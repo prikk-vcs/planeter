@@ -1,10 +1,10 @@
 # RFC 001 — Foundations: the prikk-integration layer, the layering gate, and multi-repo hosting
 
-**Status.** Proposed (2026-09-15) — the first planeter RFC, and the substrate every later surface sits
-on. Draft for review; on the owner's acceptance it moves to `accepted/` and the dev team builds the
-workspace skeleton per the handoff. Defines *how planeter talks to prikk*, *how the crates are layered
-and gated*, and *how many anonymous prikk repositories become identified, hosted repositories*.
-Handoff: forthcoming (`../handoffs/001-foundations/`).
+**Status.** Accepted (2026-09-15) — the first planeter RFC, and the substrate every later surface sits
+on. The design is settled and the implementer may build the workspace skeleton against it per the
+handoff. Defines *how planeter talks to prikk*, *how the crates are layered and gated*, and *how many
+anonymous prikk repositories become identified, hosted repositories*.
+Handoff: [`../handoffs/001-foundations/foundations-handoff-v1.md`](../handoffs/001-foundations/foundations-handoff-v1.md).
 **Tracks.** ROADMAP Phase A0 → A1 (Track A — depends only on prikk's existing CLI). Internal design
 §1 (`CR-*`), §2 (`LAY-*`), §3 (`PKI-*`), §4 (`DM-*`), §11 (`ENF-*`); external design `PK-*`, `BD-03`;
 requirements `INT-1…6`, `BN-1…5`, `CAP-1`; threat model `INV-2/3/4/6`, `TB-4`, `C-4c`.

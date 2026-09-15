@@ -23,13 +23,14 @@ rfcs/
 
 ## Pipeline (planned, from the roadmap)
 
-**RFC 001 is drafted (proposed)**; the rest are planned in priority order below (see
-[`../ROADMAP.md`](../ROADMAP.md) §The RFC plan). Each is authored as a `proposed/` RFC + handoff on the
-owner's go-ahead, **RFC 001 first**.
+**RFC 001 is accepted** (2026-09-15) — the implementer may build A0 against it; its
+[handoff](handoffs/001-foundations/foundations-handoff-v1.md) is written. The rest are planned in
+priority order below (see [`../ROADMAP.md`](../ROADMAP.md) §The RFC plan), each authored on the owner's
+go-ahead.
 
 | # | RFC | Serves (phase) | State |
 |---|---|---|---|
-| 001 | [Foundations: prikk-integration layer, the layering gate, multi-repo hosting & identity](proposed/001-foundations.md) | A0→A1 | **proposed** |
+| 001 | [Foundations: prikk-integration layer, the layering gate, multi-repo hosting & identity](accepted/001-foundations.md) | A0→A1 | **accepted** |
 | 002 | Authorization model (`authorize()`, roles, per-ref permissions) | A1 | planned |
 | 003 | Read path & web browse (re-derivation, caching, safe rendering) | A1 | planned |
 | 004 | Transport envelope + client helper (fetch/push over ferried artifacts) | A2 | planned |
@@ -43,8 +44,8 @@ owner's go-ahead, **RFC 001 first**.
 
 | State | RFCs |
 |---|---|
-| Proposed | [001 — Foundations](proposed/001-foundations.md) |
-| Accepted | *(none yet)* |
+| Proposed | *(none yet)* |
+| Accepted | [001 — Foundations](accepted/001-foundations.md) |
 | Done | *(none yet)* |
 | Archived | *(none yet)* |
 
