@@ -1,11 +1,11 @@
 # RFC 004 — Transport: clone and push as a ferry over prikk's artifact exchange
 
-**Status.** Proposed (2026-09-15) — opens M2 (clone/push). Draft for review; on acceptance the
-implementer builds the transport surface and the client helper per the handoff. Defines *how bytes move
+**Status.** Accepted (2026-09-15) — opens M2 (clone/push). The design is settled and the implementer may
+build the transport surface and the client helper against it per the handoff. Defines *how bytes move
 between a developer and planeter* — by carrying prikk's own `bundle`/`sync` artifacts over an
 authenticated, encrypted envelope, so **planeter invents no prikk wire protocol and holds no signing
 key**.
-Handoff: forthcoming (`../handoffs/004-transport/`).
+Handoff: [`../handoffs/004-transport/transport-handoff-v1.md`](../handoffs/004-transport/transport-handoff-v1.md).
 **Tracks.** ROADMAP Phase A2 → M2 (Track A). Requirements `CAP-2`, `INT-2`, `STD-1`, `NG-2`, `BN-4`;
 external design `TX-01…06`, `FL-02/03`, `CT-01/02`; internal design `WR-1/2/3/6`, `CON-1/3`, `PKI-2/3`;
 threat model `T-4/T-9`, `INV-2/3`, `C-4`. Consumes RFC 002 `authorize()` and RFC 001's driver.
