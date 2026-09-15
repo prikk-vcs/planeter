@@ -26,15 +26,15 @@ rfcs/
 **RFC 001 is accepted** (2026-09-15) — the implementer may build A0 against it; its
 [handoff](handoffs/001-foundations/foundations-handoff-v1.md) is written. **RFC 002 (authorization) and
 RFC 003 (read path) are also accepted, with handoffs** — with A0 they complete the **M1 (0.1.0)** design
-layer. The rest are planned in priority order below (see [`../ROADMAP.md`](../ROADMAP.md) §The RFC plan),
-each authored on the owner's go-ahead — next is **RFC 004 (transport)** for M2.
+layer. **RFC 004 (transport) is proposed** — it opens clone/push for M2. The rest are planned in priority
+order below (see [`../ROADMAP.md`](../ROADMAP.md) §The RFC plan), each authored on the owner's go-ahead.
 
 | # | RFC | Serves (phase) | State |
 |---|---|---|---|
 | 001 | [Foundations: prikk-integration layer, the layering gate, multi-repo hosting & identity](accepted/001-foundations.md) | A0→A1 | **accepted** |
 | 002 | [Authorization model (`authorize()`, roles, per-ref permissions)](accepted/002-authorization.md) | A1 | **accepted** |
 | 003 | [Read path & web browse (re-derivation, caching, safe rendering)](accepted/003-read-path.md) | A1 | **accepted** |
-| 004 | Transport envelope + client helper (fetch/push over ferried artifacts) | A2 | planned |
+| 004 | [Transport: clone/push as a ferry over prikk's artifact exchange + client helper](proposed/004-transport.md) | A2 | **proposed** |
 | 005 | Change/review model (accepted-unsealed-as-PR, review, keyless merge) | A3 | planned |
 | 006 | CI + runner protocol | A4 | planned |
 | 007 | Package registry | A5 | planned |
@@ -45,7 +45,7 @@ each authored on the owner's go-ahead — next is **RFC 004 (transport)** for M2
 
 | State | RFCs |
 |---|---|
-| Proposed | *(none yet)* |
+| Proposed | [004 — Transport](proposed/004-transport.md) |
 | Accepted | [001 — Foundations](accepted/001-foundations.md), [002 — Authorization](accepted/002-authorization.md), [003 — Read path](accepted/003-read-path.md) |
 | Done | *(none yet)* |
 | Archived | *(none yet)* |
