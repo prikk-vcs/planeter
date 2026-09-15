@@ -23,13 +23,13 @@ rfcs/
 
 ## Pipeline (planned, from the roadmap)
 
-None are written yet — planeter is at the design-set stage. The order below is the planned priority
-(see [`../ROADMAP.md`](../ROADMAP.md) §The RFC plan); each is authored as a `proposed/` RFC + handoff on
-the owner's go-ahead, **RFC 001 first**.
+**RFC 001 is drafted (proposed)**; the rest are planned in priority order below (see
+[`../ROADMAP.md`](../ROADMAP.md) §The RFC plan). Each is authored as a `proposed/` RFC + handoff on the
+owner's go-ahead, **RFC 001 first**.
 
-| # | RFC (planned) | Serves (phase) | State |
+| # | RFC | Serves (phase) | State |
 |---|---|---|---|
-| 001 | Foundations: prikk-integration layer, the layering gate, multi-repo hosting & identity | A0→A1 | planned |
+| 001 | [Foundations: prikk-integration layer, the layering gate, multi-repo hosting & identity](proposed/001-foundations.md) | A0→A1 | **proposed** |
 | 002 | Authorization model (`authorize()`, roles, per-ref permissions) | A1 | planned |
 | 003 | Read path & web browse (re-derivation, caching, safe rendering) | A1 | planned |
 | 004 | Transport envelope + client helper (fetch/push over ferried artifacts) | A2 | planned |
@@ -43,7 +43,7 @@ the owner's go-ahead, **RFC 001 first**.
 
 | State | RFCs |
 |---|---|
-| Proposed | *(none yet)* |
+| Proposed | [001 — Foundations](proposed/001-foundations.md) |
 | Accepted | *(none yet)* |
 | Done | *(none yet)* |
 | Archived | *(none yet)* |

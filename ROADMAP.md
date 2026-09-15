@@ -124,7 +124,12 @@ content-as-data, no default egress), **portable identity** (defer until a standa
 | **M5** | 0.5.0 | **Packages**: OCI + first language registries | A5 | planned |
 | **B1** | ships within 0.x once UD-6 lands | **One-click merge** (client-sealable claim) | B1 | gated (joint prikk RFC) |
 | **B2** | before 1.0 | **Hosted-format durability policy** | B2 | gated (owner OQ-6) |
-| **1.0.0** | 1.0 | **The familiar forge, complete**: host + transport + review + one-click merge + CI + packages + web + API, hardened, backup-tested, durability policy settled | A + B | pending A0–A5, B1, B2 |
+| **1.0.0** | 1.0 | **The familiar forge, complete**: host + transport + review + one-click merge + CI + packages + web + API, hardened, backup-tested, durability policy settled | A + B | pending A0–A5, B1, B2 **+ owner confirmation** |
+
+> **v0 → v1 is an owner gate.** All development proceeds in **v0.x**. Promoting to **1.0 requires the
+> owner's clear, explicit confirmation** — green gates and feature-completeness are necessary but **not
+> sufficient**. Until then, the format, APIs, and surfaces are treated as pre-1.0 (unstable, additive
+> where possible), and no milestone silently crosses into 1.0.
 
 ## Release cycles
 
