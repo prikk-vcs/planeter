@@ -1,10 +1,10 @@
 # RFC 006 — Continuous integration and the runner protocol
 
-**Status.** Proposed (2026-09-15) — automation for M4. Draft for review; on acceptance the implementer
-builds the pipeline model, the runner protocol, and `planeter-runner` per the handoff. Defines *how
-planeter runs untrusted build code safely* — on isolated, ephemeral runners in a separate trust domain,
-with a job identity that can build but can never sign or merge.
-Handoff: forthcoming (`../handoffs/006-ci-runners/`).
+**Status.** Accepted (2026-09-15) — automation for M4. The design is settled and the implementer may
+build the pipeline model, the runner protocol, and `planeter-runner` against it per the handoff. Defines
+*how planeter runs untrusted build code safely* — on isolated, ephemeral runners in a separate trust
+domain, with a job identity that can build but can never sign or merge.
+Handoff: [`../handoffs/006-ci-runners/ci-runners-handoff-v1.md`](../handoffs/006-ci-runners/ci-runners-handoff-v1.md).
 **Tracks.** ROADMAP Phase A4 → M4 (Track A). Requirements `CAP-6`, `SEC-4`, `OPS-4`; external design
 `CI-01…04`; internal design `CIO-1…4`; threat model `T-5` (CI RCE), `C-5`, `INV-5`, `RR-6/7`. Consumes
 RFC 002 (job authz), RFC 004 (a job pulls the change), and wires the check-gate seam RFC 005 left.
