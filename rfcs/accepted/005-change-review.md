@@ -1,10 +1,10 @@
 # RFC 005 — Change proposal, review, and merge (and issues)
 
-**Status.** Proposed (2026-09-15) — the collaboration loop, M3. Draft for review; on acceptance the
-implementer builds the change/review model, the merge flow, and the issue tracker per the handoff.
+**Status.** Accepted (2026-09-15) — the collaboration loop, M3. The design is settled and the implementer
+may build the change/review model, the merge flow, and the issue tracker against it per the handoff.
 Defines *how a proposed change is reviewed and merged* — where a "pull request" is prikk's own
 accepted-but-unsealed claim set, and a "merge" is a maintainer's own seal, never the forge's.
-Handoff: forthcoming (`../handoffs/005-change-review/`).
+Handoff: [`../handoffs/005-change-review/change-review-handoff-v1.md`](../handoffs/005-change-review/change-review-handoff-v1.md).
 **Tracks.** ROADMAP Phase A3 → M3 (Track A). Requirements `CAP-5`, `CAP-4`, `SEC-1`, `NG-3/6`; external
 design `WEB-02/03/06`, `FL-04/05`; internal design `WR-4/5`, `DM-2/4`, `RD-3`; threat model `T-1/T-10`,
 `INV-1/2`. Consumes RFC 002 (`authorize` merge-seal/review), RFC 003 (re-derived diff), RFC 004
