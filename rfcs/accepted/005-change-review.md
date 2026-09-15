@@ -14,6 +14,23 @@ review and issue UI + API). **Not here:** the **one-click seal mechanism** (RFC 
 uses the keyless fallback and is written to accept either), **CI execution** (RFC 006 — merge *gates on*
 its checks), and packages (RFC 007).
 
+## Revision 2026-09-16 — merge corrected to seal-then-adopt (prikk RFC 154)
+
+prikk measured that a keyless forge cannot advance its own ref by receiving a sealed block (a received
+sealed ref stays an untrusted `remotes/` pointer), so D-4's keyless-fallback-where-the-forge's-ref-advances
+does not work. The corrected model, **gated on the prikk binary** (RFC 154 accepted + RFC 155 proposed,
+post-0.43.0):
+
+- **Merge = a maintainer seals (their own key, client-side) + the forge *adopts* the resulting
+  trusted-maintainer-signed fast-forward advance (RFC 154).** The forge never signs; it adopts a
+  fully-verified fast-forward. Keyless, multi-maintainer. This supersedes D-4's fallback mechanism (the
+  *model* — merge is the maintainer's seal, honesty distinct from approval — is unchanged).
+- **Multi-maintainer resolution:** first fast-forward adoption wins; a maintainer whose seal is no longer
+  a fast-forward adopts the winner, re-merges on top, re-sends → one signed chain.
+- **The open change is still accepted-pending claims** (D-1/D-2); those claims travel in the RFC 155
+  artifact, and review state stays planeter metadata (confirmed by prikk). Approvals/checks still gate the
+  adoption at the authorization layer (D-5).
+
 ## Summary
 
 RFC 004 leaves pushed work as **accepted, verified, pending** claims (author-signed, ingested, not

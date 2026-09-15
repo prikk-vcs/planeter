@@ -15,6 +15,30 @@ serialization) and a **client helper** (a `planeter` client / prikk remote-helpe
 maintainer signature) — that is the change/review model (RFC 005) and the one-click seal (RFC 008/UD-6);
 this RFC stops at *accepted + verified + pending*. No CI triggers (RFC 006).
 
+## Revision 2026-09-16 — corrected to the prikk RFC 154 / 155 model
+
+prikk resolved the trust-model question this RFC skirted. The corrections below supersede the affected
+decisions; **implementation is gated on the prikk binary shipping**, order after 0.43.0: key-id fix →
+RFC 155 (repository-complete artifact) → RFC 154 (adoption).
+
+- **Canonical branch by *adoption*, not by the forge sealing (prikk RFC 154, accepted).** The forge holds
+  its canonical branch by **adopting a trusted-maintainer-signed fast-forward advance** — signed by a key
+  the forge has adopted, a fast-forward of the local tip, every block replaying+verifying, local CAS
+  holding — **keyless and multi-maintainer**. This replaces any notion of the forge advancing a ref by
+  sealing (supersedes the seal-side of D-3/D-4). *Whose `main`*: first fast-forward wins; a losing
+  maintainer adopts the winner, merges on top, re-sends → one signed chain, no forge key.
+- **Fetch / clone / serve via the RFC 155 repository-complete artifact + `import --adopt`** (supersedes
+  D-2's `bundle export` of a received ref, which prikk measured impossible — a received ref stays under
+  `remotes/`, unservable). Default import lands refs under `remotes/`; `--adopt` lands maintainer-signed
+  refs as local branches under RFC 154's rule, inside one all-or-nothing import.
+- **Push is unchanged and correct:** keyless `sync accept` → accepted + verified + pending (the accept
+  half of D-3 stands).
+- **New planeter responsibilities (a keyless forge can *deny*, not *forge*):** planeter owns **freshness**
+  (detecting a withheld/stale tip — prikk has no clock or network) and **split-view detection**
+  (different clients shown different signed tips; prikk reports two trusted successors of one state as a
+  refusal naming both, but cross-client comparison is transport's). Add both to the transport surface.
+- **Distinct maintainer key-ids** are required (prikk fixes the default-`maintainer` collision first).
+
 ## Summary
 
 prikk deliberately does not move bytes over a network (RFC 115/116: "prikk stays off the network"); its

@@ -35,7 +35,7 @@ they are decoupled so they never block the bulk.
  A0 foundations → A1 host+browse+auth → A2 clone+push (keyless) → A3 review+issues+merge
       → A4 CI → A5 packages ─────────────────────────────────────────────► 1.0 familiar forge
                                                                               │
- Track B (parallel, gated): B1 one-click merge (UD-6) · B2 format durability ─┘
+ Track B (parallel, gated on prikk RFC 154/155): B1 canonical branch + merge · B2 format durability ─┘
  Later (deferred, per forge-commons verdicts): federation · AI (passive) · portable identity
 ```
 
@@ -95,15 +95,26 @@ versions, object-storage-backed.
 
 ## Track B — joint prikk work (gated, parallel, never blocks Track A)
 
-### Phase B1 — One-click merge (UD-6)
-The client-sealable-claim affordance (WR-5a): let a maintainer's client seal a *server-held* accepted
-claim in one action, so "merge" is one click and the forge still holds no key. A **joint planeter+prikk
-RFC** (needs a small prikk-side capability). Until it lands, A3's keyless fallback (WR-5b) is the merge.
+> **Trust-model resolved 2026-09-16.** The keyless multi-maintainer question is answered by two prikk
+> RFCs: **RFC 154 — trusted fast-forward ref adoption (accepted by the prikk owner)** lets a keyless
+> forge hold a canonical, multi-maintainer branch by *adopting* trusted-maintainer-signed advances; and
+> **RFC 155 — the repository-complete artifact (proposed)** is the clone/serve/migrate substrate. Track B
+> is now **gated on prikk shipping these** (order after prikk 0.43.0: **key-id collision fix → RFC 155 →
+> RFC 154**). planeter designs to the direction now; implementation waits on the binary.
+
+### Phase B1 — Canonical branch + one-click merge (prikk RFC 154 + 155)
+A merge is a maintainer sealing (their own key, client-side) and the **forge adopting** the resulting
+trusted-maintainer-signed fast-forward (RFC 154) — keyless, multi-maintainer, "first fast-forward wins".
+Clone/serve of that canonical branch, and open-change claims, ride the RFC 155 artifact (`import
+--adopt`). This supersedes the earlier "client-sealable claim" framing (withdrawn — prikk declined
+blind-signing). Gated on the prikk binary.
 
 ### Phase B2 — Hosted-format durability (OQ-6 / UD-3)
-prikk's on-disk format is unstable pre-1.0; planeter pins supported prikk format versions and refuses
-the unsupported (OP-04). B2 settles the **durability policy**: version pinning, migration, and the
-stability gate before hosting a given prikk version. Owner-ruled; required before 1.0.
+Carry-forward = `init` → adopt maintainer keys → `import --adopt` of the RFC 155 artifact (read-only
+export, all-or-nothing import). **De-risked:** prikk RFC 114 §5.2 already requires a tested migration
+*before* any format change ships (CI-enforced), object identity/signatures are frozen forever, and
+format 6 has held since 0.20.0 with none planned. planeter's adoption gate aligns with prikk's. Gated on
+the prikk binary; required before 1.0.
 
 ## Later — deferred frontier (post-1.0)
 Per forge-commons verdicts, and only when their triggers are met: **federation** (pilot ForgeFed
@@ -122,7 +133,7 @@ content-as-data, no default egress), **portable identity** (defer until a standa
 | **M3** | 0.3.0 | **Review + issues + merge**: change/review model, issues, merge (keyless fallback WR-5b) | A3 | planned |
 | **M4** | 0.4.0 | **CI**: pipelines + isolated ephemeral runners | A4 | planned |
 | **M5** | 0.5.0 | **Packages**: OCI + first language registries | A5 | planned |
-| **B1** | ships within 0.x once UD-6 lands | **One-click merge** (client-sealable claim) | B1 | gated (joint prikk RFC) |
+| **B1** | ships within 0.x once prikk RFC 154 + 155 ship | **Canonical branch + one-click merge** (maintainer seals, forge adopts the fast-forward) | B1 | gated (prikk RFC 154 accepted, 155 proposed) |
 | **B2** | before 1.0 | **Hosted-format durability policy** | B2 | gated (owner OQ-6) |
 | **1.0.0** | 1.0 | **The familiar forge, complete**: host + transport + review + one-click merge + CI + packages + web + API, hardened, backup-tested, durability policy settled | A + B | pending A0–A5, B1, B2 **+ owner confirmation** |
 
@@ -150,8 +161,16 @@ content-as-data, no default egress), **portable identity** (defer until a standa
 
 Named so no plan silently assumes them:
 
-- **UD-6** — client-sealable-claim affordance (one-click merge, B1). Joint prikk RFC.
-- **UD-3 / OQ-6** — prikk format stability + the hosted-format durability policy (B2). Owner-ruled.
+- **prikk RFC 154 — trusted fast-forward ref adoption. ACCEPTED (prikk owner, 2026-09-16); not yet
+  shipped.** The keyless multi-maintainer canonical-branch primitive B1 depends on. Supersedes the old
+  UD-6 "client-sealable-claim" ask. Ship order (post-0.43.0): key-id fix → RFC 155 → RFC 154.
+- **prikk RFC 155 — the repository-complete artifact. PROPOSED** (planeter's requirements folded in). The
+  clone/serve/migrate substrate for B1 and B2 (`import --adopt`). Owner-scheduled.
+- **prikk key-id collision fix** — `setup` names every maintainer key `maintainer`; a multi-maintainer
+  forge needs distinct key-ids. First in prikk's ship order; planeter designs its identity model for
+  distinct ids regardless.
+- **UD-3 / OQ-6** — hosted-format durability (B2): **de-risked** — prikk RFC 114 §5.2 requires a tested
+  migration before any format change (CI-enforced); mechanism is RFC 155 `import --adopt`.
 - **OQ-2** — whether per-ref authorization anchors to a prikk-side notion or is purely planeter's (shapes
   AZ-2/WR-5). Owner-ruled.
 - **OQ-4** — the exact v1 feature ceiling beyond the CAP core (wikis, discussions, boards). Owner-ruled.
@@ -160,7 +179,9 @@ Named so no plan silently assumes them:
 - **UD-4 / IQ-3** — prikk local-locking sufficiency beneath planeter's per-repo serialization. Confirmed
   in the transport RFC.
 
-*OQ-1 is settled (2026-09-15, option a): the forge holds no history-signing key by default.*
+*OQ-1 is settled (2026-09-15, option a): the forge holds no history-signing key by default — and, as of
+2026-09-16, this is viable for **multi-maintainer** forges too, via prikk RFC 154's trusted
+fast-forward adoption (a keyless forge can deny, never forge).*
 
 ---
 
@@ -180,7 +201,7 @@ starts until the foundations and the layering gate exist.
 | **005** | Change/review model — accepted-unsealed-as-PR, review, keyless merge (WR-4/5b) | A3 | medium |
 | **006** | CI + runner protocol (CIO-*) | A4 | medium |
 | **007** | Package registry (RG-*) | A5 | medium |
-| **008** | *(joint prikk)* Seal / UD-6 — one-click client-sealable merge (WR-5a) | B1 | parallel, gated |
+| **008** | *(joint prikk)* Seal / UD-6 — now via prikk RFC 154 adoption + RFC 155 artifact | B1 | parallel, gated (prikk 154 accepted) |
 | **009** | Hosted-format durability policy (OQ-6/UD-3) | B2 | before 1.0 |
 
 **Immediate next step:** stand up planeter's `rfcs/` (done alongside this roadmap — see

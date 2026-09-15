@@ -8,6 +8,14 @@
 | Audience | Dev team. Return a review-request package when green. |
 | Scope | **Phase A3 → M3.** Change/review model, merge via the keyless fallback, issues. **Out of scope:** the one-click seal mechanism (RFC 008/UD-6 — leave the seam), CI execution (RFC 006 — wire the check-gate seam). |
 
+> **Revised 2026-09-16 — merge reshaped, gated on the prikk binary.** The **merge** task (T3) becomes
+> **seal-then-adopt**: a maintainer seals with their own key (client-side), and the forge **adopts** the
+> resulting trusted-maintainer-signed fast-forward (prikk RFC 154, *accepted*) — keyless, multi-maintainer,
+> first-fast-forward-wins. This replaces the "keyless fallback where the forge's ref advances" (measured
+> impossible). The **change/review/issues** tasks stand; open-change claims travel in the RFC 155 artifact
+> (*proposed*). Implementation of the merge waits on prikk shipping RFC 154/155 (post-0.43.0); a **v2
+> handoff follows**. See RFC 005 §Revision 2026-09-16.
+
 ## Task breakdown (PR plan)
 
 - **T1 — The change model (D-1/D-2/D-7).** `planeter-core`: a `change` record

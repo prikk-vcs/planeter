@@ -8,6 +8,15 @@
 | Audience | Dev team. Return a review-request package when green. |
 | Scope | **Phase A2 → M2.** The clone/push transport and the client helper — prikk's **keyless** phase only. **Out of scope:** seal/merge (RFC 005/008), CI triggers (RFC 006). Build on A0 + A1. |
 
+> **Revised 2026-09-16 — gated on the prikk binary.** The prikk trust-model resolution (RFC 154 trusted
+> fast-forward adoption, *accepted*; RFC 155 repository-complete artifact, *proposed*) reshapes the
+> **fetch/serve** and **canonical-branch** work: fetch/serve go via the RFC 155 artifact + `import
+> --adopt`, and the forge's canonical branch advances by **adopting** a trusted-maintainer-signed
+> fast-forward (RFC 154), not by the forge sealing. The **keyless push = `sync accept`** task stands. New
+> tasks: **freshness** and **split-view detection** (a keyless forge can deny, not forge). Implementation
+> of the gated parts waits on prikk shipping (post-0.43.0: key-id fix → RFC 155 → RFC 154); a **v2 handoff
+> follows** when the binary lands. See RFC 004 §Revision 2026-09-16.
+
 ## Task breakdown (PR plan — build in this order)
 
 - **T1 — HTTPS transport endpoints (D-1/D-3/D-6).** In `planeter-transport`: the advertise/`have`,

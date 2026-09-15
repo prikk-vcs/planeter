@@ -13,6 +13,24 @@ threat model `INV-2`, `RR-2`.
 and a **companion prikk RFC** for any prikk-side affordance. **Not here:** the merge *model* (RFC 005,
 unchanged), CI (RFC 006).
 
+## Revision 2026-09-16 — superseded in mechanism by prikk RFC 154 + RFC 155
+
+prikk turned this RFC's question into accepted/proposed prikk-side capabilities that resolve it more
+cleanly than the mechanisms drafted here. **Gated on the prikk binary** (order: key-id fix → RFC 155 →
+RFC 154, post-0.43.0):
+
+- **The seal → canonical step is RFC 154 adoption (accepted).** The maintainer seals client-side; the
+  forge **adopts** the trusted-maintainer-signed fast-forward — keyless, no forge key, and
+  multi-maintainer. This achieves D-1/D-2's goal via a prikk primitive rather than forge orchestration.
+- **The "compact sealable claim" (A1 / D-4) is withdrawn.** prikk correctly declined blind-signing a
+  state root the maintainer never verified; RFC 154 (adopt a *fully verified* fast-forward) + RFC 155
+  (the repository-complete artifact) supersede it. The maintainer signs history they verified in their
+  own repo; the forge adopts.
+- **One-click merge** = client seals → produces the advance (via the RFC 155 artifact) → forge adopts
+  (RFC 154). D-2 (CLI one-click) and D-3 (web one-click via a client-side signer — the browser still
+  cannot hold the key) stand as the ergonomics ladder over this substrate; D-5's forge-key opt-in remains
+  the labeled exception only.
+
 ## Summary
 
 Merging seals accepted claims onto a ref, and a seal needs the maintainer's Ed25519 key. Under OQ-1(a)

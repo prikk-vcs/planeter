@@ -12,6 +12,23 @@ Handoff: [`../handoffs/009-hosted-format-durability/hosted-format-durability-han
 tracking, migration orchestration), and operations (`OPS-3` backup). **Not here:** prikk's own format
 design or migration tooling (prikk's); the exact backup mechanism (`OPS-3`).
 
+## Revision 2026-09-16 — the migration mechanism is RFC 155 + `import --adopt`; de-risked by prikk RFC 114 §5.2
+
+prikk's replies made D-4's "drive prikk's migration" concrete and de-risked the whole RFC. **Gated on the
+prikk binary** (RFC 155, post-0.43.0):
+
+- **The forward path is now specific:** carry-forward = **`init` → adopt the maintainer keys →
+  `import --adopt`** of the **RFC 155 repository-complete artifact** — read-only export (source untouched),
+  all-or-nothing import *even if the process is killed*, with `doctor` naming an interrupted import. No
+  signature changes, no automatic trust.
+- **De-risked:** prikk **RFC 114 §5.2** already *rules* that a tested migration must exist **before** any
+  format change ships, **CI-enforced**; object identity + signatures are **frozen forever** (RFC 114 §3);
+  format 6 has held since 0.20.0 with none planned; and at 1.0 the **exchange artifacts stabilize first**.
+  planeter's adoption gate (D-3) aligns with prikk's own CI gate rather than standing alone.
+- **`bundle verify` checks structure only, not signatures** (measured) — so offline signature
+  verification before hosting depends on RFC 155's verify (reported *internally consistent*, trusted only
+  against the receiver's own adopted keys), not on `bundle verify`.
+
 ## Summary
 
 planeter hosts **the largest repositories in some projects' lives** in prikk's on-disk format — and that

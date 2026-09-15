@@ -8,6 +8,15 @@
 | Audience | Dev team (for D-2) + architect/owner (for the D-4 companion prikk RFC and the D-6 scope call). |
 | Scope | **Build D-2 now** (keyless CLI one-click). **D-3 (web one-click)** and **D-4 (prikk-side ask)** are coordination/design items, not code in this increment. |
 
+> **Revised 2026-09-16 — mechanism superseded, gated on the prikk binary.** prikk turned this into
+> accepted/proposed prikk capabilities: the seal→canonical step is **RFC 154 adoption** (the maintainer
+> seals client-side; the forge adopts the trusted fast-forward — no forge key), and the substrate is the
+> **RFC 155 artifact**. The **"compact sealable claim" (T5/A1) is withdrawn** (prikk correctly declined
+> blind-signing). One-click merge = client seals → RFC 155 artifact → forge adopts; the web-signer
+> frontier (T6/D-3) stands. Tasks T1–T4 are reshaped to that model. Implementation waits on prikk shipping
+> (key-id fix → RFC 155 → RFC 154, post-0.43.0); a **v2 handoff follows**. See RFC 008 §Revision
+> 2026-09-16.
+
 ## Task breakdown
 
 - **T1 — `planeter merge <change>` (D-2).** Extend the client helper (RFC 004 `TX-05`) with a single

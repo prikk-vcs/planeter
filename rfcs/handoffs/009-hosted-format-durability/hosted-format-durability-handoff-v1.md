@@ -8,6 +8,15 @@
 | Audience | Dev team + architect/owner (for the prikk migration dependency and prikk-1.0 coordination). |
 | Scope | **Phase B2 (Track B), required before 1.0.** Does not block Track A milestones. |
 
+> **Revised 2026-09-16 — mechanism concrete + de-risked, gated on the prikk binary.** The **migration**
+> task (T4) is now specific: carry-forward = **`init` → adopt maintainer keys → `import --adopt`** of the
+> **RFC 155 repository-complete artifact** (*proposed*) — read-only export, all-or-nothing import even if
+> killed. **De-risked:** prikk **RFC 114 §5.2** already requires a tested migration *before* any format
+> change ships (CI-enforced), and object identity/signatures are frozen forever — so the version-pin and
+> adoption-gate tasks (T1–T3) stand and now align with prikk's own CI gate. Note `bundle verify` checks
+> **structure only, not signatures**; offline signature verification depends on RFC 155. Implementation
+> waits on prikk shipping RFC 155 (post-0.43.0). See RFC 009 §Revision 2026-09-16.
+
 ## Task breakdown (PR plan)
 
 - **T1 — Supported format-version range (D-1).** `planeter-prikk` declares the supported prikk
