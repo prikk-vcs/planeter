@@ -1,10 +1,10 @@
 # RFC 003 — Read path & web browse: re-derive from prikk, render safely, show the truth
 
-**Status.** Proposed (2026-09-15) — the read half of M1. Draft for review; on acceptance the implementer
-builds the browse surfaces and the read API against it per the handoff. Defines *how planeter shows a
+**Status.** Accepted (2026-09-15) — the read half of M1. The design is settled and the implementer may
+build the browse surfaces and the read API against it per the handoff. Defines *how planeter shows a
 repository* — always re-derived from prikk, cached carefully, rendered safely, and honest about what
 prikk verified versus what the forge merely approved.
-Handoff: forthcoming (`../handoffs/003-read-path/`).
+Handoff: [`../handoffs/003-read-path/read-path-handoff-v1.md`](../handoffs/003-read-path/read-path-handoff-v1.md).
 **Tracks.** ROADMAP Phase A1 → M1 (Track A). Requirements `CAP-8`, `STD-3/6`, `INT-4/5`, `NG-6`; external
 design `WEB-01/05/06`, `API-01…03`, `RD-1…3`; internal design `RD-1…3`, `DM-3`, `ENF-5`; threat model
 `T-6/T-7/T-10`, `INV-6`, `C-6`.

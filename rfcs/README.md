@@ -25,15 +25,15 @@ rfcs/
 
 **RFC 001 is accepted** (2026-09-15) — the implementer may build A0 against it; its
 [handoff](handoffs/001-foundations/foundations-handoff-v1.md) is written. **RFC 002 (authorization) and
-RFC 003 (read path) are proposed** for review — together with A0 they reach M1. The rest are planned in
-priority order below (see [`../ROADMAP.md`](../ROADMAP.md) §The RFC plan), each authored on the owner's
-go-ahead.
+RFC 003 (read path) are also accepted, with handoffs** — with A0 they complete the **M1 (0.1.0)** design
+layer. The rest are planned in priority order below (see [`../ROADMAP.md`](../ROADMAP.md) §The RFC plan),
+each authored on the owner's go-ahead — next is **RFC 004 (transport)** for M2.
 
 | # | RFC | Serves (phase) | State |
 |---|---|---|---|
 | 001 | [Foundations: prikk-integration layer, the layering gate, multi-repo hosting & identity](accepted/001-foundations.md) | A0→A1 | **accepted** |
-| 002 | [Authorization model (`authorize()`, roles, per-ref permissions)](proposed/002-authorization.md) | A1 | **proposed** |
-| 003 | [Read path & web browse (re-derivation, caching, safe rendering)](proposed/003-read-path.md) | A1 | **proposed** |
+| 002 | [Authorization model (`authorize()`, roles, per-ref permissions)](accepted/002-authorization.md) | A1 | **accepted** |
+| 003 | [Read path & web browse (re-derivation, caching, safe rendering)](accepted/003-read-path.md) | A1 | **accepted** |
 | 004 | Transport envelope + client helper (fetch/push over ferried artifacts) | A2 | planned |
 | 005 | Change/review model (accepted-unsealed-as-PR, review, keyless merge) | A3 | planned |
 | 006 | CI + runner protocol | A4 | planned |
@@ -45,8 +45,8 @@ go-ahead.
 
 | State | RFCs |
 |---|---|
-| Proposed | [002 — Authorization](proposed/002-authorization.md), [003 — Read path](proposed/003-read-path.md) |
-| Accepted | [001 — Foundations](accepted/001-foundations.md) |
+| Proposed | *(none yet)* |
+| Accepted | [001 — Foundations](accepted/001-foundations.md), [002 — Authorization](accepted/002-authorization.md), [003 — Read path](accepted/003-read-path.md) |
 | Done | *(none yet)* |
 | Archived | *(none yet)* |
 
