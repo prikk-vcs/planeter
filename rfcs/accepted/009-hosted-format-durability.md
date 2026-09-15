@@ -1,8 +1,10 @@
 # RFC 009 — Hosted-format durability: hosting prikk repos across an unstable format
 
-**Status.** Proposed (2026-09-15) — **Track B, owner-gated (OQ-6).** Draft for review; it proposes a
-**policy for the owner to rule** and names a prikk-side migration dependency. Required before 1.0.
-Handoff: forthcoming (`../handoffs/009-hosted-format-durability/`).
+**Status.** Accepted (2026-09-15) — **Track B, owner-gated (OQ-6).** The design is settled; the
+implementer may build against it per the handoff. The owner accepted the **migrate-forward** policy (D-2)
+in accepting this RFC; the prikk-side **migration dependency** (D-4) and prikk-1.0 timing (D-6) remain
+coordination items. Required before 1.0.
+Handoff: [`../handoffs/009-hosted-format-durability/hosted-format-durability-handoff-v1.md`](../handoffs/009-hosted-format-durability/hosted-format-durability-handoff-v1.md).
 **Tracks.** ROADMAP Phase B2 (Track B). Requirements `UD-3`, `OQ-6`, `OPS-3`; external design `OP-04`,
 `GATED-3`; internal design `CON`, `PKI-4`; threat model `RR-4`. Builds on RFC 001's version pinning
 (D-3) and the repository record's `prikk_format_version` (D-5).

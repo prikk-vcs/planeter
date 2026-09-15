@@ -1,9 +1,9 @@
 # RFC 007 — Package and artifact registry
 
-**Status.** Proposed (2026-09-15) — packages for M5. Draft for review; on acceptance the implementer
-builds the registry per the handoff. Defines *how planeter hosts build outputs* — against the protocols
-their own tools already speak, authenticated and immutable, with the bytes in object storage.
-Handoff: forthcoming (`../handoffs/007-registry/`).
+**Status.** Accepted (2026-09-15) — packages for M5. The design is settled and the implementer may build
+the registry against it per the handoff. Defines *how planeter hosts build outputs* — against the
+protocols their own tools already speak, authenticated and immutable, with the bytes in object storage.
+Handoff: [`../handoffs/007-registry/registry-handoff-v1.md`](../handoffs/007-registry/registry-handoff-v1.md).
 **Tracks.** ROADMAP Phase A5 → M5 (Track A). Requirements `CAP-7`, `STD-5`, `SEC-4`; external design
 `REG-01/02`, `HOOK`; internal design `RG-1/2`, `CIO-4`; forge-commons *Package and Artifact Registries*,
 *Integrity*. Consumes RFC 002 (publish authz) and RFC 006 (CI publishes via a job-scoped token).
