@@ -96,9 +96,9 @@ network**. No prikk wire protocol is invented (NG-2).
 - **TX-02 — Push over HTTPS.** The client produces artifacts (`sync build` against the server's
   advertised `have`) and uploads them; planeter authorizes the target ref (AUTH-03), validates with
   prikk (`sync accept` + `verify`), and applies — or rejects with a named reason. **The signature that
-  makes the applied ref prikk-verifiable is the subject of the trust gate (GATED-1 / OQ-1);** the
-  default designed here is that it is the *pushing user's own* prikk signature, and planeter stores and
-  verifies but does not sign.
+  makes the applied ref prikk-verifiable is ruled (OQ-1 → option a):** it is the *pushing user's own*
+  prikk signature; **planeter stores and verifies but holds no history-signing key.** A per-repo opt-in
+  for forge-side signing is the labeled exception (GATED-1).
 - **TX-03 — SSH transport.** The same negotiation over SSH, authenticated by the user's registered
   public key (AUTH-02) — the transport developers expect for automated pushes.
 - **TX-04 — The negotiation is prikk's, ferried.** planeter's contribution is the envelope: TLS
@@ -156,9 +156,9 @@ Read views **re-derive from prikk** (INT-4), rendered safely (STD-6), and keep p
   push / merge-seal / admin), least-privilege, with **protected refs** (review + checks required, no
   force-replace). This is the authority prikk lacks (§0a).
 - **AUTH-04 — The mapping onto prikk** (SEC-1): an authorized push/merge produces prikk objects that
-  prikk's `verify` accepts on their own merits. **Where the maintainer signature comes from is GATED-1
-  (OQ-1);** the interim design holds *no* signing keys in planeter (client-side signing), the safer
-  default (BN-5).
+  prikk's `verify` accepts on their own merits. **Where the maintainer signature comes from is ruled
+  (OQ-1 → option a):** planeter holds *no* history-signing key (client-side signing); a per-repo
+  forge-side opt-in is the labeled exception (BN-5).
 - **AUTH-05 — Audit log** of security-relevant events (sign-in, push, permission and admin changes),
   shipped off-box (SEC-5, OPS-5).
 
@@ -198,9 +198,9 @@ Read views **re-derive from prikk** (INT-4), rendered safely (STD-6), and keep p
 - **PK-03 — prikk is the source of truth** (INT-4): the forge metadata store keys its records to prikk
   object ids and re-derives history/verify from prikk; it is never the authority for what the history
   *is*.
-- **PK-04 — The seal/sign step is gated** (GATED-1, OQ-1): PK-01's `sync seal` / merge step is designed
-  only up to the point where a signature is required; who signs and where the key lives is the owner's
-  ruling.
+- **PK-04 — The seal/sign step is ruled** (OQ-1 → option a): PK-01's `sync seal` / merge step is
+  completed by the maintainer's **own prikk** (server-prepared, client-sealed — UD-6); planeter holds no
+  history-signing key. A per-repo forge-side signing identity is an explicit opt-in only.
 - **PK-05 — Reuse of stikk's CLI layer is a marked choice** (INT-6, OQ-7): the PK surface is specified
   abstractly so it can be satisfied either by an independent prikk-CLI driver or by building on stikk's
   `stikk-prikk` operation layer — a dependency-direction decision (GATED-6).
@@ -225,17 +225,18 @@ Numbered user-action → system-response, each citing the requirement it realize
 - **FL-03 — Push (AC-02).** 1. The client `sync build`s a delta against planeter's advertised `have` and
   uploads it (TX-02). 2. planeter authorizes the **target ref** (AUTH-03; protected refs may refuse). 3.
   planeter validates with prikk (`sync accept` + `verify`) and applies. 4. The applied ref is
-  prikk-verifiable by the **pushing user's own signature** (interim default, BN-5); planeter stores and
-  verifies, holding no key. 5. **If the owner rules server-side signing (OQ-1), the alternative is
-  GATED-1** — not designed here. 6. On refusal, the reason is named (unauthorized ref, failed verify),
-  never a silent drop.
+  prikk-verifiable by the **pushing user's own signature** (ruled OQ-1 → option a, BN-5); planeter
+  stores and verifies, holding no key. 5. A **per-repo forge-side signing** opt-in (option b) is the
+  labeled exception, key-isolated and forge-attributed (threat model RR-2). 6. On refusal, the reason is
+  named (unauthorized ref, failed verify), never a silent drop.
 - **FL-04 — Propose, review, and merge a change (AC-02 → AC-03).** 1. A developer pushes a branch or
   opens a change. 2. planeter opens a review (WEB-02), rendering prikk's `show`/patch as the diff. 3.
   Reviewers comment and approve; required CI checks (FL-06) must pass. 4. A maintainer merges: planeter
   runs prikk's `merge`/`seal`; the result lands as prikk-verifiable history. 5. The UI shows **"approved
-  by … on planeter"** and **"sealed & prikk-verified"** as distinct facts (WEB-06, SEC-1). 6. **The
-  signature on the seal is GATED-1** (OQ-1); until ruled, the merge control stops at the gate and states
-  that the seal is performed by a maintainer's own prikk, not by the forge.
+  by … on planeter"** and **"sealed & prikk-verified"** as distinct facts (WEB-06, SEC-1). 6. **The seal
+  signature is ruled (OQ-1 → option a):** it is performed by the merging maintainer's **own prikk** —
+  server-prepared, client-sealed in one action (UD-6) — and planeter holds no key. A per-repo opt-in for
+  forge-side signing (b) is the labeled exception.
 - **FL-05 — File and cross-reference an issue (AC-02).** 1. Open an issue (forge-owned, CAP-4). 2.
   Mentioning a change or a prikk object links it by prikk id (PK-03). 3. Nothing here touches prikk's
   authority; it is forge metadata (NG-6).
@@ -338,7 +339,7 @@ what planeter does in the meantime.
 
 | ID | Gated surface | Blocked on | planeter's interim behaviour |
 |---|---|---|---|
-| **GATED-1** | The **signing model** for a push/merge/seal — who signs, and whether planeter holds a key | **OQ-1** / SEC-2 / UD-2 | Design assumes **client-side signing only**: the user's own prikk signs; planeter stores and verifies, holds **no** key (BN-5). The server-side "merge-button" signing surface is not designed until ruled |
+| **GATED-1 — RULED (OQ-1, 2026-09-15): option (a)** | The **signing model** for a push/merge/seal | resolved; remaining dependency is **UD-6** | **client-side signing:** the user's own prikk signs the seal; planeter holds **no** history-signing key (BN-5), stores and verifies. One-click UX via **server-prepared / client-sealed** merges (UD-6). Server-side forge-key signing is an explicit, key-isolated, forge-attributed, **per-repo opt-in** only (threat model RR-2). The write path is now designable |
 | **GATED-2** | Anchoring **ref authorization** to a prikk-side concept | **OQ-2** / UD-2 | Authorization is **purely planeter's**, above prikk (AUTH-03); no prikk-side ref-authority is assumed to exist |
 | **GATED-3** | The **hosted-format durability policy** across prikk format changes | **OQ-6** / UD-3 | planeter **pins supported prikk format versions** and refuses to host an unsupported one (OP-04); the migration/version-pinning promise awaits the owner |
 | **GATED-4** | The **v1 feature ceiling** beyond the CAP-1…10 core (wikis, discussions, richer boards, insights) | **OQ-4** | The core is designed; the edges are left as clearly-marked extensions, not built into v1 by assumption |
@@ -349,16 +350,20 @@ what planeter does in the meantime.
 **Sequencing consequence.** What can be built **now**, with no prikk change and no owner ruling, is the
 whole read-and-host spine: multi-repo hosting and identity (CAP-1), fetch/clone transport (TX-01),
 the web browse surface (WEB-01), accounts and authorization (AUTH), issues (WEB-03), the API (API), and
-the read half of review (WEB-02) — all over prikk's CLI-JSON surface and artifact exchange. What waits
-on **GATED-1** (the owner's OQ-1) is the **write completion**: turning an authorized push/merge into a
-*signed, sealed, prikk-verified* result. This document deliberately stops at that gate rather than guess
-where the signing key lives — a confident wrong trust model would be worse than a stated gate (the
-requirements' own rule, and brygge's before it).
+the read half of review (WEB-02) — all over prikk's CLI-JSON surface and artifact exchange. The **write
+completion** — turning an authorized push/merge into a *signed, sealed, prikk-verified* result — is now
+**unblocked: GATED-1 is ruled (OQ-1 → option a, client-side seal; planeter holds no key).** It is
+designable, with the one-click UX depending on the client-sealable-plan affordance (UD-6); the remaining
+open gate is **GATED-3** (the durability policy, OQ-6). This document stopped at the trust gate rather
+than guess where the signing key lives — and the owner's ruling, informed by the threat model, is what
+opened it: a confident *wrong* trust model would have been worse than the stated gate (the requirements'
+rule, and brygge's before it).
 
 *End of External Design v0.1. Next design work should start where no gate blocks it: the multi-repo
 hosting model and identity layer (CAP-1) and the CLI-JSON read/browse spine (WEB-01, PK-01), then the
-transport ferry (TX-01/TX-02 fetch and the push *validation* path), leaving the **seal signature**
-(GATED-1) and the **durability policy** (GATED-3) for the owner's rulings on OQ-1 and OQ-6. The internal
-design and a threat model (`planeter-03-threat-model`, expected next per the house set) follow — a forge
-that holds authority and accepts untrusted input over a network makes the threat model a first-class
-deliverable, as it is for brygge.*
+transport ferry (TX-01/TX-02) — and now the **write completion**, since GATED-1 is ruled (OQ-1 →
+client-side seal), pending only the client-sealable-plan affordance (UD-6). The **durability policy**
+(GATED-3, OQ-6) remains the open gate. The threat model (`planeter-03-threat-model-v0.1.md`) is
+delivered and both substantiated the OQ-1 ruling and covers the modern/AI threat surface — a forge that
+holds authority and accepts untrusted input over a network makes the threat model a first-class
+deliverable, as it is for brygge. The internal design follows.*
