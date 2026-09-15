@@ -1,9 +1,11 @@
 # RFC 008 — One-click merge without a forge key (UD-6): the sealing ergonomics problem
 
-**Status.** Proposed (2026-09-15) — **Track B, joint planeter + prikk, gated.** Draft for review; it
-carries a **prikk-side ask** the prikk project/owner must rule on, and a planeter design that adapts to
-what prikk provides. Upgrades the *mechanism* of RFC 005's merge (D-4) without changing its model.
-Handoff: forthcoming (`../handoffs/008-seal-one-click-merge/`).
+**Status.** Accepted (2026-09-15) — **Track B, joint planeter + prikk, gated.** The planeter design is
+settled; the implementer may build the D-2 (CLI one-click) increment against it per the handoff. Carries
+a **prikk-side ask** (D-4) to be raised as a companion prikk RFC with the prikk project/owner, and a
+web-one-click scope decision (D-6) for the owner. Upgrades the *mechanism* of RFC 005's merge without
+changing its model.
+Handoff: [`../handoffs/008-seal-one-click-merge/seal-one-click-merge-handoff-v1.md`](../handoffs/008-seal-one-click-merge/seal-one-click-merge-handoff-v1.md).
 **Tracks.** ROADMAP Phase B1 (Track B — never blocks Track A; RFC 005's keyless fallback ships the merge
 meanwhile). Requirements `UD-6`, OQ-1 (a); external design `GATED-1`, `TX-05`; internal design `WR-5a`;
 threat model `INV-2`, `RR-2`.

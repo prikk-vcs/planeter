@@ -26,10 +26,10 @@ rfcs/
 **RFC 001 is accepted** (2026-09-15) — the implementer may build A0 against it; its
 [handoff](handoffs/001-foundations/foundations-handoff-v1.md) is written. **RFC 002 (authorization) and
 RFC 003 (read path) are also accepted, with handoffs** — with A0 they complete the **M1 (0.1.0)** design
-layer. **RFCs 004 (transport) and 005 (change/review) are accepted** (handoffs written) — clone/push (M2)
-and the collaboration loop (M3). **RFC 008 (one-click merge / UD-6, joint prikk, Track B) is proposed.**
-The rest are planned in priority order below (see [`../ROADMAP.md`](../ROADMAP.md) §The RFC plan) — next
-in the main line is **RFC 006 (CI)**.
+layer. **RFCs 004 (transport, M2), 005 (change/review, M3), and 008 (one-click merge / UD-6, Track B) are
+accepted** (handoffs written). **RFC 006 (CI + runners) is proposed** for M4. The rest are planned in
+priority order below (see [`../ROADMAP.md`](../ROADMAP.md) §The RFC plan) — remaining: 007 (registry) and
+009 (durability).
 
 | # | RFC | Serves (phase) | State |
 |---|---|---|---|
@@ -38,17 +38,17 @@ in the main line is **RFC 006 (CI)**.
 | 003 | [Read path & web browse (re-derivation, caching, safe rendering)](accepted/003-read-path.md) | A1 | **accepted** |
 | 004 | [Transport: clone/push as a ferry over prikk's artifact exchange + client helper](accepted/004-transport.md) | A2 | **accepted** |
 | 005 | [Change proposal, review, and merge (and issues)](accepted/005-change-review.md) | A3 | **accepted** |
-| 006 | CI + runner protocol | A4 | planned |
+| 006 | [Continuous integration and the runner protocol](proposed/006-ci-runners.md) | A4 | **proposed** |
 | 007 | Package registry | A5 | planned |
-| 008 | [*(joint prikk)* One-click merge without a forge key (UD-6)](proposed/008-seal-one-click-merge.md) | B1 | **proposed** (gated) |
+| 008 | [*(joint prikk)* One-click merge without a forge key (UD-6)](accepted/008-seal-one-click-merge.md) | B1 | **accepted** (gated) |
 | 009 | Hosted-format durability policy | B2 | planned (gated) |
 
 ## Current state
 
 | State | RFCs |
 |---|---|
-| Proposed | [008 — One-click merge / UD-6](proposed/008-seal-one-click-merge.md) |
-| Accepted | [001 — Foundations](accepted/001-foundations.md), [002 — Authorization](accepted/002-authorization.md), [003 — Read path](accepted/003-read-path.md), [004 — Transport](accepted/004-transport.md), [005 — Change/review](accepted/005-change-review.md) |
+| Proposed | [006 — CI + runners](proposed/006-ci-runners.md) |
+| Accepted | [001 — Foundations](accepted/001-foundations.md), [002 — Authorization](accepted/002-authorization.md), [003 — Read path](accepted/003-read-path.md), [004 — Transport](accepted/004-transport.md), [005 — Change/review](accepted/005-change-review.md), [008 — One-click merge / UD-6](accepted/008-seal-one-click-merge.md) |
 | Done | *(none yet)* |
 | Archived | *(none yet)* |
 
