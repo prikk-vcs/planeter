@@ -10,4 +10,5 @@ description = "Authentication and authorization enforcement primitives (RFC 002)
 publish = false
 
 [dependencies]
+planeter-core = { path = "../planeter-core" }
 planeter-store = { path = "../planeter-store" }

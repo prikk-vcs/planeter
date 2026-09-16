@@ -30,6 +30,7 @@ dependencies = [
 name = "planeter-auth"
 version = "0.0.0"
 dependencies = [
+ "planeter-core",
  "planeter-store",
 ]
 
