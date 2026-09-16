@@ -9,9 +9,11 @@
 //! Design phase: the [`error`] type and the trait/models land in RFC 001 T2; the subprocess driver
 //! (T3), the version pin (T3), and the sandbox (T4) follow.
 
+pub mod cli;
 pub mod error;
 pub mod model;
 pub mod repo;
 
+pub use cli::CliPrikkRepo;
 pub use error::{PrikkError, Result};
 pub use repo::PrikkRepo;
