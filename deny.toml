@@ -7,7 +7,17 @@ yanked = "deny"
 
 [licenses]
 version = 2
-allow = ["Apache-2.0", "MIT", "Apache-2.0 WITH LLVM-exception", "Unicode-3.0"]
+# Permissive licenses only. MPL-2.0 is weak (file-level) copyleft: obligations attach to the MPL files
+# themselves, not to code that merely depends on them, so it is safe for an Apache-2.0 project to consume
+# as a library. It enters via ammonia's CSS sanitizer (`cssparser`, `dtoa-short`) — part of the RFC 003
+# T4 rendering-safety stack.
+allow = [
+    "Apache-2.0",
+    "MIT",
+    "Apache-2.0 WITH LLVM-exception",
+    "Unicode-3.0",
+    "MPL-2.0",
+]
 
 [bans]
 multiple-versions = "warn"

@@ -11,3 +11,9 @@ publish = false
 
 [dependencies]
 planeter-core = { path = "../planeter-core" }
+planeter-auth = { path = "../planeter-auth" }
+planeter-store = { path = "../planeter-store" }
+
+# T4 rendering safety (RFC 003 / STD-6): strict HTML sanitization + a pure-Rust Markdown renderer.
+ammonia = "4"
+pulldown-cmark = { version = "0.12", default-features = false, features = ["html"] }
