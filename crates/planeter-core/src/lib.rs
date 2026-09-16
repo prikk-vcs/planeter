@@ -22,6 +22,7 @@ pub mod egress;
 pub mod hosting;
 pub mod layout;
 pub mod permission;
+pub mod read;
 
 pub use audit::{AuditRecord, AuditSink, InMemoryAuditSink, NullAuditSink, audit_if_sensitive};
 pub use authorize::{
@@ -32,3 +33,7 @@ pub use egress::{DenyAllEgress, EgressError, EgressGuard};
 pub use hosting::{HostingError, HostingService};
 pub use layout::{DefaultRepoIdAllocator, RepoIdAllocator, RepoLayout};
 pub use permission::resolve_repo_role;
+pub use read::{
+    Assurance, ChangeView, FileContentView, FileView, Freshness, HistoryView, ReadError,
+    ReadService, RefsView, Served, VerifyView,
+};

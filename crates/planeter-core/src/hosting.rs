@@ -204,6 +204,21 @@ impl HostingService {
     pub fn record(&self, repo_id: &RepoId) -> Result<Option<RepositoryRecord>> {
         Ok(self.store.get(repo_id)?)
     }
+
+    /// The record for an `owner/name` (metadata only; no prikk read). Lets a caller authorize on the
+    /// repository's visibility **before** opening prikk (RFC 003 read gate).
+    pub fn record_by_name(&self, owner: &Owner, name: &str) -> Result<Option<RepositoryRecord>> {
+        match self.store.resolve(owner, name)? {
+            Some(repo_id) => Ok(self.store.get(&repo_id)?),
+            None => Ok(None),
+        }
+    }
+
+    /// Open a driver bound to a record's path with this service's binary/sandbox, version-pinned. Lets
+    /// the read path open a repository it has already fetched and authorized (avoids a second lookup).
+    pub fn open_record(&self, record: &RepositoryRecord) -> Result<CliPrikkRepo> {
+        Ok(self.driver_at(&record.path).checked()?)
+    }
 }
 
 fn now_unix_secs() -> u64 {

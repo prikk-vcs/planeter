@@ -51,6 +51,7 @@ version = "0.0.0"
 dependencies = [
  "planeter-prikk",
  "planeter-store",
+ "serde_json",
 ]
 
 [[package]]

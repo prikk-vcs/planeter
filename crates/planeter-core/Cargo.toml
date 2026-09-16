@@ -18,3 +18,7 @@ forge-seal = []
 [dependencies]
 planeter-prikk = { path = "../planeter-prikk" }
 planeter-store = { path = "../planeter-store" }
+
+[dev-dependencies]
+# Test-only: build prikk model fixtures from JSON to exercise the read-path view converters.
+serde_json = "1"
