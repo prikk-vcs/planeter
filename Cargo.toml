@@ -1,0 +1,24 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/planeter-prikk",
+    "crates/planeter-store",
+    "crates/planeter-core",
+    "crates/planeter-auth",
+    "crates/planeter-web",
+    "crates/planeter-transport",
+    "crates/planeter-ci",
+    "crates/planeter-registry",
+    "crates/planeter",
+    "crates/planeter-runner",
+    "tools/boundary-check",
+]
+
+# Shared metadata every crate inherits (RFC 001; ROADMAP: v0.x, MSRV 1.85, Rust 2024).
+[workspace.package]
+version = "0.0.0"
+edition = "2024"
+rust-version = "1.85"
+license = "Apache-2.0"
+authors = ["nabbisen"]
+repository = "https://github.com/prikk-vcs/planeter"

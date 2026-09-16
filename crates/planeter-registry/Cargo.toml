@@ -1,0 +1,13 @@
+[package]
+name = "planeter-registry"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Package and artifact registry (RFC 007)."
+publish = false
+
+[dependencies]
+planeter-core = { path = "../planeter-core" }

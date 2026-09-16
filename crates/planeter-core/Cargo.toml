@@ -1,0 +1,14 @@
+[package]
+name = "planeter-core"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "The forge domain and the single default-deny authorize() service (RFC 001/002)."
+publish = false
+
+[dependencies]
+planeter-prikk = { path = "../planeter-prikk" }
+planeter-store = { path = "../planeter-store" }

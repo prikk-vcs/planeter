@@ -1,0 +1,12 @@
+[package]
+name = "planeter-store"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Forge-metadata persistence: repository/identity records, keyed to prikk object ids; never authoritative for history (RFC 001)."
+publish = false
+
+[dependencies]

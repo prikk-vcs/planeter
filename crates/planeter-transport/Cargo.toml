@@ -1,0 +1,13 @@
+[package]
+name = "planeter-transport"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Clone/push transport: ferries prikk artifacts (RFC 004)."
+publish = false
+
+[dependencies]
+planeter-core = { path = "../planeter-core" }

@@ -1,0 +1,21 @@
+# cargo-deny configuration (RFC 001 gates). The workspace has no external dependencies yet, so these
+# checks are trivially clean today; the config is in place so they stay meaningful as deps are added.
+
+[advisories]
+version = 2
+yanked = "deny"
+
+[licenses]
+version = 2
+allow = ["Apache-2.0", "MIT", "Apache-2.0 WITH LLVM-exception", "Unicode-3.0"]
+
+[bans]
+multiple-versions = "warn"
+wildcards = "deny"
+# Intra-workspace path deps carry no version (they are `{ path = ... }`); that is not a real wildcard
+# risk, so allow it while still denying wildcard *registry* versions.
+allow-wildcard-paths = true
+
+[sources]
+unknown-registry = "deny"
+unknown-git = "deny"

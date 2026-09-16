@@ -1,0 +1,12 @@
+[package]
+name = "planeter-boundary-check"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "The layering gate (RFC 001 LAY-1): a std-only test asserting no lower/core crate depends on an upper crate. Not a product crate."
+publish = false
+
+[dependencies]

@@ -1,0 +1,13 @@
+[package]
+name = "planeter-auth"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Authentication and authorization enforcement primitives (RFC 002)."
+publish = false
+
+[dependencies]
+planeter-store = { path = "../planeter-store" }

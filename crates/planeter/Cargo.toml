@@ -1,0 +1,18 @@
+[package]
+name = "planeter"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "the planeter forge server binary (design phase)."
+publish = false
+
+[dependencies]
+planeter-core = { path = "../planeter-core" }
+planeter-auth = { path = "../planeter-auth" }
+planeter-web = { path = "../planeter-web" }
+planeter-transport = { path = "../planeter-transport" }
+planeter-ci = { path = "../planeter-ci" }
+planeter-registry = { path = "../planeter-registry" }
