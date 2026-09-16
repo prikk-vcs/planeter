@@ -64,6 +64,31 @@ impl CliPrikkRepo {
         Ok(repo)
     }
 
+    /// Create a new prikk repository at `root` via `prikk init`, then bind to it with the version pin
+    /// (RFC 001 D-3). `root` must already exist; confinement binds it as the one writable location, so
+    /// `prikk init` writes its `.prikk` there. A non-zero exit (e.g. an existing `.prikk`) is a typed
+    /// [`PrikkError::Command`].
+    pub fn init(root: impl Into<PathBuf>) -> Result<Self> {
+        let repo = Self::new(root);
+        repo.check_version()?;
+        repo.run(&["init", "."])?;
+        Ok(repo)
+    }
+
+    /// Create with an explicit binary/sandbox already configured, then `prikk init` in place.
+    pub fn init_configured(self) -> Result<Self> {
+        self.check_version()?;
+        self.run(&["init", "."])?;
+        Ok(self)
+    }
+
+    /// Run the version pin (RFC 001 D-3) on an already-configured instance (binary/sandbox set) and
+    /// return it, or a typed error if prikk is out of range. The configured analogue of [`Self::open`].
+    pub fn checked(self) -> Result<Self> {
+        self.check_version()?;
+        Ok(self)
+    }
+
     /// Return the prikk binary's version string (from `prikk --version`, e.g. `"0.43.0"`).
     fn version_string(&self) -> Result<String> {
         let out = self.run(&["--version"])?;

@@ -9,6 +9,12 @@ repository.workspace = true
 description = "The forge domain and the single default-deny authorize() service (RFC 001/002)."
 publish = false
 
+[features]
+# Reserved, OFF BY DEFAULT (RFC 001 §0a / LAY-4 / ENF-2): the seam under which any history-signing
+# ("forge-seal") code would live. planeter is a keyless forge (INV-2) — no seal code exists yet, and the
+# ENF-2 CI check proves the forge-signer symbol is absent from the default build.
+forge-seal = []
+
 [dependencies]
 planeter-prikk = { path = "../planeter-prikk" }
 planeter-store = { path = "../planeter-store" }

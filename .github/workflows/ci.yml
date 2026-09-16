@@ -25,6 +25,16 @@ jobs:
       - name: Test (includes the layering gate)
         run: cargo test --workspace --locked
 
+  enf2:
+    # ENF-2 (RFC 001 §0a / INV-2): the keyless forge ships no history-signing symbol by default.
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v7
+
+      - name: ENF-2 symbol-absence check
+        run: tools/enf2-symbol-check/check.sh
+
   supply-chain:
     runs-on: ubuntu-latest
     steps:
