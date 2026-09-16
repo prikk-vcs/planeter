@@ -5,10 +5,14 @@
 //! abstraction that persists them ([`store`]), and an in-memory backend ([`memory`]). The production
 //! SQLite backend (RFC 001 IQ-4) is a later increment behind the [`store::RepositoryStore`] trait.
 
+pub mod membership;
 pub mod memory;
 pub mod model;
 pub mod store;
 
+pub use membership::{
+    InMemoryMembershipStore, MembershipStore, OrgId, OrgRole, Role, Subject, TeamId, UserId,
+};
 pub use memory::InMemoryRepositoryStore;
 pub use model::{Owner, RepoId, RepositoryRecord, Visibility};
 pub use store::{RepositoryStore, StoreError};
