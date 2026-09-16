@@ -57,7 +57,8 @@ impl std::error::Error for ReadError {}
 type Result<T> = std::result::Result<T, ReadError>;
 
 /// Whether a served view was re-derived from prikk now, or is a cached fallback prikk could not refresh.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum Freshness {
     Fresh,
     Stale,
@@ -65,7 +66,7 @@ pub enum Freshness {
 
 /// A view served to a surface, tagged with its freshness (T1: a stale fallback is labelled, never
 /// passed off as current).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct Served<T> {
     pub view: T,
     pub freshness: Freshness,
@@ -76,7 +77,8 @@ pub struct Served<T> {
 // ----------------------------------------------------------------------------
 
 /// How much assurance a change carries — the distinction the UI must never blur (SEC-1 / WEB-06).
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
+#[serde(rename_all = "kebab-case")]
 pub enum Assurance {
     /// Sealed and prikk-verified.
     PrikkVerified,
@@ -92,14 +94,14 @@ pub enum Assurance {
 // ----------------------------------------------------------------------------
 
 /// Repository history (from `log`).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct HistoryView {
     pub ref_name: String,
     pub current_branch: Option<String>,
     pub entries: Vec<HistoryEntry>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct HistoryEntry {
     pub block_id: String,
     pub ref_state_id: String,
@@ -109,7 +111,7 @@ pub struct HistoryEntry {
     pub messages: Vec<PatchMessageView>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct PatchMessageView {
     pub patch_id: String,
     pub message: String,
@@ -144,12 +146,12 @@ impl HistoryView {
 }
 
 /// A change's content/effect (from `show`).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct ChangeView {
     pub patches: Vec<ChangePatchView>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct ChangePatchView {
     pub patch_id: String,
     /// Honest assurance: a queued (unsealed) patch is `ForgeApprovedUnsealed`, never verified (T5).
@@ -157,7 +159,7 @@ pub struct ChangePatchView {
     pub operations: Vec<OperationView>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct OperationView {
     pub kind: String,
     pub paths: Vec<String>,
@@ -203,14 +205,14 @@ fn render_path(p: &model::PathRef) -> String {
 
 /// A single file's content at a ref (from `checkout --patch-plan --content-path`). The `Text` bytes are
 /// **raw repository content** — the web layer must sanitize/serve from the isolated origin (T4).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct FileView {
     pub ref_name: String,
     pub path: String,
     pub content: FileContentView,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub enum FileContentView {
     Text(String),
     Binary { blob_id: String, size: u64 },
@@ -243,14 +245,14 @@ impl FileView {
 }
 
 /// Refs/branches/tags (from `branch` + `tag`).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct RefsView {
     pub current_branch: Option<String>,
     pub branches: Vec<BranchView>,
     pub tags: Vec<TagView>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct BranchView {
     pub ref_name: String,
     pub ref_state_id: String,
@@ -258,7 +260,7 @@ pub struct BranchView {
     pub current: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct TagView {
     pub ref_name: String,
     pub target_block_id: String,
@@ -296,7 +298,7 @@ impl RefsView {
 }
 
 /// The repository verify status (from `verify`) — the honesty anchor, always re-derived (T5).
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct VerifyView {
     pub ok: bool,
     pub verified_sessions: u64,
@@ -305,13 +307,13 @@ pub struct VerifyView {
     pub stages: Vec<StageView>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct FailedConditionView {
     pub id: String,
     pub message: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct StageView {
     pub stage: String,
     /// `evaluated` | `failed` | `not_evaluated` | `halted`.

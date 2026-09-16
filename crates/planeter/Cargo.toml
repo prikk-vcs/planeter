@@ -12,7 +12,9 @@ publish = false
 [dependencies]
 planeter-core = { path = "../planeter-core" }
 planeter-auth = { path = "../planeter-auth" }
+planeter-store = { path = "../planeter-store" }
 planeter-web = { path = "../planeter-web" }
 planeter-transport = { path = "../planeter-transport" }
 planeter-ci = { path = "../planeter-ci" }
 planeter-registry = { path = "../planeter-registry" }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }

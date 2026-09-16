@@ -17,6 +17,9 @@ allow = [
     "Apache-2.0 WITH LLVM-exception",
     "Unicode-3.0",
     "MPL-2.0",
+    # Permissive; enters via axum's router (`matchit`, "MIT AND BSD-3-Clause") — part of the RFC 003
+    # T3 web stack.
+    "BSD-3-Clause",
 ]
 
 [bans]
