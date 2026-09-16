@@ -18,8 +18,8 @@ its checks), and packages (RFC 007).
 
 prikk measured that a keyless forge cannot advance its own ref by receiving a sealed block (a received
 sealed ref stays an untrusted `remotes/` pointer), so D-4's keyless-fallback-where-the-forge's-ref-advances
-does not work. The corrected model, **gated on the prikk binary** (RFC 154 accepted + RFC 155 proposed,
-post-0.43.0):
+does not work. The corrected model, **gated on the prikk binary** (RFC 154 + RFC 155 both accepted
+2026-09-16, unshipped; order post-0.43.0):
 
 - **Merge = a maintainer seals (their own key, client-side) + the forge *adopts* the resulting
   trusted-maintainer-signed fast-forward advance (RFC 154).** The forge never signs; it adopts a

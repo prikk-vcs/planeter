@@ -164,8 +164,14 @@ Named so no plan silently assumes them:
 - **prikk RFC 154 — trusted fast-forward ref adoption. ACCEPTED (prikk owner, 2026-09-16); not yet
   shipped.** The keyless multi-maintainer canonical-branch primitive B1 depends on. Supersedes the old
   UD-6 "client-sealable-claim" ask. Ship order (post-0.43.0): key-id fix → RFC 155 → RFC 154.
-- **prikk RFC 155 — the repository-complete artifact. PROPOSED** (planeter's requirements folded in). The
-  clone/serve/migrate substrate for B1 and B2 (`import --adopt`). Owner-scheduled.
+- **prikk RFC 155 — the repository-complete artifact. ACCEPTED (prikk owner, 2026-09-16); not yet
+  shipped.** planeter's R1–R6 are now prikk's accepted direction; the clone/serve/migrate substrate for
+  B1 and B2 (`import --adopt`). Its all-or-nothing import gets its own prikk design round — those details
+  may still move.
+- **prikk 0.43.0 released (2026-09-16).** Ships the fix a forge needs — `bundle export` / `sync build`
+  now handle ordinary *delete-after-edit* histories (refused since 0.28.0) — so **planeter's transport
+  requires prikk ≥ 0.43.0** (dependency-ledger PK-22). It ships **neither** RFC 154 nor RFC 155 nor the
+  key-id fix, and changes no format/JSON planeter reads.
 - **prikk key-id collision fix** — `setup` names every maintainer key `maintainer`; a multi-maintainer
   forge needs distinct key-ids. First in prikk's ship order; planeter designs its identity model for
   distinct ids regardless.

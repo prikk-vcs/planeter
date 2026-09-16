@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | A living record of every prikk behaviour planeter's design depends on, and how sure we are of it. |
-| Version | v1 (2026-09-16) |
+| Version | v1.1 (2026-09-16 — folds RFC 155 acceptance and prikk 0.43.0) |
 | Why | We were burned once by an unverified assumption (the "seal locally, forge's ref advances" fallback — measured false). This ledger surfaces every other such dependency so the next wrong one is caught **before** implementation, and so it is obvious what is real, what is ruled, what is not yet shipped, and what is still only assumed. |
 | How to use | Before implementing any RFC, check its prikk dependencies here. When prikk ships or measures something, move the row's status and cite the evidence. An **ASSUMED** row implemented without being promoted to **CONFIRMED** is a risk taken knowingly. |
 
@@ -36,13 +36,14 @@
 | PK-11 | `sync` is **negotiation-as-artifacts, off the network** | **RULED** | prikk RFC 116. planeter ferries artifacts; invents no wire protocol (RFC 004). |
 | PK-12 | Serving-for-reading is **Shape D** — the CLI JSON surface is the substrate; prikk ships no server | **RULED** | prikk RFC 145. planeter drives the CLI, never links the crate. |
 | PK-13 | At **1.0**, stability arrives in layers: object format + exchange artifacts first, CLI JSON second, library API last | **RULED** | prikk RFC 152 §5. planeter builds on the layers that stabilize first. |
+| PK-22 | `bundle export` / `sync build` handle **ordinary histories that delete a previously-edited file** (the exporter replays history to derive the deleted content) | **CONFIRMED** (prikk **0.43.0**) | Fixed in 0.43.0; every release 0.28.0–0.42.0 refused these with *"integrity error: missing blob object"* while `verify` passed. **⇒ planeter's transport requires prikk ≥ 0.43.0.** A 0.43.0 bundle still imports in a 0.42.0 binary (mixed-version relay property, measured). |
 
 ### B. Accepted/proposed in direction, not yet shipped (GATED — implementation waits on the binary)
 
 | ID | planeter relies on | Status | Evidence / note |
 |---|---|---|---|
 | PK-14 | **Trusted fast-forward ref adoption** — a keyless repo publishes a received, trusted-maintainer-signed fast-forward as its own canonical branch, no re-sign | **GATED** (accepted, not shipped) | prikk **RFC 154**, accepted by prikk owner 2026-09-16. The canonical-branch/merge primitive (RFC 004/005/008). |
-| PK-15 | The **repository-complete artifact** — whole-repo, offline-verifiable, verbatim, read-only export + all-or-nothing import, `import --adopt` | **GATED** (proposed) | prikk **RFC 155**, proposed 2026-09-16 (planeter's requirements folded in). Clone/serve/migrate substrate (RFC 004/009). **Not yet accepted** — highest-leverage open dependency. |
+| PK-15 | The **repository-complete artifact** — whole-repo, offline-verifiable, verbatim, read-only export + all-or-nothing import, `import --adopt` | **GATED** (accepted, not shipped) | prikk **RFC 155**, **accepted by prikk owner 2026-09-16** — planeter's R1–R6 are now prikk's accepted direction. Clone/serve/migrate substrate (RFC 004/009). Highest-leverage **unshipped** dependency. **R4 (all-or-nothing import) gets its own prikk design round — those details may still move.** |
 | PK-16 | The **key-id collision fix** in `setup` | **GATED** (in prikk's ship order) | First in prikk's post-0.43.0 order. Workaround: distinct key ids (PK-8). |
 
 *Ship order prikk stated (post-0.43.0): key-id fix → RFC 155 → RFC 154.*
@@ -52,7 +53,7 @@
 | ID | planeter assumes | Status | Risk / action |
 |---|---|---|---|
 | PK-17 | The `--format json` read surface is **complete enough** for a full forge browse (raw blob access is via `show`/`checkout` only; **no blame/annotate**) | **PARTIAL** (`UD-1`) | Views needing missing data render *"pending a prikk increment"*, never faked (RFC 003 D-7). Catalogue the gaps during RFC 003 build; raise as prikk asks. |
-| PK-18 | The CLI **JSON schemas are stable enough** to drive across prikk versions | **ASSUMED** | prikk RFC 152 §5 says CLI JSON stabilizes **second**, at 1.0 — so **pre-1.0 the JSON may change**. planeter pins supported prikk versions (RFC 001 D-3) and must treat JSON-schema drift as a version-gated risk. **Verify per prikk release.** |
+| PK-18 | The CLI **JSON schemas are stable enough** to drive across prikk versions | **ASSUMED** | prikk RFC 152 §5 says CLI JSON stabilizes **second**, at 1.0 — so **pre-1.0 the JSON may change**. **0.43.0 changed no `schema_version` and no format planeter reads (clean this release).** planeter pins supported prikk versions (RFC 001 D-3) and treats JSON-schema drift as a version-gated risk. **Verify per prikk release.** |
 | PK-19 | prikk's **local locking is sufficient** beneath planeter's per-repo write serialization | **ASSUMED** (`UD-4`/`IQ-3`) | Confirm during the RFC 004 transport build (its handoff T6). If insufficient, raise before proceeding. |
 | PK-20 | The accepted-but-unsealed queue (`sync pending`) exposes what planeter needs to render an **open change** | **CONFIRMED-ish** | prikk reply: the claims are stored objects that travel in RFC 155; review state is planeter metadata. Treat the *content* as confirmed, the *artifact carriage* as GATED on PK-15. |
 | PK-21 | Driving prikk as a **subprocess** with a stable, gateable outcome is viable | **CONFIRMED** for reads (PK-1); **GATED** for the exchange/adopt verbs (RFC 155 promises JSON outcomes) | Reads work today; the adopt/artifact verbs' outcomes arrive with PK-14/PK-15. |
@@ -60,7 +61,7 @@
 ## Reading the ledger
 
 - **Section A is the floor** — real today, safe to build M1 (host/browse/auth + keyless `accept`) on.
-- **Section B is the gate** — the keyless canonical-branch, merge, relay and migration paths are *designed* but wait on prikk shipping PK-14/PK-15/PK-16. **PK-15 (RFC 155) is only proposed** and is the single most important open dependency: it is the clone/serve/migrate substrate and it is not yet accepted.
+- **Section B is the gate** — the keyless canonical-branch, merge, relay and migration paths are *designed* but wait on prikk **shipping** PK-14/PK-15/PK-16. As of 2026-09-16 **RFC 154 and RFC 155 are both accepted but unimplemented**, and prikk 0.43.0 shipped neither. PK-15 (RFC 155) is the highest-leverage unshipped dependency (the clone/serve/migrate substrate), and its all-or-nothing import gets its own prikk design round. Transport also now requires **prikk ≥ 0.43.0** (PK-22).
 - **Section C is the watch list** — especially **PK-18** (pre-1.0 JSON drift) and **PK-19** (locking), which no correspondence has settled and which implementation must verify rather than assume.
 
 Update this file whenever prikk ships, measures, or rules something a row depends on.

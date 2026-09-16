@@ -38,6 +38,10 @@ RFC 155 (repository-complete artifact) → RFC 154 (adoption).
   (different clients shown different signed tips; prikk reports two trusted successors of one state as a
   refusal naming both, but cross-client comparison is transport's). Add both to the transport surface.
 - **Distinct maintainer key-ids** are required (prikk fixes the default-`maintainer` collision first).
+- **Minimum prikk version ≥ 0.43.0 for transport.** `bundle export` / `sync build` only handle ordinary
+  *delete-after-edit* histories from prikk 0.43.0 (refused 0.28.0–0.42.0); a forge serving real repos
+  needs this, so 0.43.0 is planeter's transport floor (dependency-ledger PK-22). Note also that
+  **RFC 154 and RFC 155 are accepted but *not shipped* in 0.43.0** — implementation still waits.
 
 ## Summary
 
