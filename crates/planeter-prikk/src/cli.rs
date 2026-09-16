@@ -8,12 +8,12 @@
 
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
-use std::process::Command;
 
 use serde::de::DeserializeOwned;
 
 use crate::error::{PrikkError, Result};
 use crate::model;
+use crate::sandbox::Sandbox;
 
 /// planeter's minimum supported prikk version (RFC 001 D-3 / PK-22).
 pub const MIN_PRIKK_VERSION: (u64, u64, u64) = (0, 43, 0);
@@ -25,6 +25,8 @@ pub struct CliPrikkRepo {
     root: PathBuf,
     /// The prikk binary to invoke (default: `prikk` on `PATH`).
     binary: OsString,
+    /// How the prikk subprocess is confined (default: bubblewrap — RFC 001 T4).
+    sandbox: Sandbox,
 }
 
 impl CliPrikkRepo {
@@ -33,6 +35,7 @@ impl CliPrikkRepo {
         Self {
             root: root.into(),
             binary: OsString::from("prikk"),
+            sandbox: Sandbox::default(),
         }
     }
 
@@ -41,7 +44,16 @@ impl CliPrikkRepo {
         Self {
             root: root.into(),
             binary: binary.into(),
+            sandbox: Sandbox::default(),
         }
+    }
+
+    /// Set the confinement policy (default: bubblewrap). Use [`Sandbox::Unconfined`] only in dev, never
+    /// to host untrusted input (RFC 001 T4).
+    #[must_use]
+    pub fn with_sandbox(mut self, sandbox: Sandbox) -> Self {
+        self.sandbox = sandbox;
+        self
     }
 
     /// Bind and **verify the prikk version is in planeter's supported range** (RFC 001 D-3): refuse an
@@ -80,9 +92,9 @@ impl CliPrikkRepo {
 
     /// Run a prikk subcommand, returning its stdout. A non-zero exit is a typed [`PrikkError::Command`].
     fn run(&self, args: &[&str]) -> Result<String> {
-        let output = Command::new(&self.binary)
-            .current_dir(&self.root)
-            .args(args)
+        let output = self
+            .sandbox
+            .command(&self.binary, &self.root, args)
             .output()
             .map_err(PrikkError::Spawn)?;
         if output.status.success() {

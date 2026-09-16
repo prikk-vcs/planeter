@@ -64,6 +64,24 @@ fn reads_parse_to_typed_models_on_a_fresh_repo() {
     let tags = repo.tags().expect("tags");
     assert_eq!(tags.schema_version, "tag-list-v1");
 
-    let keys = repo.key_status().expect("key status");
-    assert_eq!(keys.schema_version, "key-status-v1");
+    // Repo-level trust policy reads fine confined. (`key status` is deliberately *not* asserted here: it
+    // needs the operator's key directory / HOME, which the confined, keyless forge subprocess does not
+    // have — correct for the keyless model, INV-2.)
+    let trust = repo.trust_list().expect("trust list");
+    assert_eq!(trust.schema_version, "trust-list-v1");
+}
+
+#[test]
+fn unconfined_dev_mode_also_works() {
+    if !prikk_available() {
+        eprintln!("skipping: prikk not on PATH");
+        return;
+    }
+    let dir = init_repo("driver-unconfined");
+    let repo = CliPrikkRepo::new(&dir).with_sandbox(planeter_prikk::Sandbox::Unconfined);
+    // The dev-only unconfined path drives prikk directly (no bwrap).
+    assert_eq!(
+        repo.status().expect("status").schema_version,
+        "status-report-v1"
+    );
 }
