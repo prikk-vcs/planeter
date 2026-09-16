@@ -144,18 +144,30 @@ content-as-data, no default egress), **portable identity** (defer until a standa
 
 ## Release cycles
 
-- **Milestone-driven minors.** Each phase completes a minor. A minor ships only when its gates are green
-  (fmt · clippy `-D warnings` · test · supply-chain: `cargo-deny`/`cargo-audit`), its security invariants
-  hold (notably **ENF-2**: the default build links no forge-seal path — CI-checked), and the threat model
-  is updated if the release touched a sensitive surface.
-- **The read/host spine ships early and often.** M1 is a genuinely usable product (host + browse + auth);
-  subsequent minors add capability without a big-bang.
-- **Track B ships when ready, within 0.x.** B1/B2 are not release blockers for their neighbours; they
-  land when their joint prikk work and owner rulings complete.
+**planeter releases an application, not libraries.** Every crate is `publish = false` — planeter is a
+forge *server*, so a release is **a tagged bare version plus built artifacts to deploy** (the `planeter`
+server and `planeter-runner` binaries, and a container image), published as a GitHub release with build
+attestations — **never crates.io packages**. This is the one place planeter's release cycle differs from
+the ecosystem's library projects (stikk/brygge crates).
+
+- **A0 is pre-release; the first release is M1 (0.1.0).** The workspace stays `0.0.0` through foundations
+  (the "0.1.0-dev" milestone); **nothing is tagged until M1** ships the first usable product
+  (host + browse + auth = A0 + RFC 002 + RFC 003). The version is set to `0.1.0` at the M1 tag.
+- **Milestone-driven minors** (M1 `0.1.0` → M5 `0.5.0`). A minor ships only when its gates are green
+  (fmt · clippy `-D warnings` · test · `cargo-deny`/`cargo-audit`), its security invariants hold
+  (notably **ENF-2**: the default build links no forge-seal path — CI-checked), and the threat model is
+  updated if the release touched a sensitive surface.
+- **The read/host spine ships early and often.** M1 is a genuinely usable product; later minors add
+  capability without a big-bang.
+- **Track B ships when ready, within 0.x** (gated on prikk shipping RFC 154/155); not a blocker for its
+  neighbours.
 - **Security releases are out-of-band.** A dependency advisory or a threat-model control failure triggers
   a prompt patch release.
-- **Tags are bare versions (no `v`)**, gates CI-enforced, release mechanics mirroring the ecosystem;
-  **publishing/tagging is owner-only.**
+- **Runtime prerequisites are release notes, not code:** **prikk ≥ 0.43.0** (the transport floor, PK-22)
+  and **bubblewrap** on the host (the sandbox, T4) are documented deployment prerequisites of a release.
+- **The release workflow lands as M1 nears** — a `release.yml` (not needed during A0): on a bare-version
+  tag → gates green → build binaries + container → attest/sign → GitHub release. **Tagging, publishing,
+  and the v0→v1 promotion are owner-only.**
 
 ## Dependencies (on prikk and on the owner) — do not block Track A
 
