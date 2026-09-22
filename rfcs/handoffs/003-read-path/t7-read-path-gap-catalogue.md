@@ -1,5 +1,16 @@
 # RFC 003 T7 — Read-path gap catalogue (D-7 / UD-1)
 
+> **Update 2026-09-22 — mostly closed.** prikk **0.46.0** shipped the two M1 browse blockers and the
+> compare verb, co-designed with planeter (prikk letter 2026-09-22):
+> **A1 → `prikk tree` (`tree-listing-v1`)**, **A2 → `prikk cat` (`path-content-v1`)**, **A4 →
+> `prikk diff` (`diff-report-v1`, RFC 153)**. **A3 (blame) remains** a candidate, not scheduled (M2+).
+> Wiring these into planeter's driver/views is gated on upgrading the local prikk binary to 0.46.0 and
+> bumping the version pin (ledger PK-23/24/25/26). One caveat carried forward: `prikk cat --max-bytes`
+> bounds *bytes written*, not memory — planeter bounds hostile input by what it accepts (PK-24).
+>
+> The rest of this document is the original catalogue, kept for the record.
+
+
 Where a browse view needs repository data that prikk does not (yet) expose in machine-readable
 (`--format json`) form. Per `LAY-3`, planeter **never reaches into prikk internals** to fill these — the
 view renders **"pending a prikk increment"** and the gap is listed here as the prikk-side ask.
