@@ -25,6 +25,86 @@ fn init_repo(name: &str) -> PathBuf {
     dir
 }
 
+/// Create a repo with keys, write files, commit and seal them to `heads/main`, and return its root.
+/// Key material is isolated to a per-test config dir (HOME/XDG override) so it never touches the
+/// developer's real key directory. The sealing steps run **unsandboxed** (they need the key dir);
+/// planeter's own reads (tree/cat) then run through the sandboxed [`CliPrikkRepo`], which needs no keys.
+fn sealed_repo(name: &str) -> PathBuf {
+    let base = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(name);
+    let _ = std::fs::remove_dir_all(&base);
+    let repo = base.join("repo");
+    let keys = base.join("keys");
+    std::fs::create_dir_all(&repo).expect("create repo dir");
+    std::fs::create_dir_all(&keys).expect("create keys dir");
+
+    let prikk = |args: &[&str]| {
+        let ok = Command::new("prikk")
+            .args(args)
+            .current_dir(&repo)
+            .env("HOME", &keys)
+            .env("XDG_CONFIG_HOME", &keys)
+            .status()
+            .expect("spawn prikk");
+        assert!(ok.success(), "prikk {args:?} failed");
+    };
+
+    prikk(&["setup"]);
+    std::fs::write(repo.join("README.md"), b"hello world\n").unwrap();
+    std::fs::create_dir_all(repo.join("src")).unwrap();
+    std::fs::write(repo.join("src/main.rs"), b"fn main() {}\n").unwrap();
+    std::fs::write(repo.join("data.bin"), [0x00u8, 0x01, 0x02, b'X', 0xff]).unwrap();
+    prikk(&["commit", "--from-worktree", "-m", "init"]);
+    prikk(&["seal", "--allow-no-audit"]);
+    repo
+}
+
+#[test]
+fn tree_and_cat_read_a_sealed_repo() {
+    if !prikk_available() {
+        eprintln!("skipping: prikk not on PATH");
+        return;
+    }
+    let dir = sealed_repo("driver-tree-cat");
+    let repo = CliPrikkRepo::open(&dir).expect("open + version pin (>= 0.46.0)");
+
+    // tree: leaf paths at heads/main, with text/binary encoding.
+    let tree = repo.tree(None, None).expect("tree");
+    assert_eq!(tree.schema_version, "tree-listing-v1");
+    let readme = tree
+        .entries
+        .iter()
+        .find(|e| e.path == "README.md")
+        .expect("README.md listed");
+    assert_eq!(readme.encoding.as_deref(), Some("text"));
+    let bin = tree
+        .entries
+        .iter()
+        .find(|e| e.path == "data.bin")
+        .expect("data.bin listed");
+    assert_eq!(bin.encoding.as_deref(), Some("binary"));
+    assert!(bin.content_id.is_some(), "binary carries a content_id");
+
+    // tree with a prefix filters to the subtree.
+    let src = repo.tree(None, Some("src")).expect("tree --prefix src");
+    assert!(src.entries.iter().all(|e| e.path.starts_with("src")));
+
+    // cat metadata (no bytes).
+    let meta = repo
+        .path_content_meta(None, "README.md")
+        .expect("cat --format json");
+    assert_eq!(meta.schema_version, "path-content-v1");
+    assert_eq!(meta.encoding.as_deref(), Some("text"));
+
+    // cat bytes: text is exact; binary comes back with its non-UTF-8 bytes intact.
+    let text = repo.cat_bytes(None, "README.md", None).expect("cat text");
+    assert_eq!(text, b"hello world\n");
+    let raw = repo.cat_bytes(None, "data.bin", None).expect("cat binary");
+    assert_eq!(raw, vec![0x00u8, 0x01, 0x02, b'X', 0xff]);
+
+    // --max-bytes below the size refuses with nothing written (a typed Command error).
+    assert!(repo.cat_bytes(None, "README.md", Some(3)).is_err());
+}
+
 #[test]
 fn open_pins_the_version_and_reports_it() {
     if !prikk_available() {
@@ -32,7 +112,7 @@ fn open_pins_the_version_and_reports_it() {
         return;
     }
     let dir = init_repo("driver-version");
-    // open() runs the version pin (RFC 001 D-3); success means prikk >= 0.43.0.
+    // open() runs the version pin (RFC 001 D-3); success means prikk >= 0.46.0 (MIN_PRIKK_VERSION).
     let repo = CliPrikkRepo::open(&dir).expect("open + version pin");
     let v = repo.version().expect("version");
     assert!(

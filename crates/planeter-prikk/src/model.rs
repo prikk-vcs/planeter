@@ -351,6 +351,68 @@ pub enum PathContent {
 }
 
 // ----------------------------------------------------------------------------
+// `tree` — schema_version "tree-listing-v1" (prikk 0.46.0; ledger PK-23)
+// ----------------------------------------------------------------------------
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct TreeListing {
+    pub schema_version: String,
+    /// The resolved point (a ref name, e.g. `"heads/main"`, or a block id).
+    pub point: String,
+    /// The block the listing was resolved to (null for an empty repository).
+    pub target_block_id: Option<String>,
+    /// The path-component prefix filter applied, if any.
+    pub prefix: Option<String>,
+    pub entries: Vec<TreeEntry>,
+}
+
+/// One present leaf path (prikk emits leaves only — planeter builds directories from segments).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct TreeEntry {
+    pub path: String,
+    /// `file` | `symlink`.
+    pub kind: String,
+    /// `text` | `binary` (checkout's classification; the same axis `cat` reports). Absent for kinds
+    /// where it does not apply (e.g. a symlink).
+    #[serde(default)]
+    pub encoding: Option<String>,
+    /// The full file mode (e.g. `33188`), not a short form.
+    pub mode: u32,
+    #[serde(default)]
+    pub size: u64,
+    /// Present for **binary** entries only — a cache hint, never a retrieval key.
+    #[serde(default)]
+    pub content_id: Option<String>,
+    /// The link target, for a `symlink` entry.
+    #[serde(default)]
+    pub target: Option<String>,
+}
+
+// ----------------------------------------------------------------------------
+// `cat --format json` — schema_version "path-content-v1" (prikk 0.46.0; ledger PK-24)
+// ----------------------------------------------------------------------------
+
+/// The metadata `cat --format json` reports (no bytes) — same fields as one [`TreeEntry`], plus the
+/// resolved point. Used to decide inline-render vs. download before fetching bytes.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct PathContentMeta {
+    pub schema_version: String,
+    pub point: String,
+    pub target_block_id: Option<String>,
+    pub path: String,
+    /// `file` | `symlink`.
+    pub kind: String,
+    /// `text` | `binary`.
+    #[serde(default)]
+    pub encoding: Option<String>,
+    pub mode: u32,
+    #[serde(default)]
+    pub size: u64,
+    #[serde(default)]
+    pub content_id: Option<String>,
+}
+
+// ----------------------------------------------------------------------------
 // `key status` / `trust maintainer list` / `trust maintainer check`
 // ----------------------------------------------------------------------------
 
@@ -548,6 +610,31 @@ mod tests {
         assert_eq!(r.ref_name, "heads/main");
         assert_eq!(r.content[1].content, PathContent::Opaque { size: 99 });
         assert_eq!(r.not_found, vec!["missing".to_owned()]);
+    }
+
+    #[test]
+    fn parses_tree_listing_and_path_content() {
+        let t: TreeListing = serde_json::from_str(
+            r#"{"schema_version":"tree-listing-v1","point":"heads/main",
+                "target_block_id":"b1","prefix":null,"entries":[
+                {"path":"README.md","kind":"file","encoding":"text","mode":33188,"size":12},
+                {"path":"data.bin","kind":"file","encoding":"binary","mode":33188,"size":7,"content_id":"c1"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(t.point, "heads/main");
+        assert_eq!(t.entries[0].encoding.as_deref(), Some("text"));
+        assert_eq!(t.entries[0].content_id, None); // text has no content_id
+        assert_eq!(t.entries[1].content_id.as_deref(), Some("c1")); // binary does
+        assert_eq!(t.entries[1].size, 7);
+
+        let c: PathContentMeta = serde_json::from_str(
+            r#"{"schema_version":"path-content-v1","point":"heads/main","target_block_id":"b1",
+                "path":"data.bin","kind":"file","encoding":"binary","mode":33188,"size":7,"content_id":"c1"}"#,
+        )
+        .unwrap();
+        assert_eq!(c.path, "data.bin");
+        assert_eq!(c.encoding.as_deref(), Some("binary"));
+        assert_eq!(c.size, 7);
     }
 
     #[test]

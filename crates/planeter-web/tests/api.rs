@@ -152,3 +152,35 @@ async fn authorized_history_returns_json_then_304() {
     .await;
     assert_eq!(not_modified.status(), StatusCode::NOT_MODIFIED);
 }
+
+#[tokio::test]
+async fn authorized_tree_returns_json_and_raw_missing_is_404() {
+    if !prikk_available() {
+        eprintln!("skipping: prikk not on PATH");
+        return;
+    }
+    let r = router(app("api-tree-raw"));
+    // tree on the owner's (fresh) private repo: 200 JSON.
+    let tree = send(&r, "/api/v1/repos/alice/app/tree", Some("tok-alice"), None).await;
+    assert_eq!(tree.status(), StatusCode::OK);
+    assert_eq!(
+        tree.headers().get(header::CONTENT_TYPE).unwrap(),
+        "application/json"
+    );
+    // raw of a nonexistent path → 404 (existence-neutral).
+    let raw = send(
+        &r,
+        "/api/v1/repos/alice/app/raw?path=nope.txt",
+        Some("tok-alice"),
+        None,
+    )
+    .await;
+    assert_eq!(raw.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn anonymous_tree_is_404() {
+    let r = router(app("api-tree-anon"));
+    let denied = send(&r, "/api/v1/repos/alice/app/tree", None, None).await;
+    assert_eq!(denied.status(), StatusCode::NOT_FOUND);
+}

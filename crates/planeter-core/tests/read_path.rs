@@ -54,6 +54,42 @@ fn owner_browses_history_refs_and_verify() {
     let verify = svc.verify(&alice, &owner, "app").expect("verify");
     // Honesty: the verdict is re-derived from prikk; a fresh repo verifies.
     assert!(verify.ok);
+
+    // tree on a fresh (unsealed) repo authorizes and returns an empty listing.
+    let tree = svc.tree(&alice, &owner, "app", None, None).expect("tree");
+    assert_eq!(tree.point, "heads/main");
+    assert!(tree.entries.is_empty());
+
+    // raw_file for a path that does not exist is NotFound (not a generic error).
+    assert!(matches!(
+        svc.raw_file(&alice, &owner, "app", None, "nope.txt", None),
+        Err(ReadError::NotFound)
+    ));
+}
+
+#[test]
+fn anonymous_is_denied_tree_and_raw() {
+    if !prikk_available() {
+        eprintln!("skipping: prikk not on PATH");
+        return;
+    }
+    let (svc, owner) = fixture("read-anon-tree-raw");
+    // The new browse surfaces share the one authorize(_, Read, _) gate.
+    assert!(matches!(
+        svc.tree(&Principal::Anonymous, &owner, "app", None, None),
+        Err(ReadError::NotFound)
+    ));
+    assert!(matches!(
+        svc.raw_file(
+            &Principal::Anonymous,
+            &owner,
+            "app",
+            None,
+            "README.md",
+            None
+        ),
+        Err(ReadError::NotFound)
+    ));
 }
 
 #[test]

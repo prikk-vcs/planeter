@@ -244,6 +244,61 @@ impl FileView {
     }
 }
 
+/// A directory listing at a point (from `tree`). prikk emits leaf paths only; a caller builds the
+/// directory structure from path segments.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct TreeView {
+    pub point: String,
+    pub prefix: Option<String>,
+    pub entries: Vec<TreeEntryView>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+pub struct TreeEntryView {
+    pub path: String,
+    /// `file` | `symlink`.
+    pub kind: String,
+    /// `text` | `binary` (absent where it does not apply).
+    pub encoding: Option<String>,
+    pub mode: u32,
+    pub size: u64,
+    /// Present for binary entries only (a cache hint, not a retrieval key).
+    pub content_id: Option<String>,
+}
+
+impl TreeView {
+    pub fn from_tree(t: &model::TreeListing) -> Self {
+        Self {
+            point: t.point.clone(),
+            prefix: t.prefix.clone(),
+            entries: t
+                .entries
+                .iter()
+                .map(|e| TreeEntryView {
+                    path: e.path.clone(),
+                    kind: e.kind.clone(),
+                    encoding: e.encoding.clone(),
+                    mode: e.mode,
+                    size: e.size,
+                    content_id: e.content_id.clone(),
+                })
+                .collect(),
+        }
+    }
+}
+
+/// The raw bytes of a file at a point (from `cat`), plus the metadata needed to serve them. The bytes
+/// are **raw repository content** — the web layer serves them from the isolated content origin as a
+/// download, never rendered inline (RFC 003 T4). Not serialized as JSON: it is a byte payload.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RawFile {
+    pub path: String,
+    /// `text` | `binary` (from the metadata), if known.
+    pub encoding: Option<String>,
+    pub size: u64,
+    pub bytes: Vec<u8>,
+}
+
 /// Refs/branches/tags (from `branch` + `tag`).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct RefsView {
@@ -538,6 +593,54 @@ impl ReadService {
             .tags()
             .map_err(|e| ReadError::Unavailable(e.to_string()))?;
         Ok(RefsView::from_lists(&branches, &tags))
+    }
+
+    /// A directory listing at a point (`tree`). `prefix` filters by whole path components.
+    pub fn tree(
+        &self,
+        principal: &Principal,
+        owner: &Owner,
+        name: &str,
+        point: Option<&str>,
+        prefix: Option<&str>,
+    ) -> Result<TreeView> {
+        let record = self.authorize_read(principal, owner, name)?;
+        let driver = self.open(&record)?;
+        let listing = driver
+            .tree(point, prefix)
+            .map_err(|e| ReadError::Unavailable(e.to_string()))?;
+        Ok(TreeView::from_tree(&listing))
+    }
+
+    /// The raw bytes of a file at a point (`cat`), for the download / isolated-origin view. `max_bytes`,
+    /// if set, refuses (returns `Unavailable`) when the content exceeds it — prikk writes nothing.
+    /// A missing path is [`ReadError::NotFound`].
+    pub fn raw_file(
+        &self,
+        principal: &Principal,
+        owner: &Owner,
+        name: &str,
+        point: Option<&str>,
+        path: &str,
+        max_bytes: Option<u64>,
+    ) -> Result<RawFile> {
+        let record = self.authorize_read(principal, owner, name)?;
+        let driver = self.open(&record)?;
+        // Metadata first: a missing path becomes NotFound (not a generic unavailable).
+        let meta = match driver.path_content_meta(point, path) {
+            Ok(m) => m,
+            Err(planeter_prikk::PrikkError::Command { .. }) => return Err(ReadError::NotFound),
+            Err(e) => return Err(ReadError::Unavailable(e.to_string())),
+        };
+        let bytes = driver
+            .cat_bytes(point, path, max_bytes)
+            .map_err(|e| ReadError::Unavailable(e.to_string()))?;
+        Ok(RawFile {
+            path: path.to_owned(),
+            encoding: meta.encoding,
+            size: meta.size,
+            bytes,
+        })
     }
 
     /// The repository verify status (`verify`) — always re-derived, never cached (T5 honesty).

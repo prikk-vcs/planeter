@@ -23,14 +23,17 @@ use axum::routing::get;
 use serde::Serialize;
 
 use planeter_auth::Authenticator;
-use planeter_core::{Principal, ReadError, ReadService};
+use planeter_core::{Principal, RawFile, ReadError, ReadService};
 use planeter_store::Owner;
 
-use crate::security::{ContentOrigin, app_security_headers};
+use crate::security::{ContentOrigin, app_security_headers, raw_content_headers};
 
 /// Default and maximum history page size (bounded — `STD-3`).
 const DEFAULT_LIMIT: usize = 50;
 const MAX_LIMIT: usize = 200;
+/// The cap on raw file bytes served in one response (`cat --max-bytes`). Bounds the *response*; hostile
+/// input is bounded upstream, at the accept edge (PK-24).
+const RAW_MAX_BYTES: u64 = 25 * 1024 * 1024;
 
 /// Shared application state (cheap to clone — all `Arc`).
 #[derive(Clone)]
@@ -49,6 +52,8 @@ pub fn router(state: AppState) -> Router {
             get(change_handler),
         )
         .route("/api/v1/repos/{owner}/{name}/file", get(file_handler))
+        .route("/api/v1/repos/{owner}/{name}/tree", get(tree_handler))
+        .route("/api/v1/repos/{owner}/{name}/raw", get(raw_handler))
         .route("/api/v1/repos/{owner}/{name}/refs", get(refs_handler))
         .route("/api/v1/repos/{owner}/{name}/verify", get(verify_handler))
         .route("/api/v1/openapi.json", get(openapi_handler))
@@ -75,6 +80,20 @@ pub struct FileQuery {
 pub struct RefsQuery {
     #[serde(default)]
     all: bool,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct TreeQuery {
+    #[serde(rename = "ref")]
+    ref_name: Option<String>,
+    prefix: Option<String>,
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct RawQuery {
+    #[serde(rename = "ref")]
+    ref_name: Option<String>,
+    path: String,
 }
 
 // -- handlers --
@@ -118,6 +137,48 @@ async fn file_handler(
             .file(&principal, o, &name, q.ref_name.as_deref(), &q.path)
     });
     respond(&state, &headers, result)
+}
+
+async fn tree_handler(
+    State(state): State<AppState>,
+    Path((owner, name)): Path<(String, String)>,
+    Query(q): Query<TreeQuery>,
+    headers: HeaderMap,
+) -> Response {
+    let principal = principal_from(&headers, &state.auth);
+    let result = try_both_owners(&owner, |o| {
+        state.read.tree(
+            &principal,
+            o,
+            &name,
+            q.ref_name.as_deref(),
+            q.prefix.as_deref(),
+        )
+    });
+    respond(&state, &headers, result)
+}
+
+async fn raw_handler(
+    State(state): State<AppState>,
+    Path((owner, name)): Path<(String, String)>,
+    Query(q): Query<RawQuery>,
+    headers: HeaderMap,
+) -> Response {
+    let principal = principal_from(&headers, &state.auth);
+    let result = try_both_owners(&owner, |o| {
+        state.read.raw_file(
+            &principal,
+            o,
+            &name,
+            q.ref_name.as_deref(),
+            &q.path,
+            Some(RAW_MAX_BYTES),
+        )
+    });
+    match result {
+        Ok(raw) => build_raw(&state, &raw),
+        Err(e) => error_response(&state, e),
+    }
 }
 
 async fn refs_handler(
@@ -220,6 +281,19 @@ fn build_json(state: &AppState, body: &str, etag: Option<String>) -> Response {
         .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response_fallback())
 }
 
+/// Serve raw repository bytes as an inert download (isolated-content-origin headers, T4). The bytes are
+/// never rendered; `Content-Disposition: attachment` + `nosniff` + a `sandbox` CSP force a download.
+fn build_raw(_state: &AppState, raw: &RawFile) -> Response {
+    let filename = raw.path.rsplit('/').next().unwrap_or(&raw.path);
+    let mut builder = Response::builder().status(StatusCode::OK);
+    for (name, value) in raw_content_headers(filename) {
+        builder = builder.header(name, value);
+    }
+    builder
+        .body(Body::from(raw.bytes.clone()))
+        .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response_fallback())
+}
+
 fn error_response(state: &AppState, e: ReadError) -> Response {
     let status = match e {
         ReadError::NotFound => StatusCode::NOT_FOUND,
@@ -257,6 +331,8 @@ fn openapi_doc() -> serde_json::Value {
             "/api/v1/repos/{owner}/{name}/history": {"get": {"summary": "Repository history"}},
             "/api/v1/repos/{owner}/{name}/change/{target}": {"get": {"summary": "A change's content"}},
             "/api/v1/repos/{owner}/{name}/file": {"get": {"summary": "A file's content at a ref"}},
+            "/api/v1/repos/{owner}/{name}/tree": {"get": {"summary": "Directory listing at a ref"}},
+            "/api/v1/repos/{owner}/{name}/raw": {"get": {"summary": "Raw file bytes (download)"}},
             "/api/v1/repos/{owner}/{name}/refs": {"get": {"summary": "Branches and tags"}},
             "/api/v1/repos/{owner}/{name}/verify": {"get": {"summary": "Verify status"}}
         }

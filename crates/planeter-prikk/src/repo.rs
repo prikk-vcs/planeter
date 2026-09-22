@@ -49,6 +49,21 @@ pub trait PrikkRepo {
         paths: &[&str],
     ) -> Result<model::PatchPlanContent>;
 
+    /// `tree` — the files present at a point (leaves only; planeter builds directories from segments).
+    /// `point` is a ref or a bare block id (None = the current branch); `prefix` filters by whole path
+    /// components (prikk 0.46.0).
+    fn tree(&self, point: Option<&str>, prefix: Option<&str>) -> Result<model::TreeListing>;
+
+    /// `cat --format json` — metadata (no bytes) for a file at a point: `kind`/`encoding`/`size`, so a
+    /// caller can decide inline-render vs. download before fetching (prikk 0.46.0).
+    fn path_content_meta(&self, point: Option<&str>, path: &str) -> Result<model::PathContentMeta>;
+
+    /// `cat` — the raw reconstructed bytes of a file at a point (text **and** binary). `max_bytes`, if
+    /// set, refuses (writing **nothing**) when the content exceeds it. **Note (PK-24):** this bounds the
+    /// bytes returned, **not** prikk's memory — bound hostile input by what you accept, upstream of here.
+    fn cat_bytes(&self, point: Option<&str>, path: &str, max_bytes: Option<u64>)
+    -> Result<Vec<u8>>;
+
     /// `key status`.
     fn key_status(&self) -> Result<model::KeyStatus>;
 

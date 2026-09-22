@@ -3,7 +3,7 @@
 //! It shells out to the prikk binary against one repository directory (the one holding `.prikk`),
 //! parses `--format json` output into the [`crate::model`] types after checking the `schema_version`,
 //! and maps a non-zero exit to a typed [`PrikkError`] (never a panic). The version pin (D-3) refuses a
-//! prikk older than planeter's floor (PK-22: transport requires prikk ≥ 0.43.0). Confinement of the
+//! prikk older than planeter's floor (PK-26: planeter requires prikk ≥ 0.46.0). Confinement of the
 //! subprocess (sandbox) is layered on in T4 — this module invokes prikk directly.
 
 use std::ffi::OsString;
@@ -15,8 +15,13 @@ use crate::error::{PrikkError, Result};
 use crate::model;
 use crate::sandbox::Sandbox;
 
-/// planeter's minimum supported prikk version (RFC 001 D-3 / PK-22).
-pub const MIN_PRIKK_VERSION: (u64, u64, u64) = (0, 43, 0);
+/// planeter's minimum supported prikk version (RFC 001 D-3 / dependency-ledger PK-26).
+///
+/// Raised to 0.46.0 (2026-09-22): it ships the read verbs planeter's browse needs — `tree`
+/// (`tree-listing-v1`), `cat` (`path-content-v1`), `diff` (`diff-report-v1`) — and carries the 0.44.0
+/// `bundle import` corruption fix (GHSA-px5q-233r-6hq5), the 0.45.0 format-7 signature union, and the
+/// key-id fix. The pin refuses anything older rather than guess.
+pub const MIN_PRIKK_VERSION: (u64, u64, u64) = (0, 46, 0);
 
 /// A prikk repository driven through the prikk CLI as a subprocess.
 #[derive(Debug, Clone)]
@@ -111,6 +116,24 @@ impl CliPrikkRepo {
                     ">= {}.{}.{}",
                     MIN_PRIKK_VERSION.0, MIN_PRIKK_VERSION.1, MIN_PRIKK_VERSION.2
                 ),
+            })
+        }
+    }
+
+    /// Run a prikk subcommand, returning raw stdout bytes. A non-zero exit is a typed
+    /// [`PrikkError::Command`]. Used by the byte-oriented verbs (e.g. `cat` of binary content).
+    fn run_bytes(&self, args: &[&str]) -> Result<Vec<u8>> {
+        let output = self
+            .sandbox
+            .command(&self.binary, &self.root, args)
+            .output()
+            .map_err(PrikkError::Spawn)?;
+        if output.status.success() {
+            Ok(output.stdout)
+        } else {
+            Err(PrikkError::Command {
+                code: output.status.code(),
+                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
             })
         }
     }
@@ -250,6 +273,43 @@ impl super::repo::PrikkRepo for CliPrikkRepo {
         self.run_json(&args, "patch-plan-content-v1")
     }
 
+    fn tree(&self, point: Option<&str>, prefix: Option<&str>) -> Result<model::TreeListing> {
+        let mut args = vec!["tree", "--format", "json"];
+        if let Some(p) = point {
+            args.extend(["--ref", p]);
+        }
+        if let Some(pre) = prefix {
+            args.extend(["--prefix", pre]);
+        }
+        self.run_json(&args, "tree-listing-v1")
+    }
+
+    fn path_content_meta(&self, point: Option<&str>, path: &str) -> Result<model::PathContentMeta> {
+        let mut args = vec!["cat", "--path", path, "--format", "json"];
+        if let Some(p) = point {
+            args.extend(["--ref", p]);
+        }
+        self.run_json(&args, "path-content-v1")
+    }
+
+    fn cat_bytes(
+        &self,
+        point: Option<&str>,
+        path: &str,
+        max_bytes: Option<u64>,
+    ) -> Result<Vec<u8>> {
+        let max_s;
+        let mut args = vec!["cat", "--path", path];
+        if let Some(p) = point {
+            args.extend(["--ref", p]);
+        }
+        if let Some(n) = max_bytes {
+            max_s = n.to_string();
+            args.extend(["--max-bytes", &max_s]);
+        }
+        self.run_bytes(&args)
+    }
+
     fn key_status(&self) -> Result<model::KeyStatus> {
         self.run_json(&["key", "status", "--format", "json"], "key-status-v1")
     }
@@ -342,9 +402,10 @@ mod tests {
 
     #[test]
     fn version_ordering_meets_the_floor() {
-        assert!((0, 43, 0) >= MIN_PRIKK_VERSION);
-        assert!((0, 43, 1) >= MIN_PRIKK_VERSION);
+        assert!((0, 46, 0) >= MIN_PRIKK_VERSION);
+        assert!((0, 46, 1) >= MIN_PRIKK_VERSION);
         assert!((1, 0, 0) >= MIN_PRIKK_VERSION);
-        assert!((0, 42, 9) < MIN_PRIKK_VERSION);
+        assert!((0, 45, 9) < MIN_PRIKK_VERSION);
+        assert!((0, 43, 0) < MIN_PRIKK_VERSION);
     }
 }
