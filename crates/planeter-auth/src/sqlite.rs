@@ -14,6 +14,7 @@ use planeter_store::{RepoId, SqliteDb, UserId};
 use crate::credential::{CredentialStore, DeployKeyRecord, SshKeyRecord, TokenRecord};
 use crate::hashing::{PasswordHash, TokenHash};
 use crate::identity::{Account, AccountStore, AuthError, Result};
+use crate::session::{Session, SessionId, SessionStore, random_token};
 
 const AUTH_SCHEMA: &str = "
 CREATE TABLE IF NOT EXISTS accounts (
@@ -35,6 +36,12 @@ CREATE TABLE IF NOT EXISTS ssh_keys (
     access      TEXT NOT NULL,
     repos       TEXT,
     expires_at  INTEGER
+);
+CREATE TABLE IF NOT EXISTS sessions (
+    id         TEXT PRIMARY KEY,
+    user       TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS deploy_keys (
     fingerprint TEXT PRIMARY KEY,
@@ -404,5 +411,88 @@ mod tests {
             Principal::MachineAsUser { .. }
         ));
         assert!(auth.authenticate_token("plt_forged").is_err());
+    }
+}
+
+/// [`SessionStore`] over SQLite.
+#[derive(Clone)]
+pub struct SqliteSessionStore {
+    db: SqliteDb,
+}
+
+impl SqliteSessionStore {
+    pub fn new(db: SqliteDb) -> Result<Self> {
+        db.apply_schema(AUTH_SCHEMA).map_err(be)?;
+        Ok(Self { db })
+    }
+}
+
+impl SessionStore for SqliteSessionStore {
+    fn create(&self, user: UserId, now_unix: u64, expires_at: u64) -> Result<Session> {
+        let s = Session {
+            id: SessionId(random_token()),
+            user,
+            created_at: now_unix,
+            expires_at,
+        };
+        self.db
+            .lock()
+            .map_err(be)?
+            .execute(
+                "INSERT INTO sessions (id, user, created_at, expires_at) VALUES (?1, ?2, ?3, ?4)",
+                params![
+                    s.id.0,
+                    s.user.as_str(),
+                    i64::try_from(s.created_at).unwrap_or(i64::MAX),
+                    i64::try_from(s.expires_at).unwrap_or(i64::MAX)
+                ],
+            )
+            .map_err(be)?;
+        Ok(s)
+    }
+
+    fn get(&self, id: &SessionId, now_unix: u64) -> Result<Option<Session>> {
+        let conn = self.db.lock().map_err(be)?;
+        conn.query_row(
+            "SELECT id, user, created_at, expires_at FROM sessions WHERE id = ?1 AND expires_at > ?2",
+            params![id.0, i64::try_from(now_unix).unwrap_or(i64::MAX)],
+            |r| {
+                Ok(Session {
+                    id: SessionId(r.get(0)?),
+                    user: UserId::new(r.get::<_, String>(1)?),
+                    created_at: u64::try_from(r.get::<_, i64>(2)?).unwrap_or(0),
+                    expires_at: u64::try_from(r.get::<_, i64>(3)?).unwrap_or(0),
+                })
+            },
+        )
+        .optional()
+        .map_err(be)
+    }
+
+    fn delete(&self, id: &SessionId) -> Result<()> {
+        self.db
+            .lock()
+            .map_err(be)?
+            .execute("DELETE FROM sessions WHERE id = ?1", params![id.0])
+            .map_err(be)?;
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+mod session_tests {
+    use super::*;
+
+    #[test]
+    fn sqlite_sessions_round_trip_and_expire() {
+        let s = SqliteSessionStore::new(SqliteDb::open_in_memory().unwrap()).unwrap();
+        let sess = s.create(UserId::new("bob"), 10, 20).unwrap();
+        assert_eq!(
+            s.get(&sess.id, 15).unwrap().unwrap().user,
+            UserId::new("bob")
+        );
+        assert!(s.get(&sess.id, 20).unwrap().is_none());
+        s.delete(&sess.id).unwrap();
+        assert!(s.get(&sess.id, 15).unwrap().is_none());
     }
 }

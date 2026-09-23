@@ -29,7 +29,10 @@ pub use authorize::{
     AccessContext, Action, Decision, DenyReason, ItemResource, OrgResource, Principal, RefAttempt,
     RefProtection, RefResource, RepoResource, RepoScope, Resource, Scope, ScopeAccess, authorize,
 };
-pub use egress::{DenyAllEgress, EgressError, EgressGuard};
+pub use egress::{
+    DenyAllEgress, EgressError, EgressGuard, EgressPolicy, ResolvedTarget, StdEgressGuard,
+    is_public_unicast,
+};
 pub use hosting::{HostingError, HostingService};
 pub use layout::{DefaultRepoIdAllocator, RepoIdAllocator, RepoLayout};
 pub use permission::resolve_repo_role;
