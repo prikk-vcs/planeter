@@ -61,6 +61,15 @@ gh attestation verify oci://ghcr.io/prikk-vcs/planeter:X.Y.Z --repo prikk-vcs/pl
 - **Format 7:** keep the serving prikk at or above the on-disk format your hosted repositories carry;
   planeter never upgrades a repository's format on its own.
 
+## If a job fails
+
+The workflow is idempotent up to `publish`: re-run the failed job with `gh run rerun <run-id> --failed`
+(the tag's workflow file and the run's attested artifacts are reused). If `publish` cannot be
+repaired, download the run's `planeter-*` artifacts (`gh run download <run-id> -p 'planeter-*'`) and
+create the release by hand with the same asset set and the tag's `CHANGELOG.md` section; the
+build-provenance attestations are bound to the tarball digests, so `gh attestation verify` still
+holds. Never move or recreate a pushed tag.
+
 ## Security releases
 
 An advisory or a threat-model control failure triggers an out-of-band patch release

@@ -128,8 +128,11 @@ jobs:
       attestations: write
     steps:
       - uses: actions/checkout@v7
+      # Only the planeter build artifacts: docker/build-push-action also uploads a `*.dockerbuild`
+      # build-record artifact, and an unfiltered download of it failed the first 0.1.0 publish attempt.
       - uses: actions/download-artifact@v8
         with:
+          pattern: planeter-*
           path: dist
           merge-multiple: true
       # The image copies the prebuilt, attested binaries in; it never compiles (no QEMU-emulated Rust).
@@ -172,8 +175,11 @@ jobs:
       contents: write
     steps:
       - uses: actions/checkout@v7
+      # Only the planeter build artifacts: docker/build-push-action also uploads a `*.dockerbuild`
+      # build-record artifact, and an unfiltered download of it failed the first 0.1.0 publish attempt.
       - uses: actions/download-artifact@v8
         with:
+          pattern: planeter-*
           path: dist
           merge-multiple: true
       # Notes = this tag's CHANGELOG section (kept honest by hand, per release) + runtime prerequisites.
