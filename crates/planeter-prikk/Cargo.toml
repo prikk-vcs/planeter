@@ -6,8 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "planeter <-> prikk integration: drives the prikk CLI as a sandboxed subprocess -- the only crate that touches prikk (RFC 001 LAY-3)."
-publish = false
+description = "planeter's prikk boundary: drives the prikk CLI as a sandboxed subprocess and types its --format json output."
 
 [dependencies]
 serde = { version = "1", features = ["derive"] }

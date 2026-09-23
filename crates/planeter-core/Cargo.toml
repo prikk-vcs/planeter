@@ -6,8 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "The forge domain and the single default-deny authorize() service (RFC 001/002)."
-publish = false
+description = "planeter's forge domain: hosting, the single pure default-deny authorize() decision, the honest read path, and the security seams."
 
 [features]
 # Reserved, OFF BY DEFAULT (RFC 001 §0a / LAY-4 / ENF-2): the seam under which any history-signing
@@ -16,8 +15,8 @@ publish = false
 forge-seal = []
 
 [dependencies]
-planeter-prikk = { path = "../planeter-prikk" }
-planeter-store = { path = "../planeter-store" }
+planeter-prikk = { path = "../planeter-prikk", version = "0.1.0" }
+planeter-store = { path = "../planeter-store", version = "0.1.0" }
 # Read-path view-models derive Serialize so the web/API surface (RFC 003 T3) can emit them as JSON.
 serde = { version = "1", features = ["derive"] }
 

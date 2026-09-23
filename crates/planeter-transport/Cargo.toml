@@ -6,8 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "Clone/push transport: ferries prikk artifacts (RFC 004)."
-publish = false
+description = "planeter's transport ferry for keyless clone and push over prikk's bundle/sync artifacts (RFC 004; lands at M2)."
 
 [dependencies]
-planeter-core = { path = "../planeter-core" }
+planeter-core = { path = "../planeter-core", version = "0.1.0" }

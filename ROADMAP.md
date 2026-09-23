@@ -151,11 +151,13 @@ content-as-data, no default egress), **portable identity** (defer until a standa
 
 ## Release cycles
 
-**planeter releases an application, not libraries.** Every crate is `publish = false` — planeter is a
-forge *server*, so a release is **a tagged bare version plus built artifacts to deploy** (the `planeter`
-server and `planeter-runner` binaries, and a container image), published as a GitHub release with build
-attestations — **never crates.io packages**. This is the one place planeter's release cycle differs from
-the ecosystem's library projects (stikk/brygge crates).
+**planeter releases an application; crates.io is an install path, not the release.** A release is
+**a tagged bare version plus built artifacts to deploy** (the `planeter` server binaries and a container
+image), published as a GitHub release with build attestations. **Amended 2026-09-23 (owner-ruled):** the
+nine `planeter-*` crates are *also* published to crates.io at each release so operators can
+`cargo install planeter`, matching prikk/stikk/brygge — but the deploy artifacts remain what a release
+*is*; crates.io never substitutes for them (it cannot carry the prikk + bubblewrap prerequisites the
+container does). `planeter-runner` stays unpublished until M4.
 
 - **A0 is pre-release; the first release is M1 (0.1.0).** The workspace stays `0.0.0` through foundations
   (the "0.1.0-dev" milestone); **nothing is tagged until M1** ships the first usable product

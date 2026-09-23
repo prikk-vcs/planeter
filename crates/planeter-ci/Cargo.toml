@@ -6,8 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "CI orchestration and the runner protocol (RFC 006)."
-publish = false
+description = "planeter's CI pipelines and isolated ephemeral runners (RFC 006; lands at M4)."
 
 [dependencies]
-planeter-core = { path = "../planeter-core" }
+planeter-core = { path = "../planeter-core", version = "0.1.0" }

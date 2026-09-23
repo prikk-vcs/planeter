@@ -6,8 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "Package and artifact registry (RFC 007)."
-publish = false
+description = "planeter's package registry (RFC 007; lands at M5)."
 
 [dependencies]
-planeter-core = { path = "../planeter-core" }
+planeter-core = { path = "../planeter-core", version = "0.1.0" }

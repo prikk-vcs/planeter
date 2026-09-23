@@ -1,8 +1,9 @@
 # Releasing planeter
 
-planeter releases an **application**, not libraries: a bare version tag → `release.yml` → attested
-binaries + a container image → a GitHub release. Every crate is `publish = false`; nothing goes to
-crates.io. **Tagging is owner-only.**
+planeter releases an **application**: a bare version tag → `release.yml` → attested binaries + a
+container image → a GitHub release. The nine `planeter-*` crates are **also** published to crates.io
+after the release run is green, as an install path (`cargo install planeter`); `planeter-runner` is not
+published until M4. **Tagging and publishing are owner-authorized.**
 
 ## Before the tag (the release-candidate commit)
 
@@ -64,3 +65,19 @@ gh attestation verify oci://ghcr.io/prikk-vcs/planeter:X.Y.Z --repo prikk-vcs/pl
 
 An advisory or a threat-model control failure triggers an out-of-band patch release
 (`X.Y.Z+1`) through the same workflow.
+
+## crates.io (after the release run is green)
+
+crates.io requires every intra-workspace dependency to carry a version, and rejects a crate whose
+dependencies are not yet published — so publish in dependency order, each with the workspace version:
+
+```sh
+for c in planeter-prikk planeter-store planeter-core planeter-auth \
+         planeter-web planeter-transport planeter-ci planeter-registry planeter; do
+  cargo publish -p "$c" --locked
+done
+```
+
+Dry-run only the leaves (`planeter-prikk`, `planeter-store`) before the first real publish: a dry-run
+of a crate whose internal dependencies are unpublished fails by construction. The crate name
+`planeter` is reserved by the owner (a `0.0.0` placeholder, 2026-09-16).

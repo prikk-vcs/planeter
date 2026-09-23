@@ -6,15 +6,14 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "the planeter forge server binary (design phase)."
-publish = false
+description = "The planeter forge server: hosts and serves prikk repositories over a sandboxed prikk, with a keyless, default-deny, honest read path."
 
 [dependencies]
-planeter-core = { path = "../planeter-core" }
-planeter-auth = { path = "../planeter-auth" }
-planeter-store = { path = "../planeter-store" }
-planeter-web = { path = "../planeter-web" }
-planeter-transport = { path = "../planeter-transport" }
-planeter-ci = { path = "../planeter-ci" }
-planeter-registry = { path = "../planeter-registry" }
+planeter-core = { path = "../planeter-core", version = "0.1.0" }
+planeter-auth = { path = "../planeter-auth", version = "0.1.0" }
+planeter-store = { path = "../planeter-store", version = "0.1.0" }
+planeter-web = { path = "../planeter-web", version = "0.1.0" }
+planeter-transport = { path = "../planeter-transport", version = "0.1.0" }
+planeter-ci = { path = "../planeter-ci", version = "0.1.0" }
+planeter-registry = { path = "../planeter-registry", version = "0.1.0" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }

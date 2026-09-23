@@ -6,8 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "Forge-metadata persistence: repository/identity records, keyed to prikk object ids; never authoritative for history (RFC 001)."
-publish = false
+description = "planeter's persistence: repository/identity records, roles and membership, behind swappable store traits (in-memory, SQLite)."
 
 [dependencies]
 # M1 pre-tag item 2: the persistent backend behind the *Store traits. Bundled SQLite (compiled from the

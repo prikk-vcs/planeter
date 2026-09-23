@@ -6,13 +6,12 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "HTTP server, REST API, web UI, webhooks (RFC 003+)."
-publish = false
+description = "planeter's HTTP surface: the GET read API with strict sanitization, CSP and an isolated content origin."
 
 [dependencies]
-planeter-core = { path = "../planeter-core" }
-planeter-auth = { path = "../planeter-auth" }
-planeter-store = { path = "../planeter-store" }
+planeter-core = { path = "../planeter-core", version = "0.1.0" }
+planeter-auth = { path = "../planeter-auth", version = "0.1.0" }
+planeter-store = { path = "../planeter-store", version = "0.1.0" }
 
 # T4 rendering safety (RFC 003 / STD-6): strict HTML sanitization + a pure-Rust Markdown renderer.
 ammonia = "4"
@@ -27,4 +26,4 @@ serde_json = "1"
 [dev-dependencies]
 # Test-only: drive the axum Router directly (no live socket) via ServiceExt::oneshot.
 tower = { version = "0.5", features = ["util"] }
-planeter-prikk = { path = "../planeter-prikk" }
+planeter-prikk = { path = "../planeter-prikk", version = "0.1.0" }
