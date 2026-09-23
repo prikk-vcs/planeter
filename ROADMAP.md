@@ -170,11 +170,15 @@ the ecosystem's library projects (stikk/brygge crates).
      verifier needs a JWT stack (`ring`, a license exception) *and* an outbound HTTP client behind the
      egress guard — RFC 004's design — so it lands as a configured integration in 0.2.x; the
      `OidcVerifier` seam stays. 0.1.0 auth = local passwords + scoped tokens + ed25519 SSH keys.
-  2. **A persistent store** — SQLite behind the `RepositoryStore` / `MembershipStore` / `AccountStore` /
-     `CredentialStore` traits (IQ-4), caller-invisible.
+  2. **A persistent store** — **done 2026-09-23** (`94e922d`): SQLite (`rusqlite`, bundled; +16 crates,
+     deny/audit clean) behind all four traits — `RepositoryStore` / `MembershipStore` (planeter-store)
+     and `AccountStore` / `CredentialStore` (planeter-auth) — over one shared `SqliteDb` (WAL, idempotent
+     schema; each crate applies its own tables). Same invariant tests as the in-memory stores plus a
+     reopen-persistence test. The `planeter` binary now runs on `PLANETER_DB` (default `./planeter.db`).
   3. **`release.yml`** — on a bare-version tag: gates green → build the `planeter` server (and runner)
      binaries + container image → attest/sign → GitHub release.
-  4. The `planeter` binary drops its "M1 preview, not for production" label once 1–2 are wired.
+  4. The `planeter` binary drops its preview label once 1–2 are wired — **done 2026-09-23** (it now
+     announces only its address and database).
   The tag itself remains owner-only.
 - **Milestone-driven minors** (M1 `0.1.0` → M5 `0.5.0`). A minor ships only when its gates are green
   (fmt · clippy `-D warnings` · test · `cargo-deny`/`cargo-audit`), its security invariants hold

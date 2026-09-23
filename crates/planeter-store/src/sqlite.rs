@@ -184,18 +184,7 @@ impl SqliteRepositoryStore {
         Self { db }
     }
 
-    fn row_to_record(
-        row: &rusqlite::Row<'_>,
-    ) -> rusqlite::Result<(
-        String,
-        String,
-        String,
-        String,
-        String,
-        i64,
-        Option<String>,
-        String,
-    )> {
+    fn row_to_record(row: &rusqlite::Row<'_>) -> rusqlite::Result<RepoRow> {
         Ok((
             row.get(0)?,
             row.get(1)?,
@@ -209,16 +198,7 @@ impl SqliteRepositoryStore {
     }
 
     fn decode(
-        (repo_id, owner_kind, owner, name, visibility, created_at, fmt, path): (
-            String,
-            String,
-            String,
-            String,
-            String,
-            i64,
-            Option<String>,
-            String,
-        ),
+        (repo_id, owner_kind, owner, name, visibility, created_at, fmt, path): RepoRow,
     ) -> Result<RepositoryRecord> {
         Ok(RepositoryRecord {
             repo_id: RepoId::new(repo_id),
@@ -231,6 +211,19 @@ impl SqliteRepositoryStore {
         })
     }
 }
+
+/// One `repositories` row, in column order: repo_id, owner_kind, owner, name, visibility,
+/// created_at, prikk_format_version, path.
+type RepoRow = (
+    String,
+    String,
+    String,
+    String,
+    String,
+    i64,
+    Option<String>,
+    String,
+);
 
 const SELECT_REPO: &str = "SELECT repo_id, owner_kind, owner, name, visibility, created_at, \
                            prikk_format_version, path FROM repositories";
