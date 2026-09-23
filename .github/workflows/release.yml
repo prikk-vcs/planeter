@@ -1,0 +1,195 @@
+name: Release
+
+# The release cycle (ROADMAP §Release cycles): planeter releases an APPLICATION, never crates — a bare
+# version tag → every gate green → per-target server binaries + a container image → build-provenance
+# attestations → a GitHub release. Tagging is owner-only; this workflow only runs after that act.
+#
+# Targets: Linux x86_64 + aarch64 only. planeter's sandbox is bubblewrap (RFC 001 T4), which is
+# Linux-only, so a macOS/Windows asset would be a platform claim resting on nothing (the lesson of
+# prikk's RFC 107). Per-target steps are written out in full, as prikk's workflow does, so a reader can
+# verify each by exact match rather than trusting a template.
+
+on:
+  push:
+    tags:
+      - "[0-9]+.[0-9]+.[0-9]+"
+
+permissions:
+  contents: read
+
+env:
+  # The prikk release baked into the container image (dependency-ledger PK-26). Bump with the pin.
+  PRIKK_VERSION: "0.46.0"
+
+jobs:
+  gates:
+    name: gates (tag == Cargo version · fmt · clippy · test · deny · audit · ENF-2 · layering)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Tag must equal the workspace version
+        env:
+          TAG: ${{ github.ref_name }}
+        run: grep -qx "version = \"$TAG\"" Cargo.toml || { echo "Cargo.toml [workspace.package] version != tag $TAG"; exit 1; }
+      - name: Format
+        run: cargo fmt --all --check
+      - name: Clippy (-D warnings)
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Test (includes the layering gate)
+        run: cargo test --workspace --locked
+      - name: Install cargo-deny and cargo-audit
+        run: cargo install cargo-deny cargo-audit --locked
+      - name: cargo-deny
+        run: cargo deny check
+      - name: cargo-audit
+        run: cargo audit
+      - name: ENF-2 symbol-absence check (keyless forge)
+        run: tools/enf2-symbol-check/check.sh
+
+  build:
+    name: build (${{ matrix.target }})
+    needs: gates
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-latest
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - name: Build (x86_64-unknown-linux-gnu)
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: cargo build -p planeter --release --target x86_64-unknown-linux-gnu --locked
+      - name: Build (aarch64-unknown-linux-gnu)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: cargo build -p planeter --release --target aarch64-unknown-linux-gnu --locked
+
+      - name: Package (x86_64-unknown-linux-gnu)
+        if: matrix.target == 'x86_64-unknown-linux-gnu'
+        run: |
+          mkdir -p stage dist
+          cp target/x86_64-unknown-linux-gnu/release/planeter stage/planeter
+          cp LICENSE stage/LICENSE
+          tar -C stage -czf dist/planeter-x86_64-unknown-linux-gnu.tar.gz planeter LICENSE
+          ( cd dist && sha256sum planeter-x86_64-unknown-linux-gnu.tar.gz > planeter-x86_64-unknown-linux-gnu.tar.gz.sha256 )
+          echo "target: x86_64-unknown-linux-gnu" > dist/planeter-x86_64-unknown-linux-gnu.build-info.txt
+          echo "commit: ${GITHUB_SHA}" >> dist/planeter-x86_64-unknown-linux-gnu.build-info.txt
+          echo "tag: ${GITHUB_REF_NAME}" >> dist/planeter-x86_64-unknown-linux-gnu.build-info.txt
+          echo "build: cargo build -p planeter --release --target x86_64-unknown-linux-gnu --locked" >> dist/planeter-x86_64-unknown-linux-gnu.build-info.txt
+          echo "requires: prikk >= ${PRIKK_VERSION}, bubblewrap" >> dist/planeter-x86_64-unknown-linux-gnu.build-info.txt
+          rustc -vV >> dist/planeter-x86_64-unknown-linux-gnu.build-info.txt
+      - name: Package (aarch64-unknown-linux-gnu)
+        if: matrix.target == 'aarch64-unknown-linux-gnu'
+        run: |
+          mkdir -p stage dist
+          cp target/aarch64-unknown-linux-gnu/release/planeter stage/planeter
+          cp LICENSE stage/LICENSE
+          tar -C stage -czf dist/planeter-aarch64-unknown-linux-gnu.tar.gz planeter LICENSE
+          ( cd dist && sha256sum planeter-aarch64-unknown-linux-gnu.tar.gz > planeter-aarch64-unknown-linux-gnu.tar.gz.sha256 )
+          echo "target: aarch64-unknown-linux-gnu" > dist/planeter-aarch64-unknown-linux-gnu.build-info.txt
+          echo "commit: ${GITHUB_SHA}" >> dist/planeter-aarch64-unknown-linux-gnu.build-info.txt
+          echo "tag: ${GITHUB_REF_NAME}" >> dist/planeter-aarch64-unknown-linux-gnu.build-info.txt
+          echo "build: cargo build -p planeter --release --target aarch64-unknown-linux-gnu --locked" >> dist/planeter-aarch64-unknown-linux-gnu.build-info.txt
+          echo "requires: prikk >= ${PRIKK_VERSION}, bubblewrap" >> dist/planeter-aarch64-unknown-linux-gnu.build-info.txt
+          rustc -vV >> dist/planeter-aarch64-unknown-linux-gnu.build-info.txt
+
+      # Build provenance (SLSA-style) for the tarball, signed by GitHub's OIDC identity of this run.
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: dist/*.tar.gz
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: planeter-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+
+  container:
+    name: container image (ghcr.io, linux/amd64 + linux/arm64)
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      # The image copies the prebuilt, attested binaries in; it never compiles (no QEMU-emulated Rust).
+      - name: Stage binaries per architecture
+        run: |
+          mkdir -p ctx/amd64 ctx/arm64
+          tar -xzf dist/planeter-x86_64-unknown-linux-gnu.tar.gz -C ctx/amd64 planeter
+          tar -xzf dist/planeter-aarch64-unknown-linux-gnu.tar.gz -C ctx/arm64 planeter
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push
+        id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: PRIKK_VERSION=${{ env.PRIKK_VERSION }}
+          tags: |
+            ghcr.io/prikk-vcs/planeter:${{ github.ref_name }}
+            ghcr.io/prikk-vcs/planeter:latest
+      - name: Attest image provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-name: ghcr.io/prikk-vcs/planeter
+          subject-digest: ${{ steps.push.outputs.digest }}
+          push-to-registry: true
+
+  publish:
+    name: publish release assets
+    needs: [build, container]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+      # Notes = this tag's CHANGELOG section (kept honest by hand, per release) + runtime prerequisites.
+      - name: Assemble release notes
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          awk -v tag="$TAG" '
+            $0 ~ "^## \\[" tag "\\]" { on = 1; next }
+            on && /^## \[/ { exit }
+            on { print }
+          ' CHANGELOG.md > release-notes.md
+          test -s release-notes.md || { echo "CHANGELOG.md has no section for $TAG"; exit 1; }
+          printf '\n---\n**Runtime prerequisites:** prikk >= %s and bubblewrap on the host (or use the container image `ghcr.io/prikk-vcs/planeter:%s`, which bundles both).\n' "$PRIKK_VERSION" "$TAG" >> release-notes.md
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" dist/*.tar.gz dist/*.tar.gz.sha256 dist/*.build-info.txt --repo prikk-vcs/planeter --title "$TAG" --notes-file release-notes.md

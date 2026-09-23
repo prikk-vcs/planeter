@@ -175,10 +175,19 @@ the ecosystem's library projects (stikk/brygge crates).
      and `AccountStore` / `CredentialStore` (planeter-auth) — over one shared `SqliteDb` (WAL, idempotent
      schema; each crate applies its own tables). Same invariant tests as the in-memory stores plus a
      reopen-persistence test. The `planeter` binary now runs on `PLANETER_DB` (default `./planeter.db`).
-  3. **`release.yml`** — on a bare-version tag: gates green → build the `planeter` server (and runner)
-     binaries + container image → attest/sign → GitHub release.
+  3. **`release.yml`** — **done 2026-09-23**: on a bare-version tag → gates (tag == version, fmt,
+     clippy, test, deny, audit, ENF-2, layering) → the `planeter` server for Linux x86_64 + aarch64
+     (tarball + sha256 + build-info, **build-provenance attested**) → a `linux/amd64`+`arm64` container
+     image on `ghcr.io/prikk-vcs/planeter` built from the prebuilt binaries with checksum-verified
+     prikk 0.46.0 + bubblewrap baked in (attested) → the GitHub release with notes from the tag's
+     `CHANGELOG.md` section. Linux-only by design (the sandbox is bubblewrap). Procedure:
+     `docs/RELEASING.md`. The `planeter-runner` binary ships at M4 (CI), not here.
   4. The `planeter` binary drops its preview label once 1–2 are wired — **done 2026-09-23** (it now
      announces only its address and database).
+
+  **All four done (2026-09-23).** `main` is the 0.1.0 release candidate: the workspace version is
+  `0.1.0` and `CHANGELOG.md` carries the `[0.1.0]` section. **The signed tag is the owner's act**
+  (`docs/RELEASING.md`).
   The tag itself remains owner-only.
 - **Milestone-driven minors** (M1 `0.1.0` → M5 `0.5.0`). A minor ships only when its gates are green
   (fmt · clippy `-D warnings` · test · `cargo-deny`/`cargo-audit`), its security invariants hold
