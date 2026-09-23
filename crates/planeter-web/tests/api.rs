@@ -30,16 +30,36 @@ fn prikk_available() -> bool {
 
 /// An app hosting a private repo owned by `alice`, with token `tok-alice` authenticating as alice
 /// (owner → Admin, so she may read her own repo).
-fn app(subdir: &str) -> AppState {
+///
+/// `real == false` seeds the repository **record only** (a bogus on-disk path) — enough for the tests
+/// whose requests are denied or never touch a repository, so they run **without prikk** (CI has none).
+/// `real == true` creates a real repository through `prikk init`; callers must self-skip when prikk
+/// is absent.
+fn app(subdir: &str, real: bool) -> AppState {
     let root = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(subdir);
     let _ = std::fs::remove_dir_all(&root);
-    let store: Arc<dyn RepositoryStore> = Arc::new(InMemoryRepositoryStore::new());
+    let store = Arc::new(InMemoryRepositoryStore::new());
     let hosting = Arc::new(
-        HostingService::new(root, store).with_sandbox(planeter_prikk::Sandbox::Unconfined),
+        HostingService::new(root.clone(), store.clone() as Arc<dyn RepositoryStore>)
+            .with_sandbox(planeter_prikk::Sandbox::Unconfined),
     );
-    hosting
-        .create_repo(Owner::User("alice".into()), "app", Visibility::Private)
-        .expect("create repo");
+    if real {
+        hosting
+            .create_repo(Owner::User("alice".into()), "app", Visibility::Private)
+            .expect("create repo (needs prikk)");
+    } else {
+        store
+            .create(planeter_store::RepositoryRecord {
+                repo_id: planeter_store::RepoId::new("r1"),
+                owner: Owner::User("alice".into()),
+                name: "app".into(),
+                visibility: Visibility::Private,
+                created_at: 0,
+                prikk_format_version: None,
+                path: root.join("never-opened"),
+            })
+            .expect("seed record");
+    }
     let membership: Arc<dyn MembershipStore> = Arc::new(InMemoryMembershipStore::new());
     let read = Arc::new(ReadService::new(
         hosting,
@@ -92,7 +112,7 @@ async fn send(
 
 #[tokio::test]
 async fn security_headers_present_on_every_response() {
-    let r = router(app("api-headers"));
+    let r = router(app("api-headers", false));
     let resp = send(&r, "/api/v1/openapi.json", None, None).await;
     assert_eq!(resp.status(), StatusCode::OK);
     assert!(resp.headers().contains_key("content-security-policy"));
@@ -105,7 +125,7 @@ async fn security_headers_present_on_every_response() {
 
 #[tokio::test]
 async fn anonymous_private_repo_is_404_and_matches_missing() {
-    let r = router(app("api-404"));
+    let r = router(app("api-404", false));
     // Anonymous read of a private repo → 404 (never opens prikk).
     let denied = send(&r, "/api/v1/repos/alice/app/history", None, None).await;
     assert_eq!(denied.status(), StatusCode::NOT_FOUND);
@@ -120,7 +140,7 @@ async fn authorized_history_returns_json_then_304() {
         eprintln!("skipping: prikk not on PATH");
         return;
     }
-    let r = router(app("api-etag"));
+    let r = router(app("api-etag", true));
     // alice's token authorizes reading her own private repo.
     let ok = send(
         &r,
@@ -159,7 +179,7 @@ async fn authorized_tree_returns_json_and_raw_missing_is_404() {
         eprintln!("skipping: prikk not on PATH");
         return;
     }
-    let r = router(app("api-tree-raw"));
+    let r = router(app("api-tree-raw", true));
     // tree on the owner's (fresh) private repo: 200 JSON.
     let tree = send(&r, "/api/v1/repos/alice/app/tree", Some("tok-alice"), None).await;
     assert_eq!(tree.status(), StatusCode::OK);
@@ -180,7 +200,7 @@ async fn authorized_tree_returns_json_and_raw_missing_is_404() {
 
 #[tokio::test]
 async fn anonymous_tree_is_404() {
-    let r = router(app("api-tree-anon"));
+    let r = router(app("api-tree-anon", false));
     let denied = send(&r, "/api/v1/repos/alice/app/tree", None, None).await;
     assert_eq!(denied.status(), StatusCode::NOT_FOUND);
 }
