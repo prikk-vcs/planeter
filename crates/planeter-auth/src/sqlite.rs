@@ -37,6 +37,12 @@ CREATE TABLE IF NOT EXISTS ssh_keys (
     repos       TEXT,
     expires_at  INTEGER
 );
+CREATE TABLE IF NOT EXISTS oidc_links (
+    issuer  TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    user    TEXT NOT NULL,
+    PRIMARY KEY (issuer, subject)
+);
 CREATE TABLE IF NOT EXISTS sessions (
     id         TEXT PRIMARY KEY,
     user       TEXT NOT NULL,
@@ -147,6 +153,30 @@ impl AccountStore for SqliteAccountStore {
         )
         .map_err(be)?;
         Ok(())
+    }
+
+    fn link_oidc(&self, issuer: &str, subject: &str, user: UserId) -> Result<()> {
+        self.db
+            .lock()
+            .map_err(be)?
+            .execute(
+                "INSERT INTO oidc_links (issuer, subject, user) VALUES (?1, ?2, ?3) \
+                 ON CONFLICT(issuer, subject) DO UPDATE SET user = excluded.user",
+                params![issuer, subject, user.as_str()],
+            )
+            .map_err(be)?;
+        Ok(())
+    }
+
+    fn lookup_oidc(&self, issuer: &str, subject: &str) -> Result<Option<UserId>> {
+        let conn = self.db.lock().map_err(be)?;
+        conn.query_row(
+            "SELECT user FROM oidc_links WHERE issuer = ?1 AND subject = ?2",
+            params![issuer, subject],
+            |r| Ok(UserId::new(r.get::<_, String>(0)?)),
+        )
+        .optional()
+        .map_err(be)
     }
 }
 

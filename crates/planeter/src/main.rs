@@ -13,6 +13,11 @@
 //! - `PLANETER_TRUSTED_PROXIES` — comma-separated addresses/CIDRs of the TLS-terminating reverse proxies
 //!   (client IPs are taken from `X-Forwarded-For` only behind these). **A non-loopback `PLANETER_ADDR`
 //!   is refused unless this is set**: planeter speaks plain HTTP and must sit behind TLS termination.
+//! - `PLANETER_OIDC_ISSUER`, `PLANETER_OIDC_CLIENT_ID`, `PLANETER_OIDC_REDIRECT_URI` (all three to enable
+//!   SSO) and optional `PLANETER_OIDC_CLIENT_SECRET` — the OpenID Connect provider. Discovery, JWKS and the
+//!   token exchange go through the egress guard and a confined `curl` (a runtime prerequisite like prikk
+//!   and bubblewrap). Accounts are linked to `(issuer, subject)` administratively; nothing is
+//!   auto-provisioned.
 
 use std::sync::Arc;
 
@@ -93,6 +98,31 @@ async fn main() {
         }
     };
 
+    let oidc = match std::env::var("PLANETER_OIDC_ISSUER") {
+        Ok(issuer) if !issuer.is_empty() => {
+            let need = |k: &str| match std::env::var(k) {
+                Ok(v) if !v.is_empty() => v,
+                _ => {
+                    eprintln!("planeter: {k} is required when PLANETER_OIDC_ISSUER is set");
+                    std::process::exit(1);
+                }
+            };
+            let cfg = planeter_auth::OidcConfig {
+                issuer,
+                client_id: need("PLANETER_OIDC_CLIENT_ID"),
+                client_secret: std::env::var("PLANETER_OIDC_CLIENT_SECRET")
+                    .ok()
+                    .filter(|s| !s.is_empty()),
+                redirect_uri: need("PLANETER_OIDC_REDIRECT_URI"),
+            };
+            let fetcher = Arc::new(planeter_core::CurlFetcher::new(Box::new(
+                planeter_core::StdEgressGuard::default(),
+            )));
+            Some(Arc::new(planeter_auth::OidcProvider::new(cfg, fetcher)))
+        }
+        _ => None,
+    };
+
     let state = AppState {
         read,
         auth,
@@ -101,6 +131,7 @@ async fn main() {
         login_throttle: Arc::new(planeter_auth::LoginThrottle::default()),
         ip_throttle: Arc::new(planeter_auth::LoginThrottle::new(20, 15 * 60)),
         trusted_proxies: Arc::new(trusted_proxies),
+        oidc,
         now_unix: || {
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)

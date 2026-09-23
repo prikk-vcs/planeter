@@ -94,6 +94,7 @@ fn app(subdir: &str, real: bool) -> AppState {
         trusted_proxies: Arc::new(
             planeter_web::TrustedProxies::parse("10.0.0.0/8").expect("trusted proxies"),
         ),
+        oidc: None,
     }
 }
 

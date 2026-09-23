@@ -1,7 +1,8 @@
 # planeter server image. Built by .github/workflows/release.yml from the PREBUILT, attested release
 # binaries (staged under ctx/<arch>/planeter) — this file never compiles Rust. It bundles the two
 # runtime prerequisites a bare binary would otherwise need on the host: a pinned prikk release
-# (dependency-ledger PK-26) and bubblewrap (the sandbox, RFC 001 T4).
+# (dependency-ledger PK-26), bubblewrap (the sandbox, RFC 001 T4) and curl (the confined outbound
+# HTTPS client behind the egress guard — OIDC discovery/JWKS/token exchange).
 #
 # Running it: bubblewrap needs user namespaces. On most hosts that means `--security-opt
 # seccomp=unconfined` or a seccomp profile that permits unshare/clone with CLONE_NEWUSER, and

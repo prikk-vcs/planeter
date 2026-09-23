@@ -15,12 +15,16 @@ use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::Response;
 use axum::routing::{get, post};
 
-use planeter_auth::{SESSION_TTL_SECS, SessionId, random_token, tokens_match};
+use planeter_auth::{
+    OidcError, PENDING_TTL_SECS, SESSION_TTL_SECS, SessionId, random_token, tokens_match,
+};
 use planeter_core::{Assurance, Principal, ReadError, TreeEntryView};
 
 use crate::api::{AppState, try_both_owners, with_security_headers};
 use crate::client_ip::{PeerAddr, client_ip};
-use crate::cookies::{CSRF_COOKIE, SESSION_COOKIE, clear_cookie, get_cookie, set_cookie};
+use crate::cookies::{
+    CSRF_COOKIE, OIDC_STATE_COOKIE, SESSION_COOKIE, clear_cookie, get_cookie, set_cookie,
+};
 use crate::principal::principal_from_request;
 use crate::sanitize::render_markdown;
 
@@ -33,6 +37,8 @@ pub fn router(state: AppState) -> Router {
         .route("/go", get(go))
         .route("/static/app.css", get(stylesheet))
         .route("/login", get(login_form).post(login_submit))
+        .route("/login/oidc", get(oidc_begin))
+        .route("/login/oidc/callback", get(oidc_callback))
         .route("/logout", post(logout))
         .route("/{owner}/{name}", get(repo_home))
         .route("/{owner}/{name}/tree/{*path}", get(tree_page))
@@ -234,6 +240,7 @@ struct LoginTpl {
     user: Option<String>,
     csrf: String,
     failed: bool,
+    sso: bool,
 }
 #[derive(Template)]
 #[template(path = "notfound.html")]
@@ -445,6 +452,7 @@ async fn login_form(State(state): State<AppState>, headers: HeaderMap) -> Respon
             user: c.user.clone(),
             csrf: c.csrf.clone(),
             failed: false,
+            sso: state.oidc.is_some(),
         },
         &c,
     )
@@ -481,6 +489,7 @@ async fn login_submit(
                 user: None,
                 csrf: c.csrf.clone(),
                 failed: true,
+                sso: state.oidc.is_some(),
             },
             &c,
         );
@@ -520,6 +529,7 @@ async fn login_submit(
                     user: None,
                     csrf: c.csrf.clone(),
                     failed: true,
+                    sso: state.oidc.is_some(),
                 },
                 &c,
             )
@@ -545,6 +555,116 @@ async fn logout(
         let _ = state.sessions.delete(&SessionId(id));
     }
     redirect(&state, "/", vec![clear_cookie(SESSION_COOKIE)])
+}
+
+#[derive(serde::Deserialize)]
+struct OidcCallbackQuery {
+    code: Option<String>,
+    state: Option<String>,
+}
+
+/// Start an SSO sign-in: 303 to the provider; the opaque `state` rides in a short-lived cookie.
+async fn oidc_begin(State(state): State<AppState>) -> Response {
+    let Some(oidc) = &state.oidc else {
+        return html(
+            &state,
+            StatusCode::NOT_FOUND,
+            "SSO is not configured".into(),
+            vec![],
+        );
+    };
+    match oidc.begin_login((state.now_unix)()) {
+        Ok(b) => redirect(
+            &state,
+            &b.authorization_url,
+            vec![set_cookie(OIDC_STATE_COOKIE, &b.state, PENDING_TTL_SECS)],
+        ),
+        Err(e) => html(
+            &state,
+            StatusCode::BAD_GATEWAY,
+            format!("SSO provider unavailable: {e}"),
+            vec![],
+        ),
+    }
+}
+
+/// The provider's callback: state (cookie == query, one-shot server-side) → code exchange → ID token
+/// verification → the linked account → a session. Unlinked subjects are refused (no auto-provisioning).
+async fn oidc_callback(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Query(q): Query<OidcCallbackQuery>,
+) -> Response {
+    let Some(oidc) = &state.oidc else {
+        return html(
+            &state,
+            StatusCode::NOT_FOUND,
+            "SSO is not configured".into(),
+            vec![],
+        );
+    };
+    let (Some(code), Some(st)) = (q.code, q.state) else {
+        return html(
+            &state,
+            StatusCode::BAD_REQUEST,
+            "missing code or state".into(),
+            vec![],
+        );
+    };
+    let cookie_state = get_cookie(&headers, OIDC_STATE_COOKIE).unwrap_or_default();
+    if cookie_state.is_empty() || !tokens_match(&cookie_state, &st) {
+        return html(
+            &state,
+            StatusCode::BAD_REQUEST,
+            "SSO state mismatch".into(),
+            vec![],
+        );
+    }
+    let now = (state.now_unix)();
+    let identity = match oidc.finish_login(&st, &code, now) {
+        Ok(id) => id,
+        Err(OidcError::State) => {
+            return html(
+                &state,
+                StatusCode::BAD_REQUEST,
+                "SSO state expired".into(),
+                vec![],
+            );
+        }
+        Err(_) => {
+            return html(
+                &state,
+                StatusCode::UNAUTHORIZED,
+                "SSO sign-in failed".into(),
+                vec![],
+            );
+        }
+    };
+    match state.auth.authenticate_oidc(&identity) {
+        Ok(Principal::User(user)) => match state.sessions.create(user, now, now + SESSION_TTL_SECS)
+        {
+            Ok(session) => redirect(
+                &state,
+                "/",
+                vec![
+                    set_cookie(SESSION_COOKIE, &session.id.0, SESSION_TTL_SECS),
+                    clear_cookie(OIDC_STATE_COOKIE),
+                ],
+            ),
+            Err(_) => html(
+                &state,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "session error".into(),
+                vec![],
+            ),
+        },
+        _ => html(
+            &state,
+            StatusCode::UNAUTHORIZED,
+            "this SSO identity is not linked to a planeter account".into(),
+            vec![clear_cookie(OIDC_STATE_COOKIE)],
+        ),
+    }
 }
 
 async fn repo_home(

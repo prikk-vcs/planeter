@@ -47,12 +47,17 @@ pub type Result<T> = std::result::Result<T, AuthError>;
 pub trait AccountStore: Send + Sync {
     fn get(&self, user: &UserId) -> Result<Option<Account>>;
     fn upsert(&self, account: Account) -> Result<()>;
+    /// Link an OIDC `(issuer, subject)` to a local account (an administrative act; no auto-provisioning).
+    fn link_oidc(&self, issuer: &str, subject: &str, user: UserId) -> Result<()>;
+    /// The account linked to an OIDC `(issuer, subject)`, if any.
+    fn lookup_oidc(&self, issuer: &str, subject: &str) -> Result<Option<UserId>>;
 }
 
 /// An in-memory [`AccountStore`] for tests/dev.
 #[derive(Default)]
 pub struct InMemoryAccountStore {
     accounts: RwLock<HashMap<UserId, Account>>,
+    oidc_links: RwLock<HashMap<(String, String), UserId>>,
 }
 
 impl InMemoryAccountStore {
@@ -76,5 +81,21 @@ impl AccountStore for InMemoryAccountStore {
                 m.insert(account.user.clone(), account);
             })
             .map_err(|_| AuthError::Backend("account lock poisoned".to_owned()))
+    }
+
+    fn link_oidc(&self, issuer: &str, subject: &str, user: UserId) -> Result<()> {
+        self.oidc_links
+            .write()
+            .map(|mut m| {
+                m.insert((issuer.to_owned(), subject.to_owned()), user);
+            })
+            .map_err(|_| AuthError::Backend("oidc link lock poisoned".to_owned()))
+    }
+
+    fn lookup_oidc(&self, issuer: &str, subject: &str) -> Result<Option<UserId>> {
+        self.oidc_links
+            .read()
+            .map(|m| m.get(&(issuer.to_owned(), subject.to_owned())).cloned())
+            .map_err(|_| AuthError::Backend("oidc link lock poisoned".to_owned()))
     }
 }

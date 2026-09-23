@@ -7,6 +7,7 @@ use axum::http::HeaderMap;
 
 pub const SESSION_COOKIE: &str = "planeter_session";
 pub const CSRF_COOKIE: &str = "planeter_csrf";
+pub const OIDC_STATE_COOKIE: &str = "planeter_oidc_state";
 
 /// The value of cookie `name` from the request's `Cookie` header(s), if present.
 pub fn get_cookie(headers: &HeaderMap, name: &str) -> Option<String> {

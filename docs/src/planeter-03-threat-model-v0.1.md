@@ -115,8 +115,11 @@ creates an opaque random session id stored server-side (SQLite) and returned in 
 `SameSite=Strict` + `Secure` cookie; every cookie-authenticated `POST` carries a CSRF double-submit
 token compared in constant time; the API accepts the same session cookie or a bearer token through one
 principal extractor. *Implemented:* C-2a **partially** — Argon2id for local passwords, SHA-256 +
-constant-time compare for scoped tokens, ed25519 SSH keys; **OAuth/OIDC deferred to 0.2.x** (owner-ruled:
-needs an outbound HTTP client behind C-8 and a JWT stack review) and **no second factor yet** (RR-6).
+constant-time compare for scoped tokens, ed25519 SSH keys; **OAuth 2.0 / OIDC implemented 2026-09-24**
+(authorization-code flow with PKCE, state one-shot and server-side, nonce-bound ID tokens verified by
+`kid` against the provider's JWKS with `jsonwebtoken`'s RustCrypto backend; accounts linked to
+`(issuer, subject)` administratively, never auto-provisioned; provider traffic only through C-8 + a
+confined `curl`) and **no second factor yet** (RR-6).
 C-2b **implemented as a per-account throttle** (5 consecutive failures → 15-minute lock, a correct
 password refused while locked) **and a per-client-IP throttle** (20 failures across any accounts; client
 IP via the trusted-proxy rules; RR-7). C-2c **implemented** as above; token revocation is by deleting the
@@ -218,9 +221,11 @@ infrastructure (A-HOST).
 answer required to be public unicast (loopback, private, CGNAT, link-local incl. `169.254.169.254`,
 unspecified/multicast/reserved/documentation, and the IPv6 equivalents including IPv4-mapped and NAT64
 forms all refused), returning the **pinned** addresses the caller must connect to and re-check on every
-redirect; a private-target opt-in exists for internal webhook receivers. **No outbound caller exists yet**
-(webhooks, mirrors and OIDC arrive with later RFCs); each must route through this guard — that is the
-review check for every future outbound feature.
+redirect; a private-target opt-in exists for internal webhook receivers. **First caller (2026-09-24): OIDC discovery,
+JWKS and token exchange**, through `planeter_core::fetch::CurlFetcher` — the guard's pinned address is
+passed to a bubblewrap-confined `curl` (`--resolve`, `--proto =https`, no redirects, byte and time
+bounds). Webhooks and mirrors must take the same path — that is the review check for every future
+outbound feature.
 
 ### T-9 (Denial of service) — resource exhaustion and availability
 Enormous repositories and pushes, expensive prikk operations, CI abuse, API hammering, and disk fill —

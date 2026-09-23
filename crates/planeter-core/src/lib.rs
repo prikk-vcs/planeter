@@ -19,6 +19,7 @@
 pub mod audit;
 pub mod authorize;
 pub mod egress;
+pub mod fetch;
 pub mod hosting;
 pub mod layout;
 pub mod permission;
@@ -33,6 +34,7 @@ pub use egress::{
     DenyAllEgress, EgressError, EgressGuard, EgressPolicy, ResolvedTarget, StdEgressGuard,
     is_public_unicast,
 };
+pub use fetch::{CurlFetcher, FetchError, FetchLimits, FetchRequest, HttpsFetcher};
 pub use hosting::{HostingError, HostingService};
 pub use layout::{DefaultRepoIdAllocator, RepoIdAllocator, RepoLayout};
 pub use permission::resolve_repo_role;

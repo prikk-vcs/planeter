@@ -51,6 +51,8 @@ pub struct AppState {
     pub ip_throttle: Arc<planeter_auth::LoginThrottle>,
     /// The operator's trusted reverse proxies (client IP derivation + the bind rule).
     pub trusted_proxies: Arc<crate::client_ip::TrustedProxies>,
+    /// The OIDC provider, when the operator configured one (SSO sign-in).
+    pub oidc: Option<Arc<planeter_auth::OidcProvider>>,
 }
 
 /// Build the read-API router.

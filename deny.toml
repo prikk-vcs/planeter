@@ -4,6 +4,13 @@
 [advisories]
 version = 2
 yanked = "deny"
+ignore = [
+    # RustCrypto `rsa` (via jsonwebtoken's RustCrypto backend, for RS256 OIDC ID tokens). Marvin is a
+    # timing side channel on PRIVATE-key operations (decryption/signing); planeter only VERIFIES with an
+    # identity provider's public key and holds no RSA private key. Owner-ruled 2026-09-24; re-evaluate at
+    # every prikk/planeter release and drop the ignore the day a fixed `rsa` ships.
+    { id = "RUSTSEC-2023-0071", reason = "public-key verification only; no RSA private-key operation in planeter" },
+]
 
 [licenses]
 version = 2
@@ -20,6 +27,9 @@ allow = [
     # Permissive; enters via axum's router (`matchit`, "MIT AND BSD-3-Clause") — part of the RFC 003
     # T3 web stack.
     "BSD-3-Clause",
+    # Permissive (OSI). Enters only as a dev-dependency: `simple_asn1` behind jsonwebtoken's `use_pem`
+    # feature, used to parse the OIDC test fixture key. Not in the shipped binary.
+    "ISC",
 ]
 
 [bans]

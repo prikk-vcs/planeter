@@ -9,9 +9,10 @@
 //! **Crypto is behind seams, and (as of the 2026-09-23 supply-chain review) wired:** [`hashing`]
 //! ships the production **Argon2id** password hasher and the constant-time SHA-256 token hasher (plus
 //! [`hashing::mint_token`]); [`sshkey`] parses OpenSSH **ed25519** public keys to fingerprints. The
-//! [`hashing::InsecureStubHasher`] remains only as a fast test double. **OIDC** is still a seam
-//! ([`oidc::UnconfiguredOidc`]): its verifier needs a JWT + JWKS-fetch stack and the egress guard, and
-//! is its own review.
+//! [`hashing::InsecureStubHasher`] remains only as a fast test double. **OIDC** is implemented (2026-09-24,
+//! owner-ruled): [`oidc::OidcProvider`] runs the PKCE code flow and verifies ID tokens against the
+//! provider's JWKS with `jsonwebtoken`'s RustCrypto backend, fetching only through the egress guard +
+//! confined `curl`; accounts are linked to `(issuer, subject)` administratively — no auto-provisioning.
 
 pub mod authenticator;
 pub mod credential;
@@ -32,7 +33,10 @@ pub use hashing::{
     TokenHasher, mint_token,
 };
 pub use identity::{Account, AccountStore, AuthError, InMemoryAccountStore};
-pub use oidc::{OidcError, OidcVerifier, UnconfiguredOidc, VerifiedIdentity};
+pub use oidc::{
+    BeginLogin, OidcConfig, OidcError, OidcProvider, OidcVerifier, PENDING_TTL_SECS,
+    UnconfiguredOidc, VerifiedIdentity,
+};
 pub use session::{
     InMemorySessionStore, SESSION_TTL_SECS, Session, SessionId, SessionStore, random_token,
     tokens_match,

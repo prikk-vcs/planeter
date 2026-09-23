@@ -57,6 +57,12 @@ gh attestation verify oci://ghcr.io/prikk-vcs/planeter:X.Y.Z --repo prikk-vcs/pl
   planeter speaks plain HTTP: it **refuses a non-loopback bind unless trusted proxies are set**, takes
   the client IP from `X-Forwarded-For` only when the TCP peer is a trusted proxy, and marks cookies
   `Secure` (so the proxy must serve HTTPS).
+- **SSO (OIDC):** set `PLANETER_OIDC_ISSUER`, `PLANETER_OIDC_CLIENT_ID`, `PLANETER_OIDC_REDIRECT_URI`
+  (and `PLANETER_OIDC_CLIENT_SECRET` for a confidential client). The provider is reached only through
+  the egress guard and a bubblewrap-confined **`curl`** (add `curl` to the runtime prerequisites; it is
+  in the container image). Link each account to its provider identity with the account store's
+  `link_oidc(issuer, subject, user)` — an unlinked identity is refused; planeter never auto-creates
+  accounts from SSO.
 - **Container:** persist `/var/lib/planeter` (repos + SQLite). bubblewrap needs user namespaces
   inside the container: typically `--security-opt seccomp=unconfined` (or a seccomp profile allowing
   `unshare`/`clone` with `CLONE_NEWUSER`) and, on kernels that restrict unprivileged user namespaces,

@@ -1,0 +1,4 @@
+# cargo-audit configuration (the CI `supply-chain` job runs `cargo audit`).
+# Keep in step with deny.toml's [advisories].ignore and its rationale.
+[advisories]
+ignore = ["RUSTSEC-2023-0071"] # RustCrypto rsa / Marvin: private-key side channel; planeter verifies with public keys only

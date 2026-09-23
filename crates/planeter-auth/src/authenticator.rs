@@ -16,7 +16,7 @@ use planeter_store::UserId;
 use crate::credential::CredentialStore;
 use crate::hashing::{PasswordHasher, TokenHasher};
 use crate::identity::{AccountStore, AuthError, Result};
-use crate::oidc::{OidcVerifier, VerifiedIdentity};
+use crate::oidc::VerifiedIdentity;
 
 /// Authenticates presented credentials into principals. Holds the identity/credential stores and the
 /// hashing seams; a deployment wires the production Argon2id/token hashers here (owner-ruled: seams now,
@@ -70,19 +70,13 @@ impl Authenticator {
         }
     }
 
-    /// Map a verified OIDC identity (subject) to a local account → a `User` principal. The verifier is
-    /// the configured provider client; the subject must already be linked to an account (by handle).
-    pub fn authenticate_oidc(
-        &self,
-        verifier: &dyn OidcVerifier,
-        id_token: &str,
-    ) -> Result<Principal> {
-        let VerifiedIdentity { subject, .. } = verifier
-            .verify(id_token)
-            .map_err(|_| AuthError::BadCredentials)?;
-        // The account whose handle is the provider subject link. (A richer subject↔account mapping is a
-        // provider-integration detail; the seam is what matters here.)
-        let user = UserId::new(subject);
+    /// A verified OIDC identity → the **linked** local account → a `User` principal. No
+    /// auto-provisioning: an unlinked `(issuer, subject)` is refused like any bad credential.
+    pub fn authenticate_oidc(&self, identity: &VerifiedIdentity) -> Result<Principal> {
+        let user = self
+            .accounts
+            .lookup_oidc(&identity.issuer, &identity.subject)?
+            .ok_or(AuthError::BadCredentials)?;
         self.accounts.get(&user)?.ok_or(AuthError::BadCredentials)?;
         Ok(Principal::User(user))
     }

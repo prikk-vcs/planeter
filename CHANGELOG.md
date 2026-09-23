@@ -10,6 +10,10 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
   behind TLS termination).
 - **Per-client-IP login throttle** (20 failures across any accounts → 15-minute lock) alongside the
   per-account one.
+- **SSO via OpenID Connect** (`PLANETER_OIDC_*`): authorization-code flow with PKCE, ID tokens verified
+  against the provider's JWKS; provider traffic through the egress guard and a confined `curl` (new
+  runtime prerequisite). Accounts are linked to `(issuer, subject)` administratively — no
+  auto-provisioning.
 
 ## [0.1.1] — read side: browse UI, sign-in, egress guard
 
