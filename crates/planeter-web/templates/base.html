@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}planeter{% endblock %}</title>
+<link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+<header>
+  <a href="/">planeter</a>
+  {% block nav %}{% endblock %}
+  <span class="who">{% if let Some(u) = user %}{{ u }} · <form class="inline" method="post" action="/logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit">sign out</button></form>{% else %}<a href="/login">sign in</a>{% endif %}</span>
+</header>
+<main>
+{% block body %}{% endblock %}
+</main>
+</body>
+</html>

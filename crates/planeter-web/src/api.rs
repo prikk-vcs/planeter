@@ -23,7 +23,7 @@ use axum::routing::get;
 use serde::Serialize;
 
 use planeter_auth::Authenticator;
-use planeter_core::{Principal, RawFile, ReadError, ReadService};
+use planeter_core::{RawFile, ReadError, ReadService};
 use planeter_store::Owner;
 
 use crate::security::{ContentOrigin, app_security_headers, raw_content_headers};
@@ -41,6 +41,10 @@ pub struct AppState {
     pub read: Arc<ReadService>,
     pub auth: Arc<Authenticator>,
     pub content_origin: ContentOrigin,
+    /// Browser sessions (the UI's sign-in); the API accepts the session cookie too.
+    pub sessions: Arc<dyn planeter_auth::SessionStore>,
+    /// Injected clock (tests pin it).
+    pub now_unix: fn() -> u64,
 }
 
 /// Build the read-API router.
@@ -104,7 +108,7 @@ async fn history_handler(
     Query(q): Query<HistoryQuery>,
     headers: HeaderMap,
 ) -> Response {
-    let principal = principal_from(&headers, &state.auth);
+    let principal = crate::principal::principal_from_request(&headers, &state);
     let limit = q.limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT);
     let result = try_both_owners(&owner, |o| {
         state
@@ -119,7 +123,7 @@ async fn change_handler(
     Path((owner, name, target)): Path<(String, String, String)>,
     headers: HeaderMap,
 ) -> Response {
-    let principal = principal_from(&headers, &state.auth);
+    let principal = crate::principal::principal_from_request(&headers, &state);
     let result = try_both_owners(&owner, |o| state.read.change(&principal, o, &name, &target));
     respond(&state, &headers, result)
 }
@@ -130,7 +134,7 @@ async fn file_handler(
     Query(q): Query<FileQuery>,
     headers: HeaderMap,
 ) -> Response {
-    let principal = principal_from(&headers, &state.auth);
+    let principal = crate::principal::principal_from_request(&headers, &state);
     let result = try_both_owners(&owner, |o| {
         state
             .read
@@ -145,7 +149,7 @@ async fn tree_handler(
     Query(q): Query<TreeQuery>,
     headers: HeaderMap,
 ) -> Response {
-    let principal = principal_from(&headers, &state.auth);
+    let principal = crate::principal::principal_from_request(&headers, &state);
     let result = try_both_owners(&owner, |o| {
         state.read.tree(
             &principal,
@@ -164,7 +168,7 @@ async fn raw_handler(
     Query(q): Query<RawQuery>,
     headers: HeaderMap,
 ) -> Response {
-    let principal = principal_from(&headers, &state.auth);
+    let principal = crate::principal::principal_from_request(&headers, &state);
     let result = try_both_owners(&owner, |o| {
         state.read.raw_file(
             &principal,
@@ -187,7 +191,7 @@ async fn refs_handler(
     Query(q): Query<RefsQuery>,
     headers: HeaderMap,
 ) -> Response {
-    let principal = principal_from(&headers, &state.auth);
+    let principal = crate::principal::principal_from_request(&headers, &state);
     let result = try_both_owners(&owner, |o| state.read.refs(&principal, o, &name, q.all));
     respond(&state, &headers, result)
 }
@@ -197,7 +201,7 @@ async fn verify_handler(
     Path((owner, name)): Path<(String, String)>,
     headers: HeaderMap,
 ) -> Response {
-    let principal = principal_from(&headers, &state.auth);
+    let principal = crate::principal::principal_from_request(&headers, &state);
     let result = try_both_owners(&owner, |o| state.read.verify(&principal, o, &name));
     respond(&state, &headers, result)
 }
@@ -210,22 +214,9 @@ async fn openapi_handler(State(state): State<AppState>) -> Response {
 
 // -- helpers --
 
-/// Extract the principal from `Authorization: Bearer <token>`, else anonymous.
-fn principal_from(headers: &HeaderMap, auth: &Authenticator) -> Principal {
-    if let Some(value) = headers
-        .get(header::AUTHORIZATION)
-        .and_then(|h| h.to_str().ok())
-        && let Some(token) = value.strip_prefix("Bearer ")
-        && let Ok(principal) = auth.authenticate_token(token.trim())
-    {
-        return principal;
-    }
-    Principal::Anonymous
-}
-
 /// Try the handle as a user, then as an org. A `NotFound` for the user is retried as an org (the two are
 /// a shared namespace); any other outcome is returned as-is.
-fn try_both_owners<T>(
+pub(crate) fn try_both_owners<T>(
     handle: &str,
     f: impl Fn(&Owner) -> Result<T, ReadError>,
 ) -> Result<T, ReadError> {
@@ -306,7 +297,7 @@ fn error_response(state: &AppState, e: ReadError) -> Response {
         .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response_fallback())
 }
 
-fn with_security_headers(
+pub(crate) fn with_security_headers(
     state: &AppState,
     mut builder: axum::http::response::Builder,
 ) -> axum::http::response::Builder {

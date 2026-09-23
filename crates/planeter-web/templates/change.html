@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}change {{ target }} · {{ owner }}/{{ name }}{% endblock %}
+{% block nav %}{% include "repo_nav.html" %}{% endblock %}
+{% block body %}
+<h1>Change <code>{{ target }}</code></h1>
+{% for p in patches %}
+<h2>patch <code>{{ p.short_id }}</code> <span class="badge {{ p.assurance_class }}">{{ p.assurance_label }}</span></h2>
+<table>{% for op in p.operations %}<tr><td><code>{{ op.kind }}</code></td><td>{% for path in op.paths %}<code>{{ path }}</code> {% endfor %}</td></tr>{% endfor %}</table>
+{% endfor %}
+{% endblock %}

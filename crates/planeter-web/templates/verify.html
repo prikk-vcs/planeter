@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}verify · {{ owner }}/{{ name }}{% endblock %}
+{% block nav %}{% include "repo_nav.html" %}{% endblock %}
+{% block body %}
+<h1>Verification <span class="badge {{ assurance_class }}">{{ assurance_label }}</span></h1>
+<p class="muted">Re-derived from <code>prikk verify</code> on this request — never served from a cache. {{ verified_sessions }} of {{ total_sessions }} session(s) verified.</p>
+{% for c in failed %}<p class="badge bad">{{ c }}</p>{% endfor %}
+<table>{% for s in stages %}<tr><td><code>{{ s.stage }}</code></td><td>{{ s.status }}</td><td class="muted">{{ s.detail }}</td></tr>{% endfor %}</table>
+{% endblock %}

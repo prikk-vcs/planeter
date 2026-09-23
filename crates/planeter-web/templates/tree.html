@@ -1,0 +1,7 @@
+{% extends "base.html" %}
+{% block title %}{{ prefix }} · {{ owner }}/{{ name }}{% endblock %}
+{% block nav %}{% include "repo_nav.html" %}{% endblock %}
+{% block body %}
+<p class="crumbs"><a href="/{{ owner }}/{{ name }}">{{ name }}</a> / <code>{{ prefix }}</code> <span class="muted">at {{ point }}</span></p>
+{% include "listing.html" %}
+{% endblock %}

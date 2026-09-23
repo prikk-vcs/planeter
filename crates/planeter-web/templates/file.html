@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block title %}{{ path }} · {{ owner }}/{{ name }}{% endblock %}
+{% block nav %}{% include "repo_nav.html" %}{% endblock %}
+{% block body %}
+<p class="crumbs"><a href="/{{ owner }}/{{ name }}">{{ name }}</a> / <code>{{ path }}</code> <span class="muted">{{ size }} B · {{ encoding }}</span> · <a href="{{ raw_url }}">raw</a></p>
+{% if let Some(html) = rendered_html %}
+<section class="readme">{{ html|safe }}</section>
+{% else %}
+{% if let Some(t) = text %}
+<pre><code>{{ t }}</code></pre>
+{% else %}
+<p class="muted">Binary content — <a href="{{ raw_url }}">download</a>.</p>
+{% endif %}
+{% endif %}
+{% endblock %}

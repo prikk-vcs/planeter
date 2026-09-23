@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block body %}
+<h1>planeter</h1>
+<p class="muted">A forge for prikk repositories. Browse a repository by its <code>owner/name</code>.</p>
+<form method="get" action="/go">
+  <input name="repo" placeholder="owner/name" required>
+  <button type="submit">Open</button>
+</form>
+{% endblock %}

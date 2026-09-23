@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block title %}{{ owner }}/{{ name }} · planeter{% endblock %}
+{% block nav %}{% include "repo_nav.html" %}{% endblock %}
+{% block body %}
+<h1>{{ owner }}/{{ name }} <span class="badge {{ assurance_class }}">{{ assurance_label }}</span></h1>
+<p class="muted">at <code>{{ point }}</code>{% if let Some(b) = current_branch %} · branch <code>{{ b }}</code>{% endif %}</p>
+{% include "listing.html" %}
+{% if let Some(html) = readme_html %}
+<section class="readme">{{ html|safe }}</section>
+{% endif %}
+{% endblock %}

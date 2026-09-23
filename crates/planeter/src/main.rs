@@ -15,6 +15,7 @@ use std::sync::Arc;
 
 use planeter_auth::{
     Argon2idHasher, Authenticator, Sha256TokenHasher, SqliteAccountStore, SqliteCredentialStore,
+    SqliteSessionStore,
 };
 use planeter_core::{HostingService, NullAuditSink, ReadService};
 use planeter_store::{
@@ -53,7 +54,7 @@ async fn main() {
 
     let (accounts, credentials) = match (
         SqliteAccountStore::new(db.clone()),
-        SqliteCredentialStore::new(db),
+        SqliteCredentialStore::new(db.clone()),
     ) {
         (Ok(a), Ok(c)) => (a, c),
         (Err(e), _) | (_, Err(e)) => {
@@ -68,10 +69,25 @@ async fn main() {
         Arc::new(Sha256TokenHasher),
     ));
 
+    let sessions = match SqliteSessionStore::new(db) {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("planeter: cannot initialise sessions: {e}");
+            std::process::exit(1);
+        }
+    };
+
     let state = AppState {
         read,
         auth,
         content_origin: ContentOrigin::new(content_origin),
+        sessions: Arc::new(sessions),
+        now_unix: || {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_secs())
+                .unwrap_or(0)
+        },
     };
 
     eprintln!("planeter listening on http://{addr} (db: {db_path})");

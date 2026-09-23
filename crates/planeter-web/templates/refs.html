@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}refs · {{ owner }}/{{ name }}{% endblock %}
+{% block nav %}{% include "repo_nav.html" %}{% endblock %}
+{% block body %}
+<h1>Branches</h1>
+<table>{% for b in branches %}<tr><td><a href="/{{ owner }}/{{ name }}/history?ref={{ b.ref_name }}"><code>{{ b.ref_name }}</code></a>{% if b.current %} <span class="badge">current</span>{% endif %}{% if b.closed %} <span class="badge warn">closed</span>{% endif %}</td><td class="muted"><code>{{ b.short_state }}</code></td></tr>{% endfor %}</table>
+<h1>Tags</h1>
+<table>{% for t in tags %}<tr><td><code>{{ t.ref_name }}</code></td><td class="muted"><code>{{ t.short_target }}</code></td></tr>{% endfor %}</table>
+{% if tags.is_empty() %}<p class="muted">No tags.</p>{% endif %}
+{% endblock %}

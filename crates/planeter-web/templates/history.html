@@ -1,0 +1,10 @@
+{% extends "base.html" %}
+{% block title %}history · {{ owner }}/{{ name }}{% endblock %}
+{% block nav %}{% include "repo_nav.html" %}{% endblock %}
+{% block body %}
+<h1>History <span class="muted">{{ ref_name }}</span> <span class="badge {{ assurance_class }}">{{ assurance_label }}</span></h1>
+<table>
+{% for e in entries %}<tr><td><a href="/{{ owner }}/{{ name }}/change/{{ e.block_id }}"><code>{{ e.short_id }}</code></a></td><td>{{ e.kind }}{% if e.rollback_block %} <span class="badge warn">rollback</span>{% endif %}</td><td>{% for m in e.messages %}{{ m }}<br>{% endfor %}</td><td class="muted">{{ e.patch_count }} patch(es)</td></tr>{% endfor %}
+</table>
+{% if entries.is_empty() %}<p class="muted">No sealed history on this ref yet.</p>{% endif %}
+{% endblock %}

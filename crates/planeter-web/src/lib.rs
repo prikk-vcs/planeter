@@ -7,10 +7,18 @@
 //! calls `planeter_core::ReadService` behind the one `authorize(_, Read, _)` gate.
 
 pub mod api;
+pub mod cookies;
+pub mod principal;
 pub mod sanitize;
 pub mod security;
+pub mod ui;
 
-pub use api::{AppState, router};
+pub use api::AppState;
+
+/// The full application router: the JSON read API under `/api/v1/…` merged with the browse UI.
+pub fn router(state: AppState) -> axum::Router {
+    api::router(state.clone()).merge(ui::router(state))
+}
 pub use sanitize::{render_markdown, sanitize_html};
 pub use security::{ContentOrigin, app_csp, app_security_headers, raw_content_headers};
 

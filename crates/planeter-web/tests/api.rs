@@ -87,6 +87,8 @@ fn app(subdir: &str, real: bool) -> AppState {
         read,
         auth,
         content_origin: ContentOrigin::new("https://raw.planeter.example"),
+        sessions: Arc::new(planeter_auth::InMemorySessionStore::new()),
+        now_unix: || 1_000_000,
     }
 }
 

@@ -206,6 +206,10 @@ container does). `planeter-runner` stays unpublished until M4.
   updated if the release touched a sensitive surface.
 - **The read/host spine ships early and often.** M1 is a genuinely usable product; later minors add
   capability without a big-bang.
+- **While M2 is held (owner-ruled 2026-09-23), the read side keeps shipping as 0.1.x:** the browse
+  **web UI** (server-rendered pages over the same `ReadService` and `authorize()` gate as the API, with
+  cookie sessions + CSRF — closes RFC 003's "API-not-UI" deviation) and the real **egress guard** landed
+  2026-09-23.
 - **Track B ships when ready, within 0.x** (gated on prikk shipping RFC 154/155); not a blocker for its
   neighbours.
 - **Security releases are out-of-band.** A dependency advisory or a threat-model control failure triggers

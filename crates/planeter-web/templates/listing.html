@@ -1,0 +1,4 @@
+<table>
+{% for d in dirs %}<tr><td>📁 <a href="/{{ owner }}/{{ name }}/tree/{{ d.path }}{{ ref_query }}">{{ d.name }}/</a></td><td class="muted"></td></tr>{% endfor %}
+{% for f in files %}<tr><td>📄 <a href="/{{ owner }}/{{ name }}/blob/{{ f.path }}{{ ref_query }}">{{ f.name }}</a></td><td class="muted">{{ f.size }} B · {{ f.encoding }}</td></tr>{% endfor %}
+</table>
