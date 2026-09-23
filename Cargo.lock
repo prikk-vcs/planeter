@@ -1122,7 +1122,7 @@ checksum = "f6b464fbc74e149a392436b17d523f769e057cb6877f6a5c4618bc6f11800548"
 
 [[package]]
 name = "planeter"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "planeter-auth",
  "planeter-ci",
@@ -1136,7 +1136,7 @@ dependencies = [
 
 [[package]]
 name = "planeter-auth"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "argon2",
  "base64ct",
@@ -1152,18 +1152,18 @@ dependencies = [
 
 [[package]]
 name = "planeter-boundary-check"
-version = "0.1.1"
+version = "0.2.0"
 
 [[package]]
 name = "planeter-ci"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "planeter-core",
 ]
 
 [[package]]
 name = "planeter-core"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "planeter-prikk",
  "planeter-store",
@@ -1174,7 +1174,7 @@ dependencies = [
 
 [[package]]
 name = "planeter-prikk"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "serde",
  "serde_json",
@@ -1182,32 +1182,32 @@ dependencies = [
 
 [[package]]
 name = "planeter-registry"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "planeter-core",
 ]
 
 [[package]]
 name = "planeter-runner"
-version = "0.1.1"
+version = "0.2.0"
 
 [[package]]
 name = "planeter-store"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "rusqlite",
 ]
 
 [[package]]
 name = "planeter-transport"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "planeter-core",
 ]
 
 [[package]]
 name = "planeter-web"
-version = "0.1.1"
+version = "0.2.0"
 dependencies = [
  "ammonia",
  "askama",

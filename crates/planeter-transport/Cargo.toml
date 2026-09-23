@@ -9,4 +9,4 @@ repository.workspace = true
 description = "planeter's transport ferry for keyless clone and push over prikk's bundle/sync artifacts (RFC 004; lands at M2)."
 
 [dependencies]
-planeter-core = { path = "../planeter-core", version = "0.1.1" }
+planeter-core = { path = "../planeter-core", version = "0.2.0" }

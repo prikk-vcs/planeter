@@ -3,7 +3,11 @@
 Releases are bare version tags; each section is the release's notes (assembled into the GitHub
 release by `release.yml`). Kept by hand, per release, so nothing here goes stale by templating.
 
-## [Unreleased]
+## [0.2.0] — the auth increment: trusted proxies, per-IP throttle, SSO
+
+Shipped during the M2 hold (clone/push waits for prikk RFC 155 then 154, after prikk 0.49.0), after a
+full documentation audit. Runtime prerequisites: prikk ≥ 0.46.0, bubblewrap, and `curl` if SSO is
+enabled (the container image bundles all three).
 
 - **Trusted reverse proxies** (`PLANETER_TRUSTED_PROXIES`): client IPs from `X-Forwarded-For` only
   behind declared proxies; a non-loopback bind is refused without them (planeter speaks plain HTTP
@@ -14,6 +18,9 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
   against the provider's JWKS; provider traffic through the egress guard and a confined `curl` (new
   runtime prerequisite). Accounts are linked to `(issuer, subject)` administratively — no
   auto-provisioning.
+- **Documentation**: the README describes the shipped product and how to install, run and deploy it;
+  RFCs 001–003 are recorded as done; threat model v0.3 (OIDC status, residual-risk ids RR-10/RR-11);
+  rustdoc builds warning-free.
 
 ## [0.1.1] — read side: browse UI, sign-in, egress guard
 
