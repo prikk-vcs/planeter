@@ -45,6 +45,8 @@ pub struct AppState {
     pub sessions: Arc<dyn planeter_auth::SessionStore>,
     /// Injected clock (tests pin it).
     pub now_unix: fn() -> u64,
+    /// Per-account sign-in throttle (threat model C-2b).
+    pub login_throttle: Arc<planeter_auth::LoginThrottle>,
 }
 
 /// Build the read-API router.

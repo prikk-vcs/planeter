@@ -21,6 +21,7 @@ pub mod oidc;
 pub mod session;
 pub mod sqlite;
 pub mod sshkey;
+pub mod throttle;
 
 pub use authenticator::Authenticator;
 pub use credential::{
@@ -38,3 +39,4 @@ pub use session::{
 };
 pub use sqlite::{SqliteAccountStore, SqliteCredentialStore, SqliteSessionStore};
 pub use sshkey::{SshKeyError, SshPublicKey};
+pub use throttle::{DEFAULT_LOCK_SECS, DEFAULT_MAX_FAILURES, LoginThrottle};

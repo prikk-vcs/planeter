@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | Document | planeter Threat Model (security) |
-| Version | v0.1 (draft for review) |
-| Date | 2026-09-15 |
+| Version | v0.2 (2026-09-23 — implementation status through 0.1.x recorded under T-2/T-6/T-8 and RR-6/RR-7, per the release rule that a release touching a sensitive surface updates this document; v0.1 2026-09-15 was the review draft) |
+| Date | 2026-09-23 (v0.2); 2026-09-15 (v0.1) |
 | Basis | planeter Requirements v0.1 (PU/NG/CAP/STD/SEC/INT/OPS/BN/UD/OQ) and External Design v0.1 (BD/AC/TX/WEB/API/AUTH/CI/REG/HOOK/PK/FL/CT/OP/GATED); **forge-commons** (the standards frame); prikk reality (2026-09-15 survey, prikk `HEAD f6cbd057`); project rules (a threat model is a first-class release deliverable) |
 | ID scheme | `A-` asset · `TB-` trust boundary · `T-` threat · `C-` control · `INV-` security invariant · `RR-` residual risk · `ASSUME-` assumption |
 | Not | code, an API, or a dependency-audit report. It states what planeter must defend, against whom, and how — so the design and tests can be checked against it. |
@@ -110,6 +110,17 @@ key confusion — the common road to account takeover (A-CREDS).
 - **C-2c — session safety** (STD-6): `Secure` + `HttpOnly` + `SameSite` cookies; CSRF tokens for
   cookie-authenticated writes; short-lived, **scoped** tokens for machines, revocable and rotable.
 
+**Status (0.1.x, 2026-09-23).** *New inbound flow:* browser sign-in — `POST /login` (TB-1 → TB-2)
+creates an opaque random session id stored server-side (SQLite) and returned in an `HttpOnly` +
+`SameSite=Strict` + `Secure` cookie; every cookie-authenticated `POST` carries a CSRF double-submit
+token compared in constant time; the API accepts the same session cookie or a bearer token through one
+principal extractor. *Implemented:* C-2a **partially** — Argon2id for local passwords, SHA-256 +
+constant-time compare for scoped tokens, ed25519 SSH keys; **OAuth/OIDC deferred to 0.2.x** (owner-ruled:
+needs an outbound HTTP client behind C-8 and a JWT stack review) and **no second factor yet** (RR-6).
+C-2b **implemented as a per-account throttle** (5 consecutive failures → 15-minute lock, a correct
+password refused while locked; RR-7). C-2c **implemented** as above; token revocation is by deleting the
+stored hash.
+
 ### T-3 (Elevation) — authorization bypass / confused deputy
 A user reaches a repository, ref, or action they are not entitled to: insecure direct object references,
 missing checks on a code path, a low-scope token performing a high-scope action, privilege escalation
@@ -171,6 +182,14 @@ uploaded assets). Rendering it into the app origin, or serving raw files from it
   avatars, and hosted pages come from a different domain than the application, so a malicious file
   executes in a throwaway origin with no session and no access to the forge DOM.
 
+**Status (0.1.x, 2026-09-23).** *Implemented:* C-6a — a strict CSP on every response (`script-src 'self'`,
+`style-src 'self'`, `object-src 'none'`, `frame-ancestors 'none'`, `base-uri 'none'`; no inline script
+or style anywhere in the UI, whose one stylesheet is served from the app origin), plus `nosniff`,
+`X-Frame-Options`, `Referrer-Policy`; C-6b — `ammonia` sanitization of all Markdown/HTML before it reaches
+a page (scripts, handlers, `javascript:`/`data:` URLs stripped; tested); C-6c — raw repository bytes
+served only as inert downloads (`Content-Disposition: attachment`, `nosniff`, a `sandbox` CSP) from the
+configured isolated content origin, which the UI links to and never inlines.
+
 ### T-7 (Information disclosure) — confidentiality of private content
 Private repository content or metadata leaks: an authorization gap (T-3), cross-tenant bleed, secrets
 committed *inside* repository history, or content in logs (A-CONTENT).
@@ -192,6 +211,15 @@ infrastructure (A-HOST).
 - **C-8 — SSRF egress controls on every user-supplied URL** (STD-4/STD-6): block loopback, link-local,
   and private ranges by default, applied uniformly to webhooks, mirrors, imports, and OIDC — widened
   only by deliberate operator allowlist. This is the item most often missed and most damaging.
+
+**Status (0.1.x, 2026-09-23).** *Implemented* as `planeter_core::egress::StdEgressGuard`: HTTPS only
+(plain HTTP by explicit opt-in), userinfo refused, the host resolved via the OS resolver and **every**
+answer required to be public unicast (loopback, private, CGNAT, link-local incl. `169.254.169.254`,
+unspecified/multicast/reserved/documentation, and the IPv6 equivalents including IPv4-mapped and NAT64
+forms all refused), returning the **pinned** addresses the caller must connect to and re-check on every
+redirect; a private-target opt-in exists for internal webhook receivers. **No outbound caller exists yet**
+(webhooks, mirrors and OIDC arrive with later RFCs); each must route through this guard — that is the
+review check for every future outbound feature.
 
 ### T-9 (Denial of service) — resource exhaustion and availability
 Enormous repositories and pushes, expensive prikk operations, CI abuse, API hammering, and disk fill —
@@ -332,6 +360,15 @@ A change that breaks one of these is a security bug, not a preference. Several m
   until the durability policy (OQ-6) is ruled.
 - **RR-5 — Multi-writer safety rests on prikk's local locking beneath planeter's per-repo serialization
   (UD-4)** — to be confirmed, not assumed, in the internal design.
+- **RR-6 — No second factor on accounts yet (C-2a).** 0.1.x sign-in is password + per-account throttle
+  only; TOTP/WebAuthn (required for privileged accounts by SEC-3) are not implemented. Until they are,
+  privileged accounts should use long random passwords and scoped tokens, and deployments needing MFA
+  should front planeter with an SSO/identity-aware proxy. Tracked for the 0.2.x auth increment with OIDC.
+- **RR-7 — The login throttle is per account, in memory, per process.** It cannot rate-limit by client
+  IP until the trusted-proxy header (client IP behind TLS termination) is configured and trusted, and it
+  resets on restart and is not shared across replicas. Credential stuffing across *many* accounts is
+  therefore bounded per account, not globally; a reverse-proxy rate limit on `/login` is the deployment
+  mitigation until per-IP throttling lands with the trusted-proxy work.
 - **RR-6 — A compromised CI runner can poison the build outputs it produces.** Mitigated by isolation
   (C-5) and by storing/verifying provenance (SEC-4), but a determined runner compromise is an
   industry-wide residual.

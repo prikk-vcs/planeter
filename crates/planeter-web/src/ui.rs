@@ -464,12 +464,26 @@ async fn login_submit(
             vec![],
         );
     }
+    let now = (state.now_unix)();
+    // C-2b: a locked account is refused before the password is even checked.
+    if state.login_throttle.check(&form.username, now).is_err() {
+        return render(
+            &state,
+            StatusCode::TOO_MANY_REQUESTS,
+            &LoginTpl {
+                user: None,
+                csrf: c.csrf.clone(),
+                failed: true,
+            },
+            &c,
+        );
+    }
     match state
         .auth
         .authenticate_password(&form.username, &form.password)
     {
         Ok(Principal::User(user)) => {
-            let now = (state.now_unix)();
+            state.login_throttle.record_success(&form.username);
             match state.sessions.create(user, now, now + SESSION_TTL_SECS) {
                 Ok(session) => redirect(
                     &state,
@@ -484,16 +498,19 @@ async fn login_submit(
                 ),
             }
         }
-        _ => render(
-            &state,
-            StatusCode::UNAUTHORIZED,
-            &LoginTpl {
-                user: None,
-                csrf: c.csrf.clone(),
-                failed: true,
-            },
-            &c,
-        ),
+        _ => {
+            state.login_throttle.record_failure(&form.username, now);
+            render(
+                &state,
+                StatusCode::UNAUTHORIZED,
+                &LoginTpl {
+                    user: None,
+                    csrf: c.csrf.clone(),
+                    failed: true,
+                },
+                &c,
+            )
+        }
     }
 }
 

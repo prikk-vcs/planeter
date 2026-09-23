@@ -82,6 +82,7 @@ async fn main() {
         auth,
         content_origin: ContentOrigin::new(content_origin),
         sessions: Arc::new(sessions),
+        login_throttle: Arc::new(planeter_auth::LoginThrottle::default()),
         now_unix: || {
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)

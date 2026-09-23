@@ -82,6 +82,7 @@ fn app(subdir: &str, real: bool) -> AppState {
         content_origin: ContentOrigin::new("https://raw.planeter.example"),
         sessions: Arc::new(InMemorySessionStore::new()),
         now_unix: || 1_000_000,
+        login_throttle: Arc::new(planeter_auth::LoginThrottle::default()),
     }
 }
 
@@ -286,4 +287,32 @@ async fn signed_in_owner_browses_her_private_repo() {
         send(&r, get("/alice/app")).await.status(),
         StatusCode::NOT_FOUND
     );
+}
+
+#[tokio::test]
+async fn repeated_failures_lock_the_account_even_for_the_right_password() {
+    let r = router(app("ui-throttle", false));
+    let page = send(&r, get("/login")).await;
+    let csrf = cookie_value(&page, "planeter_csrf").unwrap();
+    let post = |pw: &str| {
+        Request::builder()
+            .method("POST")
+            .uri("/login")
+            .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .header(header::COOKIE, format!("planeter_csrf={csrf}"))
+            .body(Body::from(format!(
+                "csrf={csrf}&username=alice&password={pw}"
+            )))
+            .unwrap()
+    };
+    for _ in 0..planeter_auth::DEFAULT_MAX_FAILURES {
+        assert_eq!(
+            send(&r, post("wrong")).await.status(),
+            StatusCode::UNAUTHORIZED
+        );
+    }
+    // Locked: the correct password is refused with 429 and no session cookie.
+    let resp = send(&r, post("pw")).await;
+    assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
+    assert!(cookie_value(&resp, "planeter_session").is_none());
 }
