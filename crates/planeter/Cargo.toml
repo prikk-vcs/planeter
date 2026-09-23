@@ -9,11 +9,11 @@ repository.workspace = true
 description = "The planeter forge server: hosts and serves prikk repositories over a sandboxed prikk, with a keyless, default-deny, honest read path."
 
 [dependencies]
-planeter-core = { path = "../planeter-core", version = "0.1.0" }
-planeter-auth = { path = "../planeter-auth", version = "0.1.0" }
-planeter-store = { path = "../planeter-store", version = "0.1.0" }
-planeter-web = { path = "../planeter-web", version = "0.1.0" }
-planeter-transport = { path = "../planeter-transport", version = "0.1.0" }
-planeter-ci = { path = "../planeter-ci", version = "0.1.0" }
-planeter-registry = { path = "../planeter-registry", version = "0.1.0" }
+planeter-core = { path = "../planeter-core", version = "0.1.1" }
+planeter-auth = { path = "../planeter-auth", version = "0.1.1" }
+planeter-store = { path = "../planeter-store", version = "0.1.1" }
+planeter-web = { path = "../planeter-web", version = "0.1.1" }
+planeter-transport = { path = "../planeter-transport", version = "0.1.1" }
+planeter-ci = { path = "../planeter-ci", version = "0.1.1" }
+planeter-registry = { path = "../planeter-registry", version = "0.1.1" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }

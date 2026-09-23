@@ -9,4 +9,4 @@ repository.workspace = true
 description = "planeter's package registry (RFC 007; lands at M5)."
 
 [dependencies]
-planeter-core = { path = "../planeter-core", version = "0.1.0" }
+planeter-core = { path = "../planeter-core", version = "0.1.1" }
