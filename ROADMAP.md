@@ -82,8 +82,9 @@ builds, server `accept`s author-signed patches — WR-2/WR-3), plus the **client
 keyless (`sync accept` idempotent, tamper-refusing, verify-clean); `bundle export` / `sync have` /
 `sync summary` need no key; but **`sync build` refuses without a maintainer key**, so a keyless forge
 cannot build incremental-fetch artifacts, and a planeter-created repository has **no sealed branch to
-serve** until RFC 154 adoption exists. **Owner ruling: A2 is held until prikk 0.48.0+** (RFC 155/154,
-plus the `sync build` ask), so clone and push land together rather than shipping a push-only 0.2.0.
+serve** until RFC 154 adoption exists. **Owner ruling: A2 is held until prikk ships RFC 155 then 154 — after 0.49.0 on prikk's
+schedule** (the `sync build` ask was answered: it stays keyed; keyless fetch is RFC 155's verbatim path,
+whole-artifact until a delta form lands), so clone and push land together rather than a push-only 0.2.0.
 **Transport layering (owner-ruled 2026-09-23, supersedes RFC 004 D-6's in-process reading):** planeter
 serves plain HTTP on loopback behind a **TLS-terminating reverse proxy** (TLS stays mandatory as a
 deployment rule the binary enforces — no non-loopback bind without a trusted-proxy configuration), and
@@ -111,9 +112,10 @@ versions, object-storage-backed.
 > RFCs: **RFC 154 — trusted fast-forward ref adoption (accepted by the prikk owner)** lets a keyless
 > forge hold a canonical, multi-maintainer branch by *adopting* trusted-maintainer-signed advances; and
 > **RFC 155 — the repository-complete artifact (proposed)** is the clone/serve/migrate substrate. Track B
-> is now **gated on prikk shipping these**. Ship order (updated 2026-09-22): key-id fix + format-7
-> signature union (**0.45.0, done**) → `diff`/read verbs (**0.46.0, done**) → import/verify size bound
-> (**0.47.0**) → **RFC 155, then RFC 154's adoption act (0.48.0 onward)**. planeter designs to the
+> is now **gated on prikk shipping these**. prikk's schedule (2026-09-23, by theme, no dates): 0.45.0
+> key-id + signature union (done) → 0.46.0 `diff`/read verbs (done) → **0.47.0** RFC 158 Stage A (import size
+> bound) → **0.48.0** RFC 158 B/C (streaming, chunk manifests, **format 8**) → **0.49.0** RFC 158 D →
+> **after 0.49.0: RFC 155, then RFC 154**. `sync build` stays keyed (ruled); keyless fetch is RFC 155's. planeter designs to the
 > direction now; implementation waits on the binary. **This gates Track B only — M2 (keyless clone +
 > push) is buildable on prikk-as-is and proceeds now (owner-confirmed 2026-09-23).**
 
@@ -144,7 +146,7 @@ content-as-data, no default egress), **portable identity** (defer until a standa
 |---|---|---|---|---|
 | **M0** | 0.1.0-dev | Foundations: CR-prikk driver, store, core + `authorize`, auth, layering gate | A0 | **done** (2026-09-16) |
 | **M1** | **0.1.0** | **Host + browse + auth**: multi-repo hosting/identity, read path, sign-in, per-ref authz. The first usable hosted forge | A1 | **released 2026-09-23** — signed tag `0.1.0` at `01bbb1c`; [GitHub release](https://github.com/prikk-vcs/planeter/releases/tag/0.1.0) (attested Linux x86_64 + aarch64 tarballs), container image `ghcr.io/prikk-vcs/planeter:0.1.0`, and all nine crates on crates.io (`cargo install planeter`) |
-| **M2** | 0.2.0 | **Clone + push (keyless)**: transport ferry, fetch, push=accept+verify, client helper | A2 | **HELD until prikk 0.48.0+ (owner-ruled 2026-09-23)** — measured on 0.46.0: push is fully keyless, but `sync build` requires a maintainer key (PK-27) and a planeter-created repo has no servable branch until RFC 154 adoption, so clone/fetch cannot land keylessly yet; M2 ships clone + push together once RFC 155/154 (and a keyless `sync build`, asked) ship |
+| **M2** | 0.2.0 | **Clone + push (keyless)**: transport ferry, fetch, push=accept+verify, client helper | A2 | **HELD until prikk ships RFC 155 then RFC 154 — after 0.49.0 per prikk's schedule of 2026-09-23 (owner-ruled hold, 2026-09-23)** — measured on 0.46.0: push is fully keyless, but `sync build` requires a maintainer key (PK-27) and a planeter-created repo has no servable branch until RFC 154 adoption, so clone/fetch cannot land keylessly yet; M2 ships clone + push together once RFC 155/154 ship; prikk ruled `sync build` stays keyed (keyless fetch is RFC 155's verbatim path, gaining a delta form in its design round) |
 | **M3** | 0.3.0 | **Review + issues + merge**: change/review model, issues, merge (keyless fallback WR-5b) | A3 | planned |
 | **M4** | 0.4.0 | **CI**: pipelines + isolated ephemeral runners | A4 | planned |
 | **M5** | 0.5.0 | **Packages**: OCI + first language registries | A5 | planned |

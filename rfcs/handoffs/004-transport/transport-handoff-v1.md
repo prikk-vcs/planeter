@@ -11,8 +11,11 @@
 > **Held 2026-09-23 (owner ruling) — do not start.** Measured on prikk 0.46.0 (dependency-ledger
 > PK-27/28/29): the push path is fully keyless and robust, but **`sync build` requires a maintainer
 > key** and a planeter-created repository has no servable branch until RFC 154 adoption — so clone/fetch
-> cannot land keylessly. A2 waits for prikk 0.48.0+ (RFC 155/154, and the `sync build` ask sent
-> 2026-09-23) and a **v2 handoff**. Two decisions already taken for that v2: **TLS is proxy-terminated
+> cannot land keylessly. A2 waits for prikk to ship RFC 155 then RFC 154 — **after 0.49.0** on prikk's
+> schedule of 2026-09-23 (`sync build` stays keyed, ruled; keyless fetch is RFC 155's verbatim path) —
+> and a **v2 handoff**. Two 0.47.0 facts for that v2: `sync accept` refuses over-size input before
+> reading (exit code 1, new wording — key on the code) and the bound is `PRIKK_EXCHANGE_MAX_BYTES`,
+> which the clearing sandbox must set explicitly. Two decisions already taken for that v2: **TLS is proxy-terminated
 > (loopback HTTP + trusted-proxy rule) and SSH is host OpenSSH `ForceCommand` → `planeter ssh-shell`** —
 > no in-process rustls/russh (measured: +165 crates, deny + audit failing). T1/T2 below are superseded
 > accordingly; T3–T8 stand in substance.
