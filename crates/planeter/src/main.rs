@@ -1,11 +1,11 @@
 #![forbid(unsafe_code)]
 //! `planeter` — the forge server binary.
 //!
-//! **M1 preview.** This wires the read path (RFC 003) into a runnable server: create/host repos over
-//! sandboxed prikk, browse them through the authorized, honest read API. It uses **in-memory** stores
-//! and the **insecure stub** password/token hasher (real Argon2id + SQLite are deferred behind their
-//! seams — RFC 002), so it is a **development/preview server, not for production**. Configuration is by
-//! environment variable:
+//! **M1, pre-tag.** This wires the read path (RFC 003) into a runnable server: create/host repos over
+//! sandboxed prikk, browse them through the authorized, honest read API, with the production
+//! **Argon2id** password hasher and constant-time token hasher (RFC 002 seams, wired 2026-09-23). It
+//! still uses **in-memory** stores (SQLite is the remaining pre-tag increment), so state does not
+//! survive a restart — **not yet for production**. Configuration is by environment variable:
 //!
 //! - `PLANETER_ADDR` — bind address (default `127.0.0.1:8080`)
 //! - `PLANETER_REPOS_ROOT` — where hosted repositories live (default `./planeter-repos`)
@@ -14,7 +14,7 @@
 use std::sync::Arc;
 
 use planeter_auth::{
-    Authenticator, InMemoryAccountStore, InMemoryCredentialStore, InsecureStubHasher,
+    Argon2idHasher, Authenticator, InMemoryAccountStore, InMemoryCredentialStore, Sha256TokenHasher,
 };
 use planeter_core::{HostingService, NullAuditSink, ReadService};
 use planeter_store::{
@@ -33,7 +33,7 @@ async fn main() {
     let content_origin =
         std::env::var("PLANETER_CONTENT_ORIGIN").unwrap_or_else(|_| format!("http://{addr}"));
 
-    // In-memory stores + stub hashing — preview only.
+    // In-memory stores (SQLite is the remaining pre-tag increment); production hashers.
     let repo_store: Arc<dyn RepositoryStore> = Arc::new(InMemoryRepositoryStore::new());
     let hosting = Arc::new(HostingService::new(repos_root, repo_store));
     let membership: Arc<dyn MembershipStore> = Arc::new(InMemoryMembershipStore::new());
@@ -43,12 +43,11 @@ async fn main() {
         Arc::new(NullAuditSink),
     ));
 
-    let hasher = Arc::new(InsecureStubHasher);
     let auth = Arc::new(Authenticator::new(
         Arc::new(InMemoryAccountStore::new()),
         Arc::new(InMemoryCredentialStore::new()),
-        hasher.clone(),
-        hasher,
+        Arc::new(Argon2idHasher),
+        Arc::new(Sha256TokenHasher),
     ));
 
     let state = AppState {
@@ -57,7 +56,9 @@ async fn main() {
         content_origin: ContentOrigin::new(content_origin),
     };
 
-    eprintln!("planeter (M1 preview, in-memory, NOT for production) listening on http://{addr}");
+    eprintln!(
+        "planeter (M1 pre-tag: in-memory stores, not yet for production) listening on http://{addr}"
+    );
     if let Err(e) = planeter_web::serve(state, addr).await {
         eprintln!("planeter: server error: {e}");
         std::process::exit(1);
