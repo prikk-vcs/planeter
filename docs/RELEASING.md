@@ -52,7 +52,11 @@ gh attestation verify oci://ghcr.io/prikk-vcs/planeter:X.Y.Z --repo prikk-vcs/pl
 ## Deploying
 
 - **Binary:** needs `prikk` (≥ the floor in `build-info.txt`) and `bwrap` on `PATH`. Configure with
-  `PLANETER_ADDR`, `PLANETER_REPOS_ROOT`, `PLANETER_DB`, `PLANETER_CONTENT_ORIGIN`.
+  `PLANETER_ADDR`, `PLANETER_REPOS_ROOT`, `PLANETER_DB`, `PLANETER_CONTENT_ORIGIN`, and
+  **`PLANETER_TRUSTED_PROXIES`** (the TLS-terminating proxy's addresses/CIDRs, comma-separated).
+  planeter speaks plain HTTP: it **refuses a non-loopback bind unless trusted proxies are set**, takes
+  the client IP from `X-Forwarded-For` only when the TCP peer is a trusted proxy, and marks cookies
+  `Secure` (so the proxy must serve HTTPS).
 - **Container:** persist `/var/lib/planeter` (repos + SQLite). bubblewrap needs user namespaces
   inside the container: typically `--security-opt seccomp=unconfined` (or a seccomp profile allowing
   `unshare`/`clone` with `CLONE_NEWUSER`) and, on kernels that restrict unprivileged user namespaces,

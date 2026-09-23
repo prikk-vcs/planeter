@@ -19,6 +19,7 @@ use planeter_auth::{SESSION_TTL_SECS, SessionId, random_token, tokens_match};
 use planeter_core::{Assurance, Principal, ReadError, TreeEntryView};
 
 use crate::api::{AppState, try_both_owners, with_security_headers};
+use crate::client_ip::{PeerAddr, client_ip};
 use crate::cookies::{CSRF_COOKIE, SESSION_COOKIE, clear_cookie, get_cookie, set_cookie};
 use crate::principal::principal_from_request;
 use crate::sanitize::render_markdown;
@@ -451,6 +452,7 @@ async fn login_form(State(state): State<AppState>, headers: HeaderMap) -> Respon
 
 async fn login_submit(
     State(state): State<AppState>,
+    PeerAddr(peer): PeerAddr,
     headers: HeaderMap,
     Form(form): Form<LoginForm>,
 ) -> Response {
@@ -465,8 +467,13 @@ async fn login_submit(
         );
     }
     let now = (state.now_unix)();
-    // C-2b: a locked account is refused before the password is even checked.
-    if state.login_throttle.check(&form.username, now).is_err() {
+    // C-2b: a locked account — or a locked client address — is refused before the password is checked.
+    let ip_key =
+        client_ip(peer.map(|p| p.ip()), &headers, &state.trusted_proxies).map(|ip| ip.to_string());
+    let ip_locked = ip_key
+        .as_deref()
+        .is_some_and(|k| state.ip_throttle.check(k, now).is_err());
+    if ip_locked || state.login_throttle.check(&form.username, now).is_err() {
         return render(
             &state,
             StatusCode::TOO_MANY_REQUESTS,
@@ -484,6 +491,9 @@ async fn login_submit(
     {
         Ok(Principal::User(user)) => {
             state.login_throttle.record_success(&form.username);
+            if let Some(k) = &ip_key {
+                state.ip_throttle.record_success(k);
+            }
             match state.sessions.create(user, now, now + SESSION_TTL_SECS) {
                 Ok(session) => redirect(
                     &state,
@@ -500,6 +510,9 @@ async fn login_submit(
         }
         _ => {
             state.login_throttle.record_failure(&form.username, now);
+            if let Some(k) = &ip_key {
+                state.ip_throttle.record_failure(k, now);
+            }
             render(
                 &state,
                 StatusCode::UNAUTHORIZED,

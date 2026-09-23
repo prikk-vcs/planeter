@@ -83,6 +83,10 @@ fn app(subdir: &str, real: bool) -> AppState {
         sessions: Arc::new(InMemorySessionStore::new()),
         now_unix: || 1_000_000,
         login_throttle: Arc::new(planeter_auth::LoginThrottle::default()),
+        ip_throttle: Arc::new(planeter_auth::LoginThrottle::new(20, 15 * 60)),
+        trusted_proxies: Arc::new(
+            planeter_web::TrustedProxies::parse("10.0.0.0/8").expect("trusted proxies"),
+        ),
     }
 }
 
@@ -315,4 +319,39 @@ async fn repeated_failures_lock_the_account_even_for_the_right_password() {
     let resp = send(&r, post("pw")).await;
     assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
     assert!(cookie_value(&resp, "planeter_session").is_none());
+}
+
+#[tokio::test]
+async fn one_client_ip_behind_the_trusted_proxy_is_locked_across_usernames() {
+    let r = router(app("ui-ip-throttle", false));
+    let page = send(&r, get("/login")).await;
+    let csrf = cookie_value(&page, "planeter_csrf").unwrap();
+    // The TCP peer is the trusted proxy 10.0.0.5; X-Forwarded-For names the real client.
+    let post = |user: &str, pw: &str, xff: &str| {
+        let mut req = Request::builder()
+            .method("POST")
+            .uri("/login")
+            .header(header::CONTENT_TYPE, "application/x-www-form-urlencoded")
+            .header(header::COOKIE, format!("planeter_csrf={csrf}"))
+            .header("x-forwarded-for", xff)
+            .body(Body::from(format!(
+                "csrf={csrf}&username={user}&password={pw}"
+            )))
+            .unwrap();
+        req.extensions_mut().insert(axum::extract::ConnectInfo(
+            "10.0.0.5:4242".parse::<std::net::SocketAddr>().unwrap(),
+        ));
+        req
+    };
+    // 20 failures from one client address, spread over many usernames (credential stuffing).
+    for i in 0..20 {
+        let resp = send(&r, post(&format!("user{i}"), "wrong", "203.0.113.9")).await;
+        assert_eq!(resp.status(), StatusCode::UNAUTHORIZED, "attempt {i}");
+    }
+    // The address is locked: even alice's right password is refused from it.
+    let resp = send(&r, post("alice", "pw", "203.0.113.9")).await;
+    assert_eq!(resp.status(), StatusCode::TOO_MANY_REQUESTS);
+    // A different client address behind the same proxy is unaffected.
+    let resp = send(&r, post("alice", "pw", "203.0.113.10")).await;
+    assert_eq!(resp.status(), StatusCode::SEE_OTHER);
 }

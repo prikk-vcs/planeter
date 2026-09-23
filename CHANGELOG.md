@@ -3,6 +3,14 @@
 Releases are bare version tags; each section is the release's notes (assembled into the GitHub
 release by `release.yml`). Kept by hand, per release, so nothing here goes stale by templating.
 
+## [Unreleased]
+
+- **Trusted reverse proxies** (`PLANETER_TRUSTED_PROXIES`): client IPs from `X-Forwarded-For` only
+  behind declared proxies; a non-loopback bind is refused without them (planeter speaks plain HTTP
+  behind TLS termination).
+- **Per-client-IP login throttle** (20 failures across any accounts → 15-minute lock) alongside the
+  per-account one.
+
 ## [0.1.1] — read side: browse UI, sign-in, egress guard
 
 Work during the M2 hold (clone/push waits for prikk 0.48.0+).

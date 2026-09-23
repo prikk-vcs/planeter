@@ -90,6 +90,10 @@ fn app(subdir: &str, real: bool) -> AppState {
         sessions: Arc::new(planeter_auth::InMemorySessionStore::new()),
         now_unix: || 1_000_000,
         login_throttle: Arc::new(planeter_auth::LoginThrottle::default()),
+        ip_throttle: Arc::new(planeter_auth::LoginThrottle::new(20, 15 * 60)),
+        trusted_proxies: Arc::new(
+            planeter_web::TrustedProxies::parse("10.0.0.0/8").expect("trusted proxies"),
+        ),
     }
 }
 

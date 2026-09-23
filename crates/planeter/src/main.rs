@@ -10,6 +10,9 @@
 //! - `PLANETER_REPOS_ROOT` — where hosted repositories live (default `./planeter-repos`)
 //! - `PLANETER_CONTENT_ORIGIN` — the isolated origin for raw bytes (default `http://127.0.0.1:8080`)
 //! - `PLANETER_DB` — the SQLite database file (default `./planeter.db`; created if absent)
+//! - `PLANETER_TRUSTED_PROXIES` — comma-separated addresses/CIDRs of the TLS-terminating reverse proxies
+//!   (client IPs are taken from `X-Forwarded-For` only behind these). **A non-loopback `PLANETER_ADDR`
+//!   is refused unless this is set**: planeter speaks plain HTTP and must sit behind TLS termination.
 
 use std::sync::Arc;
 
@@ -34,6 +37,19 @@ async fn main() {
     let content_origin =
         std::env::var("PLANETER_CONTENT_ORIGIN").unwrap_or_else(|_| format!("http://{addr}"));
     let db_path = std::env::var("PLANETER_DB").unwrap_or_else(|_| "./planeter.db".to_owned());
+    let trusted_proxies = match planeter_web::TrustedProxies::parse(
+        &std::env::var("PLANETER_TRUSTED_PROXIES").unwrap_or_default(),
+    ) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("planeter: PLANETER_TRUSTED_PROXIES: {e}");
+            std::process::exit(1);
+        }
+    };
+    if let Err(e) = planeter_web::bind_allowed(addr, &trusted_proxies) {
+        eprintln!("planeter: {e}");
+        std::process::exit(1);
+    }
 
     // One SQLite database for every store; production hashers.
     let db = match SqliteDb::open(&db_path) {
@@ -83,6 +99,8 @@ async fn main() {
         content_origin: ContentOrigin::new(content_origin),
         sessions: Arc::new(sessions),
         login_throttle: Arc::new(planeter_auth::LoginThrottle::default()),
+        ip_throttle: Arc::new(planeter_auth::LoginThrottle::new(20, 15 * 60)),
+        trusted_proxies: Arc::new(trusted_proxies),
         now_unix: || {
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)

@@ -7,6 +7,7 @@
 //! calls `planeter_core::ReadService` behind the one `authorize(_, Read, _)` gate.
 
 pub mod api;
+pub mod client_ip;
 pub mod cookies;
 pub mod principal;
 pub mod sanitize;
@@ -14,6 +15,7 @@ pub mod security;
 pub mod ui;
 
 pub use api::AppState;
+pub use client_ip::{TrustedProxies, bind_allowed, client_ip};
 
 /// The full application router: the JSON read API under `/api/v1/…` merged with the browse UI.
 pub fn router(state: AppState) -> axum::Router {
@@ -25,5 +27,10 @@ pub use security::{ContentOrigin, app_csp, app_security_headers, raw_content_hea
 /// Serve the read API on `addr` until the process is stopped.
 pub async fn serve(state: AppState, addr: std::net::SocketAddr) -> std::io::Result<()> {
     let listener = tokio::net::TcpListener::bind(addr).await?;
-    axum::serve(listener, router(state)).await
+    // Connect-info gives handlers the TCP peer, which the trusted-proxy rules turn into the client IP.
+    axum::serve(
+        listener,
+        router(state).into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .await
 }

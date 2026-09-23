@@ -47,6 +47,10 @@ pub struct AppState {
     pub now_unix: fn() -> u64,
     /// Per-account sign-in throttle (threat model C-2b).
     pub login_throttle: Arc<planeter_auth::LoginThrottle>,
+    /// Per-client-IP sign-in throttle (C-2b; needs a trusted proxy to know the client).
+    pub ip_throttle: Arc<planeter_auth::LoginThrottle>,
+    /// The operator's trusted reverse proxies (client IP derivation + the bind rule).
+    pub trusted_proxies: Arc<crate::client_ip::TrustedProxies>,
 }
 
 /// Build the read-API router.

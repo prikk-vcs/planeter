@@ -118,7 +118,8 @@ principal extractor. *Implemented:* C-2a **partially** — Argon2id for local pa
 constant-time compare for scoped tokens, ed25519 SSH keys; **OAuth/OIDC deferred to 0.2.x** (owner-ruled:
 needs an outbound HTTP client behind C-8 and a JWT stack review) and **no second factor yet** (RR-6).
 C-2b **implemented as a per-account throttle** (5 consecutive failures → 15-minute lock, a correct
-password refused while locked; RR-7). C-2c **implemented** as above; token revocation is by deleting the
+password refused while locked) **and a per-client-IP throttle** (20 failures across any accounts; client
+IP via the trusted-proxy rules; RR-7). C-2c **implemented** as above; token revocation is by deleting the
 stored hash.
 
 ### T-3 (Elevation) — authorization bypass / confused deputy
@@ -364,11 +365,12 @@ A change that breaks one of these is a security bug, not a preference. Several m
   only; TOTP/WebAuthn (required for privileged accounts by SEC-3) are not implemented. Until they are,
   privileged accounts should use long random passwords and scoped tokens, and deployments needing MFA
   should front planeter with an SSO/identity-aware proxy. Tracked for the 0.2.x auth increment with OIDC.
-- **RR-7 — The login throttle is per account, in memory, per process.** It cannot rate-limit by client
-  IP until the trusted-proxy header (client IP behind TLS termination) is configured and trusted, and it
-  resets on restart and is not shared across replicas. Credential stuffing across *many* accounts is
-  therefore bounded per account, not globally; a reverse-proxy rate limit on `/login` is the deployment
-  mitigation until per-IP throttling lands with the trusted-proxy work.
+- **RR-7 — The login throttles are in memory, per process.** *(Reduced 2026-09-23.)* Sign-in is now
+  throttled **per account (5 failures) and per client IP (20 failures across any accounts)**, the client
+  IP derived from `X-Forwarded-For` only behind an operator-declared trusted proxy (`TB-8`;
+  `PLANETER_TRUSTED_PROXIES`) and never from the header alone; a non-loopback bind is refused without
+  that configuration. What remains: both throttles reset on restart and are not shared across
+  replicas, so a multi-replica deployment should also rate-limit `/login` at the proxy.
 - **RR-6 — A compromised CI runner can poison the build outputs it produces.** Mitigated by isolation
   (C-5) and by storing/verifying provenance (SEC-4), but a determined runner compromise is an
   industry-wide residual.
