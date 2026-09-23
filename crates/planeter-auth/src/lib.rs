@@ -18,6 +18,7 @@ pub mod credential;
 pub mod hashing;
 pub mod identity;
 pub mod oidc;
+pub mod sqlite;
 pub mod sshkey;
 
 pub use authenticator::Authenticator;
@@ -30,4 +31,5 @@ pub use hashing::{
 };
 pub use identity::{Account, AccountStore, AuthError, InMemoryAccountStore};
 pub use oidc::{OidcError, OidcVerifier, UnconfiguredOidc, VerifiedIdentity};
+pub use sqlite::{SqliteAccountStore, SqliteCredentialStore};
 pub use sshkey::{SshKeyError, SshPublicKey};

@@ -23,3 +23,5 @@ subtle = "2"
 # base64ct: the `ssh-key` crate was rejected in review because it locks the unfixable RUSTSEC-2023-0071
 # `rsa` crate into Cargo.lock (trips cargo-audit) for an algorithm planeter never uses.
 base64ct = { version = "1", features = ["alloc"] }
+# SQLite account/credential stores over planeter-store's shared SqliteDb (same crate, no new tree).
+rusqlite = { version = "0.32", features = ["bundled"] }
