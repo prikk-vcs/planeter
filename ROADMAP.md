@@ -135,7 +135,7 @@ content-as-data, no default egress), **portable identity** (defer until a standa
 | Milestone | Version | Contents | Track | Status |
 |---|---|---|---|---|
 | **M0** | 0.1.0-dev | Foundations: CR-prikk driver, store, core + `authorize`, auth, layering gate | A0 | **done** (2026-09-16) |
-| **M1** | **0.1.0** | **Host + browse + auth**: multi-repo hosting/identity, read path, sign-in, per-ref authz. The first usable hosted forge | A1 | **built** (RFC 002 + 003 complete, 2026-09-16; `tree`/`cat` browse 2026-09-22) — **tag pending the M1 pre-tag checklist** (below) |
+| **M1** | **0.1.0** | **Host + browse + auth**: multi-repo hosting/identity, read path, sign-in, per-ref authz. The first usable hosted forge | A1 | **released 2026-09-23** — signed tag `0.1.0` at `01bbb1c`; [GitHub release](https://github.com/prikk-vcs/planeter/releases/tag/0.1.0) (attested Linux x86_64 + aarch64 tarballs), container image `ghcr.io/prikk-vcs/planeter:0.1.0`, and all nine crates on crates.io (`cargo install planeter`) |
 | **M2** | 0.2.0 | **Clone + push (keyless)**: transport ferry, fetch, push=accept+verify, client helper | A2 | planned — **buildable on prikk-as-is (≥ 0.46.0)**, not gated on RFC 154/155 |
 | **M3** | 0.3.0 | **Review + issues + merge**: change/review model, issues, merge (keyless fallback WR-5b) | A3 | planned |
 | **M4** | 0.4.0 | **CI**: pipelines + isolated ephemeral runners | A4 | planned |
@@ -187,9 +187,10 @@ container does). `planeter-runner` stays unpublished until M4.
   4. The `planeter` binary drops its preview label once 1–2 are wired — **done 2026-09-23** (it now
      announces only its address and database).
 
-  **All four done (2026-09-23).** `main` is the 0.1.0 release candidate: the workspace version is
-  `0.1.0` and `CHANGELOG.md` carries the `[0.1.0]` section. **The signed tag is the owner's act**
-  (`docs/RELEASING.md`).
+  **All four done, and 0.1.0 shipped (2026-09-23).** The release run's `publish` job failed on an
+  artifact-download defect (fixed for future releases in `fedf904`); the GitHub release was created by
+  the documented fallback from the run's own checksum- and attestation-verified assets. The nine crates
+  were published to crates.io in dependency order (the new-crate rate limit paced the last four).
   The tag itself remains owner-only.
 - **Milestone-driven minors** (M1 `0.1.0` → M5 `0.5.0`). A minor ships only when its gates are green
   (fmt · clippy `-D warnings` · test · `cargo-deny`/`cargo-audit`), its security invariants hold

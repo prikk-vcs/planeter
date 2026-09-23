@@ -61,6 +61,15 @@ gh attestation verify oci://ghcr.io/prikk-vcs/planeter:X.Y.Z --repo prikk-vcs/pl
 - **Format 7:** keep the serving prikk at or above the on-disk format your hosted repositories carry;
   planeter never upgrades a repository's format on its own.
 
+## Release log
+
+- **0.1.0 (2026-09-23).** Gates, both builds and the container image passed; `publish` failed twice
+  because an unfiltered `download-artifact` also fetched Docker's `*.dockerbuild` build-record
+  artifact, which could not be downloaded (fixed on `main` in `fedf904` with `pattern: planeter-*`).
+  The release was created by the fallback below from the run's own artifacts after `sha256sum -c`
+  and `gh attestation verify` both passed. crates.io: nine crates, dependency order; the new-crate
+  rate limit (burst of 5, then ~1 per 10 min) paced the last four.
+
 ## If a job fails
 
 The workflow is idempotent up to `publish`: re-run the failed job with `gh run rerun <run-id> --failed`
