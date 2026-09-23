@@ -1,10 +1,13 @@
 #![forbid(unsafe_code)]
 //! `planeter-web` — planeter upper (surfaces) layer. See RFC 001/003.
 //!
-//! The web/API surface over the read path (RFC 003). This crate holds the **rendering-safety core**
-//! ([`sanitize`] — strict HTML/Markdown sanitization; [`security`] — the strict CSP, the security
-//! headers, and the isolated content origin for raw bytes), and (next) the HTTP/OpenAPI read API that
-//! calls `planeter_core::ReadService` behind the one `authorize(_, Read, _)` gate.
+//! The web/API surface over the read path (RFC 003): the **rendering-safety core** ([`sanitize`] —
+//! strict HTML/Markdown sanitization; [`security`] — the strict CSP, the security headers, and the
+//! isolated content origin for raw bytes), the HTTP/OpenAPI read [`api`] and the server-rendered browse
+//! [`ui`], both calling `planeter_core::ReadService` behind the one `authorize(_, Read, _)` gate; the
+//! [`principal`] extractor (session cookie or bearer token), the [`cookies`] helpers (CSRF double-submit,
+//! `HttpOnly`/`SameSite=Strict`/`Secure`), sign-in (local password or OIDC) with the login throttles, and
+//! the trusted-proxy [`client_ip`](mod@client_ip) rules.
 
 pub mod api;
 pub mod client_ip;

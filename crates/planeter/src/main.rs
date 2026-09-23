@@ -1,10 +1,11 @@
 #![forbid(unsafe_code)]
 //! `planeter` — the forge server binary.
 //!
-//! **M1.** The read/host spine (RFC 001–003) as a runnable server: create/host repos over sandboxed
-//! prikk, browse them through the authorized, honest read API, with production **Argon2id** /
-//! constant-time token hashing and a persistent **SQLite** database for every store (both landed
-//! 2026-09-23). Configuration is by environment variable:
+//! The read/host spine (RFC 001–003) as a runnable server: create/host repositories over sandboxed
+//! prikk and browse them through the browse UI and the authorized, honest read API; sign in with a
+//! local password (Argon2id) or OpenID Connect, behind sessions, CSRF protection and login throttles;
+//! every store persists in **SQLite**. Clone/push (RFC 004) is not here yet. Configuration is by
+//! environment variable:
 //!
 //! - `PLANETER_ADDR` — bind address (default `127.0.0.1:8080`)
 //! - `PLANETER_REPOS_ROOT` — where hosted repositories live (default `./planeter-repos`)

@@ -111,13 +111,15 @@ versions, object-storage-backed.
 > **Trust-model resolved 2026-09-16.** The keyless multi-maintainer question is answered by two prikk
 > RFCs: **RFC 154 — trusted fast-forward ref adoption (accepted by the prikk owner)** lets a keyless
 > forge hold a canonical, multi-maintainer branch by *adopting* trusted-maintainer-signed advances; and
-> **RFC 155 — the repository-complete artifact (proposed)** is the clone/serve/migrate substrate. Track B
+> **RFC 155 — the repository-complete artifact (accepted by the prikk owner, 2026-09-16)** is the
+> clone/serve/migrate substrate. Track B
 > is now **gated on prikk shipping these**. prikk's schedule (2026-09-23, by theme, no dates): 0.45.0
 > key-id + signature union (done) → 0.46.0 `diff`/read verbs (done) → **0.47.0** RFC 158 Stage A (import size
 > bound) → **0.48.0** RFC 158 B/C (streaming, chunk manifests, **format 8**) → **0.49.0** RFC 158 D →
 > **after 0.49.0: RFC 155, then RFC 154**. `sync build` stays keyed (ruled); keyless fetch is RFC 155's. planeter designs to the
-> direction now; implementation waits on the binary. **This gates Track B only — M2 (keyless clone +
-> push) is buildable on prikk-as-is and proceeds now (owner-confirmed 2026-09-23).**
+> direction now; implementation waits on the binary. **This gates Track B and, since the 0.46.0
+> measurement (PK-27), M2 as well: keyless clone + push is held until RFC 155 then 154 ship (owner-ruled
+> 2026-09-23).**
 
 ### Phase B1 — Canonical branch + one-click merge (prikk RFC 154 + 155)
 A merge is a maintainer sealing (their own key, client-side) and the **forge adopting** the resulting
@@ -146,11 +148,12 @@ content-as-data, no default egress), **portable identity** (defer until a standa
 |---|---|---|---|---|
 | **M0** | 0.1.0-dev | Foundations: CR-prikk driver, store, core + `authorize`, auth, layering gate | A0 | **done** (2026-09-16) |
 | **M1** | **0.1.0** | **Host + browse + auth**: multi-repo hosting/identity, read path, sign-in, per-ref authz. The first usable hosted forge | A1 | **released 2026-09-23** — signed tag `0.1.0` at `01bbb1c`; [GitHub release](https://github.com/prikk-vcs/planeter/releases/tag/0.1.0) (attested Linux x86_64 + aarch64 tarballs), container image `ghcr.io/prikk-vcs/planeter:0.1.0`, and all nine crates on crates.io (`cargo install planeter`) |
-| **M2** | 0.2.0 | **Clone + push (keyless)**: transport ferry, fetch, push=accept+verify, client helper | A2 | **HELD until prikk ships RFC 155 then RFC 154 — after 0.49.0 per prikk's schedule of 2026-09-23 (owner-ruled hold, 2026-09-23)** — measured on 0.46.0: push is fully keyless, but `sync build` requires a maintainer key (PK-27) and a planeter-created repo has no servable branch until RFC 154 adoption, so clone/fetch cannot land keylessly yet; M2 ships clone + push together once RFC 155/154 ship; prikk ruled `sync build` stays keyed (keyless fetch is RFC 155's verbatim path, gaining a delta form in its design round) |
-| **M3** | 0.3.0 | **Review + issues + merge**: change/review model, issues, merge (keyless fallback WR-5b) | A3 | planned |
-| **M4** | 0.4.0 | **CI**: pipelines + isolated ephemeral runners | A4 | planned |
-| **M5** | 0.5.0 | **Packages**: OCI + first language registries | A5 | planned |
-| **B1** | ships within 0.x once prikk RFC 154 + 155 ship | **Canonical branch + one-click merge** (maintainer seals, forge adopts the fast-forward) | B1 | gated (prikk RFC 154 accepted, 155 proposed) |
+| **0.2.0** | **0.2.0** | **The auth increment, shipped during the M2 hold**: trusted reverse proxies (client IP, bind rule), per-client-IP login throttle, **SSO via OpenID Connect** | A1 | **released 2026-09-24** — signed tag, attested tarballs + container image, nine crates on crates.io |
+| **M2** | next free minor | **Clone + push (keyless)**: transport ferry, fetch, push=accept+verify, client helper | A2 | **HELD until prikk ships RFC 155 then RFC 154 — after 0.49.0 per prikk's schedule of 2026-09-23 (owner-ruled hold, 2026-09-23)** — measured on 0.46.0: push is fully keyless, but `sync build` requires a maintainer key (PK-27) and a planeter-created repo has no servable branch until RFC 154 adoption, so clone/fetch cannot land keylessly yet; M2 ships clone + push together once RFC 155/154 ship; prikk ruled `sync build` stays keyed (keyless fetch is RFC 155's verbatim path, gaining a delta form in its design round) |
+| **M3** | minor after M2 | **Review + issues + merge**: change/review model, issues, merge (keyless fallback WR-5b) | A3 | planned |
+| **M4** | minor after M3 | **CI**: pipelines + isolated ephemeral runners | A4 | planned |
+| **M5** | minor after M4 | **Packages**: OCI + first language registries | A5 | planned |
+| **B1** | ships within 0.x once prikk RFC 154 + 155 ship | **Canonical branch + one-click merge** (maintainer seals, forge adopts the fast-forward) | B1 | gated (prikk RFC 154 + 155 accepted, not yet shipped) |
 | **B2** | before 1.0 | **Hosted-format durability policy** | B2 | gated (owner OQ-6) |
 | **1.0.0** | 1.0 | **The familiar forge, complete**: host + transport + review + one-click merge + CI + packages + web + API, hardened, backup-tested, durability policy settled | A + B | pending A0–A5, B1, B2 **+ owner confirmation** |
 
@@ -184,7 +187,7 @@ container does). `planeter-runner` stays unpublished until M4.
      `OidcVerifier` seam stays. 0.1.0 auth = local passwords + scoped tokens + ed25519 SSH keys. **Landed
      2026-09-24 (unreleased):** OIDC on `jsonwebtoken`'s RustCrypto backend with a scoped, justified
      ignore of RUSTSEC-2023-0071 (public-key verification only), provider traffic via a confined `curl`
-     through the egress guard — the owner-ruled shape.
+     through the egress guard — the owner-ruled shape. Released in 0.2.0.
   2. **A persistent store** — **done 2026-09-23** (`94e922d`): SQLite (`rusqlite`, bundled; +16 crates,
      deny/audit clean) behind all four traits — `RepositoryStore` / `MembershipStore` (planeter-store)
      and `AccountStore` / `CredentialStore` (planeter-auth) — over one shared `SqliteDb` (WAL, idempotent
@@ -205,24 +208,29 @@ container does). `planeter-runner` stays unpublished until M4.
   the documented fallback from the run's own checksum- and attestation-verified assets. The nine crates
   were published to crates.io in dependency order (the new-crate rate limit paced the last four).
   The tag itself remains owner-only.
-- **Milestone-driven minors** (M1 `0.1.0` → M5 `0.5.0`). A minor ships only when its gates are green
+- **Milestone-driven minors** (M1 was `0.1.0`; later milestones take the next free minor). A minor ships only when its gates are green
   (fmt · clippy `-D warnings` · test · `cargo-deny`/`cargo-audit`), its security invariants hold
   (notably **ENF-2**: the default build links no forge-seal path — CI-checked), and the threat model is
   updated if the release touched a sensitive surface.
 - **The read/host spine ships early and often.** M1 is a genuinely usable product; later minors add
   capability without a big-bang.
-- **While M2 is held (owner-ruled 2026-09-23), the read side keeps shipping as 0.1.x:** the browse
+- **While M2 is held (owner-ruled 2026-09-23), the read side keeps shipping:** the browse
   **web UI** (server-rendered pages over the same `ReadService` and `authorize()` gate as the API, with
   cookie sessions + CSRF — closes RFC 003's "API-not-UI" deviation) and the real **egress guard** landed
   2026-09-23. **Released as 0.1.1 the same day** (signed tag; the release workflow completed
   unaided; nine crates on crates.io), with the login throttle (C-2b) and threat model v0.2.
+  **0.2.0 (2026-09-24, owner-authorized)** followed with the auth increment — trusted reverse proxies,
+  the per-client-IP throttle and OpenID Connect SSO — after a full documentation audit. **Minors are
+  no longer pre-assigned to milestones**: a milestone takes the next free minor when it ships, so M2
+  is "the next minor after 0.2.0", not "0.2.0".
 - **Track B ships when ready, within 0.x** (gated on prikk shipping RFC 154/155); not a blocker for its
   neighbours.
 - **Security releases are out-of-band.** A dependency advisory or a threat-model control failure triggers
   a prompt patch release.
 - **Runtime prerequisites are release notes, not code:** **prikk ≥ 0.46.0** (the version pin, PK-26 —
   it carries the `tree`/`cat`/`diff` read verbs, the 0.44.0 GHSA-px5q-233r-6hq5 import fix, the format-7
-  signature union and the key-id fix) and **bubblewrap** on the host (the sandbox, T4) are documented
+  signature union and the key-id fix), **bubblewrap** on the host (the sandbox, T4) and, for SSO,
+  **curl** (the confined outbound HTTPS client behind the egress guard, 0.2.0) are documented
   deployment prerequisites of a release. **Format 7** is a breaking, explicit-only `prikk format
   upgrade` with no downgrade: a deployment keeps its serving binary at or above the format its hosted
   repositories carry, and planeter never upgrades a hosted repository without an intended act.
@@ -232,19 +240,19 @@ container does). `planeter-runner` stays unpublished until M4.
   against the released binary; record the outcome in the dependency ledger. A pin bump lands only with
   the binary present, so the version-pinned integration tests validate against it rather than refuse
   it. Mirrors stikk's per-release rebaseline practice.
-- **The release workflow lands as M1 nears** — a `release.yml` (not needed during A0): on a bare-version
-  tag → gates green → build binaries + container → attest/sign → GitHub release. **Tagging, publishing,
-  and the v0→v1 promotion are owner-only.**
+- **The release workflow** (`release.yml`, landed 2026-09-23; procedure in `docs/RELEASING.md`): on a
+  bare-version tag → gates green → build binaries + container → attest → GitHub release → crates.io.
+  **Tagging, publishing, and the v0→v1 promotion are owner-authorized.**
 
 ## Dependencies (on prikk and on the owner) — do not block Track A
 
 Named so no plan silently assumes them:
 
 - **prikk RFC 154 — trusted fast-forward ref adoption. ACCEPTED (prikk owner, 2026-09-16); scheduled
-  0.48.0 onward, after RFC 155.** The keyless multi-maintainer canonical-branch primitive B1 depends on.
+  after 0.49.0, after RFC 155 (prikk's schedule of 2026-09-23).** The keyless multi-maintainer canonical-branch primitive B1 depends on.
   Supersedes the old UD-6 "client-sealable-claim" ask.
 - **prikk RFC 155 — the repository-complete artifact. ACCEPTED (prikk owner, 2026-09-16); scheduled
-  0.48.0 onward.** planeter's R1–R6 are prikk's accepted direction; the clone/serve/migrate substrate for
+  after 0.49.0 (prikk's schedule of 2026-09-23).** planeter's R1–R6 are prikk's accepted direction; the clone/serve/migrate substrate for
   B1 and B2 (`import --adopt`). Its all-or-nothing import (R4) gets its own prikk design round, with
   planeter's input invited; **R6 is already answered** by format 7's signature union (0.45.0). 0.47.0
   lands an import/verify size bound first — the nearest thing to R4 shippable before RFC 155 opens.
@@ -293,8 +301,10 @@ starts until the foundations and the layering gate exist.
 | **008** | *(joint prikk)* Seal / UD-6 — now via prikk RFC 154 adoption + RFC 155 artifact | B1 | parallel, gated (prikk 154 accepted) |
 | **009** | Hosted-format durability policy (OQ-6/UD-3) | B2 | before 1.0 |
 
-**Immediate next step:** stand up planeter's `rfcs/` (done alongside this roadmap — see
-[`rfcs/README.md`](rfcs/README.md)), then draft **RFC 001** on the owner's go-ahead.
+**Where the pipeline stands (2026-09-24):** RFCs 001–003 are shipped (`rfcs/done/`, M1 0.1.0 and the
+0.1.1/0.2.0 read-side increments); **RFC 004 is held** until prikk ships RFC 155 then 154; 005–007 wait
+on 004; 008/009 are gated on the same prikk RFCs. Meanwhile planeter re-baselines against each prikk
+release (0.47.0 next: PK-30/31) and keeps the read side and the records current.
 
 ## Method & roles (project rules §Workflow)
 

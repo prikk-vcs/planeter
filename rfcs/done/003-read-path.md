@@ -1,6 +1,6 @@
 # RFC 003 — Read path & web browse: re-derive from prikk, render safely, show the truth
 
-**Status.** Accepted (2026-09-15) — the read half of M1. The design is settled and the implementer may
+**Status.** Done — shipped in planeter 0.1.0 (2026-09-23; accepted 2026-09-15) — the read half of M1. The design is settled and the implementer may
 build the browse surfaces and the read API against it per the handoff. Defines *how planeter shows a
 repository* — always re-derived from prikk, cached carefully, rendered safely, and honest about what
 prikk verified versus what the forge merely approved.

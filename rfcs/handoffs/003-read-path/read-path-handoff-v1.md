@@ -4,7 +4,7 @@
 |---|---|
 | Document | Companion execution doc for RFC 003 (Read path). Task/PR plan + QA checklist. |
 | Status | Inherited from RFC 003 — **Accepted**. |
-| Basis | [`../../accepted/003-read-path.md`](../../accepted/003-read-path.md) (decisions D-1…D-8); RFC 001 (prikk driver, hosting), RFC 002 (`authorize(_, read, _)`); `STD-3/6`, `INT-4/5`, `INV-6`; threat model `T-6/T-7/T-10`. |
+| Basis | [`../../done/003-read-path.md`](../../done/003-read-path.md) (decisions D-1…D-8); RFC 001 (prikk driver, hosting), RFC 002 (`authorize(_, read, _)`); `STD-3/6`, `INT-4/5`, `INV-6`; threat model `T-6/T-7/T-10`. |
 | Audience | Dev team. Return a review-request package when green. |
 | Scope | **Phase A1, read slice — reaching M1 with A0 + RFC 002.** The browse UI + read API (GET only). **Out of scope:** any prikk write verb, transport (RFC 004), the change/review model (RFC 005). Read-only. |
 

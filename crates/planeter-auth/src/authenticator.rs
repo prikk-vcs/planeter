@@ -1,5 +1,5 @@
 //! The [`Authenticator`] (RFC 002 T2 / D-2): turns a presented credential into a
-//! [`Principal`](planeter_core::Principal). This is the boundary `STD-2` describes — authentication
+//! [`Principal`]. This is the boundary `STD-2` describes — authentication
 //! lives here; its *output* is the principal that `authorize()` (core) consumes, and nothing else in
 //! planeter sees a password, token, or key.
 //!

@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
 //! `planeter-registry` — planeter upper (surfaces) layer. See RFC 001 (foundations).
 //!
-//! Design phase: skeleton only; behaviour arrives in later RFC 001 tasks and RFCs 002+.
+//! Skeleton only: behaviour arrives with RFC 007 (the package registry) at M5. Published with the workspace so the
+//! layering gate covers it from the start.

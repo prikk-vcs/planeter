@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | Document | planeter Threat Model (security) |
-| Version | v0.2 (2026-09-23 — implementation status through 0.1.x recorded under T-2/T-6/T-8 and RR-6/RR-7, per the release rule that a release touching a sensitive surface updates this document; v0.1 2026-09-15 was the review draft) |
-| Date | 2026-09-23 (v0.2); 2026-09-15 (v0.1) |
+| Version | v0.3 (2026-09-24 — 0.2.0: OpenID Connect under T-2/C-2a, the trusted-proxy client-IP rule and per-client-IP throttle under RR-11, the first egress-guard caller under T-8; the two residual risks v0.2 added are renumbered RR-10/RR-11 because v0.2 reused the ids RR-6/RR-7 already held by the CI-runner and supply-chain risks; v0.2 2026-09-23 recorded implementation status through 0.1.x under T-2/T-6/T-8; v0.1 2026-09-15 was the review draft) |
+| Date | 2026-09-24 (v0.3); 2026-09-23 (v0.2); 2026-09-15 (v0.1) |
 | Basis | planeter Requirements v0.1 (PU/NG/CAP/STD/SEC/INT/OPS/BN/UD/OQ) and External Design v0.1 (BD/AC/TX/WEB/API/AUTH/CI/REG/HOOK/PK/FL/CT/OP/GATED); **forge-commons** (the standards frame); prikk reality (2026-09-15 survey, prikk `HEAD f6cbd057`); project rules (a threat model is a first-class release deliverable) |
 | ID scheme | `A-` asset · `TB-` trust boundary · `T-` threat · `C-` control · `INV-` security invariant · `RR-` residual risk · `ASSUME-` assumption |
 | Not | code, an API, or a dependency-audit report. It states what planeter must defend, against whom, and how — so the design and tests can be checked against it. |
@@ -110,7 +110,7 @@ key confusion — the common road to account takeover (A-CREDS).
 - **C-2c — session safety** (STD-6): `Secure` + `HttpOnly` + `SameSite` cookies; CSRF tokens for
   cookie-authenticated writes; short-lived, **scoped** tokens for machines, revocable and rotable.
 
-**Status (0.1.x, 2026-09-23).** *New inbound flow:* browser sign-in — `POST /login` (TB-1 → TB-2)
+**Status (0.1.x–0.2.0, 2026-09-23/24).** *New inbound flow:* browser sign-in — `POST /login` (TB-1 → TB-2)
 creates an opaque random session id stored server-side (SQLite) and returned in an `HttpOnly` +
 `SameSite=Strict` + `Secure` cookie; every cookie-authenticated `POST` carries a CSRF double-submit
 token compared in constant time; the API accepts the same session cookie or a bearer token through one
@@ -119,10 +119,10 @@ constant-time compare for scoped tokens, ed25519 SSH keys; **OAuth 2.0 / OIDC im
 (authorization-code flow with PKCE, state one-shot and server-side, nonce-bound ID tokens verified by
 `kid` against the provider's JWKS with `jsonwebtoken`'s RustCrypto backend; accounts linked to
 `(issuer, subject)` administratively, never auto-provisioned; provider traffic only through C-8 + a
-confined `curl`) and **no second factor yet** (RR-6).
+confined `curl`) and **no second factor yet** (RR-10).
 C-2b **implemented as a per-account throttle** (5 consecutive failures → 15-minute lock, a correct
 password refused while locked) **and a per-client-IP throttle** (20 failures across any accounts; client
-IP via the trusted-proxy rules; RR-7). C-2c **implemented** as above; token revocation is by deleting the
+IP via the trusted-proxy rules; RR-11). C-2c **implemented** as above; token revocation is by deleting the
 stored hash.
 
 ### T-3 (Elevation) — authorization bypass / confused deputy
@@ -366,11 +366,12 @@ A change that breaks one of these is a security bug, not a preference. Several m
   until the durability policy (OQ-6) is ruled.
 - **RR-5 — Multi-writer safety rests on prikk's local locking beneath planeter's per-repo serialization
   (UD-4)** — to be confirmed, not assumed, in the internal design.
-- **RR-6 — No second factor on accounts yet (C-2a).** 0.1.x sign-in is password + per-account throttle
-  only; TOTP/WebAuthn (required for privileged accounts by SEC-3) are not implemented. Until they are,
-  privileged accounts should use long random passwords and scoped tokens, and deployments needing MFA
-  should front planeter with an SSO/identity-aware proxy. Tracked for the 0.2.x auth increment with OIDC.
-- **RR-7 — The login throttles are in memory, per process.** *(Reduced 2026-09-23.)* Sign-in is now
+- **RR-10 — No second factor on accounts yet (C-2a).** Sign-in is a local password or (0.2.0) an OpenID
+  Connect identity, each behind the throttles; TOTP/WebAuthn (required for privileged accounts by SEC-3)
+  are not implemented. Until they are, privileged accounts should use long random passwords and scoped
+  tokens, or sign in through an OIDC provider that enforces MFA itself. Tracked for the next auth
+  increment.
+- **RR-11 — The login throttles are in memory, per process.** *(Reduced 2026-09-23.)* Sign-in is now
   throttled **per account (5 failures) and per client IP (20 failures across any accounts)**, the client
   IP derived from `X-Forwarded-For` only behind an operator-declared trusted proxy (`TB-8`;
   `PLANETER_TRUSTED_PROXIES`) and never from the header alone; a non-loopback bind is refused without

@@ -1,5 +1,5 @@
 //! Roles and membership records — the *inputs* to an authorization decision (RFC 002 D-4). These are
-//! pure data plus their persistence; the **decision** that reads them is [`planeter-core`]'s
+//! pure data plus their persistence; the **decision** that reads them is `planeter-core`'s
 //! `authorize()`, and the resolution algorithm (membership → effective role) is core's too. Kept in the
 //! lower store layer because grant records must be persisted and because `authorize()` (core) may read
 //! them, never the reverse (RFC 001 layering).

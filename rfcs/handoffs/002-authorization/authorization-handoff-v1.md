@@ -4,7 +4,7 @@
 |---|---|
 | Document | Companion execution doc for RFC 002 (Authorization). Task/PR plan + QA checklist. |
 | Status | Inherited from RFC 002 — **Accepted**. |
-| Basis | [`../../accepted/002-authorization.md`](../../accepted/002-authorization.md) (decisions D-1…D-9); RFC 001 foundations (the `authorize()` seam, `planeter-auth`/`planeter-store`); `STD-2/3`, `SEC-3/5`; threat model `INV-4`, `T-2/T-3/T-7/T-12`. |
+| Basis | [`../../done/002-authorization.md`](../../done/002-authorization.md) (decisions D-1…D-9); RFC 001 foundations (the `authorize()` seam, `planeter-auth`/`planeter-store`); `STD-2/3`, `SEC-3/5`; threat model `INV-4`, `T-2/T-3/T-7/T-12`. |
 | Audience | Dev team. Return a review-request package (entry-point path) when green. |
 | Scope | **Phase A1, authorization slice.** The identity/membership inputs and the `authorize()` decision. **Out of scope:** the read call sites (RFC 003) and write ones (RFC 004/005) — they *call* this; here, build the contract and prove it in isolation. Build on RFC 001's A0. |
 

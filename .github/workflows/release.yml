@@ -88,7 +88,7 @@ jobs:
           echo "commit: ${GITHUB_SHA}" >> dist/planeter-x86_64-unknown-linux-gnu.build-info.txt
           echo "tag: ${GITHUB_REF_NAME}" >> dist/planeter-x86_64-unknown-linux-gnu.build-info.txt
           echo "build: cargo build -p planeter --release --target x86_64-unknown-linux-gnu --locked" >> dist/planeter-x86_64-unknown-linux-gnu.build-info.txt
-          echo "requires: prikk >= ${PRIKK_VERSION}, bubblewrap" >> dist/planeter-x86_64-unknown-linux-gnu.build-info.txt
+          echo "requires: prikk >= ${PRIKK_VERSION}, bubblewrap, curl (SSO only)" >> dist/planeter-x86_64-unknown-linux-gnu.build-info.txt
           rustc -vV >> dist/planeter-x86_64-unknown-linux-gnu.build-info.txt
       - name: Package (aarch64-unknown-linux-gnu)
         if: matrix.target == 'aarch64-unknown-linux-gnu'
@@ -102,7 +102,7 @@ jobs:
           echo "commit: ${GITHUB_SHA}" >> dist/planeter-aarch64-unknown-linux-gnu.build-info.txt
           echo "tag: ${GITHUB_REF_NAME}" >> dist/planeter-aarch64-unknown-linux-gnu.build-info.txt
           echo "build: cargo build -p planeter --release --target aarch64-unknown-linux-gnu --locked" >> dist/planeter-aarch64-unknown-linux-gnu.build-info.txt
-          echo "requires: prikk >= ${PRIKK_VERSION}, bubblewrap" >> dist/planeter-aarch64-unknown-linux-gnu.build-info.txt
+          echo "requires: prikk >= ${PRIKK_VERSION}, bubblewrap, curl (SSO only)" >> dist/planeter-aarch64-unknown-linux-gnu.build-info.txt
           rustc -vV >> dist/planeter-aarch64-unknown-linux-gnu.build-info.txt
 
       # Build provenance (SLSA-style) for the tarball, signed by GitHub's OIDC identity of this run.
@@ -193,7 +193,7 @@ jobs:
             on { print }
           ' CHANGELOG.md > release-notes.md
           test -s release-notes.md || { echo "CHANGELOG.md has no section for $TAG"; exit 1; }
-          printf '\n---\n**Runtime prerequisites:** prikk >= %s and bubblewrap on the host (or use the container image `ghcr.io/prikk-vcs/planeter:%s`, which bundles both).\n' "$PRIKK_VERSION" "$TAG" >> release-notes.md
+          printf '\n---\n**Runtime prerequisites:** prikk >= %s, bubblewrap and (for SSO) curl on the host — or use the container image `ghcr.io/prikk-vcs/planeter:%s`, which bundles all three.\n' "$PRIKK_VERSION" "$TAG" >> release-notes.md
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}

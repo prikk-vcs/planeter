@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "planeter's authentication: accounts, scoped tokens, SSH keys and deploy keys, Argon2id and constant-time hashing, behind seams."
+description = "planeter's authentication: accounts, sessions, login throttles, OpenID Connect sign-in, scoped tokens, SSH keys and deploy keys, Argon2id and constant-time hashing."
 
 [dependencies]
 planeter-core = { path = "../planeter-core", version = "0.1.1" }

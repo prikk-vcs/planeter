@@ -6,7 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
-description = "planeter's HTTP surface: the GET read API with strict sanitization, CSP and an isolated content origin."
+description = "planeter's HTTP surface: the browse UI and GET read API, sign-in (local or OIDC) with sessions and CSRF, strict sanitization, CSP, trusted-proxy client IPs and an isolated content origin."
 
 [dependencies]
 planeter-core = { path = "../planeter-core", version = "0.1.1" }

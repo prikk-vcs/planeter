@@ -27,17 +27,22 @@ rfcs/
 complete. Track A: **001** foundations (A0) · **002** authorization + **003** read path (A1 → M1) ·
 **004** transport (M2) · **005** change/review (M3) · **006** CI (M4) · **007** registry (M5). Track B
 (gated): **008** one-click merge / UD-6 · **009** hosted-format durability. See
-[`../ROADMAP.md`](../ROADMAP.md) §The RFC plan. What remains before implementation begins in earnest: the
-dev team builds against the handoffs (M0→M5, Track B in parallel), and the owner conveys the two
-**prikk-side asks** to the prikk team — the UD-6 seal affordance (008 §D-4) and the format-migration
-dependency (009 §D-4).
+[`../ROADMAP.md`](../ROADMAP.md) §The RFC plan.
+
+**Where it stands (2026-09-24).** **001–003 are done**: shipped as M1 (planeter 0.1.0, 2026-09-23) and
+extended by the 0.1.1 / 0.2.0 read-side increments (browse UI, sessions, trusted proxies, OpenID Connect).
+**004 is held** — measured on prikk 0.46.0, a keyless forge cannot build incremental fetch artifacts and
+has no servable canonical branch until prikk ships RFC 155 then RFC 154 (after prikk 0.49.0); see
+`handoffs/004-transport/`. 005–007 wait on 004. The two prikk-side asks (008 §D-4, 009 §D-4) were
+conveyed and answered: prikk RFC 154 (trusted fast-forward adoption) and RFC 155 (the repository-complete
+artifact) are accepted by the prikk owner, so 008 and 009 are gated on those shipping.
 
 | # | RFC | Serves (phase) | State |
 |---|---|---|---|
-| 001 | [Foundations: prikk-integration layer, the layering gate, multi-repo hosting & identity](accepted/001-foundations.md) | A0→A1 | **accepted** |
-| 002 | [Authorization model (`authorize()`, roles, per-ref permissions)](accepted/002-authorization.md) | A1 | **accepted** |
-| 003 | [Read path & web browse (re-derivation, caching, safe rendering)](accepted/003-read-path.md) | A1 | **accepted** |
-| 004 | [Transport: clone/push as a ferry over prikk's artifact exchange + client helper](accepted/004-transport.md) | A2 | **accepted** |
+| 001 | [Foundations: prikk-integration layer, the layering gate, multi-repo hosting & identity](done/001-foundations.md) | A0→A1 | **done** (0.1.0) |
+| 002 | [Authorization model (`authorize()`, roles, per-ref permissions)](done/002-authorization.md) | A1 | **done** (0.1.0; SSO in 0.2.0) |
+| 003 | [Read path & web browse (re-derivation, caching, safe rendering)](done/003-read-path.md) | A1 | **done** (0.1.0; UI in 0.1.1) |
+| 004 | [Transport: clone/push as a ferry over prikk's artifact exchange + client helper](accepted/004-transport.md) | A2 | **accepted** (held until prikk RFC 155 + 154 ship) |
 | 005 | [Change proposal, review, and merge (and issues)](accepted/005-change-review.md) | A3 | **accepted** |
 | 006 | [Continuous integration and the runner protocol](accepted/006-ci-runners.md) | A4 | **accepted** |
 | 007 | [Package and artifact registry](accepted/007-registry.md) | A5 | **accepted** |
@@ -49,8 +54,8 @@ dependency (009 §D-4).
 | State | RFCs |
 |---|---|
 | Proposed | *(none — pipeline fully accepted)* |
-| Accepted | [001 — Foundations](accepted/001-foundations.md), [002 — Authorization](accepted/002-authorization.md), [003 — Read path](accepted/003-read-path.md), [004 — Transport](accepted/004-transport.md), [005 — Change/review](accepted/005-change-review.md), [006 — CI + runners](accepted/006-ci-runners.md), [007 — Registry](accepted/007-registry.md), [008 — One-click merge / UD-6](accepted/008-seal-one-click-merge.md), [009 — Hosted-format durability](accepted/009-hosted-format-durability.md) |
-| Done | *(none yet)* |
+| Accepted | [004 — Transport](accepted/004-transport.md), [005 — Change/review](accepted/005-change-review.md), [006 — CI + runners](accepted/006-ci-runners.md), [007 — Registry](accepted/007-registry.md), [008 — One-click merge / UD-6](accepted/008-seal-one-click-merge.md), [009 — Hosted-format durability](accepted/009-hosted-format-durability.md) |
+| Done | [001 — Foundations](done/001-foundations.md), [002 — Authorization](done/002-authorization.md), [003 — Read path](done/003-read-path.md) — shipped in 0.1.0 (2026-09-23) |
 | Archived | *(none yet)* |
 
 Governing design set: [`../docs/src/`](../docs/src/) — `planeter-01` requirements, `-02` external

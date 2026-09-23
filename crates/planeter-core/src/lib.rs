@@ -3,7 +3,7 @@
 //!
 //! The forge domain above anonymous prikk: the [`hosting`] model (create/open a hosted repository over
 //! the sandboxed prikk boundary and the [`layout`] on-disk placement), the **authorization decision**
-//! ([`authorize`] — the pure, default-deny access function, RFC 002 — with [`permission`] resolution and
+//! ([`authorize`](mod@authorize) — the pure, default-deny access function, RFC 002 — with [`permission`] resolution and
 //! the [`audit`] seam), and the [`egress`] deny-by-default SSRF chokepoint (RFC 004). The reserved
 //! off-by-default `forge-seal` write feature (LAY-4/ENF-2) rounds out the security seams.
 //!

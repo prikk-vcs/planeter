@@ -51,7 +51,8 @@ gh attestation verify oci://ghcr.io/prikk-vcs/planeter:X.Y.Z --repo prikk-vcs/pl
 
 ## Deploying
 
-- **Binary:** needs `prikk` (≥ the floor in `build-info.txt`) and `bwrap` on `PATH`. Configure with
+- **Binary:** needs `prikk` (≥ the floor in `build-info.txt`) and `bwrap` on `PATH`, plus `curl` if SSO
+  is enabled. Configure with
   `PLANETER_ADDR`, `PLANETER_REPOS_ROOT`, `PLANETER_DB`, `PLANETER_CONTENT_ORIGIN`, and
   **`PLANETER_TRUSTED_PROXIES`** (the TLS-terminating proxy's addresses/CIDRs, comma-separated).
   planeter speaks plain HTTP: it **refuses a non-loopback bind unless trusted proxies are set**, takes

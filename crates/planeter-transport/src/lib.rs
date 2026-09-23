@@ -1,4 +1,5 @@
 #![forbid(unsafe_code)]
 //! `planeter-transport` — planeter upper (surfaces) layer. See RFC 001 (foundations).
 //!
-//! Design phase: skeleton only; behaviour arrives in later RFC 001 tasks and RFCs 002+.
+//! Skeleton only: behaviour arrives with RFC 004 (transport: keyless clone/push) at M2 — held until prikk ships RFC 155 then RFC 154. Published with the workspace so the
+//! layering gate covers it from the start.

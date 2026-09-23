@@ -1,6 +1,6 @@
 # RFC 002 — Authorization model: principals, roles, and per-ref permissions
 
-**Status.** Accepted (2026-09-15) — fills the `authorize()` seam RFC 001 established (D-6). The design is
+**Status.** Done — shipped in planeter 0.1.0 (2026-09-23; accepted 2026-09-15) — fills the `authorize()` seam RFC 001 established (D-6). The design is
 settled and the implementer may build the authorization service and the identity/membership model
 against it per the handoff. Defines *who a principal is*, *what they may do to which resource*, and *how
 a forge decision maps onto prikk without ever becoming a prikk signature*.

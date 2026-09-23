@@ -1,6 +1,6 @@
 # RFC 001 — Foundations: the prikk-integration layer, the layering gate, and multi-repo hosting
 
-**Status.** Accepted (2026-09-15) — the first planeter RFC, and the substrate every later surface sits
+**Status.** Done — shipped in planeter 0.1.0 (2026-09-23; accepted 2026-09-15) — the first planeter RFC, and the substrate every later surface sits
 on. The design is settled and the implementer may build the workspace skeleton against it per the
 handoff. Defines *how planeter talks to prikk*, *how the crates are layered and gated*, and *how many
 anonymous prikk repositories become identified, hosted repositories*.

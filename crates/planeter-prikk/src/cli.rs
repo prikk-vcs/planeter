@@ -1,4 +1,4 @@
-//! [`CliPrikkRepo`] — the subprocess implementation of [`PrikkRepo`] (RFC 001 D-2/D-3).
+//! [`CliPrikkRepo`] — the subprocess implementation of [`PrikkRepo`](crate::PrikkRepo) (RFC 001 D-2/D-3).
 //!
 //! It shells out to the prikk binary against one repository directory (the one holding `.prikk`),
 //! parses `--format json` output into the [`crate::model`] types after checking the `schema_version`,

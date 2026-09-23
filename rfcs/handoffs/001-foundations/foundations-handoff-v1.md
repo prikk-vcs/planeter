@@ -4,7 +4,7 @@
 |---|---|
 | Document | Companion execution doc for RFC 001 (Foundations). Task breakdown + PR plan + QA checklist. |
 | Status | Inherited from RFC 001 — **Accepted** (the implementer may build against it). |
-| Basis | [`../../accepted/001-foundations.md`](../../accepted/001-foundations.md) (decisions D-1…D-7, acceptance criteria); internal design `planeter-04` (§1–§4, §11); project rules (gates, English, Apache-2.0). |
+| Basis | [`../../done/001-foundations.md`](../../done/001-foundations.md) (decisions D-1…D-7, acceptance criteria); internal design `planeter-04` (§1–§4, §11); project rules (gates, English, Apache-2.0). |
 | Audience | The dev team (Mid-Capability Model). Return a **review-request package** (entry-point path) to the owner and the architect when A0 is green. |
 | Scope | **Phase A0 only:** the workspace skeleton, the layering gate, `planeter-prikk`, the `planeter-store` repository records, and the `planeter-core` hosting model + security seams. **Out of scope** (later RFCs): the `authorize()` *contract* (RFC 002), the read path/web (RFC 003), transport (RFC 004). Build the *seams* now, not their contents. |
 
