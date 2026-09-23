@@ -163,10 +163,13 @@ the ecosystem's library projects (stikk/brygge crates).
 - **0.1.0 means "genuinely usable", not "preview" (owner-confirmed 2026-09-23).** The read/host spine is
   built and runnable, but two increments were deliberately deferred behind seams during A1 and must land
   **before** the tag so the first release matches the M1 promise. The **M1 pre-tag checklist**:
-  1. **Auth crypto** behind the RFC 002 seams — the vetted Argon2id password hasher, a constant-time
-     token hasher, the OAuth2/OIDC verifier, SSH-key parsing — each through the same supply-chain review
-     (cargo-deny/audit + tree-growth report) the web stack went through. Until then no real secret
-     passes through `planeter-auth`.
+  1. **Auth crypto** behind the RFC 002 seams — **done 2026-09-23** (`d3fa61b`): Argon2id password
+     hashing, constant-time SHA-256 token hashing + minting, and OpenSSH ed25519 key parsing, through the
+     supply-chain review (+15 crates; `ssh-key` rejected for locking the unfixable RUSTSEC-2023-0071
+     `rsa` into the lockfile). **OIDC/SSO is deferred past 0.1.0 (owner-ruled 2026-09-23)**: its
+     verifier needs a JWT stack (`ring`, a license exception) *and* an outbound HTTP client behind the
+     egress guard — RFC 004's design — so it lands as a configured integration in 0.2.x; the
+     `OidcVerifier` seam stays. 0.1.0 auth = local passwords + scoped tokens + ed25519 SSH keys.
   2. **A persistent store** — SQLite behind the `RepositoryStore` / `MembershipStore` / `AccountStore` /
      `CredentialStore` traits (IQ-4), caller-invisible.
   3. **`release.yml`** — on a bare-version tag: gates green → build the `planeter` server (and runner)
