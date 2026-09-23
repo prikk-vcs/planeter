@@ -70,6 +70,12 @@ gh attestation verify oci://ghcr.io/prikk-vcs/planeter:X.Y.Z --repo prikk-vcs/pl
   and `gh attestation verify` both passed. crates.io: nine crates, dependency order; the new-crate
   rate limit (burst of 5, then ~1 per 10 min) paced the last four.
 
+- **0.1.1 (2026-09-23).** The workflow completed unaided end to end — gates, both builds, the
+  container image, and `publish` (the `planeter-*` artifact filter fixed the 0.1.0 defect). A release
+  asset's checksum and build-provenance attestation were verified after the fact; the nine crates were
+  published to crates.io in dependency order (30 seconds; no new-crate rate limit applies once the
+  crates exist).
+
 ## If a job fails
 
 The workflow is idempotent up to `publish`: re-run the failed job with `gh run rerun <run-id> --failed`
