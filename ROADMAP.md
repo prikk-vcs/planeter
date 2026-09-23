@@ -78,6 +78,10 @@ STD-6); **authentication** (OAuth/OIDC, tokens, SSH keys) and **per-repo/per-ref
 The **transport ferry** (TX): fetch/clone (server builds, client accepts — WR-1) and **push** (client
 builds, server `accept`s author-signed patches — WR-2/WR-3), plus the **client helper** (TX-05).
 **No maintainer key touches the forge.** Outcome: a live host you clone from and push to.
+**Builds on prikk-as-is (≥ 0.46.0):** clone = `bundle export` of the forge's own sealed branch; push =
+keyless `sync accept` of author-signed patches (ledger PK-2/PK-22), with the 0.44.0 import-corruption
+fix already in the pin. What A2 does *not* include — adopting a pushed ref as the canonical branch, and
+merge — is Track B1, gated on prikk 0.48.0+ (RFC 154/155).
 
 ### Phase A3 — Review + issues + merge
 The **change/review model** (WR-4): an open change *is* prikk's accepted-but-unsealed claim set, with
@@ -99,8 +103,11 @@ versions, object-storage-backed.
 > RFCs: **RFC 154 — trusted fast-forward ref adoption (accepted by the prikk owner)** lets a keyless
 > forge hold a canonical, multi-maintainer branch by *adopting* trusted-maintainer-signed advances; and
 > **RFC 155 — the repository-complete artifact (proposed)** is the clone/serve/migrate substrate. Track B
-> is now **gated on prikk shipping these** (order after prikk 0.43.0: **key-id collision fix → RFC 155 →
-> RFC 154**). planeter designs to the direction now; implementation waits on the binary.
+> is now **gated on prikk shipping these**. Ship order (updated 2026-09-22): key-id fix + format-7
+> signature union (**0.45.0, done**) → `diff`/read verbs (**0.46.0, done**) → import/verify size bound
+> (**0.47.0**) → **RFC 155, then RFC 154's adoption act (0.48.0 onward)**. planeter designs to the
+> direction now; implementation waits on the binary. **This gates Track B only — M2 (keyless clone +
+> push) is buildable on prikk-as-is and proceeds now (owner-confirmed 2026-09-23).**
 
 ### Phase B1 — Canonical branch + one-click merge (prikk RFC 154 + 155)
 A merge is a maintainer sealing (their own key, client-side) and the **forge adopting** the resulting
@@ -127,9 +134,9 @@ content-as-data, no default egress), **portable identity** (defer until a standa
 
 | Milestone | Version | Contents | Track | Status |
 |---|---|---|---|---|
-| **M0** | 0.1.0-dev | Foundations: CR-prikk driver, store, core + `authorize`, auth, layering gate | A0 | planned |
-| **M1** | **0.1.0** | **Host + browse + auth**: multi-repo hosting/identity, read path, sign-in, per-ref authz. The first usable hosted forge | A1 | planned |
-| **M2** | 0.2.0 | **Clone + push (keyless)**: transport ferry, fetch, push=accept+verify, client helper | A2 | planned |
+| **M0** | 0.1.0-dev | Foundations: CR-prikk driver, store, core + `authorize`, auth, layering gate | A0 | **done** (2026-09-16) |
+| **M1** | **0.1.0** | **Host + browse + auth**: multi-repo hosting/identity, read path, sign-in, per-ref authz. The first usable hosted forge | A1 | **built** (RFC 002 + 003 complete, 2026-09-16; `tree`/`cat` browse 2026-09-22) — **tag pending the M1 pre-tag checklist** (below) |
+| **M2** | 0.2.0 | **Clone + push (keyless)**: transport ferry, fetch, push=accept+verify, client helper | A2 | planned — **buildable on prikk-as-is (≥ 0.46.0)**, not gated on RFC 154/155 |
 | **M3** | 0.3.0 | **Review + issues + merge**: change/review model, issues, merge (keyless fallback WR-5b) | A3 | planned |
 | **M4** | 0.4.0 | **CI**: pipelines + isolated ephemeral runners | A4 | planned |
 | **M5** | 0.5.0 | **Packages**: OCI + first language registries | A5 | planned |
@@ -153,6 +160,19 @@ the ecosystem's library projects (stikk/brygge crates).
 - **A0 is pre-release; the first release is M1 (0.1.0).** The workspace stays `0.0.0` through foundations
   (the "0.1.0-dev" milestone); **nothing is tagged until M1** ships the first usable product
   (host + browse + auth = A0 + RFC 002 + RFC 003). The version is set to `0.1.0` at the M1 tag.
+- **0.1.0 means "genuinely usable", not "preview" (owner-confirmed 2026-09-23).** The read/host spine is
+  built and runnable, but two increments were deliberately deferred behind seams during A1 and must land
+  **before** the tag so the first release matches the M1 promise. The **M1 pre-tag checklist**:
+  1. **Auth crypto** behind the RFC 002 seams — the vetted Argon2id password hasher, a constant-time
+     token hasher, the OAuth2/OIDC verifier, SSH-key parsing — each through the same supply-chain review
+     (cargo-deny/audit + tree-growth report) the web stack went through. Until then no real secret
+     passes through `planeter-auth`.
+  2. **A persistent store** — SQLite behind the `RepositoryStore` / `MembershipStore` / `AccountStore` /
+     `CredentialStore` traits (IQ-4), caller-invisible.
+  3. **`release.yml`** — on a bare-version tag: gates green → build the `planeter` server (and runner)
+     binaries + container image → attest/sign → GitHub release.
+  4. The `planeter` binary drops its "M1 preview, not for production" label once 1–2 are wired.
+  The tag itself remains owner-only.
 - **Milestone-driven minors** (M1 `0.1.0` → M5 `0.5.0`). A minor ships only when its gates are green
   (fmt · clippy `-D warnings` · test · `cargo-deny`/`cargo-audit`), its security invariants hold
   (notably **ENF-2**: the default build links no forge-seal path — CI-checked), and the threat model is
@@ -163,8 +183,18 @@ the ecosystem's library projects (stikk/brygge crates).
   neighbours.
 - **Security releases are out-of-band.** A dependency advisory or a threat-model control failure triggers
   a prompt patch release.
-- **Runtime prerequisites are release notes, not code:** **prikk ≥ 0.43.0** (the transport floor, PK-22)
-  and **bubblewrap** on the host (the sandbox, T4) are documented deployment prerequisites of a release.
+- **Runtime prerequisites are release notes, not code:** **prikk ≥ 0.46.0** (the version pin, PK-26 —
+  it carries the `tree`/`cat`/`diff` read verbs, the 0.44.0 GHSA-px5q-233r-6hq5 import fix, the format-7
+  signature union and the key-id fix) and **bubblewrap** on the host (the sandbox, T4) are documented
+  deployment prerequisites of a release. **Format 7** is a breaking, explicit-only `prikk format
+  upgrade` with no downgrade: a deployment keeps its serving binary at or above the format its hosted
+  repositories carry, and planeter never upgrades a hosted repository without an intended act.
+- **planeter re-baselines against each prikk release (owner-confirmed 2026-09-23).** prikk moves fast
+  (0.43.0 → 0.46.0 in six days). For every prikk release: bump the pin when it ships a verb planeter
+  needs or a security fix; **re-verify every JSON schema planeter reads** (`schema_version` drift, PK-18)
+  against the released binary; record the outcome in the dependency ledger. A pin bump lands only with
+  the binary present, so the version-pinned integration tests validate against it rather than refuse
+  it. Mirrors stikk's per-release rebaseline practice.
 - **The release workflow lands as M1 nears** — a `release.yml` (not needed during A0): on a bare-version
   tag → gates green → build binaries + container → attest/sign → GitHub release. **Tagging, publishing,
   and the v0→v1 promotion are owner-only.**
@@ -173,20 +203,24 @@ the ecosystem's library projects (stikk/brygge crates).
 
 Named so no plan silently assumes them:
 
-- **prikk RFC 154 — trusted fast-forward ref adoption. ACCEPTED (prikk owner, 2026-09-16); not yet
-  shipped.** The keyless multi-maintainer canonical-branch primitive B1 depends on. Supersedes the old
-  UD-6 "client-sealable-claim" ask. Ship order (post-0.43.0): key-id fix → RFC 155 → RFC 154.
-- **prikk RFC 155 — the repository-complete artifact. ACCEPTED (prikk owner, 2026-09-16); not yet
-  shipped.** planeter's R1–R6 are now prikk's accepted direction; the clone/serve/migrate substrate for
-  B1 and B2 (`import --adopt`). Its all-or-nothing import gets its own prikk design round — those details
-  may still move.
-- **prikk 0.43.0 released (2026-09-16).** Ships the fix a forge needs — `bundle export` / `sync build`
-  now handle ordinary *delete-after-edit* histories (refused since 0.28.0) — so **planeter's transport
-  requires prikk ≥ 0.43.0** (dependency-ledger PK-22). It ships **neither** RFC 154 nor RFC 155 nor the
-  key-id fix, and changes no format/JSON planeter reads.
-- **prikk key-id collision fix** — `setup` names every maintainer key `maintainer`; a multi-maintainer
-  forge needs distinct key-ids. First in prikk's ship order; planeter designs its identity model for
-  distinct ids regardless.
+- **prikk RFC 154 — trusted fast-forward ref adoption. ACCEPTED (prikk owner, 2026-09-16); scheduled
+  0.48.0 onward, after RFC 155.** The keyless multi-maintainer canonical-branch primitive B1 depends on.
+  Supersedes the old UD-6 "client-sealable-claim" ask.
+- **prikk RFC 155 — the repository-complete artifact. ACCEPTED (prikk owner, 2026-09-16); scheduled
+  0.48.0 onward.** planeter's R1–R6 are prikk's accepted direction; the clone/serve/migrate substrate for
+  B1 and B2 (`import --adopt`). Its all-or-nothing import (R4) gets its own prikk design round, with
+  planeter's input invited; **R6 is already answered** by format 7's signature union (0.45.0). 0.47.0
+  lands an import/verify size bound first — the nearest thing to R4 shippable before RFC 155 opens.
+- **prikk 0.43.0 → 0.46.0 (2026-09-16 → 2026-09-22).** 0.43.0 fixed `bundle export`/`sync build` on
+  delete-after-edit histories (PK-22). **0.44.0** fixed **GHSA-px5q-233r-6hq5** — a refused `bundle
+  import` corrupted the receiving repository (all 0.23.0–0.43.0; exactly a relaying forge's exposure).
+  **0.45.0** shipped **repository format 7** (a verified signature union — up to four counted signatures
+  per object; breaking-once, explicit-only, no downgrade) and the **key-id fix** (`ed25519-<16hex>`
+  default ids). **0.46.0** shipped the read verbs co-designed with planeter — `prikk tree`
+  (`tree-listing-v1`), `prikk cat` (`path-content-v1`), `prikk diff` (`diff-report-v1`, RFC 153) —
+  closing the RFC 003 gap catalogue except blame. **⇒ planeter's version pin is prikk ≥ 0.46.0**
+  (dependency-ledger PK-26); the ledger v1.2 records PK-23/24/25/26. One caveat honoured: `cat
+  --max-bytes` bounds bytes *written*, not memory, so planeter bounds hostile input by what it accepts.
 - **UD-3 / OQ-6** — hosted-format durability (B2): **de-risked** — prikk RFC 114 §5.2 requires a tested
   migration before any format change (CI-enforced); mechanism is RFC 155 `import --adopt`.
 - **OQ-2** — whether per-ref authorization anchors to a prikk-side notion or is purely planeter's (shapes
