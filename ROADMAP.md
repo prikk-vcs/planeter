@@ -78,10 +78,18 @@ STD-6); **authentication** (OAuth/OIDC, tokens, SSH keys) and **per-repo/per-ref
 The **transport ferry** (TX): fetch/clone (server builds, client accepts — WR-1) and **push** (client
 builds, server `accept`s author-signed patches — WR-2/WR-3), plus the **client helper** (TX-05).
 **No maintainer key touches the forge.** Outcome: a live host you clone from and push to.
-**Builds on prikk-as-is (≥ 0.46.0):** clone = `bundle export` of the forge's own sealed branch; push =
-keyless `sync accept` of author-signed patches (ledger PK-2/PK-22), with the 0.44.0 import-corruption
-fix already in the pin. What A2 does *not* include — adopting a pushed ref as the canonical branch, and
-merge — is Track B1, gated on prikk 0.48.0+ (RFC 154/155).
+**Measured 2026-09-23 on 0.46.0 (ledger PK-27/28/29), which reshaped this phase:** push is fully
+keyless (`sync accept` idempotent, tamper-refusing, verify-clean); `bundle export` / `sync have` /
+`sync summary` need no key; but **`sync build` refuses without a maintainer key**, so a keyless forge
+cannot build incremental-fetch artifacts, and a planeter-created repository has **no sealed branch to
+serve** until RFC 154 adoption exists. **Owner ruling: A2 is held until prikk 0.48.0+** (RFC 155/154,
+plus the `sync build` ask), so clone and push land together rather than shipping a push-only 0.2.0.
+**Transport layering (owner-ruled 2026-09-23, supersedes RFC 004 D-6's in-process reading):** planeter
+serves plain HTTP on loopback behind a **TLS-terminating reverse proxy** (TLS stays mandatory as a
+deployment rule the binary enforces — no non-loopback bind without a trusted-proxy configuration), and
+SSH is the **host's OpenSSH with `ForceCommand` → `planeter ssh-shell`** (fingerprint → user is RFC 002's).
+Measured alternative rejected: in-process rustls + russh = +165 crates, cargo-deny advisories and
+licenses both failing, russh's own advisory (RUSTSEC-2026-0154) and the unfixable `rsa` one.
 
 ### Phase A3 — Review + issues + merge
 The **change/review model** (WR-4): an open change *is* prikk's accepted-but-unsealed claim set, with
@@ -136,7 +144,7 @@ content-as-data, no default egress), **portable identity** (defer until a standa
 |---|---|---|---|---|
 | **M0** | 0.1.0-dev | Foundations: CR-prikk driver, store, core + `authorize`, auth, layering gate | A0 | **done** (2026-09-16) |
 | **M1** | **0.1.0** | **Host + browse + auth**: multi-repo hosting/identity, read path, sign-in, per-ref authz. The first usable hosted forge | A1 | **released 2026-09-23** — signed tag `0.1.0` at `01bbb1c`; [GitHub release](https://github.com/prikk-vcs/planeter/releases/tag/0.1.0) (attested Linux x86_64 + aarch64 tarballs), container image `ghcr.io/prikk-vcs/planeter:0.1.0`, and all nine crates on crates.io (`cargo install planeter`) |
-| **M2** | 0.2.0 | **Clone + push (keyless)**: transport ferry, fetch, push=accept+verify, client helper | A2 | planned — **buildable on prikk-as-is (≥ 0.46.0)**, not gated on RFC 154/155 |
+| **M2** | 0.2.0 | **Clone + push (keyless)**: transport ferry, fetch, push=accept+verify, client helper | A2 | **HELD until prikk 0.48.0+ (owner-ruled 2026-09-23)** — measured on 0.46.0: push is fully keyless, but `sync build` requires a maintainer key (PK-27) and a planeter-created repo has no servable branch until RFC 154 adoption, so clone/fetch cannot land keylessly yet; M2 ships clone + push together once RFC 155/154 (and a keyless `sync build`, asked) ship |
 | **M3** | 0.3.0 | **Review + issues + merge**: change/review model, issues, merge (keyless fallback WR-5b) | A3 | planned |
 | **M4** | 0.4.0 | **CI**: pipelines + isolated ephemeral runners | A4 | planned |
 | **M5** | 0.5.0 | **Packages**: OCI + first language registries | A5 | planned |
