@@ -8,6 +8,15 @@
 | Audience | Dev team. Return a review-request package when green. |
 | Scope | **Phase A2 → M2.** The clone/push transport and the client helper — prikk's **keyless** phase only. **Out of scope:** seal/merge (RFC 005/008), CI triggers (RFC 006). Build on A0 + A1. |
 
+> **Held 2026-09-23 (owner ruling) — do not start.** Measured on prikk 0.46.0 (dependency-ledger
+> PK-27/28/29): the push path is fully keyless and robust, but **`sync build` requires a maintainer
+> key** and a planeter-created repository has no servable branch until RFC 154 adoption — so clone/fetch
+> cannot land keylessly. A2 waits for prikk 0.48.0+ (RFC 155/154, and the `sync build` ask sent
+> 2026-09-23) and a **v2 handoff**. Two decisions already taken for that v2: **TLS is proxy-terminated
+> (loopback HTTP + trusted-proxy rule) and SSH is host OpenSSH `ForceCommand` → `planeter ssh-shell`** —
+> no in-process rustls/russh (measured: +165 crates, deny + audit failing). T1/T2 below are superseded
+> accordingly; T3–T8 stand in substance.
+>
 > **Revised 2026-09-16 — gated on the prikk binary.** The prikk trust-model resolution (RFC 154 trusted
 > fast-forward adoption, *accepted*; RFC 155 repository-complete artifact, *proposed*) reshapes the
 > **fetch/serve** and **canonical-branch** work: fetch/serve go via the RFC 155 artifact + `import
