@@ -87,6 +87,14 @@ gh attestation verify oci://ghcr.io/prikk-vcs/planeter:X.Y.Z --repo prikk-vcs/pl
   published to crates.io in dependency order (30 seconds; no new-crate rate limit applies once the
   crates exist).
 
+- **0.2.0 (2026-09-24).** Preceded by a full documentation audit (README, ROADMAP, RFC index, threat
+  model, crate docs). The workflow completed unaided: gates, both builds, the container image and
+  `publish`; the release notes carry the new prerequisite line (curl for SSO). The x86_64 tarball's
+  checksum and build-provenance attestation verified after the fact; the nine crates were published in
+  dependency order (36 seconds) and `cargo install planeter --version 0.2.0 --locked` builds and runs.
+  The image attestation cannot be verified anonymously while the ghcr.io package is private (owner
+  action pending).
+
 ## If a job fails
 
 The workflow is idempotent up to `publish`: re-run the failed job with `gh run rerun <run-id> --failed`
