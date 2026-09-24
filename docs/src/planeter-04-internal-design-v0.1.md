@@ -3,12 +3,59 @@
 | | |
 |---|---|
 | Document | planeter Internal Design (detailed design / white-box) — the architect's handoff to the dev team |
-| Version | v0.1 (draft for review) |
-| Date | 2026-09-15 |
+| Version | v0.2 (2026-09-24 — the revision section below records the architecture as built through planeter 0.2.0 and what measurement corrected; the v0.1 body of 2026-09-15 stands and is not rewritten) |
+| Date | 2026-09-24 (v0.2); 2026-09-15 (v0.1) |
 | Inputs | planeter Requirements v0.1 (PU/NG/CAP/STD/SEC/INT/OPS/BN/UD/OQ), External Design v0.1 (BD/AC/TX/WEB/API/AUTH/CI/REG/HOOK/PK/FL/CT/OP/GATED), Threat Model v0.1 (A/TB/T/C/INV/RR); **forge-commons**; prikk reality (2026-09-15 survey + write-path check, prikk `HEAD f6cbd057`); project rules (`.git-exclude/rules/`, §Feature Development: *Requirements → External → **Internal (Detailed)** → Program → Implementation*) |
 | Scope | HOW planeter is built: the crate decomposition, the layering rules, the prikk-integration mechanism, the data model, the read and **write** paths, auth/CI/registry internals, concurrency, and — the load-bearing part — **how the security invariants are enforced structurally.** Detailed enough to hand off; it stops short of per-subsystem RFC detail and names where RFCs take over (§13). |
 | Not | code, exact database or wire schemas, or the per-subsystem RFCs themselves. |
 | ID scheme | `CR-` crate/component · `LAY-` layering & boundary rule · `PKI-` prikk-integration mechanism · `DM-` data model · `RD-` read path · `WR-` write path · `AZ-` auth internals · `CIO-` CI orchestration · `RG-` registry · `CON-` concurrency/consistency · `ENF-` invariant enforcement · `SEQ-` build sequence · `NR-` next-RFC subsystem · `IQ-` internal open question/dependency |
+
+## Revision v0.2 (2026-09-24) — as built through 0.2.0
+
+- **Crates and gates (CR/LAY):** the workspace is `planeter-prikk` (lower), `planeter-store` (lower),
+  `planeter-core` (core: hosting, `authorize()`, read service, egress guard, outbound fetcher),
+  `planeter-auth` (core: accounts, sessions, throttles, OIDC, tokens, keys, hashing), `planeter-web`
+  (upper: UI + API), `planeter-transport` / `-ci` / `-registry` (upper skeletons), binaries `planeter`
+  and `planeter-runner` (placeholder). LAY-1 is `tools/boundary-check` (a std-only test in the
+  workspace). LAY-2 holds: every shipped surface calls `authorize()`. LAY-3 holds. LAY-4: the
+  `forge-seal` cargo feature is reserved and off; **ENF-2** is `tools/enf2-symbol-check/check.sh` in
+  CI. LAY-5: `planeter_core::egress::StdEgressGuard` plus `fetch::CurlFetcher` (a bubblewrap-confined
+  `curl` pinned to the guard's resolved address); first caller: OIDC discovery/JWKS/token exchange.
+- **prikk layer (PKI):** PKI-1 holds (a version pin, `MIN_PRIKK_VERSION` = 0.46.0, refuses older).
+  PKI-3 is **bubblewrap** (`--unshare-all --clearenv`, repository-directory-only writes, wall-time
+  bound, no operator keys). PKI-2's read map gained `tree`, `cat`, `diff`; the exchange verbs were
+  measured: `bundle export/import`, `sync have/summary/accept` run keyless, **`sync build` does not**
+  (PK-27). PKI-4 holds (unexpected `schema_version` is a refusal). PKI-5 holds (blame pending).
+- **Data model (DM):** DM-1 as built — an opaque repository id maps to the on-disk path; rename and
+  transfer keep both (store-level, no surface yet). DM-2 stands as design (M3). DM-3: **no derived
+  cache exists yet** (IS-6); every read re-derives. DM-4 stands.
+- **Read path (RD):** RD-1 shipped without the cache; RD-2 shipped (ammonia + pulldown-cmark, strict
+  CSP, isolated content origin); RD-3 shipped (the `Assurance` distinction; approved-but-unsealed is
+  never verified).
+- **Write path (WR) — corrected by measurement and by prikk RFC 154:** WR-1 — the server **cannot**
+  `sync build` keylessly; fetch/clone is prikk RFC 155's repository-complete artifact (whole-artifact
+  first). WR-2/WR-3 stand as measured (keyless accept is idempotent and tamper-refusing; PK-28). WR-4
+  stands (design). **WR-5a is superseded**: prikk declined the client-sealable prepared plan; the
+  one-click merge is *the maintainer seals with their own prikk client-side and the forge adopts the
+  trusted-maintainer-signed fast-forward* (RFC 154, "first fast-forward wins"). WR-5b stands as the
+  fallback that works today. WR-5c remains the reserved feature. WR-6 → CON-1 → RFC 004 v2.
+  **Transport layering (owner-ruled 2026-09-23, supersedes RFC 004 D-6):** loopback HTTP behind a
+  trusted-proxy TLS terminator; SSH via host OpenSSH `ForceCommand` → `planeter ssh-shell`.
+- **Auth (AZ):** AZ-1 partial (Argon2id, OIDC, tokens, SSH keys, sessions + CSRF, throttles; no MFA,
+  SAML, LDAP). AZ-2 shipped: one pure default-deny `authorize(principal, action, resource)` (RFC 002).
+  AZ-3 shipped (`user-permissions ∩ scope`). AZ-4 holds.
+- **CIO / RG:** skeleton crates only. **CON:** CON-1 is RFC 004 v2's; CON-3's idempotent accept is
+  measured (PK-28). **ENF:** ENF-1 tested (an approved-but-unsealed change never reads verified);
+  ENF-2 in CI; ENF-3 partial (sandbox, egress guard, accept-edge bound PK-31; hostile-artifact fixtures
+  come with transport); ENF-4 partial — every shipped handler consults `authorize()`, but the
+  **handler-enumeration test is not written** (IS-14); ENF-5 trivially true (no cache); ENF-6 holds.
+- **Sequencing (SEQ):** SEQ-1 and SEQ-2 done (M0, M1, 0.1.1, 0.2.0). SEQ-3 and SEQ-4 are merged into
+  **M2, held** until prikk RFC 155 then 154 (after prikk 0.49.0). SEQ-5 becomes adoption (RFC 154).
+- **RFC map (NR) and open questions (IQ):** NR-1 → RFC 004 (held, v2 pending) · NR-2 → RFC 002 (done)
+  · NR-3 → RFC 005 (accepted v1; re-issue before M3) · NR-4 → RFC 008 re-based on RFC 154 adoption ·
+  NR-5 → RFC 006 · NR-6 → RFC 007 · NR-7 → RFC 009. IQ-1 resolved (independent `planeter-prikk`) ·
+  IQ-2 superseded (adoption) · IQ-3 open (transport v2) · IQ-4 resolved (SQLite behind traits, one
+  shared `SqliteDb`, PostgreSQL path kept) · IQ-5 done · IQ-6 settled (purely planeter's).
 
 Design stance carried from the set: **planeter carries the hosting weight prikk refuses, over prikk's
 stable CLI surface, holding authority prikk never had — without weakening prikk's verification.** The

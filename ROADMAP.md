@@ -1,7 +1,10 @@
 # planeter — Roadmap
 
 How planeter gets from a design set to a real, familiar forge for prikk. This is a **direction with
-milestones**, not a dated schedule: work ships when it is correct, tested, secure, and honest.
+milestones**, not a dated schedule: work ships when it is correct, tested, secure, and honest. The
+execution schedule beneath it — sequence, expected windows, a calendar *scenario*, prospects and the risk
+register — is [`docs/SCHEDULE.md`](docs/SCHEDULE.md); the background and goals are
+[`docs/src/planeter-00-project-charter.md`](docs/src/planeter-00-project-charter.md).
 Requirement and design ids (e.g. `CAP-2`, `WR-5`, `INV-2`, `LAY-2`) refer to the design set in
 [`docs/src/`](docs/src/) — `planeter-01` requirements, `-02` external design, `-03` threat model,
 `-04` internal design. The commons frame is [forge-commons](https://github.com/kos-commons/forge-commons);

@@ -3,12 +3,66 @@
 | | |
 |---|---|
 | Document | planeter External Design (black-box view) |
-| Version | v0.1 (draft for review) |
-| Date | 2026-09-15 |
+| Version | v0.2 (2026-09-24 — the revision section below records what shipped, what measurement corrected and what was ruled through planeter 0.2.0; the v0.1 body of 2026-09-15 stands and is not rewritten) |
+| Date | 2026-09-24 (v0.2); 2026-09-15 (v0.1) |
 | Inputs | planeter Requirements v0.1 (`planeter-01-requirements-spec-v0.1.md`) — cited as PU/NG/CAP/STD/SEC/INT/OPS/BN/UD/OQ; **forge-commons** (the standards frame); **prikk reality** (2026-09-15 survey, prikk `HEAD f6cbd057`); RFC 145 (Shape D), RFC 116 (sync as artifacts); the stikk integration precedent; project rules |
 | Scope | WHAT planeter exposes at its boundaries — its transport, web, API, authentication, CI, registry and webhook surfaces, and its prikk-integration surface — **for the parts designable before the owner's open questions (OQ-1…OQ-7) are settled.** The design goes up to the write/merge **trust gate** and **stops** there (§8), rather than presuming where signing keys live. |
 | Not | internal architecture, database schema, wire/artifact byte formats (prikk's), the OpenAPI document itself, or code. |
 | ID scheme | `BD-` boundary · `AC-` actor · `TX-` transport surface · `WEB-` web surface · `API-` REST surface · `AUTH-` identity/authorization surface · `CI-` CI/runner surface · `REG-` registry surface · `HOOK-` webhook surface · `PK-` prikk-integration surface · `FL-` interaction flow · `CT-` external data contract · `OP-` operational behaviour · `GATED-` a surface blocked on an owner question or a prikk-side dependency |
+
+## Revision v0.2 (2026-09-24) — the black box after 0.2.0
+
+- **Boundary and actors (BD/AC):** unchanged, with one addition — **TB-8, the trusted reverse proxy**:
+  planeter speaks plain HTTP on loopback or behind operator-declared proxies (`PLANETER_TRUSTED_PROXIES`),
+  takes the client IP from `X-Forwarded-For` only when the TCP peer is one of them, and refuses a
+  non-loopback bind without them. TLS termination is the proxy's (owner ruling 2026-09-23).
+- **Transport (TX):** TX-01 **corrected** — the server cannot produce incremental fetch artifacts
+  keylessly (`sync build` needs a maintainer key; ruled to stay so, PK-27): fetch/clone is prikk RFC
+  155's repository-complete artifact (UD-7). TX-02 stands as measured (keyless `sync accept`,
+  idempotent, tamper-refusing, PK-28); a 0.47.0 fact for it: over-size artifacts are refused before
+  reading, exit code 1, bound `PRIKK_EXCHANGE_MAX_BYTES` (PK-31). TX-03 SSH is the **host's OpenSSH
+  with `ForceCommand` → `planeter ssh-shell`**, authenticated by registered public key as designed.
+  TX-06 holds via the proxy. TX-05's client helper stands. **None of TX is shipped (M2 held).**
+- **Web (WEB):** WEB-01 shipped, extended with directory listing and raw file download (`prikk tree` /
+  `cat`); WEB-05 shipped (CSP, sanitizer, isolated content origin, `HttpOnly`/`SameSite=Strict`/
+  `Secure` cookies, CSRF double-submit); WEB-06 shipped for the distinction that exists today —
+  **prikk-verified vs. approved-but-unsealed** (the `Assurance` view-model; an unsealed change is never
+  shown as verified). WEB-02/03/04 not yet (M3+). New: sign-in pages, local or **SSO** (OIDC
+  begin/callback).
+- **API:** API-01 shipped as the GET read surface with an OpenAPI document; API-02 partial — bounded
+  page size and `ETag`/`304` are enforced, `Link` pagination and rate-limit headers are **deferred
+  rather than emitted unenforced**; API-03 holds; API-04 **decided** — planeter's own honest views,
+  not a GitHub-shaped mirror (RFC 003).
+- **Identity (AUTH):** AUTH-01 — OIDC (code + PKCE, `kid`-selected JWKS verification, one-shot
+  server-side state, nonce-bound) and Argon2id local passwords shipped; accounts are linked to an OIDC
+  `(issuer, subject)` administratively, never auto-provisioned; TOTP/WebAuthn, SAML, LDAP not yet.
+  AUTH-02 shipped (scoped SHA-256 tokens, ed25519 keys with `ssh-keygen`-identical fingerprints).
+  AUTH-03 shipped as RFC 002's single pure default-deny `authorize()`. AUTH-04 as ruled, refined by
+  RFC 154 (the forge adopts a trusted-maintainer-signed fast-forward; it never seals). AUTH-05 — an
+  audit-sink seam exists (`NullAuditSink`); off-box shipping not yet. New: per-account and per-client-IP
+  login throttles (C-2b).
+- **CI / REG / HOOK:** unchanged, unbuilt (M4, M5; webhooks with the API's write side).
+- **prikk integration (PK):** PK-01's command map gained `tree` (`tree-listing-v1`), `cat`
+  (`path-content-v1`), `diff` (`diff-report-v1`); every read refuses an unexpected `schema_version`.
+  PK-04 → adoption (RFC 154), not a client-sealed prepared plan. PK-05 resolved (independent driver).
+  PK-06 closed except blame.
+- **Flows:** FL-02 clone = the RFC 155 artifact, imported client-side; FL-03 push as designed
+  (keyless accept + verify); FL-04 merge = the maintainer seals with their own prikk and pushes the
+  sealed fast-forward, which the forge adopts when the signer is a trusted maintainer (RFC 154) — the
+  one-click UX is the client helper's, not a server-prepared plan; FL-08 shipped. FL-01 shipped.
+- **Contracts and operations:** CT-04 — the repository record carries a `prikk_format_version`
+  field (RFC 009) that is **not yet populated** (issue IS-13); the format rule is enforced as a
+  deployment rule today (serving binary ≥ hosted format, RELEASING). OP-03 — bounds exist on the read
+  side (`cat --max-bytes`, page limits) and at prikk's accept edge (PK-31); streaming is RFC 158 B/C's
+  (prikk 0.48.0). OP-06 — no derived cache exists yet, so nothing is served stale (IS-6). OP-01 — the
+  per-repository write lease is RFC 004 v2's.
+- **GATED table, current:** GATED-1 ruled and refined by RFC 154 (adoption) · GATED-2 settled (purely
+  planeter's) · GATED-3 → RFC 009, gated on RFC 155 · GATED-4 open · GATED-5 open · GATED-6 resolved
+  (independent driver) · GATED-7 closed except blame. **New gate: keyless fetch and the canonical
+  branch — prikk RFC 155 then 154, after prikk 0.49.0 — holds M2.**
+- **§7 entry point, updated:** the design set is `planeter-00` (charter) · `01` (requirements v0.2) ·
+  `02` (this) · `03` (threat model v0.3) · `04` (internal design v0.2) · the dependency ledger; with
+  `ROADMAP.md`, `docs/SCHEDULE.md` and `docs/STATUS.md` around it.
 
 Design stance carried from the requirements: **planeter carries the hosting weight prikk refuses, over
 prikk's stable CLI read surface, holding authority prikk never had — and never weakening prikk's own

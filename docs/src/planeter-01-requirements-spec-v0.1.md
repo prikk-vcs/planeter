@@ -3,11 +3,67 @@
 | | |
 |---|---|
 | Document | planeter Requirements (what the forge must do, must never do, and must decide) |
-| Version | v0.1 (draft for review) |
-| Date | 2026-09-15 |
+| Version | v0.2 (2026-09-24 — the revision section below records what was ruled, measured, shipped or superseded through planeter 0.2.0; the v0.1 body of 2026-09-15 stands as the baseline contract and is not rewritten) |
+| Date | 2026-09-24 (v0.2); 2026-09-15 (v0.1) |
 | Basis | **forge-commons** (the standards / proposals / guidelines commons, `kos-commons/forge-commons`) as the conformance frame; **prikk reality** per the 2026-09-15 survey (prikk `HEAD f6cbd057`); **RFC 145** (serving a repository for reading — Shape D over the CLI); **RFC 116** (sync is negotiation-as-artifacts, off the network); prikk `ROADMAP.md` owner hosting direction (2026-09-06); project rules in `.git-exclude/rules/` |
 | Not | a design, an API, a schema, or code. Where a decision belongs to a human, it is named in §9/§10 and left there. |
 | ID scheme | `PU-` purpose · `NG-` non-goal · `CAP-` forge capability · `STD-` standards conformance · `SEC-` security & trust · `INT-` prikk integration · `OPS-` operational · `DEF-` deferred frontier · `UD-` prikk-side dependency · `OQ-` open question |
+
+## Revision v0.2 (2026-09-24) — the baseline after 0.2.0
+
+The body below is the v0.1 contract, accepted as the baseline when RFC 001–003 were accepted
+(2026-09-15); "draft for review" no longer applies. Ids are unchanged. This section is the delta a
+reader must apply; the evidence is in `ROADMAP.md`, the dependency ledger (PK- rows), the threat model
+(v0.3) and `docs/STATUS.md`.
+
+- **Shipped through 0.2.0 (M1 + two read-side increments):** CAP-1 *partial* — create and serve
+  repositories laid out by an opaque id (rename/transfer exist in the store and keep id and path; no
+  surface yet; fork, mirror, archive, delete not yet); visibility public/internal/private enforced in
+  `authorize()`. CAP-3 *partial* — accounts, sessions, per-repository roles by direct, team and org
+  grants, credential scopes, protected refs, no existence leak; no org/team administration surface.
+  CAP-8 *partial* — browse (home, tree, file, history, change, refs, verify) and sign-in; no review,
+  issue or admin pages. CAP-9 *partial* — a GET read API described in OpenAPI with `ETag`/`304` and
+  bounded pages; no webhooks; `Link` pagination and rate-limit headers deferred. CAP-2, CAP-4…7, CAP-10:
+  not yet (M2–M5). STD-6 implemented in full (strict CSP, sanitizer, isolated content origin, cookies,
+  CSRF, throttles, egress guard). STD-2: Argon2id local passwords, OpenID Connect (code + PKCE, JWKS),
+  scoped hashed tokens, ed25519 SSH keys; TOTP/WebAuthn not yet (threat model RR-10); SAML/LDAP
+  unscheduled opt-ins. STD-3 partial as CAP-9.
+- **CAP-2 corrected by measurement on prikk 0.46.0 (ledger PK-27/28/29):** push is keyless as
+  designed (`sync accept` ingests author-signed patches, idempotent, tamper-refusing, verify-clean);
+  but **the server cannot build incremental-fetch artifacts keylessly** — `sync build` requires a
+  maintainer key, and prikk ruled it stays so. Fetch/clone is therefore prikk **RFC 155's
+  repository-complete artifact** (whole-artifact first; a delta form in its design round), and a
+  planeter-created repository has **no sealed branch to serve** until RFC 154 adoption exists. **M2 is
+  held until prikk ships RFC 155 then RFC 154 (after prikk 0.49.0)**; clone and push land together.
+- **CAP-5 / SEC-2 / UD-6 superseded:** prikk declined the client-sealable prepared plan (it is blind
+  signing). The one-click merge is instead **the maintainer seals with their own prikk, client-side,
+  and the forge *adopts* the trusted-maintainer-signed fast-forward** (prikk RFC 154, accepted
+  2026-09-16). UD-6 is withdrawn; RFC 008 is re-based on adoption. SEC-2's "server-side opt-in" survives
+  only as a reserved, off-by-default cargo feature whose absence CI proves (ENF-2).
+- **STD-1 as ruled (2026-09-23):** TLS stays mandatory but is **proxy-terminated**: planeter speaks
+  plain HTTP behind an operator-declared trusted reverse proxy and refuses a non-loopback bind without
+  one; SSH is the **host's OpenSSH with `ForceCommand`** into planeter. In-process rustls/russh was
+  measured and rejected (`docs/dependency-policy.md`).
+- **INT-5 / UD-1 closed except blame:** prikk 0.46.0 shipped `tree`, `cat` and `diff`, co-designed with
+  planeter; blame/annotate remains a prikk-side gap (read-path gap catalogue A3).
+- **INT-6 / OQ-7 resolved:** an independent driver, `planeter-prikk`, behind the `PrikkRepo` trait
+  (RFC 001 T7 evaluation); stikk's lessons reused, not its code.
+- **OPS as built:** OPS-1 — SQLite behind swappable store traits (PostgreSQL path kept); **Linux only**
+  is now an explicit constraint (the sandbox is bubblewrap; prikk RFC 107's lesson). OPS-2 — MFA not
+  yet. OPS-3/OPS-5 — backup and observability are not designed beyond the container's persist rule;
+  they belong to B2 and 1.0 readiness. OPS-6 — Apache-2.0, attested releases, crates published.
+- **§9 UD- table, current state:** UD-1 closed except blame · UD-2 answered by RFC 154 (adoption) plus
+  keyless accept (PK-28) · UD-3: format 7 shipped (0.45.0, signature union), **format 8 announced for
+  0.48.0**, prikk RFC 114 §5.2 requires a tested migration before any format change, the hosting
+  mechanism is RFC 155 `import --adopt` (RFC 009) · UD-4 still open, to confirm in the transport v2
+  handoff · UD-5 moot (no linking) · UD-6 withdrawn. **New: UD-7 keyless fetch = prikk RFC 155 (PK-27);
+  UD-8 canonical branch by adoption = prikk RFC 154.** Both accepted upstream, neither shipped.
+- **§10 OQ- state:** OQ-1 ruled (a) · OQ-2 settled by RFC 002's acceptance — per-ref authorization is
+  purely planeter's, no prikk-side anchor exists or is asked for · OQ-3 confirmed by RFC 001 (identity
+  above prikk, DM-1) · OQ-4 open (the v1 ceiling; due before M3) · OQ-5 open (Git mirror-out) · OQ-6 →
+  RFC 009 accepted, gated on RFC 155 · OQ-7 resolved (above).
+- **Governance and prospects** now live outside this contract: `planeter-00-project-charter.md`,
+  `ROADMAP.md`, `docs/SCHEDULE.md`. The security companion is threat model **v0.3**.
 
 **planeter** (Norwegian: *planets* — the bodies that orbit a common star) is the **forge**: the web
 service that hosts [prikk](https://github.com/prikk-vcs/prikk) repositories and the collaboration

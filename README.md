@@ -78,7 +78,8 @@ are in [`docs/RELEASING.md`](docs/RELEASING.md).
 
 ## Following the design
 
-The design set is the contract the code is built against:
+The design set is the contract the code is built against ([`CONTRIBUTING.md`](CONTRIBUTING.md) says how
+work moves through it; [`SECURITY.md`](SECURITY.md) how to report a vulnerability):
 
 - **[`docs/STATUS.md`](docs/STATUS.md)** — where the project is right now: the hold, what is pending on
   whom, the issue register. Read first.
@@ -86,11 +87,14 @@ The design set is the contract the code is built against:
   owner gate, and the prikk dependencies.
 - **[`rfcs/README.md`](rfcs/README.md)** — the RFC pipeline (001–009, all accepted with handoffs;
   001–003 shipped), in priority order.
+- **[`docs/SCHEDULE.md`](docs/SCHEDULE.md)** — the execution schedule beneath the roadmap: sequence, expected
+  windows, an indicative calendar scenario, prospects and the risk register.
 - **The design set** in [`docs/src/`](docs/src/):
-  - `planeter-01-requirements-spec` — what the forge must do / never do / decide.
-  - `planeter-02-external-design` — the black-box surfaces.
-  - `planeter-03-threat-model` — security (a forge holds authority and takes untrusted network input).
-  - `planeter-04-internal-design` — the white-box architecture.
+  - `planeter-00-project-charter` — background, goals, what "done" means, constraints, who decides what.
+  - `planeter-01-requirements-spec` — what the forge must do / never do / decide (v0.2).
+  - `planeter-02-external-design` — the black-box surfaces (v0.2).
+  - `planeter-03-threat-model` — security (a forge holds authority and takes untrusted network input) (v0.3).
+  - `planeter-04-internal-design` — the white-box architecture (v0.2).
   - `planeter-prikk-dependency-ledger` — every prikk behaviour planeter relies on, and how sure we are.
 
 ## Design notes

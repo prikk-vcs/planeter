@@ -4,7 +4,7 @@
 |---|---|
 | Document | The dated brief a new session reads **first**: where the project is, what is held and why, what is pending on whom, and the issue register. Updated at every release, RFC disposition and owner ruling. |
 | As of | 2026-09-24 — planeter **0.2.0** released |
-| Read next | [`../ROADMAP.md`](../ROADMAP.md) → [`../rfcs/README.md`](../rfcs/README.md) → [`../rfcs/handoffs/README.md`](../rfcs/handoffs/README.md) and the active handoff → [`src/planeter-prikk-dependency-ledger.md`](src/planeter-prikk-dependency-ledger.md) → [`src/planeter-03-threat-model-v0.1.md`](src/planeter-03-threat-model-v0.1.md) (v0.3) → [`UPSTREAM.md`](UPSTREAM.md) → [`dependency-policy.md`](dependency-policy.md) |
+| Read next | [`src/planeter-00-project-charter.md`](src/planeter-00-project-charter.md) (background, goals, governance) → [`../ROADMAP.md`](../ROADMAP.md) → [`SCHEDULE.md`](SCHEDULE.md) (sequence, windows, risks) → [`../rfcs/README.md`](../rfcs/README.md) → [`../rfcs/handoffs/README.md`](../rfcs/handoffs/README.md) and the active handoff → [`src/planeter-prikk-dependency-ledger.md`](src/planeter-prikk-dependency-ledger.md) → [`src/planeter-03-threat-model-v0.1.md`](src/planeter-03-threat-model-v0.1.md) (v0.3) → [`UPSTREAM.md`](UPSTREAM.md) → [`dependency-policy.md`](dependency-policy.md) |
 
 ## Where we are
 
@@ -62,7 +62,9 @@ assigned until a handoff names it.
 | IS-9 | No second factor (RR-10); an OIDC provider that enforces MFA is the interim answer | threat model | next auth increment |
 | IS-10 | Handoffs 004–009 are v1 from 2026-09-15, written before any prikk measurement | migration review 2026-09-24 | re-issue as v2 before any assignment; 004 v2 waits for RFC 155/154 |
 | IS-11 | prikk correspondence is private (`.git-exclude/upstream/`); only the ledger is the committed record | process | keep folding every reply into the ledger (UPSTREAM.md rule) |
-| IS-12 | The design set is v0.1 (2026-09-15) with no as-built delta document | migration review | deltas live in the threat model's version history and in this file; a design-set revision is an owner decision at M2 |
+| IS-12 | ~~The design set is v0.1 with no as-built delta~~ — closed 2026-09-24: `planeter-01`, `-02`, `-04` carry a *Revision v0.2* section; `-00` charter and `docs/SCHEDULE.md` added | migration review | closed |
+| IS-13 | The repository record's `prikk_format_version` (RFC 009 / CT-04) is never populated; the format rule is only a deployment rule today | design-set revision 2026-09-24 | populate at create/open from prikk's reported format (needs a prikk verb or `status` field — check at the 0.47.0 re-baseline); RFC 009 |
+| IS-14 | ENF-4's handler-enumeration test (every surface handler consults `authorize()`) is not written | design-set revision 2026-09-24 | next interim handoff; small |
 
 ## Process lessons (keep — each one cost a bad push or a wrong claim)
 
