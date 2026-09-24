@@ -80,6 +80,8 @@ are in [`docs/RELEASING.md`](docs/RELEASING.md).
 
 The design set is the contract the code is built against:
 
+- **[`docs/STATUS.md`](docs/STATUS.md)** — where the project is right now: the hold, what is pending on
+  whom, the issue register. Read first.
 - **[`ROADMAP.md`](ROADMAP.md)** — the wide perspective: milestones M0→1.0, release cycles, the v0→v1
   owner gate, and the prikk dependencies.
 - **[`rfcs/README.md`](rfcs/README.md)** — the RFC pipeline (001–009, all accepted with handoffs;

@@ -304,7 +304,12 @@ starts until the foundations and the layering gate exist.
 **Where the pipeline stands (2026-09-24):** RFCs 001–003 are shipped (`rfcs/done/`, M1 0.1.0 and the
 0.1.1/0.2.0 read-side increments); **RFC 004 is held** until prikk ships RFC 155 then 154; 005–007 wait
 on 004; 008/009 are gated on the same prikk RFCs. Meanwhile planeter re-baselines against each prikk
-release (0.47.0 next: PK-30/31) and keeps the read side and the records current.
+release (0.47.0 next: PK-30/31 — the handoff is written, `rfcs/handoffs/interim/`, held until the binary
+ships) and keeps the read side and the records current. **Team migration (owner-directed 2026-09-24):**
+the architect and dev-team roles below pass to a high-capability and a mid-capability agent; the
+architect's hand-over is `docs/STATUS.md` (read first), `rfcs/handoffs/README.md` (handoff status and
+the v1 quarantine), `docs/UPSTREAM.md` and `docs/dependency-policy.md`. The first assignment is the
+0.47.0 re-baseline (owner ruling).
 
 ## Method & roles (project rules §Workflow)
 

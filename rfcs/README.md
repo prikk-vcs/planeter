@@ -1,7 +1,7 @@
 # planeter RFCs
 
 Design records for planeter, one per subsystem. This directory follows the ecosystem's **RFC lifecycle
-policy** (project rules `000-rfc-lifecycle-policy.md`), **5-folder variant** — because the architect
+policy** ([`done/000-rfc-lifecycle-policy.md`](done/000-rfc-lifecycle-policy.md), imported 2026-09-24), **5-folder variant** — because the architect
 (design) and the dev team (implementation) are distinct roles, so "the design is settled" (`accepted/`)
 is a real event separate from "the work shipped" (`done/`).
 
@@ -18,7 +18,7 @@ rfcs/
   accepted/      ← design settled; implementer may start; not yet shipped
   done/          ← shipped
   archive/       ← withdrawn or superseded
-  handoffs/      ← optional companion execution docs, under handoffs/NNN-slug/
+  handoffs/      ← companion execution docs, under handoffs/NNN-slug/ (conventions + status: handoffs/README.md)
 ```
 
 ## Pipeline (planned, from the roadmap)
