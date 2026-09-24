@@ -1,120 +1,91 @@
-# planeter — Execution schedule and prospects
+# planeter — Themes, plans, and concerns
 
 | | |
 |---|---|
-| Document | The architect's execution schedule beneath the roadmap: the sequence, its dependencies and critical path, expected windows, an indicative calendar **scenario** (assumptions, not commitments), the prospects for 1.0, the risk register and the decision points ahead. The owner establishes the overall schedule; this is the proposal to confirm or correct. |
-| As of | 2026-09-24 (0.2.0 released) |
-| Basis | `ROADMAP.md` (milestones, holds, release cycles — deliberately undated); prikk's schedule by theme (letter 2026-09-23; dependency ledger §prikk schedule); the observed pace of the first nine days; `docs/STATUS.md`. |
+| Document | The plan beneath the roadmap, without dates: the development themes, the plans in order with what each waits on and what it unblocks, and the issues, risks and concerns with the relations between them. The roadmap (`ROADMAP.md`) holds the milestones and release cycles; `docs/STATUS.md` holds the current state and the issue register. |
+| As of | 2026-09-24 (0.2.0 released; M2 held) |
+| Basis | `ROADMAP.md`; prikk's schedule by theme (dependency ledger §prikk schedule); the design-set revisions of 2026-09-24; the owner's rulings (no calendar dates — work ships when correct, tested, secure and honest). |
 
-## 1. Observed pace (the only calibration available)
+## 1. Themes
 
-| Span | Work | Elapsed |
-|---|---|---|
-| 2026-09-15 | Requirements, external design, threat model, internal design, nine RFCs with handoffs | 1 day |
-| 2026-09-16 → 09-23 | A0 foundations (driver, store, core + `authorize`, auth seams, layering gate) → RFC 002 + 003 → auth crypto, SQLite, release workflow → **0.1.0** | 8 days |
-| 2026-09-23 | Browse UI, sessions + CSRF, egress guard, login throttle → **0.1.1** | same day |
-| 2026-09-23 → 09-24 | Trusted proxies, per-IP throttle, OIDC (two supply-chain forks ruled) → **0.2.0** + documentation audit | 2 days |
+| Theme | Serves | What lands | Waits on | Governing record |
+|---|---|---|---|---|
+| **T1 prikk re-baselines** | every milestone | per prikk release: schema check, pin/floor, ledger, records; 0.47.0 (PK-30/31), 0.48.0 (format 8, streaming), 0.49.0 | each prikk release | `docs/UPSTREAM.md`; `rfcs/handoffs/interim/prikk-0-47-0-rebaseline-handoff-v1.md` |
+| **T2 read-side increments** | M1 surface, usability | `--version` (IS-1); OIDC account linking from the binary (IS-2); `spawn_blocking` (IS-4); "my repositories" home (IS-7); ENF-4 enumeration test (IS-14); `prikk_format_version` populated (IS-13) | nothing | issue register; one interim handoff each |
+| **T3 transport — clone + push, keyless** | M2 | RFC 155 artifact fetch/clone; keyless push (`sync accept`); client helper; HTTP behind the trusted proxy; SSH via host OpenSSH `ForceCommand` → `planeter ssh-shell`; per-repository write lease; accept-edge bounds | prikk RFC 155 then RFC 154 shipped | RFC 004 → handoff v2 |
+| **T4 change review + issues + merge** | M3 | an open change = prikk's accepted-but-unsealed claims + review metadata; inline discussion, approvals, required checks; issues with cross-references; merge = maintainer seals client-side, forge stores and re-verifies (WR-5b) | T3 for the write side; the review *design* (RFC 005 v2) waits on nothing | RFC 005 v1 → v2 |
+| **T5 canonical branch + one-click merge** | B1 | the forge adopts a trusted-maintainer-signed fast-forward (prikk RFC 154); "first fast-forward wins"; the client helper's one-click merge | prikk RFC 154 + T4 | RFC 008 (re-based on adoption) |
+| **T6 admin surfaces** | CAP-1/CAP-3 remainder | orgs, teams, per-repository and per-ref permissions, repository settings, rename/transfer/archive/delete, imports via brygge | T3 (writes exist) | RFC 002/003 follow-on handoffs; WEB-04 |
+| **T7 auth completion** | STD-2, RR-10 | TOTP/WebAuthn second factor; audit log shipped off-box (AUTH-05); SAML/LDAP as opt-ins only on demand | nothing for MFA; audit log with T3 | RFC 002 follow-on |
+| **T8 CI + runners** | M4 | pipelines on push/change/schedule; separate-host ephemeral runners; job tokens; secrets withheld from untrusted changes; `planeter-runner` ships | T3 (a repository to trigger from); T4 for change-triggered runs | RFC 006 v2 |
+| **T9 packages** | M5 | OCI Distribution first; scoped publish, immutable versions, object storage; language registries by demand | T3 | RFC 007 v2 |
+| **T10 hosted-format durability** | B2 | carry-forward across prikk formats via RFC 155 `import --adopt`; the format-pin/refuse rule as code (needs IS-13) | prikk RFC 155; prikk 0.48.0's format 8 as the first real case | RFC 009 |
+| **T11 hardening and operations** | OPS-2/3/5, 1.0 readiness | backup as one coherent set with a rehearsed restore; observability (metrics, structured logs, health); multi-replica story (throttles at the proxy, PostgreSQL path) | T3–T10 substantially done | new RFC (operations) before 1.0 |
+| **T12 API write side + webhooks** | CAP-9 | the write endpoints for T4/T6, `Link` pagination and enforced rate-limit headers, HMAC-signed webhooks through the egress guard | T3/T4 | RFC 003 follow-on; STD-4 |
+| **Deferred** | post-1.0 | federation, portable identity, built-in AI (forge-commons verdicts) | the owner's call after 1.0 | ROADMAP §Later |
 
-This pace was one agent doing design, implementation and review with the owner ruling in near real
-time. **The two-agent workflow adds a handoff, a review request and a review report per task; its pace
-is unknown until the first assignment (the 0.47.0 re-baseline) has run.** The windows below assume the
-implementation pace roughly halves and use that as the planning figure until measured.
+## 2. Plans, in order
 
-## 2. Sequence, dependencies and the critical path
+Each plan names what it waits on and what it unblocks. Order within a tier is the architect's; order
+across tiers is fixed by the dependencies.
 
-```
-now ── M2 hold ─────────────────────────────────────────────────────────────────────────►
-      │
-      ├─ prikk 0.47.0 ─► re-baseline (handoff written) ── first assignment of the new team
-      ├─ prikk 0.48.0 ─► re-baseline; format 8 consequences; input on the streaming-bound design
-      ├─ prikk 0.49.0 ─► re-baseline
-      ├─ (meanwhile) small read-side increments from the issue register, one handoff each
-      │
-      └─ prikk RFC 155 shipped ─► prikk RFC 154 shipped ─► transport handoff v2 ─► M2 (clone + push)
-                                                                 │
-                                                                 ├─► M3 review + issues + merge (RFC 005 v2)
-                                                                 │      └─► B1 canonical branch + one-click merge (RFC 008)
-                                                                 ├─► M4 CI + runners (RFC 006 v2)
-                                                                 ├─► M5 packages (RFC 007 v2)
-                                                                 └─► B2 hosted-format durability (RFC 009) ─► 1.0 candidate ─► owner gate
-```
+1. **Now, during the M2 hold** — T1 (0.47.0 first, as the new team's first assignment), then T2 items
+   one handoff each (IS-1, IS-14, IS-4, IS-13, IS-2, IS-7 — smallest first), and the *design* of T4
+   (RFC 005 v2 against measured 0.46.0 behaviour) so M3 does not start from a pre-measurement RFC.
+   Unblocks: a measured two-agent cadence; a re-issuable RFC 005; the hosting rule for format 8.
+2. **When prikk 0.48.0 ships** — T1 again; T10's first real case (format 8: what the serving rule and
+   the record mean for repositories already hosted in format 7); planeter's input on the streaming-bound
+   design that prikk invited. Unblocks: the durability rule before RFC 155 needs it.
+3. **When prikk RFC 155 then RFC 154 ship** — RFC 004 handoff v2, then T3. **This is the gate every
+   later plan waits behind.** Unblocks: T4's write side, T6, T8, T9, T12.
+4. **After M2** — T4 (M3) with T5 riding on it (adoption is small once RFC 154 exists), T12's write
+   endpoints alongside; T6 as the administration those need. T7's MFA can land in any tier, since it
+   waits on nothing — the architect schedules it when a release touching auth is open anyway.
+5. **After M3** — T8 (M4) before T9 (M5), recommended: CI gates the review loop; packages have no
+   dependents. The owner decides the order (decision point D-4 below).
+6. **Before 1.0** — T10 complete, T11 (operations RFC, backup rehearsal, observability), the readiness
+   report, then the owner's 1.0 decision.
 
-**The critical path is prikk's**: RFC 155 (the repository-complete artifact, keyless fetch) then RFC 154
-(trusted fast-forward adoption, the canonical branch) — both accepted, neither implemented, both after
-prikk 0.49.0. Nothing planeter does shortens it; what planeter *can* do during the hold is keep the read
-side shipping, re-baseline promptly, give prikk the design input it asked for, and have the v2 transport
-handoff ready the week the binary lands.
+## 3. Issues, risks and concerns — and how they relate
 
-**What does not wait on prikk**: RFC 005's review model can be designed (v2) against measured 0.46.0
-behaviour before M2 ships, because an open change *is* prikk's accepted-but-unsealed claim set and
-`sync accept` is keyless and measured (PK-28). RFC 006 (CI) and RFC 007 (packages) have no prikk
-dependency at all beyond a hosted repository to trigger from; their order after M2 is a roadmap choice,
-not a technical one.
-
-## 3. Expected windows (relative to prikk, effort-based)
-
-| Item | Precondition | Expected effort under the new team | Release |
-|---|---|---|---|
-| 0.47.0 re-baseline | prikk 0.47.0 installed | ≤ 1 week (five small tasks) | patch or minor if the floor moves (owner) |
-| Read-side increments (IS-1, IS-2, IS-4, IS-7) | none | 1–2 days each | folded into the next minor |
-| 0.48.0 / 0.49.0 re-baselines | each prikk release | ≤ 1 week each; 0.48.0 longer if format 8 needs a hosting rule | as above |
-| RFC 005 v2 (design only) | 0.46.0 measurements (done) | 1 week of architect time | — |
-| Transport handoff v2 + M2 | RFC 155 and 154 shipped | 2–3 weeks | **next minor after 0.2.0** |
-| M3 review + issues + merge | M2 | 3–4 weeks | minor |
-| B1 canonical branch + one-click merge | RFC 154 + M3 | 1–2 weeks (mostly adoption wiring) | within M3 or the minor after |
-| M4 CI + runners | M2 (a repository to trigger from) | 3–4 weeks; `planeter-runner` ships | minor |
-| M5 packages (OCI first) | M2 | 3 weeks for OCI; language registries by demand | minor |
-| B2 durability policy; hardening; backup rehearsal; 1.0 readiness | RFC 155 `import --adopt`; all of the above | 2–3 weeks | **1.0 candidate → owner gate** |
-
-## 4. Indicative calendar scenario (assumptions to confirm — not commitments)
-
-Assumptions: prikk keeps its recent cadence (0.43.0 → 0.46.0 in six days, but RFC 158's four stages
-are larger); RFC 155/154 need a design round each; the new team's pace is as in §1.
-
-| When (scenario) | Milestone |
-|---|---|
-| Oct 2026 | prikk 0.47.0–0.49.0 land; three re-baselines; read-side increments; RFC 005 v2 designed; the new team's cadence measured |
-| Nov–Dec 2026 | prikk RFC 155 then 154 ship; transport handoff v2; **M2 clone + push** (keyless) — the first minor under the new team that is a milestone |
-| Q1 2027 | **M3** review + issues + merge with B1's adoption-based one-click merge |
-| Q1–Q2 2027 | **M4** CI on isolated runners |
-| Q2 2027 | **M5** packages (OCI) |
-| H2 2027 | B2, hardening, backup rehearsal, **1.0 candidate**; promotion is the owner's call |
-
-The single largest uncertainty is the RFC 155/154 date; every later row shifts with it one for one.
-If prikk's design rounds take a quarter longer, 1.0 candidacy moves to 2028 and the read side keeps
-shipping meanwhile — planeter remains useful at each step by design.
-
-## 5. Prospects
-
-**What 1.0 is**: a keyless, verifiable, familiar forge — the one property no Git forge can offer (a
-compromised forge cannot forge history) inside the loop every developer already knows. The read side
-already demonstrates the posture (honest verify status, sandboxed prikk, strict rendering, no signing
-key); M2 and B1 make it a forge people push to and merge on.
-
-**Upside**: prikk's RFC 154/155 land early and M2 follows within weeks; the review model (RFC 005) is
-ready the same month, so M3 comes fast; planeter becomes the reference deployment prikk's own
-documentation points at. **Downside**: prikk's schedule slips or RFC 155's delta form takes a second
-round, and planeter spends a quarter as a read-only host — still useful, but not yet the product (PU-1).
-The roadmap's hedge is that every 0.x release is usable on its own and nothing waits on the frontier.
-
-## 6. Risk register
-
-| ID | Risk | Likelihood | Impact | Mitigation | Owner of the decision |
+| ID | Concern | Kind | Touches | Related | Handling |
 |---|---|---|---|---|---|
-| RK-1 | prikk RFC 155/154 slip past the scenario | medium | M2 and everything after shift | read side keeps shipping; RFC 005 v2 designed early; planeter's design input to prikk delivered promptly | owner (schedule) |
-| RK-2 | prikk format 8 (0.48.0) needs a hosting/migration rule before RFC 155's `import --adopt` exists | medium | hosted repositories pinned to a serving binary | the "serving binary ≥ hosted format" rule; refuse to host an unsupported format (OP-04); RFC 009 | architect → owner |
-| RK-3 | JSON schema drift in a prikk release (PK-18) | low per release, certain over time | view-models change | driver refuses unknown `schema_version`; re-baseline handoff stops at T1 on drift | architect |
-| RK-4 | Keyless incremental fetch stays whole-artifact (no delta form) longer than expected | medium | clone cost on large repositories | RFC 155's design round has planeter's numbers (draft letter); serve whole artifacts first | prikk team |
-| RK-5 | Team migration slows delivery or loses context | medium | pace, quality | hand-over records (STATUS, handoffs README, UPSTREAM, dependency policy); first assignment deliberately small | owner |
-| RK-6 | A dependency advisory with no fix (as `rsa` today) | low | audit gate red | scoped ignores only with a justification; subprocess pattern keeps protocol stacks out of the tree | architect → owner |
-| RK-7 | Single owner as the only human authority (availability) | low | releases and rulings wait | decision requests batched; nothing else blocks on a ruling | owner |
-| RK-8 | Multi-replica deployments outgrow in-memory throttles and SQLite (OPS-1) | low before M4 | operations | throttle at the proxy (documented); store traits keep a PostgreSQL path | architect |
+| **C-1** | prikk RFC 155 and 154 are accepted but unimplemented and unscheduled beyond "after 0.49.0"; everything from T3 onward waits behind them | risk (schedule, external) | T3–T6, T8, T9, T10, T12 | C-2, C-4, C-6 | design ahead (RFC 005 v2, RFC 004 v2 draft), keep the read side shipping, deliver prikk the input it asked for; never invent a prikk wire protocol to shortcut it |
+| **C-2** | Keyless fetch is whole-artifact until RFC 155 gains a delta form; large repositories clone expensively | concern (performance, external) | T3 | C-1, C-8 | planeter's planning numbers are in the draft letter to prikk; serve whole artifacts first, bounded and streamed (RFC 158 B/C) |
+| **C-3** | prikk format 8 (0.48.0) arrives before RFC 155's `import --adopt` exists — hosted format-7 repositories and a format-8 serving binary | risk (durability) | T1, T10 | C-9, IS-13 | the serving-binary ≥ hosted-format rule; refuse to host an unsupported format; populate the record (IS-13) so the rule can be enforced in code; RFC 009 |
+| **C-4** | JSON schema drift in a prikk release (PK-18) changes a view-model | risk (correctness) | T1, every read surface | C-1 | the driver refuses unknown `schema_version`; the re-baseline handoff stops at T1 on drift and the architect decides |
+| **C-5** | The two-agent workflow's cadence is unmeasured; the hand-over could lose context | risk (delivery) | all | C-1 (the hold gives room) | small first assignment; the hand-over records (STATUS, handoffs README, UPSTREAM, dependency policy, charter); v1 handoffs quarantined until re-issued |
+| **C-6** | Handoffs 004–009 predate every measurement (IS-10) | issue (records) | T3–T5, T8–T10 | C-1, C-5 | re-issue as v2 before assignment; RFC 005 v2 first (it waits on nothing) |
+| **C-7** | No second factor on local accounts (RR-10); an OIDC provider that enforces MFA is the only interim answer | concern (security) | T7 | — | schedule T7's MFA with the next auth-touching release; document the interim in SECURITY.md (done) |
+| **C-8** | Multi-replica deployments: in-memory throttles (RR-11), SQLite, no observability | concern (operations) | T11 | C-2 | rate-limit `/login` at the proxy (documented); store traits keep a PostgreSQL path; operations RFC before 1.0 |
+| **C-9** | `prikk_format_version` never populated (IS-13); the durability rule is a deployment rule only | issue (code) | T2, T10 | C-3 | populate at create/open once prikk reports the format machine-readably (check at 0.47.0 re-baseline; else a prikk ask) |
+| **C-10** | ENF-4's handler-enumeration test is missing (IS-14): "every surface consults `authorize()`" is reviewed by hand | issue (assurance) | T2, every new surface | T3, T6, T12 add handlers | write the test before T3 adds the first write handlers |
+| **C-11** | A dependency advisory with no upstream fix (as `rsa` today) turns the audit gate red | risk (supply chain) | any theme adding a crate | T3 (TLS/SSH kept out of the tree), T9 (registry stacks) | scoped, justified ignores only; the subprocess pattern for protocol stacks; the rejected-crate ledger |
+| **C-12** | The open owner questions OQ-4 (feature ceiling) and OQ-5 (Git mirror-out) shape T4/T6 and T9 | concern (scope) | T4, T6, T9 | D-2, D-3 | raise as decision requests before the affected handoffs, not during |
+| **C-13** | Blame/annotate is unscheduled by prikk (gap catalogue A3) | concern (feature) | T2, T4 | — | the view stays "pending a prikk increment"; not faked |
+| **C-14** | A single human authority; rulings, tags and letters wait on the owner's availability | concern (governance) | releases, upstream | C-1 | batch decision requests; nothing technical blocks on a ruling; the read side never waits |
 
-## 7. Decision points ahead (for the owner, when they come due)
+**Relations, as a map** (an arrow reads "unblocks" or "is the first real case for"):
 
-- **The version of the 0.47.0 re-baseline** (patch vs. minor if the floor moves) — at its review request.
-- **RFC 005 v2 timing** (design during the hold vs. after M2) — recommended: during the hold.
-- **OQ-4 the v1 feature ceiling** (wikis, discussions, boards, insights) — before M3 handoffs.
-- **OQ-5 Git mirror-out scope** — before M5 or the first import request, whichever is first.
-- **M4 before M5 or the reverse** — after M2; recommended M4 (CI gates the review loop of M3).
-- **The 1.0 promotion** — the owner's alone, after B2 and the readiness report.
+```
+prikk 0.47.0 ─► T1 ─► (C-4 checked) ─► T2 items ─► measured cadence (C-5) ─► RFC 005 v2 (C-6)
+prikk 0.48.0 ─► T1 ─► format 8 (C-3) ─► T10 rule ◄─ IS-13 (C-9)
+prikk 0.49.0 ─► T1
+prikk RFC 155 ─► keyless fetch (C-2) ─┐
+                                      ├─► RFC 004 v2 ─► T3 (M2) ─► T4 (M3) ─► T5 (B1)
+prikk RFC 154 ─► adoption ────────────┘                  │        └─► T12 write side + webhooks
+                                                          ├─► T6 admin
+                                                          ├─► T8 CI (M4) ─┐
+                                                          └─► T9 packages (M5) ─┴─► T10 complete ─► T11 ─► 1.0 (owner gate)
+C-10 (ENF-4 test) must land before T3 adds write handlers.   C-7 (MFA) rides any auth-touching release.
+C-11 (supply chain) is checked at every crate.               C-14 (owner availability) bounds releases, not work.
+```
+
+## 4. Decision points (ordered by what triggers them, not by date)
+
+- **D-1** the version of the 0.47.0 re-baseline (patch, or a minor if the floor moves) — at its review request.
+- **D-2** OQ-4, the v1 feature ceiling (wikis, discussions, boards, insights) — before RFC 005 v2 is handed off.
+- **D-3** OQ-5, Git mirror-out scope — before T9's first registry handoff or the first import request.
+- **D-4** T8 before T9 or the reverse — after M2; recommended T8.
+- **D-5** whether T7's MFA lands during the hold or with M3 — recommended during the hold if a release touching auth opens.
+- **D-6** the 1.0 promotion — the owner's alone, after T10/T11 and the readiness report.

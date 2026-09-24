@@ -111,5 +111,5 @@ The workflow, the RFC lifecycle and the handoff conventions are in `CONTRIBUTING
 ## 8. Where to read next
 
 `docs/STATUS.md` (where things stand) → `ROADMAP.md` (milestones, release cycles, dependencies) →
-`docs/SCHEDULE.md` (sequence, windows, prospects, risks) → `docs/src/planeter-01…04` (the design set)
+`docs/SCHEDULE.md` (themes, plans, concerns and their relations) → `docs/src/planeter-01…04` (the design set)
 → `rfcs/` (the decisions) → `docs/src/planeter-prikk-dependency-ledger.md` (what prikk really does).

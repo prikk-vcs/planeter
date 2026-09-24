@@ -87,8 +87,8 @@ work moves through it; [`SECURITY.md`](SECURITY.md) how to report a vulnerabilit
   owner gate, and the prikk dependencies.
 - **[`rfcs/README.md`](rfcs/README.md)** — the RFC pipeline (001–009, all accepted with handoffs;
   001–003 shipped), in priority order.
-- **[`docs/SCHEDULE.md`](docs/SCHEDULE.md)** — the execution schedule beneath the roadmap: sequence, expected
-  windows, an indicative calendar scenario, prospects and the risk register.
+- **[`docs/SCHEDULE.md`](docs/SCHEDULE.md)** — the plan beneath the roadmap, without dates: themes, plans in
+  order, and the issues, risks and concerns with their relations.
 - **The design set** in [`docs/src/`](docs/src/):
   - `planeter-00-project-charter` — background, goals, what "done" means, constraints, who decides what.
   - `planeter-01-requirements-spec` — what the forge must do / never do / decide (v0.2).
