@@ -1,11 +1,6 @@
 # RFC 000 — RFC lifecycle policy
 
-> **Imported into planeter 2026-09-24** from the ecosystem's project rules, verbatim (the policy is
-> written to be adopted as-is). planeter applies its **5-folder variant** — `proposed/`, `accepted/`,
-> `done/`, `archive/`, `handoffs/` — because design (architect) and implementation (dev team) are
-> distinct roles; see [`../README.md`](../README.md) and [`../handoffs/README.md`](../handoffs/README.md).
-
-**Status.** Implemented
+**Status.** Implemented — **The 5-folder variant is adopted** (see [§ Folder layout: 5-folder variant](#folder-layout-5-folder-variant) below).
 **Tracks.** Cross-cutting documentation policy. Not tied to any
 single feature; applies to the RFC directory itself.
 **Touches.** `rfcs/` folder structure, the index file at
