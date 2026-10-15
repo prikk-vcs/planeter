@@ -44,7 +44,7 @@ across tiers is fixed by the dependencies.
    4. **Architect, in parallel, no dev time:** RFC 005 v2 and RFC 004 v2 are **drafted** (proposed; not
       acceptable until T13's rows are confirmed); RFC 006 v2 after T13; the requirements note for prikk's
       0.54.0 read-only command design round (the owner conveys it).
-   5. **Candidate release 0.2.1** — defined in §5; the owner authorizes (D-11).
+   5. **Candidate release 0.3.0** — defined in §5; the owner authorizes (D-11).
    Unblocks: a measured two-agent cadence; re-issuable RFCs 004–006; the owner's ruling on M2 (D-8).
 2. **When prikk next changes the repository format** (format 8 is unscheduled) — T1 again; T10's first
    real case (what the serving rule and the record mean for repositories already hosted in format 7);
@@ -111,23 +111,23 @@ C-11 (supply chain) is checked at every crate.               C-14 (owner availab
 - **D-9** the contribution model for non-writers (the `propose` action, the proposals setting, quotas; D-T3) — with RFC 005 v2.
 - **D-10** the CI decisions: how a runner gets the tree of an open change, the workflow subset, runner
   isolation, the job network default (D-C2, D-C3, D-C4, D-C5; D-C6 is accepted) — with RFC 006 v2, after T13.
-- **D-11** authorize candidate release 0.2.1: its version, content and criteria (§5) — **requested 2026-10-15**; the tag and the publish remain the owner's act at release time.
+- **D-11** authorize candidate release 0.3.0: its version, content and criteria (§5) — **requested 2026-10-15**; the tag and the publish remain the owner's act at release time.
 
 *Owner, 2026-10-15: D-7 granted; the plan's order and the triggers of D-8 to D-11 accepted. D-8 to D-11 are **not** decided: each is taken at its trigger, on the evidence then available. A decision made earlier than its trigger would be made on documents, which is what C-15 forbids.*
 
 ## 5. Release candidates (the architect proposes, the owner authorizes)
 
-### 0.2.1 — hardening and prerequisite patch (proposed 2026-10-15)
+### 0.3.0 — hardening and prerequisite minor (proposed 2026-10-15; version corrected the same day)
 
 | | |
 |---|---|
 | **Objective** | Operators of 0.2.0 get the two unauthenticated denial-of-service fixes, the supply-chain fixes, a tested prikk floor (0.52.0) and a binary that can say what it is, **with no new capability, API or schema change**. It also makes public-deployment guidance possible (IS-4, IS-24). |
-| **Version** | **0.2.1**, a patch: no capability, API or persistent-format change. Operator-visible changes are the runtime prerequisite (prikk ≥ 0.52.0), the exit-2 on unknown arguments and a raw-route host gate; all go in the release notes. (The precedent: 0.1.1 shipped a UI and sign-in under a patch number; the alternative 0.3.0 is available to the owner.) |
+| **Version** | **0.3.0**, a minor (SemVer: new functionality and incompatible changes before 1.0 take a minor). It adds `--version`/`--help` and new optional environment variables, and it changes three operator-visible behaviours: the runtime prerequisite rises to prikk ≥ 0.52.0, an unknown argument exits 2 (it used to start the server), and the raw route answers only on the content-origin host when one is configured. *(The first proposal said 0.2.1, a patch, because no capability was added: that misread SemVer, whose patch is for backward-compatible fixes only. A strict 0.2.1 could carry only the advisory update, IS-4 and IS-24; the owner may prefer that split.)* The 0.2.0 release stays the supported version until then. |
 | **Included** | IS-22 advisories (done); IS-17 pins, floor gate, IS-1 `--version` (done); IS-4 read concurrency (done); maintenance gates v2 (IS-26, assigned); IS-24 auth path (assigned); IS-16 raw-content origin (assigned). |
 | **Excluded** | IS-15 (needs measurement), IS-25, IS-14 (a test; lands with the first write handler), IS-13, IS-2, IS-7 (feature or UX work: next minor), IS-23 (mechanical, no operator value), anything from T3 onward. |
-| **Entry criteria** | The three assigned handoffs reviewed *Approved*; every gate exit 0 including both supply-chain gates; `release.yml` **dry run** completed on `main` with nothing published; pins reviewed (RELEASING step); the CHANGELOG `[0.2.1]` section written from `[Unreleased]`; workspace version 0.2.1 = tag (the workflow's first gate); `floor-check` and `pin-check` green. |
+| **Entry criteria** | The three assigned handoffs reviewed *Approved*; every gate exit 0 including both supply-chain gates; `release.yml` **dry run** completed on `main` with nothing published; pins reviewed (RELEASING step); the CHANGELOG `[0.3.0]` section written from `[Unreleased]`; workspace version 0.3.0 = tag (the workflow's first gate); `floor-check` and `pin-check` green. |
 | **Security and docs checks (project rule)** | No new data flow, no new auth logic, no new external integration: the threat model is **re-verified**, and its status lines for T-9/C-9b (IS-4, IS-24) and T-6/C-6c (IS-16) are updated by the architect; SECURITY.md wording true (IS-16); README, RELEASING (variables, prerequisite) and STATUS match. |
-| **Exit criteria (after the tag, the owner's act)** | `release.yml` green; tarball checksum and attestation verify; the image attestation verifies (the package must be public: pending owner action); **`planeter --version` from a tarball and from the image shows the tag's commit and `prikk-floor 0.52.0`**; the nine crates are published in order; `cargo install planeter --version 0.2.1 --locked` builds and runs. |
-| **Rollback / recovery** | No data migration and no schema change: redeploy the 0.2.0 binary (the floor is a minimum, so prikk 0.52.0 remains acceptable). A defect is corrected by 0.2.2. |
+| **Exit criteria (after the tag, the owner's act)** | `release.yml` green; tarball checksum and attestation verify; the image attestation verifies (the package must be public: pending owner action); **`planeter --version` from a tarball and from the image shows the tag's commit and `prikk-floor 0.52.0`**; the nine crates are published in order; `cargo install planeter --version 0.3.0 --locked` builds and runs. |
+| **Rollback / recovery** | No data migration and no schema change: redeploy the 0.2.0 binary (the floor is a minimum, so prikk 0.52.0 remains acceptable). A defect is corrected by 0.3.1. |
 | **Major risks** | The release workflow's first real run exercises new pins, toolchain input and image build (mitigated by the dry run); the exit-2 behaviour change surprises a wrapper script (release notes; CHANGELOG); a new advisory appears before the tag (the gate re-runs at tag time and a red one is fixed first). |
 | **Post-release evaluation** | The architect records deviations, the real dry-run and tag-run findings and any gate improvements (RFC 010 "improvement on finding"). |

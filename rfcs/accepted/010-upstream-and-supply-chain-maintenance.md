@@ -177,7 +177,7 @@ manifest except where D-4 requires and then only after measuring.
 
 ## Release implications
 
-None of it is a capability. The candidate release 0.2.1 (SCHEDULE D-11) carries the 0.52.0 floor, the
+None of it is a capability. The candidate release 0.3.0 (SCHEDULE D-11) carries the 0.52.0 floor, the
 advisory update and these gates; D-6 and D-5 change the release workflow, so a release dry run (the workflow
 on a non-release branch with publishing disabled, or the next real tag) is the verification.
 
