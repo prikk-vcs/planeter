@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Document | Companion execution doc for RFC 010 decisions D-2 (one floor, checked), D-3 (scheduled supply-chain gate) and D-5 (pinned build chain). |
+| Document | Companion execution doc for RFC 010 decisions D-2 (one floor, checked), D-3 (the supply-chain gate at project events) and D-5 (pinned build chain). |
 | Status | Inherited from RFC 010 — **Accepted** (2026-10-15): the implementer may build against it. |
 | Basis | [`../../accepted/010-upstream-and-supply-chain-maintenance.md`](../../accepted/010-upstream-and-supply-chain-maintenance.md) D-2, D-3, D-5; `docs/dependency-policy.md` rules 1, 3, 6; threat model C-5d, C-11, INV-7; issue register IS-17, IS-22. |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
@@ -27,9 +27,10 @@ construction.
 - **T3 — Pin the chain.** Replace every mutable reference by its commit SHA with the human tag in a trailing
   comment, the base image by digest, and the toolchain by an explicit version that satisfies MSRV 1.85.
   **Report, per action, the upstream tag and the SHA you resolved it to**; do not guess a SHA.
-- **T4 — Scheduled audit.** A new workflow `supply-chain.yml`: `schedule` (weekly) and `workflow_dispatch`;
-  `permissions: contents: read`; installs `cargo-deny` and `cargo-audit` as `ci.yml`'s job does and runs
-  both against a freshly fetched advisory database.
+- **T4 — Manual audit workflow.** A new workflow `supply-chain.yml` with **`workflow_dispatch` only (no
+  `schedule`)**; `permissions: contents: read`; installs `cargo-deny` and `cargo-audit` as `ci.yml`'s job does
+  and runs both against a freshly fetched advisory database, so that a checkpoint (RFC 010 D-3) can leave a
+  durable CI record. `docs/dependency-policy.md` gains the list of events at which the gates run (D-3 (a)–(e)).
 - **T5 — Documents.** `docs/UPSTREAM.md` §Re-baseline and `docs/dependency-policy.md` cite RFC 010 as their
   authority; `docs/RELEASING.md` names the two gates and gains the release-checklist step *"review the pins
   against upstream releases and advisories before tagging"* (RFC 010 R-1); CHANGELOG `[Unreleased]` records
@@ -48,7 +49,7 @@ exit 0 on the real repository. The planted fixtures are temporary directories, n
 ## Acceptance criteria
 
 `floor-check` and `pin-check` pass on `main` and fail on their planted violations; `ci.yml` runs both;
-`release.yml` runs both in `gates`; `supply-chain.yml` exists and a manual `workflow_dispatch` run is green
+`release.yml` runs both in `gates`; `supply-chain.yml` exists with no `schedule` trigger and a manual `workflow_dispatch` run is green
 (quote the run id); `pin-check` finds no mutable reference anywhere.
 
 ## Prohibited shortcuts
@@ -58,7 +59,7 @@ from the tag; do not widen any workflow `permissions`; do not add a third-party 
 
 ## Security and compatibility constraints
 
-The scheduled workflow has no secrets and `contents: read` only. The release workflow's artifacts must be
+The manual workflow has no secrets and `contents: read` only. The release workflow's artifacts must be
 byte-for-byte the product of the same steps (pins change *which* code runs the steps, not the steps).
 
 ## Known risks

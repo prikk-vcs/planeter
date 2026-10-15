@@ -76,10 +76,16 @@ cadences for planning (the CI schedule in D-3 is a mechanism, not a plan).
   `release.yml` and `Dockerfile` carry the same version and fails naming the mismatch; it runs in CI and in
   the release gates. (Generating the other two was considered and rejected: a Docker `ARG` and an Actions
   `env` are not reliably derivable from a Rust constant without a build script.)
-- **D-3 — The supply-chain gate is also scheduled.** `cargo deny check` and `cargo audit` must exit 0 (a)
-  before a push to `main` (exists), (b) at release (exists), and (c) **on a schedule**: a workflow runs both
-  against a freshly fetched advisory database. A red scheduled run is the notification; the architect reads
-  CI status at session start and a red run becomes an issue-register entry. The cadence is weekly.
+- **D-3 — The supply-chain gate runs at every project event, not on a clock.** *(Amended 2026-10-15 at the
+  owner's direction: the project has no calendar cadence, so no cron.)* `cargo deny check` and `cargo audit`
+  must exit 0 at each of these **events**: (a) every push and pull request (CI, exists); (b) every release
+  (the release gates, exists); (c) every **prikk re-baseline** (a D-1 output); (d) every **RFC disposition
+  checkpoint** (an RFC accepted, done, superseded, withdrawn or deferred: the workflow's recurring control
+  point, §6.4), where the architect runs both against a freshly fetched advisory database; (e) whenever the
+  owner asks. The result is recorded as one line in STATUS ("supply chain: green|red as of <event>"); red
+  becomes an issue-register entry. A manually dispatched workflow (`workflow_dispatch` only, no schedule) lets
+  any checkpoint leave a durable CI record. **What this does not do, stated plainly:** it detects an advisory
+  at the next event, not during a quiet period; "prompt patch release" means *prompt once found*.
 - **D-4 — One triage ladder, with evidence.** In order: (1) a lock-only update within the allowed range;
   (2) a manifest upgrade, measured under dependency-policy rule 1; (3) replace or remove the crate; (4) a
   scoped, justified ignore in both `deny.toml` and `.cargo/audit.toml` (rule 3) **only** when no fix exists
@@ -130,28 +136,29 @@ duty (D-5): updating them is a deliberate, reviewed act.
 ## Security considerations
 
 Raises INV-7 (supply chain pinned, minimized, audited) from policy to enforced gates; closes the F3
-contradiction with C-5d. A scheduled workflow needs no secrets and `contents: read` only. Pinning by SHA
+contradiction with C-5d. The dispatch-only workflow needs no secrets and `contents: read` only. Pinning by SHA
 protects against a moved tag but not against a malicious commit at the pinned SHA: reviewing the diff at pin
 time is the control (D-5). The `--version` output reveals nothing an operator's `build-info.txt` does not.
 
 ## Operational considerations
 
-A weekly scheduled run costs one CI job. A red run needs a human; the RFC makes who reads it explicit
-(the architect, at session start). Pin updates are periodic work and a release cannot proceed on a stale
+The checkpoint audit is a step in work that already happens. A red result needs a human; the RFC makes who
+reads it explicit (the architect, at each checkpoint). Pin updates are periodic work and a release cannot proceed on a stale
 pin only if the gate is red, never silently.
 
 ## Testing and verification
 
 - `tools/floor-check` and `tools/pin-check` each have a test that plants a violation and expects failure
   (a mismatched floor; a mutable `uses:`), as the layering gate and ENF-2 do.
-- The scheduled workflow's first run on `main` is green and recorded.
+- The dispatch-only workflow exists and one manual run on `main` is green and recorded; STATUS carries the
+  supply-chain line.
 - `planeter --version`, `-V`, `--help` and an unknown argument are tested without starting a server.
 - The driver tests of D-7 cover the exit-status contracts named by the ledger (PK-42 today).
 
 ## Acceptance criteria
 
-Both gates exist, run in CI and in `release.yml`, and fail on a planted violation. The scheduled audit
-exists and has run green. Every `uses:` and the base image are pinned and `pin-check` passes. `--version`
+Both gates exist, run in CI and in `release.yml`, and fail on a planted violation. The checkpoint list of D-3 is
+written into `docs/dependency-policy.md` and the dispatch-only audit has run green. Every `uses:` and the base image are pinned and `pin-check` passes. `--version`
 works as D-6. `docs/UPSTREAM.md` and `docs/dependency-policy.md` cite this RFC as their authority. The
 re-baseline instances already done (0.47.0 v1, 0.52.0 v2) and the advisory lock update are housed under
 this RFC's handoff directory.
@@ -176,12 +183,10 @@ on a non-release branch with publishing disabled, or the next real tag) is the v
   gate; instead the release checklist (`docs/RELEASING.md`) gains a step, *"review the pins against upstream
   releases and advisories before tagging"*, so the check is tied to an event (a release), not to a clock.
   `pin-check` therefore fails only on mutable references.
-- **R-2 — The scheduled audit's cadence.** The schedule exists **because development is not daily**: a
-  push-triggered run cannot fire on an idle day, which is exactly when an advisory arrives unseen (F1). The
-  cadence therefore only sets the worst-case delay before a red result becomes visible; it adds no human work
-  (a red run is read at the next session start). **Settled:** weekly, chosen as the longest delay tolerable for
-  a pre-1.0 project without production deployments; revisit when planeter has deployments with availability
-  commitments. Changing it is a one-line edit in `supply-chain.yml`.
+- **R-2 — Detection during a quiet period.** With event triggers an advisory published while the project is
+  idle is found at the next event. **Settled by the owner (2026-10-15):** acceptable; the project has no
+  calendar and "prompt" is read as "prompt once found". Operators who need earlier warning audit their own
+  deployment (SECURITY.md says so). Revisit when planeter has deployments with availability commitments.
 - **R-3.** `--version`'s commit comes from an environment variable that a build can omit, so a build can
   claim `unknown`. This is honest and deliberate; the attested release artifacts always carry it.
 - **R-4.** D-8 can slow a design when an upstream fact is slow to measure. The owner's written acceptance of

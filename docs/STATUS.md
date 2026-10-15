@@ -22,6 +22,7 @@
   (`prikk archive`, whole-repository; closure fix in 0.52.0); RFC 154 is **unscheduled**; a keyless delta
   form is **not planned**. The owner's ruling on what M2 becomes is pending; the scoping notes are
   private working material (`.git-exclude/specs/`), not decisions.
+- **Supply chain:** `cargo deny` / `cargo audit` **RED as of the 2026-10-15 re-baseline review** (IS-22: two `ammonia` advisories, one yanked crate; fix = the lock-update handoff). Checked at every push, release, re-baseline and RFC disposition (RFC 010 D-3).
 - **Runtime floor:** prikk ≥ 0.52.0 (`MIN_PRIKK_VERSION`, raised at the 0.52.0 re-baseline, 2026-10-15 — implemented and **conditionally approved by the architect**; to be pushed after the advisory lock update), bubblewrap, curl for SSO. Local binary: 0.52.0.
 - **Team:** migrating to a two-agent team (high-capability architect/reviewer + mid-capability
   implementer) under the owner's workflow (owner-directed 2026-09-24). **First assignment (owner ruling):
