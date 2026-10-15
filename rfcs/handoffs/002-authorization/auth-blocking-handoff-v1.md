@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | A **follow-on** handoff of the done RFC 002 (listed in its Status). It applies RFC 003's IS-4 fix to the authentication path: the dev team's concurrency review noted that sign-in, session and token checks, Argon2id verification and the SQLite mutex run synchronously on the async workers. Issue **IS-24**. |
-| Status | **Assignable** (architect authorization, SCHEDULE plan 1 step 3). Start with T0 (measure) and report before T1 if its findings change the shape. |
+| Status | **SUPERSEDED 2026-10-15 by [`auth-blocking-handoff-v2.md`](auth-blocking-handoff-v2.md).** T0 was done and approved; it found that the "existing dummy verification path" this handoff relies on does not exist (IS-31), which changes T2 and T3. Kept for its reasoning; not assignable. |
 | Basis | [`../../done/002-authorization.md`](../../done/002-authorization.md) D-2, D-7; threat model T-2 (C-2b throttles), T-9, C-9b; `rfcs/handoffs/003-read-path/read-concurrency-handoff-v1.md` and its review (the `PrikkGate` helper in `planeter-web`); `crates/planeter-auth`, `crates/planeter-store/src/sqlite.rs`. |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 
