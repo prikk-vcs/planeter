@@ -13,6 +13,16 @@ on:
   push:
     tags:
       - "[0-9]+.[0-9]+.[0-9]+"
+  # A DRY RUN (RFC 010, release implications): the gates, both builds, `build-info.txt` and a no-push
+  # image build, so the workflow is exercised before a real tag. It publishes nothing: no registry
+  # login, no push, no attestation, no GitHub release, and the workflow never touches crates.io.
+  # A dispatch with `dry_run: false` is refused: a release is made only by a tag push.
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build everything, publish nothing (the only mode a dispatch runs in)"
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -24,13 +34,21 @@ env:
 jobs:
   gates:
     name: gates (tag == Cargo version · floor · pins · fmt · clippy · test · deny · audit · ENF-2 · layering)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
+      - name: Refuse a non-dry-run dispatch
+        if: github.event_name == 'workflow_dispatch' && !inputs.dry_run
+        run: |
+          echo "A release is made only by pushing a version tag; dispatch runs are dry runs." >&2
+          exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable branch head, 2026-10-15; toolchain pinned by input
         with:
           toolchain: 1.99.0
+          # The action installs a minimal profile; the gates below run `cargo fmt` and `cargo clippy`.
+          components: rustfmt, clippy
       - name: Tag must equal the workspace version
+        if: github.event_name == 'push'
         env:
           TAG: ${{ github.ref_name }}
         run: grep -qx "version = \"$TAG\"" Cargo.toml || { echo "Cargo.toml [workspace.package] version != tag $TAG"; exit 1; }
@@ -61,7 +79,7 @@ jobs:
       matrix:
         include:
           - target: x86_64-unknown-linux-gnu
-            os: ubuntu-latest
+            os: ubuntu-24.04
           - target: aarch64-unknown-linux-gnu
             os: ubuntu-24.04-arm
     runs-on: ${{ matrix.os }}
@@ -124,6 +142,7 @@ jobs:
 
       # Build provenance (SLSA-style) for the tarball, signed by GitHub's OIDC identity of this run.
       - name: Attest build provenance
+        if: github.event_name == 'push'
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
           subject-path: dist/*.tar.gz
@@ -137,7 +156,7 @@ jobs:
   container:
     name: container image (ghcr.io, linux/amd64 + linux/arm64)
     needs: build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
@@ -161,10 +180,13 @@ jobs:
       - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
       - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        if: github.event_name == 'push'
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # On a dry run the image is built for both platforms and discarded: `push` is false and the login
+      # above did not run.
       - name: Build and push
         id: push
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
@@ -172,12 +194,13 @@ jobs:
           context: .
           file: Dockerfile
           platforms: linux/amd64,linux/arm64
-          push: true
+          push: ${{ github.event_name == 'push' }}
           build-args: PRIKK_VERSION=${{ env.PRIKK_VERSION }}
           tags: |
             ghcr.io/prikk-vcs/planeter:${{ github.ref_name }}
             ghcr.io/prikk-vcs/planeter:latest
       - name: Attest image provenance
+        if: github.event_name == 'push'
         uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
         with:
           subject-name: ghcr.io/prikk-vcs/planeter
@@ -186,8 +209,9 @@ jobs:
 
   publish:
     name: publish release assets
+    if: github.event_name == 'push'
     needs: [build, container]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:

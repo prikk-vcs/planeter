@@ -33,6 +33,18 @@ git push origin X.Y.Z
 A signed tag, bare version (no `v`), matching the ecosystem convention. The push triggers
 `release.yml`.
 
+## Dry run (before a real tag, and after any change to a workflow or the Dockerfile)
+
+`release.yml` can be dispatched by hand: **Actions → Release → Run workflow** on `main`, or
+`gh workflow run release.yml --ref main -f dry_run=true`. A dispatch is **always a dry run**
+(`dry_run` defaults to true; `dry_run: false` is refused): it runs the gates, builds both binaries with
+`PLANETER_GIT_COMMIT` set, writes `build-info.txt`, and **builds** the `linux/amd64` + `linux/arm64`
+image. It does **not** log in to the registry, push or attest an image, attest the tarballs, create a
+GitHub release or touch crates.io (the workflow never does; see "crates.io" below). The tag-vs-version
+check is skipped (there is no tag). Download the run's `planeter-*` artifacts to read
+`build-info.txt` and run the binary's `--version`. What a dry run cannot show: registry authentication,
+the attestations, and the notes assembled from a tag's CHANGELOG section.
+
 ## What the workflow does
 
 1. **gates** — re-runs every gate on the tagged commit and checks tag == version.

@@ -49,11 +49,14 @@ red becomes an issue-register entry. This detects an advisory at the next event,
 `tools/floor-check` fails unless `MIN_PRIKK_VERSION`, `PRIKK_VERSION` in `release.yml` and `ARG
 PRIKK_VERSION` in the `Dockerfile` are one `X.Y.Z`. `tools/pin-check` fails on any workflow `uses:` that
 is not a 40-hex commit SHA, any `image:` or Dockerfile `FROM` without a digest, and any toolchain named by
-channel. Both run in `ci.yml` and in the release `gates` job. **A pin is changed only by a reviewed change
-that names the upstream diff**; `docs/RELEASING.md` has the pre-tag review step. Not pinnable here and so
-out of the gate's scope: the runner image label (`runs-on: ubuntu-latest`) and the version of
-`cargo-deny`/`cargo-audit` installed by the workflows (deliberately current, so they can read the
-advisory database).
+channel. It also fails when the `toolchain:` inputs across the workflows are not one and the same version
+(CI, the manual checkpoint and the release build with **one compiler**, `1.99.0`), and when a `runs-on` or
+matrix `os` names a moving label (`*-latest`): runners are named (`ubuntu-24.04`,
+`ubuntu-24.04-arm`). Both gates run in `ci.yml` and in the release `gates` job. **A pin is changed only by
+a reviewed change that names the upstream diff**; `docs/RELEASING.md` has the pre-tag review step and the
+release dry run. Deliberately out of the gate's scope: the version of `cargo-deny`/`cargo-audit` installed
+by the workflows (current on purpose, so they can read the advisory database) and the content of a named
+runner image, which GitHub updates in place.
 
 ## Ledger — accepted
 

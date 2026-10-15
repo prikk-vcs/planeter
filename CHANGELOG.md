@@ -5,6 +5,14 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **One compiler, named runners, and a release dry run (RFC 010 D-5, IS-26).** CI and the manual
+  supply-chain checkpoint now install the same pinned Rust toolchain (1.99.0 with rustfmt and clippy)
+  that the release builds with; every workflow names its runner image (`ubuntu-24.04`) instead of
+  `ubuntu-latest`. `pin-check` fails on a second toolchain version and on a `*-latest` runner. The
+  release workflow can be dispatched as a dry run that builds everything and publishes nothing. The
+  release `gates` job now installs rustfmt and clippy for the pinned toolchain (the action installs a
+  minimal profile; a real tag would have failed `cargo fmt`).
+
 - **Read-path concurrency (IS-4, RFC 003 D-8): an unauthenticated denial of service closed.** Every
   prikk call from the browse UI and the read API now runs on the blocking pool (`spawn_blocking`) behind
   one process-wide gate, so slow repositories no longer pin the async workers and stall sign-in and every

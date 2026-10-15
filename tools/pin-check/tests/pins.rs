@@ -36,7 +36,7 @@ fn run(root: &Path) -> (i32, String) {
 }
 
 fn workflow(body: &str) -> String {
-    format!("name: t\non: push\njobs:\n  j:\n    runs-on: ubuntu-latest\n    steps:\n{body}")
+    format!("name: t\non: push\njobs:\n  j:\n    runs-on: ubuntu-24.04\n    steps:\n{body}")
 }
 
 fn expect_fail(name: &str, files: &[(&str, &str)], needles: &[&str]) {
@@ -150,6 +150,62 @@ fn a_service_image_and_a_docker_action_without_a_digest_fail() {
         "images",
         &[(".github/workflows/i.yml", &wf)],
         &["docker action", "image \"postgres:16\""],
+    );
+}
+
+#[test]
+fn a_second_toolchain_version_fails_and_names_the_files() {
+    let ci = workflow(&format!(
+        "      - uses: dtolnay/rust-toolchain@{SHA}\n        with:\n          toolchain: 1.99.0\n"
+    ));
+    let release = workflow(&format!(
+        "      - uses: dtolnay/rust-toolchain@{SHA}\n        with:\n          toolchain: 1.98.1\n"
+    ));
+    expect_fail(
+        "two-toolchains",
+        &[
+            (".github/workflows/ci.yml", &ci),
+            (".github/workflows/release.yml", &release),
+        ],
+        &[
+            ".github/workflows/ci.yml:9:",
+            ".github/workflows/release.yml:9:",
+            "disagrees with the other workflows",
+            "1.99.0 in .github/workflows/ci.yml",
+            "1.98.1 in .github/workflows/release.yml",
+        ],
+    );
+}
+
+#[test]
+fn one_toolchain_version_across_workflows_passes() {
+    let wf = workflow(&format!(
+        "      - uses: dtolnay/rust-toolchain@{SHA}\n        with:\n          toolchain: 1.99.0\n"
+    ));
+    let (code, text) = run(&fixture(
+        "one-toolchain",
+        &[
+            (".github/workflows/ci.yml", &wf),
+            (".github/workflows/supply-chain.yml", &wf),
+        ],
+    ));
+    assert_eq!(code, 0, "{text}");
+}
+
+#[test]
+fn a_moving_runner_label_fails_in_runs_on_and_in_a_matrix() {
+    let wf = "name: t\non: push\njobs:\n  a:\n    runs-on: ubuntu-latest\n    steps: []\n  b:\n    runs-on: ${{ matrix.os }}\n    strategy:\n      matrix:\n        include:\n          - target: x\n            os: macos-latest\n          - target: y\n            os: ubuntu-24.04-arm\n    steps: []\n  c:\n    runs-on: [self-hosted, windows-latest]\n    steps: []\n";
+    expect_fail(
+        "latest",
+        &[(".github/workflows/l.yml", wf)],
+        &[
+            ".github/workflows/l.yml:5:",
+            "\"ubuntu-latest\"",
+            ".github/workflows/l.yml:13:",
+            "\"macos-latest\"",
+            "\"windows-latest\"",
+            "3 mutable reference(s)",
+        ],
     );
 }
 

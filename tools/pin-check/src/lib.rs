@@ -8,11 +8,13 @@
 //! - a workflow `image:` without `@sha256:`;
 //! - a Dockerfile `FROM` without `@sha256:<64 hex>` (`scratch` and an earlier stage's alias are fine);
 //! - a toolchain named by channel (`stable`, `beta`, `nightly`) rather than by `X.Y.Z`: the `toolchain:`
-//!   input, a `rustup` command line, or the `channel` of a `rust-toolchain` file.
+//!   input, a `rustup` command line, or the `channel` of a `rust-toolchain` file;
+//! - `toolchain:` inputs that are not one and the same version across the workflows (CI and release
+//!   must build with one compiler, RFC 010 D-5);
+//! - a runner image named by a moving label: any `runs-on` or matrix `os` value ending in `-latest`.
 //!
 //! It has no allow-list. It reads text only, so it understands the shapes this repository uses, and
-//! says so: the runner image label (`runs-on: ubuntu-latest`) and `cargo install` of tools are not
-//! pinnable here and are out of scope.
+//! says so: `cargo install` of tools is deliberately current and is out of scope.
 
 use std::fmt;
 use std::fs;
@@ -73,6 +75,7 @@ pub fn check(root: &Path) -> io::Result<Report> {
         files_scanned: 0,
         findings: Vec::new(),
     };
+    let mut workflows: Vec<PathBuf> = Vec::new();
     for rel in files {
         let name = rel.file_name().and_then(|n| n.to_str()).unwrap_or_default();
         let rel_str = rel
@@ -91,6 +94,9 @@ pub fn check(root: &Path) -> io::Result<Report> {
         }
         let text = fs::read_to_string(root.join(&rel))?;
         report.files_scanned += 1;
+        if is_workflow {
+            workflows.push(rel.clone());
+        }
         let found = if is_workflow {
             scan_workflow(&text)
         } else if is_docker {
@@ -106,8 +112,53 @@ pub fn check(root: &Path) -> io::Result<Report> {
                 message,
             }));
     }
+    report
+        .findings
+        .extend(toolchain_disagreements(root, &workflows)?);
     report.findings.sort();
     Ok(report)
+}
+
+/// One finding per `toolchain:` input when the workflows do not agree on a single version. Inputs that
+/// are not `X.Y.Z` are already findings of their own and are left out of the comparison.
+fn toolchain_disagreements(root: &Path, workflows: &[PathBuf]) -> io::Result<Vec<Finding>> {
+    let mut inputs: Vec<(String, usize, String)> = Vec::new();
+    for rel in workflows {
+        let text = fs::read_to_string(root.join(rel))?;
+        let file = rel
+            .components()
+            .map(|c| c.as_os_str().to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("/");
+        for (i, line) in text.lines().enumerate() {
+            if let Some(v) = value_of(line, "toolchain") {
+                if is_semver(v) {
+                    inputs.push((file.clone(), i + 1, v.to_owned()));
+                }
+            }
+        }
+    }
+    let mut versions: Vec<&str> = inputs.iter().map(|(_, _, v)| v.as_str()).collect();
+    versions.sort_unstable();
+    versions.dedup();
+    if versions.len() < 2 {
+        return Ok(Vec::new());
+    }
+    let summary = inputs
+        .iter()
+        .map(|(f, l, v)| format!("{v} in {f}:{l}"))
+        .collect::<Vec<_>>()
+        .join("; ");
+    Ok(inputs
+        .iter()
+        .map(|(file, line, v)| Finding {
+            file: file.clone(),
+            line: *line,
+            message: format!(
+                "toolchain {v:?} disagrees with the other workflows; CI and release must use one version ({summary})"
+            ),
+        })
+        .collect())
 }
 
 fn walk(root: &Path, dir: &Path, out: &mut Vec<PathBuf>) -> io::Result<()> {
@@ -196,6 +247,16 @@ fn scan_workflow(text: &str) -> Hits {
                 hits.push((
                     n,
                     format!("toolchain {v:?} is not an explicit X.Y.Z version"),
+                ));
+            }
+        } else if let Some(v) = value_of(line, "runs-on").or_else(|| value_of(line, "os")) {
+            let moving = v
+                .split(|c: char| c.is_whitespace() || matches!(c, ',' | '[' | ']' | '"' | '\''))
+                .find(|t| t.ends_with("-latest"));
+            if let Some(label) = moving {
+                hits.push((
+                    n,
+                    format!("runner image {label:?} is a moving label; name the image (e.g. ubuntu-24.04)"),
                 ));
             }
         } else if let Some(v) = value_of(line, "image") {

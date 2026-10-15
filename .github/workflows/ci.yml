@@ -11,10 +11,16 @@ permissions:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Rust toolchain (pinned, one compiler for CI and release)
+        uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable branch head, 2026-10-15; toolchain pinned by input
+        with:
+          toolchain: 1.99.0
+          components: rustfmt, clippy
 
       - name: Format
         run: cargo fmt --all --check
@@ -27,20 +33,32 @@ jobs:
 
   enf2:
     # ENF-2 (RFC 001 §0a / INV-2): the keyless forge ships no history-signing symbol by default.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Rust toolchain (pinned, one compiler for CI and release)
+        uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable branch head, 2026-10-15; toolchain pinned by input
+        with:
+          toolchain: 1.99.0
+          components: rustfmt, clippy
 
       - name: ENF-2 symbol-absence check
         run: tools/enf2-symbol-check/check.sh
 
   # RFC 010 D-2 / D-5: the three prikk floors agree; nothing in the build chain is mutable.
   maintenance-gates:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Rust toolchain (pinned, one compiler for CI and release)
+        uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable branch head, 2026-10-15; toolchain pinned by input
+        with:
+          toolchain: 1.99.0
+          components: rustfmt, clippy
 
       - name: Floor check (cli.rs, release.yml, Dockerfile agree)
         run: cargo run --locked -p planeter-floor-check
@@ -49,10 +67,16 @@ jobs:
         run: cargo run --locked -p planeter-pin-check
 
   supply-chain:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Rust toolchain (pinned, one compiler for CI and release)
+        uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable branch head, 2026-10-15; toolchain pinned by input
+        with:
+          toolchain: 1.99.0
+          components: rustfmt, clippy
 
       - name: Install cargo-deny and cargo-audit
         run: cargo install cargo-deny cargo-audit --locked
