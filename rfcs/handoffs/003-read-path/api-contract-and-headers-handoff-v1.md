@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | A **follow-on** handoff of the done RFC 003 (D-2: the read API is OpenAPI-described; STD-3: one error shape, `ETag` conditional requests) and RFC 003 D-4/D-6 (private content must not leak). It corrects four gaps found by the architect's audit of the shipped API (issues IS-28, IS-29). |
-| Status | **Assignable once the owner includes it in 0.3.0** (SCHEDULE decision D-12). Until then it is held, not started. |
+| Status | **Assigned** — included in release 0.3.0 by the owner's decision D-12 (2026-10-15). |
 | Basis | [`../../done/003-read-path.md`](../../done/003-read-path.md) D-2, D-4, D-6; requirements STD-3; forge-commons *HTTP API* and *Transport Security and the Web*; `crates/planeter-web/src/api.rs` (`error_response`, `etag_of`, `openapi_doc`), `security.rs` (`app_security_headers`); the private audit `.git-exclude/reviewed/ui-api-audit-v1.md` (A1–A5). |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 
