@@ -112,6 +112,7 @@ C-11 (supply chain) is checked at every crate.               C-14 (owner availab
 - **D-9** the contribution model for non-writers (the `propose` action, the proposals setting, quotas; D-T3) — with RFC 005 v2.
 - **D-10** the CI decisions: how a runner gets the tree of an open change, the workflow subset, runner
   isolation, the job network default (D-C2, D-C3, D-C4, D-C5; D-C6 is accepted) — with RFC 006 v2, after T13.
+- **D-14** include the API contract refinements handoff (IS-33: a 405 code, a missing file is 404 not `200 NotFound`, tagged file content, raw bytes say where they live) in release 0.3.0 — **requested 2026-10-16**: three of the four items change a response the 0.3.0 contract already changes; after 0.3.0 any of them is a breaking change for a client that exists. Excluding it ships a contract that says "not found" with a 200 and sends clients after the wrong problem on raw.
 - **D-13** include the MSRV-declaration handoff (IS-32: a measured, declared and CI-checked minimum compiler; the declared 1.85 is false) in release 0.3.0 — **requested 2026-10-15**; a small change, operator-visible only as a raised declared minimum. Excluding it keeps a false claim in the published manifests of a release that is otherwise about truthful gates.
 - **D-12** include the API-contract and cache-header handoff (IS-28, IS-29: one error shape, a real OpenAPI document, stable ETags, `Cache-Control`/`Vary`/`Permissions-Policy`/HSTS) in release 0.3.0 — **AUTHORIZED by the owner 2026-10-15 (the architect's recommendation accepted)**: 0.3.0 is the cheapest minor for the contract, and the cache headers are a safe default. This amends D-11's content; the rest of D-11 stands.
 - **D-11** authorize candidate release 0.3.0: its version, content and criteria (§5) — **AUTHORIZED by the owner 2026-10-15 (Option A: 0.3.0 with the full content)**; the tag and the publish remain the owner's act at release time.
@@ -143,7 +144,7 @@ approved scope, and the release-candidate work is done from `docs/RELEASING.md` 
 | # | Step | Who | Precondition |
 |---|---|---|---|
 | R1 | Maintenance gates v2 (IS-26), including the release dry-run mode | dev team, then architect review | **done, approved 2026-10-15** |
-| R2 | IS-24 (auth path), IS-16 (raw-content origin) and the API contract and cache headers (D-12), each reviewed | dev team, then architect review | assigned |
+| R2 | IS-24 (auth path), IS-16 (raw-content origin) and the API contract and cache headers (D-12), each reviewed | dev team, then architect review | **done, all three approved 2026-10-16** (follow-ups: D-13, D-14) |
 | R3 | Threat-model status lines (T-9 / C-9b, T-6 / C-6c), SECURITY.md, README and RELEASING checked against the code; CHANGELOG `[Unreleased]` reviewed for the operator-visible changes | architect | R1, R2 approved |
 | R4 | Release-candidate commit: workspace version 0.3.0, CHANGELOG `[0.3.0]`, floors and pins checked, **a dry-run dispatch of `release.yml`** with nothing published; report with evidence | dev team | R3 |
 | R5 | Release-readiness report and recommendation (workflow Phase 8) | architect | R4 evidence reviewed |
