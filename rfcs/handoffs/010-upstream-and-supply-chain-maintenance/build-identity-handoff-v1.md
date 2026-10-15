@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | Document | Companion execution doc for RFC 010 decision D-6 (the binary identifies itself and never starts a server by accident). |
-| Status | Inherited from RFC 010 — **Proposed**: not assignable until the owner accepts it. |
-| Basis | [`../../proposed/010-upstream-and-supply-chain-maintenance.md`](../../proposed/010-upstream-and-supply-chain-maintenance.md) D-6; issue register IS-1; `crates/planeter/src/main.rs` (configuration is read from environment at the top). |
+| Status | Inherited from RFC 010 — **Accepted** (2026-10-15): the implementer may build against it. |
+| Basis | [`../../accepted/010-upstream-and-supply-chain-maintenance.md`](../../accepted/010-upstream-and-supply-chain-maintenance.md) D-6; issue register IS-1; `crates/planeter/src/main.rs` (configuration is read from environment at the top). |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 
 ## Purpose and background

@@ -1,8 +1,8 @@
 # RFC 010 — Upstream tracking and supply-chain maintenance: staying correct while prikk and our dependencies move
 
-**Status.** Proposed (2026-10-15) — for the owner's reading. The implementer should not start until the
-owner accepts. Proposed by the architect on the owner's direction that work without an RFC of its own must
-be given one (the `rfcs/handoffs/interim/` convention is retired by this RFC's adoption).
+**Status.** Accepted (2026-10-15) by the owner. The design is settled and the implementer may build against it
+per the handoffs. Proposed by the architect on the owner's direction that work without an RFC of its own must
+be given one; the `rfcs/handoffs/interim/` convention is retired by this RFC.
 Handoffs: [`../handoffs/010-upstream-and-supply-chain-maintenance/`](../handoffs/010-upstream-and-supply-chain-maintenance/).
 **Tracks.** ROADMAP §Release cycles ("planeter re-baselines against each prikk release", owner-confirmed
 2026-09-23) and §Dependencies; SCHEDULE T1, C-4, C-11, C-15; requirements INT-1, INT-5, OPS-1, OPS-6,
@@ -168,17 +168,24 @@ None of it is a capability. The candidate release 0.2.1 (SCHEDULE D-11) carries 
 advisory update and these gates; D-6 and D-5 change the release workflow, so a release dry run (the workflow
 on a non-release branch with publishing disabled, or the next real tag) is the verification.
 
-## Risks and unresolved questions
+## Risks and settled questions
 
-- **R-1.** SHA pins go stale and nobody notices: mitigated by `pin-check` failing only on *mutable*
-  references, so a stale-but-pinned action stays green. The weekly job does not check pin freshness.
-  **Open question Q-1 (owner):** is a periodic "are the pins current" check wanted, or is staleness
-  acceptable as long as pins are immutable?
-- **R-2.** The weekly cadence is arbitrary. **Q-2 (owner):** weekly is proposed; say if you prefer another.
+- **R-1 — Pins are immutable, so they do not refresh themselves.** This is a *consequence of D-5*, not an
+  observed incident: a pinned action never receives an upstream fix until someone updates it. **Settled
+  (architect, minor concretization, reviewable):** immutable pins are accepted without a separate staleness
+  gate; instead the release checklist (`docs/RELEASING.md`) gains a step, *"review the pins against upstream
+  releases and advisories before tagging"*, so the check is tied to an event (a release), not to a clock.
+  `pin-check` therefore fails only on mutable references.
+- **R-2 — The scheduled audit's cadence.** The schedule exists **because development is not daily**: a
+  push-triggered run cannot fire on an idle day, which is exactly when an advisory arrives unseen (F1). The
+  cadence therefore only sets the worst-case delay before a red result becomes visible; it adds no human work
+  (a red run is read at the next session start). **Settled:** weekly, chosen as the longest delay tolerable for
+  a pre-1.0 project without production deployments; revisit when planeter has deployments with availability
+  commitments. Changing it is a one-line edit in `supply-chain.yml`.
 - **R-3.** `--version`'s commit comes from an environment variable that a build can omit, so a build can
   claim `unknown`. This is honest and deliberate; the attested release artifacts always carry it.
-- **R-4.** D-8 can slow a design when an upstream fact is slow to measure. The owner's written acceptance
-  of risk is the release valve.
+- **R-4.** D-8 can slow a design when an upstream fact is slow to measure. The owner's written acceptance of
+  risk is the release valve.
 
 ## Sequencing and handoffs
 

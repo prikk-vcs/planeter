@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Document | Handoff for the per-prikk-release re-baseline (ROADMAP §Release cycles: "planeter re-baselines against each prikk release", owner-confirmed 2026-09-23), instance **0.52.0**. It supersedes [`prikk-0-47-0-rebaseline-handoff-v1.md`](prikk-0-47-0-rebaseline-handoff-v1.md), which targeted 0.47.0 and stays for its reasoning. An instance under RFC 010 ([`../../proposed/010-upstream-and-supply-chain-maintenance.md`](../../proposed/010-upstream-and-supply-chain-maintenance.md)). |
+| Document | Handoff for the per-prikk-release re-baseline (ROADMAP §Release cycles: "planeter re-baselines against each prikk release", owner-confirmed 2026-09-23), instance **0.52.0**. It supersedes [`prikk-0-47-0-rebaseline-handoff-v1.md`](prikk-0-47-0-rebaseline-handoff-v1.md), which targeted 0.47.0 and stays for its reasoning. An instance under RFC 010 ([`../../accepted/010-upstream-and-supply-chain-maintenance.md`](../../accepted/010-upstream-and-supply-chain-maintenance.md)). |
 | Status | **Implemented 2026-10-15 and conditionally approved by the architect** (the work predates RFC 010 and is housed here for the record; its pushing waits on the advisory lock update below). Future re-baselines follow this handoff's shape plus RFC 010 D-7. |
 | Basis | Dependency ledger v1.5 rows **PK-18** (drift), **PK-26** (floor), **PK-30** (explicit `--ref` on an unsealed repo, fixed 0.47.0), **PK-31** (accept size bound), **PK-40** (bounds and memory), **PK-42** (items for the floor), **PK-43** (schema drift 0.47–0.52 not verified); `docs/UPSTREAM.md` §Re-baseline procedure; RFC 001 D-3 (version pin) and D-2 (the driver keys on exit status, never text); issue register IS-3, IS-21. |
 | Audience | Dev team. Return a review-request package when green. |

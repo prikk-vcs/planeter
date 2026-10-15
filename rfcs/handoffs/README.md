@@ -32,7 +32,7 @@ justifies a change; a **handoff** directs its implementation and must not silent
 | `004-transport/` | v1 (2026-09-15), hold note 2026-09-23 | **held, not assignable** — T1/T2 superseded by the owner's TLS/SSH ruling; D-2's keyless-fetch assumption corrected by PK-27; **v2 is written when prikk ships RFC 155 then 154** |
 | `004-transport/` measurement | v1 (2026-10-15) | **authorized investigation (SCHEDULE D-7)** — measures only; held until the advisory lock update is pushed |
 | `006-ci-runners/` measurement | v1 (2026-10-15) | **authorized investigation (SCHEDULE D-7)** — measures only; same precondition |
-| `010-upstream-and-supply-chain-maintenance/` | re-baseline v1 (superseded) and v2 (**implemented; conditionally approved 2026-10-15**; push waits on the lock update), advisory lock update v1, maintenance gates v1, build identity v1 | **Proposed — inherited from RFC 010; not assignable until the owner accepts it** |
+| `010-upstream-and-supply-chain-maintenance/` | re-baseline v1 (superseded) and v2 (**implemented; conditionally approved 2026-10-15**; push waits on the lock update), advisory lock update v1, maintenance gates v1, build identity v1 | **Accepted — inherited from RFC 010 (2026-10-15); assignable** in this order: advisory lock update, maintenance gates, build identity |
 | `005-change-review/` … `009-hosted-format-durability/` | v1 (2026-09-15) | **not assignable** — written before any prikk measurement; each is re-issued as v2 (re-checked against the dependency ledger and the shipped prikk) before assignment |
 
 **Quarantine rule.** A handoff whose Status row does not say *assignable* (or *next assignment* with its

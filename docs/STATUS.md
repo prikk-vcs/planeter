@@ -29,11 +29,10 @@
   held until prikk 0.47.0 is released and installed. **Overtaken 2026-10-15:** prikk is at 0.52.0, it is
   re-issued as [`../rfcs/handoffs/010-upstream-and-supply-chain-maintenance/prikk-0-52-0-rebaseline-handoff-v2.md`](../rfcs/handoffs/010-upstream-and-supply-chain-maintenance/prikk-0-52-0-rebaseline-handoff-v2.md)
   (T1 schema check, `trust_check` exit code, floor, ledger v1.7); **assignable: 0.52.0 is installed (2026-10-15)**.
-- **Active handoff:** none assignable until the owner accepts **RFC 010** ([`../rfcs/proposed/010-upstream-and-supply-chain-maintenance.md`](../rfcs/proposed/010-upstream-and-supply-chain-maintenance.md)); its handoffs (advisory lock update, maintenance gates, build identity) then become assignable. The 0.52.0 re-baseline is implemented and conditionally approved (push waits on the lock update). The T13 measurement handoffs under RFC 004 and RFC 006 are authorized. Handoffs 004–009 are v1 (pre-measurement) — see the quarantine rule in [`../rfcs/handoffs/README.md`](../rfcs/handoffs/README.md).
+- **Active handoffs (RFC 010, accepted 2026-10-15), in order:** [`../rfcs/handoffs/010-upstream-and-supply-chain-maintenance/supply-chain-advisories-lock-update-handoff-v1.md`](../rfcs/handoffs/010-upstream-and-supply-chain-maintenance/supply-chain-advisories-lock-update-handoff-v1.md) (it lands before the push), `maintenance-gates-handoff-v1.md`, `build-identity-handoff-v1.md`. The 0.52.0 re-baseline is implemented and conditionally approved (push waits on the lock update). The T13 measurement handoffs under RFC 004 and RFC 006 are authorized and follow the push. Handoffs 004–009 are v1 (pre-measurement) — see the quarantine rule in [`../rfcs/handoffs/README.md`](../rfcs/handoffs/README.md).
 
 ## Pending on the owner
 
-- **Accept RFC 010** (or direct changes). Two open questions are yours: Q-1 whether pin *staleness* needs a periodic check, and Q-2 the scheduled audit's cadence (weekly proposed). The advisory lock update and the push of the re-baseline wait on this.
 
 - Make the `ghcr.io/prikk-vcs/planeter` package public (until then the image attestation cannot be
   verified anonymously; the tarball attestations verify).

@@ -310,7 +310,7 @@ starts until the foundations and the layering gate exist.
 | **007** | Package registry (RG-*) | A5 | medium |
 | **008** | *(joint prikk)* Seal / UD-6 — now via prikk RFC 154 adoption + RFC 155 artifact | B1 | parallel, gated (prikk 154 accepted) |
 | **009** | Hosted-format durability policy (OQ-6/UD-3) | B2 | before 1.0 |
-| **010** | Upstream tracking and supply-chain maintenance: the re-baseline procedure, the checked floor, the scheduled supply-chain gate, pinned build chain, build identity (proposed 2026-10-15) | all (maintenance) | with the 0.2.1 candidate |
+| **010** | Upstream tracking and supply-chain maintenance: the re-baseline procedure, the checked floor, the scheduled supply-chain gate, pinned build chain, build identity (accepted 2026-10-15) | all (maintenance) | with the 0.2.1 candidate |
 
 **Where the pipeline stands (2026-09-24):** RFCs 001–003 are shipped (`rfcs/done/`, M1 0.1.0 and the
 0.1.1/0.2.0 read-side increments); **RFC 004 is held** until prikk ships RFC 155 then 154; 005–007 wait
