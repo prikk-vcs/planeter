@@ -21,9 +21,16 @@ CI is green on whatever compiler the runner image carries that day, while the re
 - **T2 — Named runner images.** Replace `ubuntu-latest` by `ubuntu-24.04` in every workflow (the aarch64
   job already names `ubuntu-24.04-arm`). **Extend `pin-check`** to fail on any `runs-on` ending in
   `-latest`.
-- **T3 — Tests and documents.** Each new check has a planted-violation test and a passes-on-the-repository
-  test, under `tests/`. `docs/dependency-policy.md` and `docs/RELEASING.md` state the two rules; CHANGELOG
-  `[Unreleased]`; STATUS IS-26 closed.
+- **T3 — A release dry run.** `release.yml` gains `workflow_dispatch` with a boolean input `dry_run` (default
+  `true`). When dispatched with `dry_run`: run the gates, both builds and `build-info.txt`, and **build** the
+  container image for both platforms **without pushing, attesting, publishing a release or touching
+  crates.io** (`push: false`; no registry login; no `attestations`/`id-token` write needed). Tag-triggered
+  runs behave exactly as today. `pin-check` still passes. This exists because the release workflow
+  otherwise first runs on a real tag (RFC 010, Release implications; the dev team's note that the pins, the
+  toolchain input and the `--version` line were unexercised).
+- **T4 — Tests and documents.** Each new check has a planted-violation test and a passes-on-the-repository
+  test, under `tests/`. `docs/dependency-policy.md` and `docs/RELEASING.md` state the two rules and the dry run (how to dispatch
+  it, what it does not do); CHANGELOG `[Unreleased]`; STATUS IS-26 closed.
 
 ## Non-change scope
 
@@ -33,7 +40,9 @@ No application code; no dependency change; no new action beyond the one already 
 ## Acceptance criteria
 
 `pin-check` fails on a planted second toolchain version and on a planted `-latest`, and passes on the
-repository; CI run on the branch is green with the pinned compiler (quote the run id); every gate exit 0,
+repository; CI run on the branch is green with the pinned compiler (quote the run id); **a dry-run dispatch of
+`release.yml` completes (quote the run id) and published nothing** (state how you verified: no release, no
+image tag, no crate); every gate exit 0,
 both test runs named.
 
 ## Prohibited shortcuts

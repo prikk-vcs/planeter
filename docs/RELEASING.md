@@ -54,6 +54,10 @@ platform claims it cannot run (prikk RFC 107's lesson).
 sha256sum -c planeter-x86_64-unknown-linux-gnu.tar.gz.sha256
 gh attestation verify planeter-x86_64-unknown-linux-gnu.tar.gz --repo prikk-vcs/planeter
 gh attestation verify oci://ghcr.io/prikk-vcs/planeter:X.Y.Z --repo prikk-vcs/planeter
+
+# the build identifies itself (RFC 010 D-6): the commit is the tag's and the floor is the release's
+tar xzf planeter-x86_64-unknown-linux-gnu.tar.gz && ./planeter --version
+docker run --rm ghcr.io/prikk-vcs/planeter:X.Y.Z --version
 ```
 
 ## Deploying
