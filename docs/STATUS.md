@@ -25,19 +25,21 @@
 - **Runtime floor:** prikk ≥ 0.52.0 (`MIN_PRIKK_VERSION`, raised at the 0.52.0 re-baseline, 2026-10-15 — implemented and **conditionally approved by the architect**; to be pushed after the advisory lock update), bubblewrap, curl for SSO. Local binary: 0.52.0.
 - **Team:** migrating to a two-agent team (high-capability architect/reviewer + mid-capability
   implementer) under the owner's workflow (owner-directed 2026-09-24). **First assignment (owner ruling):
-  the prikk 0.47.0 re-baseline** — [`../rfcs/handoffs/interim/prikk-0-47-0-rebaseline-handoff-v1.md`](../rfcs/handoffs/interim/prikk-0-47-0-rebaseline-handoff-v1.md),
+  the prikk 0.47.0 re-baseline** — [`../rfcs/handoffs/010-upstream-and-supply-chain-maintenance/prikk-0-47-0-rebaseline-handoff-v1.md`](../rfcs/handoffs/010-upstream-and-supply-chain-maintenance/prikk-0-47-0-rebaseline-handoff-v1.md),
   held until prikk 0.47.0 is released and installed. **Overtaken 2026-10-15:** prikk is at 0.52.0, it is
-  re-issued as [`../rfcs/handoffs/interim/prikk-0-52-0-rebaseline-handoff-v2.md`](../rfcs/handoffs/interim/prikk-0-52-0-rebaseline-handoff-v2.md)
+  re-issued as [`../rfcs/handoffs/010-upstream-and-supply-chain-maintenance/prikk-0-52-0-rebaseline-handoff-v2.md`](../rfcs/handoffs/010-upstream-and-supply-chain-maintenance/prikk-0-52-0-rebaseline-handoff-v2.md)
   (T1 schema check, `trust_check` exit code, floor, ledger v1.7); **assignable: 0.52.0 is installed (2026-10-15)**.
-- **Active handoff:** [`../rfcs/handoffs/interim/supply-chain-advisories-lock-update-handoff-v1.md`](../rfcs/handoffs/interim/supply-chain-advisories-lock-update-handoff-v1.md) (assignable; lands before the re-baseline is pushed). The 0.52.0 re-baseline v2 is implemented and conditionally approved; the T13 measurement spike is authorized and follows. Handoffs 004–009 are v1 (pre-measurement) — see the quarantine rule in [`../rfcs/handoffs/README.md`](../rfcs/handoffs/README.md).
+- **Active handoff:** none assignable until the owner accepts **RFC 010** ([`../rfcs/proposed/010-upstream-and-supply-chain-maintenance.md`](../rfcs/proposed/010-upstream-and-supply-chain-maintenance.md)); its handoffs (advisory lock update, maintenance gates, build identity) then become assignable. The 0.52.0 re-baseline is implemented and conditionally approved (push waits on the lock update). The T13 measurement handoffs under RFC 004 and RFC 006 are authorized. Handoffs 004–009 are v1 (pre-measurement) — see the quarantine rule in [`../rfcs/handoffs/README.md`](../rfcs/handoffs/README.md).
 
 ## Pending on the owner
+
+- **Accept RFC 010** (or direct changes). Two open questions are yours: Q-1 whether pin *staleness* needs a periodic check, and Q-2 the scheduled audit's cadence (weekly proposed). The advisory lock update and the push of the re-baseline wait on this.
 
 - Make the `ghcr.io/prikk-vcs/planeter` package public (until then the image attestation cannot be
   verified anonymously; the tarball attestations verify).
 - **Convey** the architect's requirements note for prikk's 0.54.0 read-only command design round, once the spike reports (SCHEDULE plan 1, step 4). prikk's plan letter of 2026-10-15 is folded into ledger v1.6 (PK-46, PK-47); our reply to it needs nothing urgent.
 - Decide the floor at the re-baseline's review request (SCHEDULE D-1).
-- The measurement spike (SCHEDULE D-7) is **authorized (owner, 2026-10-15)**; it starts when prikk 0.52.0 is installed and the re-baseline is done. Handoff: [`../rfcs/handoffs/interim/transport-measurement-spike-handoff-v1.md`](../rfcs/handoffs/interim/transport-measurement-spike-handoff-v1.md) (measurement only, scratch directory, no repository change).
+- The measurement spike (SCHEDULE D-7) is **authorized (owner, 2026-10-15)**; it starts when prikk 0.52.0 is installed and the re-baseline is done. Handoff: [`../rfcs/handoffs/010-upstream-and-supply-chain-maintenance/transport-measurement-spike-handoff-v1.md`](../rfcs/handoffs/010-upstream-and-supply-chain-maintenance/transport-measurement-spike-handoff-v1.md) (measurement only, scratch directory, no repository change).
 - Rule on what M2 becomes (SCHEDULE D-8) once the spike reports.
 
 ## Pending upstream (prikk's actual releases and plan, from its letters and ROADMAP of 2026-10-13/15)
@@ -78,7 +80,7 @@ assigned until a handoff names it.
 | IS-19 | Requirements with no theme, RFC or milestone: CAP-10 (search, notifications); export (NG-7, OPS-6, CT-05); fork and mirror (CAP-1); the contribution model for non-writers (no `propose` action); the binding of a prikk author key to a forge account | architect review 2026-10-13 | decision requests (OQ-4) and RFCs before M3; RFC 005 v2 and an RFC 002 follow-on |
 | IS-20 | The RFC folders do not tell the truth (RFC 000): 004–009 sit in `accepted/` while quarantined; 001–003 are `done/` with deferred items recorded only in review requests and here | architect review 2026-10-13 | with the v2 RFC work: move re-issued RFCs to `proposed/` and add "deferred" notes |
 | IS-21 | prikk 0.52.0's `trust maintainer check` exits 1 for "not trusted" (it exited 0); `planeter-prikk::trust_check` keys on exit status | prikk letter 2026-10-15 | re-baseline v2 T5 — implemented (document read on exit 1, typed failure otherwise), awaiting review |
-| IS-22 | The supply-chain gates are red: `ammonia 4.1.4` RUSTSEC-2021-0157 and -0158 (not reachable through the default `clean`, architect-tested) and `yoke-derive 0.8.3` yanked; `release.yml` would fail its own gates | re-baseline review request 2026-10-15 | `rfcs/handoffs/interim/supply-chain-advisories-lock-update-handoff-v1.md` (lock-only; before the push) |
+| IS-22 | The supply-chain gates are red: `ammonia 4.1.4` RUSTSEC-2021-0157 and -0158 (not reachable through the default `clean`, architect-tested) and `yoke-derive 0.8.3` yanked; `release.yml` would fail its own gates | re-baseline review request 2026-10-15 | `rfcs/handoffs/010-upstream-and-supply-chain-maintenance/supply-chain-advisories-lock-update-handoff-v1.md` (lock-only; before the push) |
 | IS-23 | 25 source files carry inline `#[cfg(test)]` modules, against `project-instructions-rust.md` | re-baseline review request 2026-10-15 | one separate mechanical migration handoff among the hardening handoffs; new tests never inline |
 
 ## Process lessons (keep — each one cost a bad push or a wrong claim)

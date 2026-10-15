@@ -10,7 +10,7 @@
 
 | Theme | Serves | What lands | Waits on | Governing record |
 |---|---|---|---|---|
-| **T1 prikk re-baselines** | every milestone | per prikk release: schema check, pin/floor, ledger, records; one re-baseline against 0.52.0 (PK-30/31 fixed; PK-42 items; `trust_check` exit code), then each later release | each prikk release | `docs/UPSTREAM.md`; `rfcs/handoffs/interim/prikk-0-52-0-rebaseline-handoff-v2.md` (v1, for 0.47.0, is overtaken) |
+| **T1 prikk re-baselines** | every milestone | per prikk release: schema check, pin/floor, ledger, records; one re-baseline against 0.52.0 (PK-30/31 fixed; PK-42 items; `trust_check` exit code), then each later release | each prikk release | RFC 010 (proposed); `docs/UPSTREAM.md`; `rfcs/handoffs/010-upstream-and-supply-chain-maintenance/prikk-0-52-0-rebaseline-handoff-v2.md` (v1, for 0.47.0, is overtaken) |
 | **T2 read-side increments** | M1 surface, usability | `--version` (IS-1); OIDC account linking from the binary (IS-2); `spawn_blocking` (IS-4); "my repositories" home (IS-7); ENF-4 enumeration test (IS-14); `prikk_format_version` populated (IS-13) | nothing | issue register; one interim handoff each |
 | **T3 transport — clone + push, keyless** | M2 | RFC 155 artifact fetch/clone; keyless push (`sync accept`); client helper; HTTP behind the trusted proxy; SSH via host OpenSSH `ForceCommand` → `planeter ssh-shell`; per-repository write lease; accept-edge bounds | RFC 155 has shipped (whole-repository); the forge-side advance and incremental fetch wait on RFC 154 / a delta form (unscheduled / not planned) and the owner's ruling on M2's shape | RFC 004 → handoff v2 |
 | **T4 change review + issues + merge** | M3 | an open change = prikk's accepted-but-unsealed claims + review metadata; inline discussion, approvals, required checks; issues with cross-references; merge = maintainer seals client-side, forge stores and re-verifies (WR-5b) | T3 for the write side; the review *design* (RFC 005 v2) waits on nothing | RFC 005 v1 → v2 |
@@ -22,7 +22,7 @@
 | **T10 hosted-format durability** | B2 | carry-forward across prikk formats via RFC 155 `import --adopt`; the format-pin/refuse rule as code (needs IS-13) | prikk RFC 155 (shipped in 0.51.0 as `archive`; closure fix 0.52.0); a real format change does not exist yet (format 8 is unscheduled) | RFC 009 |
 | **T11 hardening and operations** | OPS-2/3/5, 1.0 readiness | backup as one coherent set with a rehearsed restore; observability (metrics, structured logs, health); multi-replica story (throttles at the proxy, PostgreSQL path) | T3–T10 substantially done | new RFC (operations) before 1.0 |
 | **T12 API write side + webhooks** | CAP-9 | the write endpoints for T4/T6, `Link` pagination and enforced rate-limit headers, HMAC-signed webhooks through the egress guard | T3/T4 | RFC 003 follow-on; STD-4 |
-| **T13 measurement spike (transport and CI read side)** | M2's shape, M4 | measurements A1–A11 and B1–B7 on prikk 0.52.0 in a scratch directory (keyless receive, push memory and bounds, `sync have` on a keyless forge, locks under kill, export timing, snapshot mechanisms, runner isolation, workflow census); ledger rows promoted from ASSUMED; **no product code** | the owner's authorization (D-7); prikk 0.52.0 installed; T1 done | `rfcs/handoffs/interim/transport-measurement-spike-handoff-v1.md` |
+| **T13 measurement spike (transport and CI read side)** | M2's shape, M4 | measurements A1–A11 and B1–B7 on prikk 0.52.0 in a scratch directory (keyless receive, push memory and bounds, `sync have` on a keyless forge, locks under kill, export timing, snapshot mechanisms, runner isolation, workflow census); ledger rows promoted from ASSUMED; **no product code** | the owner's authorization (D-7); prikk 0.52.0 installed; T1 done | `rfcs/handoffs/004-transport/transport-measurement-handoff-v1.md` and `rfcs/handoffs/006-ci-runners/ci-read-side-measurement-handoff-v1.md` |
 | **Deferred** | post-1.0 | federation, portable identity, built-in AI (forge-commons verdicts) | the owner's call after 1.0 | ROADMAP §Later |
 
 ## 2. Plans, in order
@@ -50,7 +50,7 @@ across tiers is fixed by the dependencies.
    planeter's input on RFC 158's streaming bound if prikk reopens it. Unblocks: the durability rule.
 3. **The write path.** RFC 155 has shipped (whole-repository); **RFC 154 is unscheduled and a keyless delta
    form is not planned.** So the plan is the owner's ruling on M2's shape after the measurement spike
-   (theme T13, `rfcs/handoffs/interim/transport-measurement-spike-handoff-v1.md`): RFC 004 handoff v2, then T3, on whole artifacts. **Forge-side branch
+   (theme T13, `rfcs/handoffs/004-transport/transport-measurement-handoff-v1.md` and `rfcs/handoffs/006-ci-runners/ci-read-side-measurement-handoff-v1.md`): RFC 004 handoff v2, then T3, on whole artifacts. **Forge-side branch
    advance (merge) and incremental fetch are what wait for prikk.** Unblocks: T4's review side, T6, T8, T9, T12.
 4. **After M2** — T4 (M3) with T5 riding on it (adoption is small once RFC 154 exists), T12's write
    endpoints alongside; T6 as the administration those need. T7's MFA can land in any tier, since it

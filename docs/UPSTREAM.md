@@ -55,4 +55,4 @@ every prikk release.
    planeter never upgrades a hosted repository's format on its own.
 
 The first instance under the new team is 0.47.0:
-[`../rfcs/handoffs/interim/prikk-0-47-0-rebaseline-handoff-v1.md`](../rfcs/handoffs/interim/prikk-0-47-0-rebaseline-handoff-v1.md).
+[`../rfcs/handoffs/010-upstream-and-supply-chain-maintenance/prikk-0-47-0-rebaseline-handoff-v1.md`](../rfcs/handoffs/010-upstream-and-supply-chain-maintenance/prikk-0-47-0-rebaseline-handoff-v1.md).

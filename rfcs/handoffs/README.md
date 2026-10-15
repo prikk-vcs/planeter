@@ -6,9 +6,11 @@ justifies a change; a **handoff** directs its implementation and must not silent
 
 ## Layout and naming
 
-- One directory per RFC: `NNN-slug/` (`001-foundations/` … `009-hosted-format-durability/`).
-  Supporting work without an RFC of its own (workflow §6.6: explicit and approved) lives under
-  `interim/`, one file per work package, named by its subject and date or prikk version.
+- One directory per RFC: `NNN-slug/` (`001-foundations/` … `010-upstream-and-supply-chain-maintenance/`).
+  **Every handoff implements an RFC** (workflow §6.3). Work that looks RFC-less is bound to the RFC whose
+  decision it carries out, or gets one (RFC 010 covers upstream tracking and supply-chain maintenance).
+  A follow-on handoff of a *done* RFC lives in that RFC's directory and is listed in its Status as
+  deferred or follow-on work (RFC 000, "Granularity of transitions"). There is no `interim/`.
 - Files: `<slug>-handoff-vN.md` (the handoff), `<slug>-review-request*.md` (the implementer's package
   back), `t<N>-*.md` (task-level records such as evaluations or gap catalogues). A **v2 supersedes v1
   and both stay**: the v1 keeps the reasoning that the measurement overturned.
@@ -28,11 +30,10 @@ justifies a change; a **handoff** directs its implementation and must not silent
 | `002-authorization/` | v1 + A1 review request | **done** — shipped in 0.1.0; SSO landed in 0.2.0 |
 | `003-read-path/` | v1 + review request + T7 gap catalogue | **done** — shipped in 0.1.0; UI in 0.1.1; the gap catalogue is closed except blame |
 | `004-transport/` | v1 (2026-09-15), hold note 2026-09-23 | **held, not assignable** — T1/T2 superseded by the owner's TLS/SSH ruling; D-2's keyless-fetch assumption corrected by PK-27; **v2 is written when prikk ships RFC 155 then 154** |
+| `004-transport/` measurement | v1 (2026-10-15) | **authorized investigation (SCHEDULE D-7)** — measures only; held until the advisory lock update is pushed |
+| `006-ci-runners/` measurement | v1 (2026-10-15) | **authorized investigation (SCHEDULE D-7)** — measures only; same precondition |
+| `010-upstream-and-supply-chain-maintenance/` | re-baseline v1 (superseded) and v2 (**implemented; conditionally approved 2026-10-15**; push waits on the lock update), advisory lock update v1, maintenance gates v1, build identity v1 | **Proposed — inherited from RFC 010; not assignable until the owner accepts it** |
 | `005-change-review/` … `009-hosted-format-durability/` | v1 (2026-09-15) | **not assignable** — written before any prikk measurement; each is re-issued as v2 (re-checked against the dependency ledger and the shipped prikk) before assignment |
-| `interim/prikk-0-47-0-rebaseline-handoff-v1.md` | v1 (2026-09-24) | **superseded by v2 (2026-10-15)** — prikk moved past 0.47.0; kept for its reasoning, not assignable |
-| `interim/prikk-0-52-0-rebaseline-handoff-v2.md` | v2 (2026-10-15) | **implemented; architect review: conditionally approved 2026-10-15** — to be pushed after the advisory lock update below (`cargo deny`/`cargo audit` are red on pre-existing ammonia advisories) |
-| `interim/supply-chain-advisories-lock-update-handoff-v1.md` | v1 (2026-10-15) | **next assignment — assignable** (lock-only; both supply-chain gates green; lands before the push) |
-| `interim/transport-measurement-spike-handoff-v1.md` | v1 (2026-10-15) | **authorized 2026-10-15 (D-7); held until** the advisory lock update is pushed (0.52.0 is installed; the re-baseline is approved); measurement only |
 
 **Quarantine rule.** A handoff whose Status row does not say *assignable* (or *next assignment* with its
 precondition met) is not implemented from. The implementer's first check is this table; the architect's

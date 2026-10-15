@@ -1,12 +1,12 @@
-# Interim — transport and CI read-side measurement spike — Implementation Handoff (v1)
+# RFC 004 — Transport — Measurement Handoff (v1)
 
 | | |
 |---|---|
-| Document | A **measurement-only** handoff: it turns the assumptions under RFC 004 v2 (transport) and RFC 006 v2 (CI) into evidence, so that those RFCs and the owner's ruling on M2's shape rest on measured behaviour, not on documents. It writes no product code. Supporting work without an RFC of its own (workflow §6.6). Theme **T13** in `docs/SCHEDULE.md`. |
-| Status | **Authorized by the owner 2026-10-15 (SCHEDULE D-7); held until precondition (3) holds (the re-baseline v2 is done), so not yet assignable.** Preconditions: (1) the owner authorizes it — **done**; (2) prikk **0.52.0** is installed locally (`prikk --version`) — **met 2026-10-15**; (3) the re-baseline handoff v2 is done, so the dev team has one measured cadence on that binary. |
-| Basis | Dependency ledger v1.5 §D (the rows marked *prikk-measured* or *ASSUMED*: PK-33, PK-37–PK-41, PK-43 and the candidates below); prikk letters 2026-10-13 and 2026-10-15; prikk RFC 155 §9.3–§9.6; `docs/dependency-policy.md` rule 1 (no manifest changes here). |
-| Audience | Dev team. Return a review-request package (`.git-exclude/review-request/`) and the raw logs. |
-| Scope | Run the measurements below on a prikk 0.52.0 binary, **in a scratch directory outside the repository**, and report results with their commands, exit codes and peak memory. **Non-change scope:** no change to any file in the repository except the review request; no product code; no manifest changes; no prikk patches; no letters to prikk (the architect drafts them from the results). |
+| Document | An **investigation** handoff under RFC 004 (workflow Phase 1–2: limited technical investigation and small proofs of concept when requested; RFC 010 D-8). It measures; it implements nothing. It turns assumptions under RFC 004's second edition into ledger evidence. SCHEDULE theme T13. |
+| Status | **Authorized by the owner 2026-10-15 (SCHEDULE D-7).** It inherits RFC 004's state (revision pending); it is startable because it changes nothing: its preconditions are that the advisory lock update (RFC 010's handoff) is pushed and prikk 0.52.0 is installed (met). |
+| Basis | Dependency ledger v1.6 §D (rows marked *prikk-measured* or *ASSUMED*); prikk letters 2026-10-13 and 2026-10-15; prikk RFC 155 §9.3–§9.6; RFC 010 D-8; `docs/dependency-policy.md` rule 1 (no manifest changes). |
+| Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`) and the raw logs. |
+| Scope | Part A: the transport measurements A1–A11 below, on prikk 0.52.0, in a scratch directory outside the repository. **Non-change scope:** no file in the repository except the review request; no product code; no manifest change; no prikk patch; no letter to prikk. |
 
 ## Ground rules
 
@@ -39,23 +39,10 @@
 | A10 | `verify` and `tree` in a loop while an accept loop runs; count transient failures and their text | Whether readers must wait for writers | new: PK-45 |
 | A11 | `archive import` into an **existing** repository (no `--adopt`, then with): what lands where; time and peak RSS | The fetch path of the client helper | PK-34 |
 
-## Part B — CI read side (RFC 006 v2)
-
-| ID | Measure | Record / learn | Ledger row |
-|---|---|---|---|
-| B1 | Snapshot by overlay: `bwrap --overlay-src <repo> --tmp-overlay <dest>` (and `--ro-overlay`); `prikk checkout --snapshot-materialize` into it; archive the result; confirm nothing persisted and no `worktree.provisional` survived; on this host, then in the container recipe (`seccomp=unconfined` as documented) | Does it work, and where; time and RSS at 100/1,000/10,000 files | PK-41 |
-| B2 | `tree` + per-file `cat` over the same trees | The cost curve behind "rejected beyond toy repositories" | PK-41 |
-| B3 | Throwaway seal for an open change: copy the store; scratch key made by prikk inside the sandbox; `sync seal` the claims; `tree` the new block; delete | Cost, disk, and whether any signer code is needed in planeter's own binary (expected: none) | PK-41 |
-| B4 | Determinism: build the same snapshot twice; vary on-disk order; compare bytes (fixed mtime, owner 0, sorted by prikk's path order) | Whether a snapshot can be cached and checked by digest | new |
-| B5 | Stampede: 50 concurrent snapshot requests for one tip against a single-flight stub | Builds, memory, latency | new |
-| B6 | A rootless OCI runtime and a bubblewrap rootfs as runner isolation: start-up time; an escape checklist (socket, `/proc`, devices, network, host mounts) | Input to decision D-C4 | new |
-| B7 | Workflow census: five representative workflows (cargo build and test, a Node build, a container build, a scheduled job, a matrix job) against the checklist in the RFC 006 note | The subset in black and white | new |
-
 ## Definition of done & handback
 
 Done when every row has a result (or an explained inability, with the blocking fact) and the review request
-holds the raw logs. The review request carries: a table `ID → result → proposed ledger change`; the
-fixtures' sizes and how they were built; every surprise; and the questions it raises for the architect. The
-architect then bumps the ledger (rows PK-44, PK-45 and the promotions), drafts any letter to prikk, writes
-RFC 004 v2 and RFC 006 v2 from the evidence, and brings decisions D-8 to D-10 to the owner. Nothing here
-authorizes a tag, a publish or a letter.
+holds the raw logs: a table `ID → result → proposed ledger change`, the fixtures' sizes and how they were
+built, every surprise, and the questions it raises for the architect. The architect then updates the ledger,
+drafts any letter to prikk, revises RFC 004 from the evidence, and brings its decisions to the owner.
+Nothing here authorizes a tag, a publish or a letter.
