@@ -19,7 +19,7 @@ permissions:
 
 env:
   # The prikk release baked into the container image (dependency-ledger PK-26). Bump with the pin.
-  PRIKK_VERSION: "0.46.0"
+  PRIKK_VERSION: "0.52.0"
 
 jobs:
   gates:

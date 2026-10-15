@@ -10,7 +10,7 @@
 FROM debian:bookworm-slim
 
 ARG TARGETARCH
-ARG PRIKK_VERSION=0.46.0
+ARG PRIKK_VERSION=0.52.0
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends bubblewrap ca-certificates curl \

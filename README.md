@@ -37,7 +37,7 @@ accounts, authorization), and builds it all on prikk's stable command surface, n
 
 ## Getting started
 
-**Runtime prerequisites** (Linux only — the sandbox is bubblewrap): a `prikk` binary **≥ 0.46.0** and
+**Runtime prerequisites** (Linux only — the sandbox is bubblewrap): a `prikk` binary **≥ 0.52.0** and
 `bwrap` on `PATH`, plus `curl` if you enable SSO. The container image bundles all three.
 
 Install one of:

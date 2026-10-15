@@ -3,6 +3,18 @@
 Releases are bare version tags; each section is the release's notes (assembled into the GitHub
 release by `release.yml`). Kept by hand, per release, so nothing here goes stale by templating.
 
+## [Unreleased]
+
+- **prikk floor → 0.52.0** (the tested version): the PK-30 fix, the accept size bound, crash-state
+  recovery, dependency-ordered `bundle import` / `sync accept` writes. The container image bakes
+  prikk 0.52.0 (it baked 0.46.0). Requires **prikk ≥ 0.52.0**.
+- The driver passes `bundle import --input <file>` (it passed the path positionally).
+- `trust maintainer check` answers "not trusted" with exit 1 on prikk 0.52.0; the driver reads that as
+  the answer when the `trust-check-v1` document says so, and still treats every other non-zero exit as
+  a failure.
+- The sandbox profile can carry prikk's incoming-artifact bounds (`PRIKK_EXCHANGE_MAX_BYTES`,
+  `PRIKK_EXCHANGE_MAX_OBJECTS`, `PRIKK_BUNDLE_MAX_BYTES`, `PRIKK_BUNDLE_MAX_OBJECTS`); none is set yet.
+
 ## [0.2.0] — the auth increment: trusted proxies, per-IP throttle, SSO
 
 Shipped during the M2 hold (clone/push waits for prikk RFC 155 then 154, after prikk 0.49.0), after a

@@ -3,7 +3,7 @@
 //! It shells out to the prikk binary against one repository directory (the one holding `.prikk`),
 //! parses `--format json` output into the [`crate::model`] types after checking the `schema_version`,
 //! and maps a non-zero exit to a typed [`PrikkError`] (never a panic). The version pin (D-3) refuses a
-//! prikk older than planeter's floor (PK-26: planeter requires prikk ≥ 0.46.0). Confinement of the
+//! prikk older than planeter's floor (PK-26/PK-42: planeter requires prikk ≥ 0.52.0). Confinement of the
 //! subprocess (sandbox) is layered on in T4 — this module invokes prikk directly.
 
 use std::ffi::OsString;
@@ -21,7 +21,12 @@ use crate::sandbox::Sandbox;
 /// (`tree-listing-v1`), `cat` (`path-content-v1`), `diff` (`diff-report-v1`) — and carries the 0.44.0
 /// `bundle import` corruption fix (GHSA-px5q-233r-6hq5), the 0.45.0 format-7 signature union, and the
 /// key-id fix.
-pub const MIN_PRIKK_VERSION: (u64, u64, u64) = (0, 46, 0);
+///
+/// Raised to 0.52.0 (2026-10-15, re-baseline handoff v2): the tested version. It adds the 0.47.0 PK-30
+/// fix and accept size bound, the 0.49.0 crash-state recovery, dependency-ordered `bundle import` /
+/// `sync accept` writes and linear resync over hostile content, and the 0.52.0 archive closure fix.
+/// The pin refuses anything older rather than guess.
+pub const MIN_PRIKK_VERSION: (u64, u64, u64) = (0, 52, 0);
 
 /// A prikk repository driven through the prikk CLI as a subprocess.
 #[derive(Debug, Clone)]
@@ -435,10 +440,10 @@ mod tests {
 
     #[test]
     fn version_ordering_meets_the_floor() {
-        assert!((0, 46, 0) >= MIN_PRIKK_VERSION);
-        assert!((0, 46, 1) >= MIN_PRIKK_VERSION);
+        assert!((0, 52, 0) >= MIN_PRIKK_VERSION);
+        assert!((0, 52, 1) >= MIN_PRIKK_VERSION);
         assert!((1, 0, 0) >= MIN_PRIKK_VERSION);
-        assert!((0, 45, 9) < MIN_PRIKK_VERSION);
-        assert!((0, 43, 0) < MIN_PRIKK_VERSION);
+        assert!((0, 51, 9) < MIN_PRIKK_VERSION);
+        assert!((0, 46, 0) < MIN_PRIKK_VERSION);
     }
 }
