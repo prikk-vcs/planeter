@@ -28,7 +28,7 @@
   the prikk 0.47.0 re-baseline** — [`../rfcs/handoffs/interim/prikk-0-47-0-rebaseline-handoff-v1.md`](../rfcs/handoffs/interim/prikk-0-47-0-rebaseline-handoff-v1.md),
   held until prikk 0.47.0 is released and installed. **Overtaken 2026-10-15:** prikk is at 0.52.0, it is
   re-issued as [`../rfcs/handoffs/interim/prikk-0-52-0-rebaseline-handoff-v2.md`](../rfcs/handoffs/interim/prikk-0-52-0-rebaseline-handoff-v2.md)
-  (T1 schema check, `trust_check` exit code, floor, ledger v1.6); assignable once 0.52.0 is installed.
+  (T1 schema check, `trust_check` exit code, floor, ledger v1.7); **assignable: 0.52.0 is installed (2026-10-15)**.
 - **Active handoff:** none assignable today (the 0.52.0 re-baseline v2 waits on the binary; the T13 measurement spike waits on the owner's authorization and on it). Handoffs 004–009 are v1 (pre-measurement) — see the
   quarantine rule in [`../rfcs/handoffs/README.md`](../rfcs/handoffs/README.md).
 
@@ -36,12 +36,8 @@
 
 - Make the `ghcr.io/prikk-vcs/planeter` package public (until then the image attestation cannot be
   verified anonymously; the tarball attestations verify).
-- Adjust and send the reply to prikk's letter of 2026-10-15 (the CI read-side shape; the base-as-pushed
-  answer): `.git-exclude/upstream/prikk/send/draft/2026-10-15-answers-ci-read-side-shape.md` (private).
-  The 2026-10-13 letter (fetch numbers, four questions) was sent and answered; its 2026-09-23 predecessor
-  is superseded.
-- Install prikk 0.52.0 (`cargo install prikk --version 0.52.0 --locked`): it is the re-baseline target
-  (0.47.0 is overtaken) and the binary the measurement spike needs. Decide the floor at that point.
+- **Convey** the architect's requirements note for prikk's 0.54.0 read-only command design round, once the spike reports (SCHEDULE plan 1, step 4). prikk's plan letter of 2026-10-15 is folded into ledger v1.6 (PK-46, PK-47); our reply to it needs nothing urgent.
+- Decide the floor at the re-baseline's review request (SCHEDULE D-1).
 - The measurement spike (SCHEDULE D-7) is **authorized (owner, 2026-10-15)**; it starts when prikk 0.52.0 is installed and the re-baseline is done. Handoff: [`../rfcs/handoffs/interim/transport-measurement-spike-handoff-v1.md`](../rfcs/handoffs/interim/transport-measurement-spike-handoff-v1.md) (measurement only, scratch directory, no repository change).
 - Rule on what M2 becomes (SCHEDULE D-8) once the spike reports.
 
@@ -52,8 +48,8 @@
 | **0.47.0–0.50.0** (released) | PK-30 fix, `PRIKK_EXCHANGE_MAX_BYTES` (0.47.0); recovery and cost at depth (0.48.0); crash-state recovery, import refusals, dependency-ordered writes, `ref complete` (0.49.0); corrections (0.50.0) | one re-baseline handoff v2 against **0.52.0** (the 0.47.0 handoff is overtaken); floor decision (PK-42) |
 | **0.51.0** (released 2026-10-13) | RFC 155 as `prikk archive`; closure defect for repositories that accepted a push | do not serve archives from 0.51.0 |
 | **0.52.0** (released) | archive closure fix; export refuses over-256 MiB objects; `verify` names a failed received ref; `trust maintainer check` exit code | re-baseline target; spike M1–M11 (RFC 004 scoping); `trust_check` exit-status handling |
-| **0.53.0 / 0.54.0-candidate** | commit cost (F4 with M6); `bundle import` memory | watch; no planeter action |
-| **unscheduled** | RFC 154 adoption act; a keyless delta form (**not planned**); RFC 158 Stages B–D incl. format 8; a read-only "files at a point" command (under consideration, not proposed) | plan as unavailable; revisit on prikk's word (ledger PK-35, PK-36, PK-41) |
+| **0.53.0 / 0.54.0 / 0.55.0** (prikk owner's plan, 2026-10-15; PK-46) | 0.53.0 commit cost; 0.54.0 the read-only "files at a point" command (design round first, shown to us) and removal of unreachable received content; 0.55.0 `bundle import` memory | requirements note before the 0.54.0 design round; CI snapshots use copy/overlay until the command exists |
+| **unscheduled** | RFC 154 adoption act; a keyless delta archive and the append-only promise (**not scheduled; decided with our first-deployment numbers, not before 0.55.0**, PK-47); RFC 158 Stages B–D incl. format 8 | plan as unavailable; instrument fetches from the first deployment; revisit on prikk's word (PK-35, PK-47) |
 
 ## Issue register
 

@@ -31,8 +31,8 @@ Each plan names what it waits on and what it unblocks. Order within a tier is th
 across tiers is fixed by the dependencies.
 
 1. **Now, during the M2 hold** — in this order (the architect's; each step names its precondition):
-   1. **T1**, the 0.52.0 re-baseline (handoff v2). *Waits on:* the owner installing prikk 0.52.0.
-   2. **T13**, the measurement spike. *Waits on:* D-7 (authorization) and step 1. Unblocks: D-8 and the
+   1. **T1**, the 0.52.0 re-baseline (handoff v2). *Waits on:* nothing: prikk 0.52.0 was installed 2026-10-15, so it is assignable.
+   2. **T13**, the measurement spike. *Waits on:* step 1 (D-7 is granted). Unblocks: D-8 and the
       evidence for RFC 004 v2 and RFC 006 v2. Measurement only.
    3. **Defects and hardening, one small handoff each** (no prikk dependency; the architect may reorder
       against step 2 if the owner prefers): IS-4 (a denial of service on public repositories: first, and it
@@ -40,7 +40,8 @@ across tiers is fixed by the dependencies.
       (raw-content host gating), IS-14 (ENF-4 test, before any write handler), then IS-1, IS-13, IS-2,
       IS-7 smallest first.
    4. **Architect, in parallel, no dev time:** RFC 005 v2 (waits on nothing but D-2), then RFC 004 v2 and
-      RFC 006 v2 after step 2; each moves its RFC to `proposed/` while it is revised (IS-20).
+      RFC 006 v2 after step 2, and the requirements note for prikk's 0.54.0 read-only command design round
+      (the owner conveys it; prikk wants requirements before that round); each moves its RFC to `proposed/` while it is revised (IS-20).
    5. **Candidate release 0.2.1** (a patch: no new features): the 0.52.0 floor, step 3's hardening, IS-1.
       The architect recommends it at step 3's end; tag and publish are the owner's.
    Unblocks: a measured two-agent cadence; re-issuable RFCs 004–006; the owner's ruling on M2 (D-8).
@@ -64,7 +65,7 @@ across tiers is fixed by the dependencies.
 | ID | Concern | Kind | Touches | Related | Handling |
 |---|---|---|---|---|---|
 | **C-1** | prikk RFC 155 has shipped (0.51.0, whole-repository); RFC 154 is accepted, unbuilt and **unscheduled**, and a keyless delta form is **not planned** (as of 2026-10-15); forge-side branch advance and incremental fetch wait behind them | risk (schedule, external) | T3–T6, T8, T9, T10, T12 | C-2, C-4, C-6 | design ahead (RFC 005 v2, RFC 004 v2 draft), keep the read side shipping, deliver prikk the input it asked for; never invent a prikk wire protocol to shortcut it |
-| **C-2** | Keyless fetch is whole-artifact and prikk does **not plan** a delta form (ledger PK-36); large repositories clone expensively | concern (performance, external) | T3 | C-1, C-8 | planeter's numbers were sent to prikk (2026-10-13); CI gets source snapshots, not history (RFC 006 v2); unchanged repositories answered by conditional GET; each artifact built once per state, spooled, verified and served (RFC 004 v2); measure the residual at the first deployment |
+| **C-2** | Keyless fetch is whole-artifact and prikk does **not plan** a delta form (ledger PK-36); large repositories clone expensively | concern (performance, external) | T3 | C-1, C-8 | planeter's numbers were sent to prikk (2026-10-13); CI gets source snapshots, not history (RFC 006 v2); unchanged repositories answered by conditional GET; each artifact built once per state, spooled, verified and served (RFC 004 v2); measure the residual at the first deployment: **instrument fetches from day one (changed vs unchanged, artifact kind, bytes), because prikk decides a delta archive on those numbers, not before 0.55.0 (PK-47)** |
 | **C-3** | a future prikk format (format 8 is unscheduled) arrives while repositories are hosted in format 7; `archive import --adopt` (0.51.0) is the carry-forward mechanism | risk (durability) | T1, T10 | C-9, IS-13 | the serving-binary ≥ hosted-format rule; refuse to host an unsupported format; populate the record (IS-13) so the rule can be enforced in code; RFC 009 |
 | **C-4** | JSON schema drift in a prikk release (PK-18) changes a view-model | risk (correctness) | T1, every read surface | C-1 | the driver refuses unknown `schema_version`; the re-baseline handoff stops at T1 on drift and the architect decides |
 | **C-5** | The two-agent workflow's cadence is unmeasured; the hand-over could lose context | risk (delivery) | all | C-1 (the hold gives room) | small first assignment; the hand-over records (STATUS, handoffs README, UPSTREAM, dependency policy, charter); v1 handoffs quarantined until re-issued |

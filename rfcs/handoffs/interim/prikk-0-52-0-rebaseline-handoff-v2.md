@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | Handoff for the per-prikk-release re-baseline (ROADMAP §Release cycles: "planeter re-baselines against each prikk release", owner-confirmed 2026-09-23), instance **0.52.0**. It supersedes [`prikk-0-47-0-rebaseline-handoff-v1.md`](prikk-0-47-0-rebaseline-handoff-v1.md), which targeted 0.47.0 and stays for its reasoning. Supporting work without an RFC of its own (workflow §6.6). |
-| Status | **Next assignment — precondition: prikk 0.52.0 (published) is installed locally** (`cargo install prikk --version 0.52.0 --locked`, by the owner; the local binary was 0.46.0 on 2026-10-15). Not assignable before that: the version-pinned tests must run against the real binary, never be skipped into a false green. |
+| Status | **Next assignment — assignable: the precondition was met on 2026-10-15** (prikk 0.52.0 is installed locally, `prikk --version` = 0.52.0). The version-pinned tests must run against the real binary, never be skipped into a false green: the version-pinned tests must run against the real binary, never be skipped into a false green. |
 | Basis | Dependency ledger v1.5 rows **PK-18** (drift), **PK-26** (floor), **PK-30** (explicit `--ref` on an unsealed repo, fixed 0.47.0), **PK-31** (accept size bound), **PK-40** (bounds and memory), **PK-42** (items for the floor), **PK-43** (schema drift 0.47–0.52 not verified); `docs/UPSTREAM.md` §Re-baseline procedure; RFC 001 D-3 (version pin) and D-2 (the driver keys on exit status, never text); issue register IS-3, IS-21. |
 | Audience | Dev team. Return a review-request package when green. |
 | Scope | The prikk boundary crate (`planeter-prikk`) and the records that pin the prikk version. **Non-change scope:** no transport code (M2 is held), no archive code, no new dependencies, no design-set edits, no change to any `schema_version` string planeter expects unless 0.52.0 changed it (then: stop and file the drift, T1). The measurement spike for the transport design is a **separate** handoff. |
@@ -59,7 +59,7 @@
   0.49.0–0.52.0 fixes above are the argument, and the image currently bakes 0.46.0). Keep the three floors
   identical: `crates/planeter-prikk/src/cli.rs`, `PRIKK_VERSION` in `.github/workflows/release.yml`,
   `ARG PRIKK_VERSION` in `Dockerfile` (checksum-verified asset); update the "≥ 0.46.0" mentions in README,
-  RELEASING, ROADMAP (§Runtime prerequisites), STATUS and CHANGELOG `[Unreleased]`. Ledger: bump to **v1.6**,
+  RELEASING, ROADMAP (§Runtime prerequisites), STATUS and CHANGELOG `[Unreleased]`. Ledger: bump to **v1.7** (v1.6 already records prikk's plan letter of 2026-10-15),
   promoting PK-30, PK-31 and PK-43 to **CONFIRMED (measured on 0.52.0)** with the test names as evidence,
   and recording T5's measurement against PK-42. **The floor bump is a release question** (0.2.1 or the next
   minor): recommend in the review request; the owner decides the version.
@@ -81,7 +81,7 @@
 
 ## Definition of done & handback
 
-Done when the checklist is complete, the ledger is v1.6 and `docs/STATUS.md` records 0.52.0 as
+Done when the checklist is complete, the ledger is v1.7 and `docs/STATUS.md` records 0.52.0 as
 re-baselined. The review request carries: commits (hash → what), every gate's command and exit code (both
 test runs named), T1's schema verdict per id and per deserialized field set, T2/T4/T5 outputs on the real
 binary, the floor-bump recommendation with its rationale, deviations and open questions. Nothing here
