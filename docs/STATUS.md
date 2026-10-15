@@ -38,7 +38,7 @@
 - Make the `ghcr.io/prikk-vcs/planeter` package public (until then the image attestation cannot be
   verified anonymously; the tarball attestations verify).
 - **Convey** the architect's requirements note for prikk's 0.54.0 read-only command design round, once the spike reports (SCHEDULE plan 1, step 4). prikk's plan letter of 2026-10-15 is folded into ledger v1.6 (PK-46, PK-47); our reply to it needs nothing urgent.
-- **Authorize or amend candidate release 0.3.0** (SCHEDULE D-11 and §5: objective, version, content, criteria). The floor decision (D-1) is part of it.
+- **Release 0.3.0 is authorized (D-11, 2026-10-15).** Your acts at release time (SCHEDULE §5, R6): make the `ghcr.io/prikk-vcs/planeter` package public, sign and push the tag `0.3.0`, authorize the publish. The steps before that are the dev team's and the architect's.
 - The measurement spike (SCHEDULE D-7) is **authorized (owner, 2026-10-15)**; it is **startable now** (prikk 0.52.0 is installed, the lock update is pushed). Handoff: [`../rfcs/handoffs/010-upstream-and-supply-chain-maintenance/transport-measurement-spike-handoff-v1.md`](../rfcs/handoffs/010-upstream-and-supply-chain-maintenance/transport-measurement-spike-handoff-v1.md) (measurement only, scratch directory, no repository change).
 - Rule on what M2 becomes (SCHEDULE D-8) once the spike reports.
 

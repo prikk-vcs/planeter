@@ -111,13 +111,13 @@ C-11 (supply chain) is checked at every crate.               C-14 (owner availab
 - **D-9** the contribution model for non-writers (the `propose` action, the proposals setting, quotas; D-T3) — with RFC 005 v2.
 - **D-10** the CI decisions: how a runner gets the tree of an open change, the workflow subset, runner
   isolation, the job network default (D-C2, D-C3, D-C4, D-C5; D-C6 is accepted) — with RFC 006 v2, after T13.
-- **D-11** authorize candidate release 0.3.0: its version, content and criteria (§5) — **requested 2026-10-15**; the tag and the publish remain the owner's act at release time.
+- **D-11** authorize candidate release 0.3.0: its version, content and criteria (§5) — **AUTHORIZED by the owner 2026-10-15 (Option A: 0.3.0 with the full content)**; the tag and the publish remain the owner's act at release time.
 
 *Owner, 2026-10-15: D-7 granted; the plan's order and the triggers of D-8 to D-11 accepted. D-8 to D-11 are **not** decided: each is taken at its trigger, on the evidence then available. A decision made earlier than its trigger would be made on documents, which is what C-15 forbids.*
 
 ## 5. Release candidates (the architect proposes, the owner authorizes)
 
-### 0.3.0 — hardening and prerequisite minor (proposed 2026-10-15; version corrected the same day)
+### 0.3.0 — hardening and prerequisite minor (**authorized 2026-10-15**; version corrected the same day)
 
 | | |
 |---|---|
@@ -131,3 +131,21 @@ C-11 (supply chain) is checked at every crate.               C-14 (owner availab
 | **Rollback / recovery** | No data migration and no schema change: redeploy the 0.2.0 binary (the floor is a minimum, so prikk 0.52.0 remains acceptable). A defect is corrected by 0.3.1. |
 | **Major risks** | The release workflow's first real run exercises new pins, toolchain input and image build (mitigated by the dry run); the exit-2 behaviour change surprises a wrapper script (release notes; CHANGELOG); a new advisory appears before the tag (the gate re-runs at tag time and a red one is fixed first). |
 | **Post-release evaluation** | The architect records deviations, the real dry-run and tag-run findings and any gate improvements (RFC 010 "improvement on finding"). |
+
+#### Steps to the tag (0.3.0), in order
+
+A release is not the implementation of an RFC (workflow §6.6): this definition, once authorized, is its
+approved scope, and the release-candidate work is done from `docs/RELEASING.md` and this section.
+
+| # | Step | Who | Precondition |
+|---|---|---|---|
+| R1 | Maintenance gates v2 (IS-26), including the release dry-run mode | dev team, then architect review | assigned |
+| R2 | IS-24 (auth path) and IS-16 (raw-content origin), each reviewed | dev team, then architect review | assigned |
+| R3 | Threat-model status lines (T-9 / C-9b, T-6 / C-6c), SECURITY.md, README and RELEASING checked against the code; CHANGELOG `[Unreleased]` reviewed for the operator-visible changes | architect | R1, R2 approved |
+| R4 | Release-candidate commit: workspace version 0.3.0, CHANGELOG `[0.3.0]`, floors and pins checked, **a dry-run dispatch of `release.yml`** with nothing published; report with evidence | dev team | R3 |
+| R5 | Release-readiness report and recommendation (workflow Phase 8) | architect | R4 evidence reviewed |
+| R6 | Make the `ghcr.io/prikk-vcs/planeter` package public; signed tag `0.3.0`; the workflow; publish crates in order | **owner** | R5 |
+| R7 | Exit criteria verified (above); post-release evaluation; gate improvements recorded | architect, dev team | R6 |
+
+If a new advisory appears or a gate turns red between R4 and R6, it is fixed first and R4's evidence is
+re-run; the version is not changed for that.
