@@ -42,6 +42,8 @@ pub struct AppState {
     pub read: Arc<ReadService>,
     /// The bound on concurrent prikk invocations and the place blocking prikk work runs (IS-4).
     pub gate: Arc<PrikkGate>,
+    /// The bound on concurrent password verifications (IS-24); a separate gate from `gate`.
+    pub auth_gate: Arc<crate::gate::AuthGate>,
     pub auth: Arc<Authenticator>,
     pub content_origin: ContentOrigin,
     /// Browser sessions (the UI's sign-in); the API accepts the session cookie too.
@@ -119,7 +121,7 @@ async fn history_handler(
     Query(q): Query<HistoryQuery>,
     headers: HeaderMap,
 ) -> Response {
-    let principal = crate::principal::principal_from_request(&headers, &state);
+    let principal = crate::principal::principal_from_request(&headers, &state).await;
     let limit = q.limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT);
     let result = read_blocking(&state, move |read| {
         try_both_owners(&owner, |o| {
@@ -135,7 +137,7 @@ async fn change_handler(
     Path((owner, name, target)): Path<(String, String, String)>,
     headers: HeaderMap,
 ) -> Response {
-    let principal = crate::principal::principal_from_request(&headers, &state);
+    let principal = crate::principal::principal_from_request(&headers, &state).await;
     let result = read_blocking(&state, move |read| {
         try_both_owners(&owner, |o| read.change(&principal, o, &name, &target))
     })
@@ -149,7 +151,7 @@ async fn file_handler(
     Query(q): Query<FileQuery>,
     headers: HeaderMap,
 ) -> Response {
-    let principal = crate::principal::principal_from_request(&headers, &state);
+    let principal = crate::principal::principal_from_request(&headers, &state).await;
     let result = read_blocking(&state, move |read| {
         try_both_owners(&owner, |o| {
             read.file(&principal, o, &name, q.ref_name.as_deref(), &q.path)
@@ -165,7 +167,7 @@ async fn tree_handler(
     Query(q): Query<TreeQuery>,
     headers: HeaderMap,
 ) -> Response {
-    let principal = crate::principal::principal_from_request(&headers, &state);
+    let principal = crate::principal::principal_from_request(&headers, &state).await;
     let result = read_blocking(&state, move |read| {
         try_both_owners(&owner, |o| {
             read.tree(
@@ -187,7 +189,7 @@ async fn raw_handler(
     Query(q): Query<RawQuery>,
     headers: HeaderMap,
 ) -> Response {
-    let principal = crate::principal::principal_from_request(&headers, &state);
+    let principal = crate::principal::principal_from_request(&headers, &state).await;
     let result = read_blocking(&state, move |read| {
         try_both_owners(&owner, |o| {
             read.raw_file(
@@ -213,7 +215,7 @@ async fn refs_handler(
     Query(q): Query<RefsQuery>,
     headers: HeaderMap,
 ) -> Response {
-    let principal = crate::principal::principal_from_request(&headers, &state);
+    let principal = crate::principal::principal_from_request(&headers, &state).await;
     let result = read_blocking(&state, move |read| {
         try_both_owners(&owner, |o| read.refs(&principal, o, &name, q.all))
     })
@@ -226,7 +228,7 @@ async fn verify_handler(
     Path((owner, name)): Path<(String, String)>,
     headers: HeaderMap,
 ) -> Response {
-    let principal = crate::principal::principal_from_request(&headers, &state);
+    let principal = crate::principal::principal_from_request(&headers, &state).await;
     let result = read_blocking(&state, move |read| {
         try_both_owners(&owner, |o| read.verify(&principal, o, &name))
     })

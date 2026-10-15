@@ -19,6 +19,10 @@
 //!   (default `min(available_parallelism, 8)`). Read-path prikk work runs off the async workers.
 //! - `PLANETER_PRIKK_QUEUE_WAIT_SECS` — how long a request waits for a slot before it is refused with
 //!   `503` and `Retry-After`, a positive integer (default 10).
+//! - `PLANETER_AUTH_CONCURRENCY` — the most password verifications (Argon2id) running at once, a
+//!   positive integer (default `min(available_parallelism, 4)`); a separate bound from the prikk one.
+//! - `PLANETER_AUTH_QUEUE_WAIT_SECS` — how long a sign-in waits for a slot before it is refused with
+//!   `503` and `Retry-After`, a positive integer (default 5). Unknown and existing accounts alike.
 //! - `PLANETER_OIDC_ISSUER`, `PLANETER_OIDC_CLIENT_ID`, `PLANETER_OIDC_REDIRECT_URI` (all three to enable
 //!   SSO) and optional `PLANETER_OIDC_CLIENT_SECRET` — the OpenID Connect provider. Discovery, JWKS and the
 //!   token exchange go through the egress guard and a confined `curl` (a runtime prerequisite like prikk
@@ -122,6 +126,25 @@ async fn main() {
         gate.wait().as_secs()
     );
 
+    // The separate, small bound on password verification (IS-24). Logged once.
+    let auth_gate = match planeter_web::BlockingGate::auth_from_vars(
+        std::env::var("PLANETER_AUTH_CONCURRENCY").ok().as_deref(),
+        std::env::var("PLANETER_AUTH_QUEUE_WAIT_SECS")
+            .ok()
+            .as_deref(),
+    ) {
+        Ok(g) => Arc::new(g),
+        Err(e) => {
+            eprintln!("planeter: {e}");
+            std::process::exit(1);
+        }
+    };
+    eprintln!(
+        "planeter: at most {} concurrent password verifications; a sign-in waits up to {} s for a slot, then gets 503",
+        auth_gate.concurrency(),
+        auth_gate.wait().as_secs()
+    );
+
     let (accounts, credentials) = match (
         SqliteAccountStore::new(db.clone()),
         SqliteCredentialStore::new(db.clone()),
@@ -175,6 +198,7 @@ async fn main() {
     let state = AppState {
         read,
         gate,
+        auth_gate,
         auth,
         content_origin: ContentOrigin::new(content_origin),
         sessions: Arc::new(sessions),

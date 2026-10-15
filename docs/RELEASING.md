@@ -81,6 +81,13 @@ docker run --rm ghcr.io/prikk-vcs/planeter:X.Y.Z --version
   planeter speaks plain HTTP: it **refuses a non-loopback bind unless trusted proxies are set**, takes
   the client IP from `X-Forwarded-For` only when the TCP peer is a trusted proxy, and marks cookies
   `Secure` (so the proxy must serve HTTPS).
+- **Sign-in concurrency (IS-24, IS-31):** password verification (Argon2id) runs off the async workers
+  behind its own gate, separate from the prikk one. **`PLANETER_AUTH_CONCURRENCY`** is the most
+  verifications at once (positive integer; default `min(CPUs, 4)`); **`PLANETER_AUTH_QUEUE_WAIT_SECS`**
+  is how long a sign-in waits for a slot before `503` and `Retry-After` (positive integer; default 5).
+  Every password sign-in costs one verification, an unknown account's against a dummy hash made at start,
+  so neither the response time nor the `503` reveals whether an account exists. Token and session checks
+  take no permit. Both values are logged once at start.
 - **Concurrency (IS-4):** read-path prikk work runs off the async workers behind a gate.
   **`PLANETER_PRIKK_CONCURRENCY`** is the most prikk subprocesses at once (positive integer; default
   `min(CPUs, 8)`); **`PLANETER_PRIKK_QUEUE_WAIT_SECS`** is how long a request waits for a slot before it

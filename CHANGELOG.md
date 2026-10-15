@@ -5,6 +5,15 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **Sign-in work off the async workers, and constant-work sign-in (IS-24, IS-31).** Password
+  verification, token and session checks, session writes and the SSO hand-shake now run on the blocking
+  pool, so a sign-in flood can no longer stall the server. Password verification is bounded by its own
+  gate: `PLANETER_AUTH_CONCURRENCY` (default `min(CPUs, 4)`) and `PLANETER_AUTH_QUEUE_WAIT_SECS`
+  (default 5), past which the sign-in is refused with `503` and `Retry-After`. **Behaviour change
+  (security fix):** sign-in for an unknown account (or one without a password) now takes as long as for a
+  wrong password; before, it returned immediately, which let a client tell whether an account exists by
+  timing. This weakness was present in 0.2.0.
+
 - **One compiler, named runners, and a release dry run (RFC 010 D-5, IS-26).** CI and the manual
   supply-chain checkpoint now install the same pinned Rust toolchain (1.99.0 with rustfmt and clippy)
   that the release builds with; every workflow names its runner image (`ubuntu-24.04`) instead of

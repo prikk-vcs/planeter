@@ -86,6 +86,7 @@ fn app(subdir: &str, real: bool) -> AppState {
     AppState {
         read,
         gate: Arc::new(planeter_web::PrikkGate::default()),
+        auth_gate: Arc::new(planeter_web::BlockingGate::auth_default()),
         auth,
         content_origin: ContentOrigin::new("https://raw.planeter.example"),
         sessions: Arc::new(planeter_auth::InMemorySessionStore::new()),

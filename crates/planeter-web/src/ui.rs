@@ -23,10 +23,12 @@ use planeter_core::{Assurance, Principal, ReadError, TreeEntryView};
 use crate::api::{
     AppState, Failure, read_blocking, retry_after_secs, try_both_owners, with_security_headers,
 };
+use crate::authn;
 use crate::client_ip::{PeerAddr, client_ip};
 use crate::cookies::{
     CSRF_COOKIE, OIDC_STATE_COOKIE, SESSION_COOKIE, clear_cookie, get_cookie, set_cookie,
 };
+use crate::gate::GateError;
 use crate::principal::principal_from_request;
 use crate::sanitize::render_markdown;
 
@@ -62,8 +64,8 @@ struct Ctx {
     set_csrf: Option<String>,
 }
 
-fn ctx(headers: &HeaderMap, state: &AppState) -> Ctx {
-    let principal = principal_from_request(headers, state);
+async fn ctx(headers: &HeaderMap, state: &AppState) -> Ctx {
+    let principal = principal_from_request(headers, state).await;
     let user = principal.user().map(|u| u.as_str().to_owned());
     let (csrf, set_csrf) = match get_cookie(headers, CSRF_COOKIE) {
         Some(t) if !t.is_empty() => (t, None),
@@ -133,22 +135,7 @@ fn error_page(state: &AppState, c: &Ctx, e: Failure) -> Response {
     match e {
         // No prikk slot within the bounded wait (IS-4): the same existence-neutral page, plus
         // `Retry-After`.
-        Failure::Busy => {
-            let mut resp = render(
-                state,
-                StatusCode::SERVICE_UNAVAILABLE,
-                &UnavailableTpl {
-                    user: c.user.clone(),
-                    csrf: c.csrf.clone(),
-                },
-                c,
-            );
-            if let Ok(v) = retry_after_secs(state).to_string().parse() {
-                resp.headers_mut()
-                    .insert(axum::http::header::RETRY_AFTER, v);
-            }
-            resp
-        }
+        Failure::Busy => busy_page(state, c, retry_after_secs(state)),
         Failure::Read(ReadError::NotFound) => render(
             state,
             StatusCode::NOT_FOUND,
@@ -168,6 +155,24 @@ fn error_page(state: &AppState, c: &Ctx, e: Failure) -> Response {
             c,
         ),
     }
+}
+
+/// The existence-neutral "unavailable" page with `Retry-After` (a refused request, IS-4 / IS-24).
+fn busy_page(state: &AppState, c: &Ctx, retry_after: u64) -> Response {
+    let mut resp = render(
+        state,
+        StatusCode::SERVICE_UNAVAILABLE,
+        &UnavailableTpl {
+            user: c.user.clone(),
+            csrf: c.csrf.clone(),
+        },
+        c,
+    );
+    if let Ok(v) = retry_after.to_string().parse() {
+        resp.headers_mut()
+            .insert(axum::http::header::RETRY_AFTER, v);
+    }
+    resp
 }
 
 fn assurance(a: Assurance) -> (&'static str, &'static str) {
@@ -422,7 +427,7 @@ struct CsrfForm {
 // -- handlers --
 
 async fn home(State(state): State<AppState>, headers: HeaderMap) -> Response {
-    let c = ctx(&headers, &state);
+    let c = ctx(&headers, &state).await;
     render(
         &state,
         StatusCode::OK,
@@ -464,7 +469,7 @@ async fn stylesheet(State(state): State<AppState>) -> Response {
 }
 
 async fn login_form(State(state): State<AppState>, headers: HeaderMap) -> Response {
-    let c = ctx(&headers, &state);
+    let c = ctx(&headers, &state).await;
     render(
         &state,
         StatusCode::OK,
@@ -484,7 +489,7 @@ async fn login_submit(
     headers: HeaderMap,
     Form(form): Form<LoginForm>,
 ) -> Response {
-    let c = ctx(&headers, &state);
+    let c = ctx(&headers, &state).await;
     let cookie_csrf = get_cookie(&headers, CSRF_COOKIE).unwrap_or_default();
     if cookie_csrf.is_empty() || !tokens_match(&cookie_csrf, &form.csrf) {
         return html(
@@ -514,22 +519,46 @@ async fn login_submit(
             &c,
         );
     }
-    match state
-        .auth
-        .authenticate_password(&form.username, &form.password)
-    {
+    // Password verification takes a permit from the auth gate and runs off the async workers. Every
+    // verification does: an unknown account's dummy one too, so a refusal under load says nothing about
+    // whether the account exists (IS-24, IS-31). A refused request is not a failed attempt.
+    let (user, password) = (form.username.clone(), form.password.clone());
+    let verdict = authn::blocking_gated(&state, move |s| {
+        s.auth.authenticate_password(&user, &password)
+    })
+    .await;
+    let verdict = match verdict {
+        Ok(v) => v,
+        Err(GateError::Busy) => {
+            let wait = state.auth_gate.wait().as_secs().max(1);
+            return busy_page(&state, &c, wait);
+        }
+        Err(GateError::Aborted) => {
+            return html(
+                &state,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "sign-in error".into(),
+                vec![],
+            );
+        }
+    };
+    match verdict {
         Ok(Principal::User(user)) => {
             state.login_throttle.record_success(&form.username);
             if let Some(k) = &ip_key {
                 state.ip_throttle.record_success(k);
             }
-            match state.sessions.create(user, now, now + SESSION_TTL_SECS) {
-                Ok(session) => redirect(
+            let created = authn::blocking(&state, move |s| {
+                s.sessions.create(user, now, now + SESSION_TTL_SECS)
+            })
+            .await;
+            match created {
+                Ok(Ok(session)) => redirect(
                     &state,
                     "/",
                     vec![set_cookie(SESSION_COOKIE, &session.id.0, SESSION_TTL_SECS)],
                 ),
-                Err(_) => html(
+                _ => html(
                     &state,
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "session error".into(),
@@ -572,7 +601,7 @@ async fn logout(
         );
     }
     if let Some(id) = get_cookie(&headers, SESSION_COOKIE) {
-        let _ = state.sessions.delete(&SessionId(id));
+        let _ = authn::blocking(&state, move |s| s.sessions.delete(&SessionId(id))).await;
     }
     redirect(&state, "/", vec![clear_cookie(SESSION_COOKIE)])
 }
@@ -585,15 +614,29 @@ struct OidcCallbackQuery {
 
 /// Start an SSO sign-in: 303 to the provider; the opaque `state` rides in a short-lived cookie.
 async fn oidc_begin(State(state): State<AppState>) -> Response {
-    let Some(oidc) = &state.oidc else {
+    if state.oidc.is_none() {
         return html(
             &state,
             StatusCode::NOT_FOUND,
             "SSO is not configured".into(),
             vec![],
         );
+    }
+    // Provider discovery may run a confined `curl`: off the async workers.
+    let now = (state.now_unix)();
+    let begun = authn::blocking(&state, move |s| s.oidc.map(|o| o.begin_login(now))).await;
+    let begun = match begun {
+        Ok(Some(r)) => r,
+        _ => {
+            return html(
+                &state,
+                StatusCode::BAD_GATEWAY,
+                "SSO provider unavailable".into(),
+                vec![],
+            );
+        }
     };
-    match oidc.begin_login((state.now_unix)()) {
+    match begun {
         Ok(b) => redirect(
             &state,
             &b.authorization_url,
@@ -615,14 +658,14 @@ async fn oidc_callback(
     headers: HeaderMap,
     Query(q): Query<OidcCallbackQuery>,
 ) -> Response {
-    let Some(oidc) = &state.oidc else {
+    if state.oidc.is_none() {
         return html(
             &state,
             StatusCode::NOT_FOUND,
             "SSO is not configured".into(),
             vec![],
         );
-    };
+    }
     let (Some(code), Some(st)) = (q.code, q.state) else {
         return html(
             &state,
@@ -641,48 +684,56 @@ async fn oidc_callback(
         );
     }
     let now = (state.now_unix)();
-    let identity = match oidc.finish_login(&st, &code, now) {
-        Ok(id) => id,
-        Err(OidcError::State) => {
-            return html(
-                &state,
-                StatusCode::BAD_REQUEST,
-                "SSO state expired".into(),
-                vec![],
-            );
-        }
-        Err(_) => {
-            return html(
-                &state,
-                StatusCode::UNAUTHORIZED,
-                "SSO sign-in failed".into(),
-                vec![],
-            );
-        }
-    };
-    match state.auth.authenticate_oidc(&identity) {
-        Ok(Principal::User(user)) => match state.sessions.create(user, now, now + SESSION_TTL_SECS)
-        {
-            Ok(session) => redirect(
-                &state,
-                "/",
-                vec![
-                    set_cookie(SESSION_COOKIE, &session.id.0, SESSION_TTL_SECS),
-                    clear_cookie(OIDC_STATE_COOKIE),
-                ],
-            ),
-            Err(_) => html(
-                &state,
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "session error".into(),
-                vec![],
-            ),
-        },
-        _ => html(
+    // Code exchange and ID-token verification run a confined `curl`; the account lookup and the session
+    // write are SQLite. All of it is blocking, so all of it runs off the async workers.
+    let completed = authn::blocking(&state, move |s| {
+        let oidc = s.oidc?;
+        let identity = match oidc.finish_login(&st, &code, now) {
+            Ok(id) => id,
+            Err(e) => return Some(Err(e)),
+        };
+        Some(Ok(match s.auth.authenticate_oidc(&identity) {
+            Ok(Principal::User(user)) => s
+                .sessions
+                .create(user, now, now + SESSION_TTL_SECS)
+                .map(Some)
+                .map_err(|_| ()),
+            _ => Ok(None),
+        }))
+    })
+    .await;
+    match completed {
+        Ok(Some(Err(OidcError::State))) => html(
+            &state,
+            StatusCode::BAD_REQUEST,
+            "SSO state expired".into(),
+            vec![],
+        ),
+        Ok(Some(Err(_))) => html(
+            &state,
+            StatusCode::UNAUTHORIZED,
+            "SSO sign-in failed".into(),
+            vec![],
+        ),
+        Ok(Some(Ok(Ok(Some(session))))) => redirect(
+            &state,
+            "/",
+            vec![
+                set_cookie(SESSION_COOKIE, &session.id.0, SESSION_TTL_SECS),
+                clear_cookie(OIDC_STATE_COOKIE),
+            ],
+        ),
+        Ok(Some(Ok(Ok(None)))) => html(
             &state,
             StatusCode::UNAUTHORIZED,
             "this SSO identity is not linked to a planeter account".into(),
             vec![clear_cookie(OIDC_STATE_COOKIE)],
+        ),
+        _ => html(
+            &state,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "session error".into(),
+            vec![],
         ),
     }
 }
@@ -693,7 +744,7 @@ async fn repo_home(
     Query(q): Query<RefQuery>,
     headers: HeaderMap,
 ) -> Response {
-    let c = ctx(&headers, &state);
+    let c = ctx(&headers, &state).await;
     let r = q.ref_name.as_deref();
     // The page's four prikk calls run in one gated job, under one permit (RFC 003 D-8, IS-4).
     let (principal, o, n, rr) = (
@@ -757,7 +808,7 @@ async fn tree_page(
     Query(q): Query<RefQuery>,
     headers: HeaderMap,
 ) -> Response {
-    let c = ctx(&headers, &state);
+    let c = ctx(&headers, &state).await;
     let r = q.ref_name.as_deref();
     let prefix = path.trim_matches('/').to_owned();
     let (principal, o, n, rr, pf) = (
@@ -802,7 +853,7 @@ async fn file_page(
     Query(q): Query<RefQuery>,
     headers: HeaderMap,
 ) -> Response {
-    let c = ctx(&headers, &state);
+    let c = ctx(&headers, &state).await;
     let r = q.ref_name.as_deref();
     let (principal, o, n, rr, p) = (
         c.principal.clone(),
@@ -865,7 +916,7 @@ async fn history_page(
     Query(q): Query<RefQuery>,
     headers: HeaderMap,
 ) -> Response {
-    let c = ctx(&headers, &state);
+    let c = ctx(&headers, &state).await;
     let r = q.ref_name.as_deref();
     let (principal, o, n, rr) = (
         c.principal.clone(),
@@ -923,7 +974,7 @@ async fn change_page(
     Path((owner, name, target)): Path<(String, String, String)>,
     headers: HeaderMap,
 ) -> Response {
-    let c = ctx(&headers, &state);
+    let c = ctx(&headers, &state).await;
     let (principal, o, n, t) = (
         c.principal.clone(),
         owner.clone(),
@@ -978,7 +1029,7 @@ async fn refs_page(
     Path((owner, name)): Path<(String, String)>,
     headers: HeaderMap,
 ) -> Response {
-    let c = ctx(&headers, &state);
+    let c = ctx(&headers, &state).await;
     let (principal, o, n) = (c.principal.clone(), owner.clone(), name.clone());
     let v = read_blocking(&state, move |read| {
         try_both_owners(&o, |ow| read.refs(&principal, ow, &n, true))
@@ -1024,7 +1075,7 @@ async fn verify_page(
     Path((owner, name)): Path<(String, String)>,
     headers: HeaderMap,
 ) -> Response {
-    let c = ctx(&headers, &state);
+    let c = ctx(&headers, &state).await;
     let (principal, o, n) = (c.principal.clone(), owner.clone(), name.clone());
     let v = read_blocking(&state, move |read| {
         try_both_owners(&o, |ow| read.verify(&principal, ow, &n))

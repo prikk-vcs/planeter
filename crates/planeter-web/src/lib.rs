@@ -11,6 +11,7 @@
 //! [`gate`]: off the async workers, under a bounded number of concurrent invocations (IS-4).
 
 pub mod api;
+pub(crate) mod authn;
 pub mod client_ip;
 pub mod cookies;
 pub mod gate;
@@ -21,7 +22,7 @@ pub mod ui;
 
 pub use api::AppState;
 pub use client_ip::{TrustedProxies, bind_allowed, client_ip};
-pub use gate::PrikkGate;
+pub use gate::{AuthGate, BlockingGate, PrikkGate};
 
 /// The full application router: the JSON read API under `/api/v1/…` merged with the browse UI.
 pub fn router(state: AppState) -> axum::Router {

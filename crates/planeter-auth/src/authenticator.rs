@@ -4,7 +4,11 @@
 //! planeter sees a password, token, or key.
 //!
 //! Every failure returns the coarse [`AuthError::BadCredentials`] so an attacker cannot distinguish
-//! "no such account" from "wrong password" from "unknown token" (`T-7`). Credential **expiry** is
+//! "no such account" from "wrong password" from "unknown token" (`T-7`). For passwords the cases are
+//! indistinguishable **in work as well as in response** (IS-31): an unknown account, an account without
+//! a password and a wrong password each perform exactly one [`PasswordHasher::verify`] (the first two
+//! against a dummy hash made at construction), so neither the response time nor a load-shedding refusal
+//! reveals whether an account exists. Credential **expiry** is
 //! enforced both here (reject at authentication) and again structurally by `authorize()` (the scope
 //! carries `expires_at`), so an expired credential cannot act even if a caller skips this check.
 
@@ -14,7 +18,7 @@ use planeter_core::Principal;
 use planeter_store::UserId;
 
 use crate::credential::CredentialStore;
-use crate::hashing::{PasswordHasher, TokenHasher};
+use crate::hashing::{PasswordHash, PasswordHasher, TokenHasher};
 use crate::identity::{AccountStore, AuthError, Result};
 use crate::oidc::VerifiedIdentity;
 
@@ -26,6 +30,10 @@ pub struct Authenticator {
     credentials: Arc<dyn CredentialStore>,
     password_hasher: Arc<dyn PasswordHasher>,
     token_hasher: Arc<dyn TokenHasher>,
+    /// A hash made at construction, by the same hasher and parameters, of a random password that is
+    /// never stored or logged. A sign-in with no real hash to check verifies against this instead, so
+    /// every password sign-in costs one verification (IS-31). Its result is always ignored.
+    dummy_hash: PasswordHash,
     /// Current Unix seconds, injected for testable expiry checks.
     now_unix: fn() -> u64,
 }
@@ -37,11 +45,13 @@ impl Authenticator {
         password_hasher: Arc<dyn PasswordHasher>,
         token_hasher: Arc<dyn TokenHasher>,
     ) -> Self {
+        let dummy_hash = password_hasher.hash(&crate::hashing::mint_token());
         Self {
             accounts,
             credentials,
             password_hasher,
             token_hasher,
+            dummy_hash,
             now_unix: default_now,
         }
     }
@@ -61,12 +71,22 @@ impl Authenticator {
     /// Interactive sign-in: verify a local password → a `User` principal (a session).
     pub fn authenticate_password(&self, user: &str, password: &str) -> Result<Principal> {
         let user = UserId::new(user);
-        let account = self.accounts.get(&user)?.ok_or(AuthError::BadCredentials)?;
-        let hash = account.password.as_ref().ok_or(AuthError::BadCredentials)?;
-        if self.password_hasher.verify(password, hash) {
-            Ok(Principal::User(user))
-        } else {
-            Err(AuthError::BadCredentials)
+        // A store failure is a backend error, not "no such account", and is returned as such. Beyond
+        // that there is no early return: the account's absence must not shorten the work.
+        let account = self.accounts.get(&user)?;
+        match account.as_ref().and_then(|a| a.password.as_ref()) {
+            Some(hash) => {
+                if self.password_hasher.verify(password, hash) {
+                    Ok(Principal::User(user))
+                } else {
+                    Err(AuthError::BadCredentials)
+                }
+            }
+            None => {
+                // No real hash: do the same work against the dummy and refuse whatever it says.
+                let _ = self.password_hasher.verify(password, &self.dummy_hash);
+                Err(AuthError::BadCredentials)
+            }
         }
     }
 

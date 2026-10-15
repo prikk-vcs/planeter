@@ -1,5 +1,10 @@
-//! The prikk gate (RFC 003 D-8, RFC 001 D-3, IS-4; threat model T-9 / C-9b): every read-path call that
-//! spawns a sandboxed prikk goes through here.
+//! The blocking gates (RFC 003 D-8, RFC 001 D-3, IS-4, IS-24; threat model T-9 / C-9b).
+//!
+//! Two instances of one mechanism: the **prikk gate** ([`PrikkGate`]) that every read-path call spawning
+//! a sandboxed prikk goes through, and the **auth gate** ([`AuthGate`]) that every password
+//! verification goes through. They are separate semaphores, so a flood of one cannot starve the other.
+//! [`offload`] is the ungated sibling for short blocking work (SQLite lookups, token and session
+//! checks) that must still stay off the async workers.
 //!
 //! Two problems, one choke point. The read service is synchronous and blocks until prikk exits (up to
 //! the sandbox's 120 s wall-time bound); called straight from an `async fn` it pins a runtime worker, so
@@ -25,8 +30,36 @@ pub fn default_concurrency() -> usize {
         .min(8)
 }
 
-/// The default bounded wait for a slot, in seconds.
+/// The default bounded wait for a prikk slot, in seconds.
 pub const DEFAULT_QUEUE_WAIT_SECS: u64 = 10;
+
+/// The default ceiling on concurrent password verifications: `min(available_parallelism, 4)`.
+pub fn default_auth_concurrency() -> usize {
+    std::thread::available_parallelism()
+        .map_or(1, std::num::NonZeroUsize::get)
+        .min(4)
+}
+
+/// The default bounded wait for an authentication slot, in seconds.
+pub const DEFAULT_AUTH_QUEUE_WAIT_SECS: u64 = 5;
+
+/// The gate on read-path prikk invocations (the original use of [`BlockingGate`]).
+pub type PrikkGate = BlockingGate;
+
+/// The gate on password verification. A separate instance, never shared with the prikk gate.
+pub type AuthGate = BlockingGate;
+
+/// Run short blocking work on the blocking pool, **without** a permit. Used for work that is cheap and
+/// bounded (a SQLite lookup, a token hash, a session read) but must not run on an async worker.
+pub async fn offload<T, F>(job: F) -> Result<T, GateError>
+where
+    F: FnOnce() -> T + Send + 'static,
+    T: Send + 'static,
+{
+    tokio::task::spawn_blocking(job)
+        .await
+        .map_err(|_| GateError::Aborted)
+}
 
 /// Why a gated job did not produce a value.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -39,14 +72,14 @@ pub enum GateError {
 
 /// A bounded gate on blocking prikk work. Cheap to share behind an `Arc`.
 #[derive(Debug)]
-pub struct PrikkGate {
+pub struct BlockingGate {
     permits: Arc<Semaphore>,
     concurrency: usize,
     wait: Duration,
     rejected: AtomicU64,
 }
 
-impl Default for PrikkGate {
+impl Default for BlockingGate {
     fn default() -> Self {
         Self::new(
             default_concurrency(),
@@ -55,7 +88,7 @@ impl Default for PrikkGate {
     }
 }
 
-impl PrikkGate {
+impl BlockingGate {
     /// A gate allowing `concurrency` (at least 1) running jobs and waiting at most `wait` for a slot.
     pub fn new(concurrency: usize, wait: Duration) -> Self {
         let concurrency = concurrency.max(1);
@@ -67,11 +100,57 @@ impl PrikkGate {
         }
     }
 
-    /// Build from the two operator variables, as given (`None` = unset → default). Each must be a
-    /// positive integer; anything else is an error naming the variable.
+    /// The prikk gate from `PLANETER_PRIKK_CONCURRENCY` and `PLANETER_PRIKK_QUEUE_WAIT_SECS`, as given
+    /// (`None` = unset → default). Each must be a positive integer; anything else is an error naming
+    /// the variable.
     pub fn from_vars(
         concurrency: Option<&str>,
         queue_wait_secs: Option<&str>,
+    ) -> Result<Self, String> {
+        Self::parse(
+            (
+                "PLANETER_PRIKK_CONCURRENCY",
+                concurrency,
+                default_concurrency(),
+            ),
+            (
+                "PLANETER_PRIKK_QUEUE_WAIT_SECS",
+                queue_wait_secs,
+                DEFAULT_QUEUE_WAIT_SECS,
+            ),
+        )
+    }
+
+    /// The auth gate from `PLANETER_AUTH_CONCURRENCY` and `PLANETER_AUTH_QUEUE_WAIT_SECS`.
+    pub fn auth_from_vars(
+        concurrency: Option<&str>,
+        queue_wait_secs: Option<&str>,
+    ) -> Result<Self, String> {
+        Self::parse(
+            (
+                "PLANETER_AUTH_CONCURRENCY",
+                concurrency,
+                default_auth_concurrency(),
+            ),
+            (
+                "PLANETER_AUTH_QUEUE_WAIT_SECS",
+                queue_wait_secs,
+                DEFAULT_AUTH_QUEUE_WAIT_SECS,
+            ),
+        )
+    }
+
+    /// A default-configured auth gate (`min(CPUs, 4)`, 5 s).
+    pub fn auth_default() -> Self {
+        Self::new(
+            default_auth_concurrency(),
+            Duration::from_secs(DEFAULT_AUTH_QUEUE_WAIT_SECS),
+        )
+    }
+
+    fn parse(
+        concurrency: (&str, Option<&str>, usize),
+        wait: (&str, Option<&str>, u64),
     ) -> Result<Self, String> {
         let positive = |name: &str, v: Option<&str>, default: u64| -> Result<u64, String> {
             match v {
@@ -82,18 +161,9 @@ impl PrikkGate {
                 },
             }
         };
-        let c = positive(
-            "PLANETER_PRIKK_CONCURRENCY",
-            concurrency,
-            default_concurrency() as u64,
-        )?;
-        let w = positive(
-            "PLANETER_PRIKK_QUEUE_WAIT_SECS",
-            queue_wait_secs,
-            DEFAULT_QUEUE_WAIT_SECS,
-        )?;
-        let c =
-            usize::try_from(c).map_err(|_| "PLANETER_PRIKK_CONCURRENCY is too large".to_owned())?;
+        let c = positive(concurrency.0, concurrency.1, concurrency.2 as u64)?;
+        let w = positive(wait.0, wait.1, wait.2)?;
+        let c = usize::try_from(c).map_err(|_| format!("{} is too large", concurrency.0))?;
         Ok(Self::new(c, Duration::from_secs(w)))
     }
 

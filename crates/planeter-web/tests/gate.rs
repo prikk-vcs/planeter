@@ -104,6 +104,7 @@ fn harness(name: &str, concurrency: usize, wait: Duration, sleep_secs: &str) -> 
     let state = AppState {
         read,
         gate: Arc::clone(&gate),
+        auth_gate: Arc::new(planeter_web::BlockingGate::auth_default()),
         auth,
         content_origin: ContentOrigin::new("https://raw.planeter.example"),
         sessions: Arc::new(planeter_auth::InMemorySessionStore::new()),
