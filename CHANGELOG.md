@@ -5,6 +5,14 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **Read-path concurrency (IS-4, RFC 003 D-8): an unauthenticated denial of service closed.** Every
+  prikk call from the browse UI and the read API now runs on the blocking pool (`spawn_blocking`) behind
+  one process-wide gate, so slow repositories no longer pin the async workers and stall sign-in and every
+  other route. New `PLANETER_PRIKK_CONCURRENCY` (default `min(CPUs, 8)`) caps concurrent prikk
+  subprocesses; `PLANETER_PRIKK_QUEUE_WAIT_SECS` (default 10) bounds the wait, past which the request
+  is refused with `503` and `Retry-After` (existence-neutral, counted). A page's several prikk calls share
+  one slot. No route, body, authorization or sandbox change.
+
 - **`planeter --version` / `-V` and `--help` / `-h` (RFC 010 D-6, IS-1).** `--version` prints three lines
   (`planeter X.Y.Z`, `commit <sha or unknown>`, `prikk-floor X.Y.Z`) and exits 0 **without reading
   configuration or starting the server**; release builds report the tag's commit and `build-info.txt`

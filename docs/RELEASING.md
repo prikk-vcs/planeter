@@ -65,6 +65,12 @@ gh attestation verify oci://ghcr.io/prikk-vcs/planeter:X.Y.Z --repo prikk-vcs/pl
   planeter speaks plain HTTP: it **refuses a non-loopback bind unless trusted proxies are set**, takes
   the client IP from `X-Forwarded-For` only when the TCP peer is a trusted proxy, and marks cookies
   `Secure` (so the proxy must serve HTTPS).
+- **Concurrency (IS-4):** read-path prikk work runs off the async workers behind a gate.
+  **`PLANETER_PRIKK_CONCURRENCY`** is the most prikk subprocesses at once (positive integer; default
+  `min(CPUs, 8)`); **`PLANETER_PRIKK_QUEUE_WAIT_SECS`** is how long a request waits for a slot before it
+  is refused with `503` and `Retry-After` (positive integer; default 10). Both values are logged once at
+  start. A low cap starves legitimate bursts; raise it with the host's memory in mind (prikk's figures
+  are several times the repository's content, dependency ledger PK-40).
 - **SSO (OIDC):** set `PLANETER_OIDC_ISSUER`, `PLANETER_OIDC_CLIENT_ID`, `PLANETER_OIDC_REDIRECT_URI`
   (and `PLANETER_OIDC_CLIENT_SECRET` for a confidential client). The provider is reached only through
   the egress guard and a bubblewrap-confined **`curl`** (add `curl` to the runtime prerequisites; it is
