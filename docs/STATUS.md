@@ -39,7 +39,7 @@
   verified anonymously; the tarball attestations verify).
 - **Convey** the architect's requirements note for prikk's 0.54.0 read-only command design round, once the spike reports (SCHEDULE plan 1, step 4). prikk's plan letter of 2026-10-15 is folded into ledger v1.6 (PK-46, PK-47); our reply to it needs nothing urgent.
 - Decide the floor at the re-baseline's review request (SCHEDULE D-1).
-- The measurement spike (SCHEDULE D-7) is **authorized (owner, 2026-10-15)**; it starts when prikk 0.52.0 is installed and the re-baseline is done. Handoff: [`../rfcs/handoffs/010-upstream-and-supply-chain-maintenance/transport-measurement-spike-handoff-v1.md`](../rfcs/handoffs/010-upstream-and-supply-chain-maintenance/transport-measurement-spike-handoff-v1.md) (measurement only, scratch directory, no repository change).
+- The measurement spike (SCHEDULE D-7) is **authorized (owner, 2026-10-15)**; it is **startable now** (prikk 0.52.0 is installed, the lock update is pushed). Handoff: [`../rfcs/handoffs/010-upstream-and-supply-chain-maintenance/transport-measurement-spike-handoff-v1.md`](../rfcs/handoffs/010-upstream-and-supply-chain-maintenance/transport-measurement-spike-handoff-v1.md) (measurement only, scratch directory, no repository change).
 - Rule on what M2 becomes (SCHEDULE D-8) once the spike reports.
 
 ## Pending upstream (prikk's actual releases and plan, from its letters and ROADMAP of 2026-10-13/15)
@@ -59,7 +59,7 @@ assigned until a handoff names it.
 
 | ID | Issue | Origin | Disposition |
 |---|---|---|---|
-| IS-1 | ~~`planeter` has no `--version` flag; an install check that ran the binary started a server~~ — fixed 2026-10-15 (RFC 010 D-6, build-identity handoff): `--version`/`-V`, `--help`/`-h`, unknown argument exit 2; awaiting review | 0.2.0 release verification | closed on review |
+| IS-1 | ~~`planeter` has no `--version` flag; an install check that ran the binary started a server~~ — fixed 2026-10-15 (RFC 010 D-6, build-identity handoff): `--version`/`-V`, `--help`/`-h`, unknown argument exit 2; **architect review: approved** (release-built `--version` is verified at the next real tag) | 0.2.0 release verification | closed on review |
 | IS-2 | No admin path to link an OIDC `(issuer, subject)` to an account — store API only, so SSO needs code to become usable | 0.2.0 OIDC | design first (a `planeter admin link-oidc` subcommand or an equivalent), then a handoff |
 | IS-3 | The driver's `bundle_import` passes the artifact positionally; prikk 0.46.0 takes `--input` | transport measurement 2026-09-23 | **re-baseline v2 T4 — implemented (`--input`, round-trip test); architect review: approved** |
 | IS-4 | ~~Synchronous prikk subprocess calls run inside async handlers without `spawn_blocking`, and nothing caps concurrent prikk subprocesses. **Re-rated 2026-10-15: an unauthenticated denial of service on any public repository** (each in-flight call pins a tokio worker for up to the 120 s bound)~~ — fixed 2026-10-15 (read-concurrency handoff): every read-path prikk call runs through one gate (`spawn_blocking` + semaphore, bounded wait, 503 + `Retry-After`); awaiting review | RFC 003 review; architect review 2026-10-13 | closed on review |
@@ -82,6 +82,9 @@ assigned until a handoff names it.
 | IS-21 | prikk 0.52.0's `trust maintainer check` exits 1 for "not trusted" (it exited 0); `planeter-prikk::trust_check` keys on exit status | prikk letter 2026-10-15 | re-baseline v2 T5 — implemented (document read on exit 1, typed failure otherwise), awaiting review |
 | IS-22 | ~~The supply-chain gates are red: `ammonia 4.1.4` RUSTSEC-2021-0157 and -0158 (not reachable through the default `clean`, architect-tested) and `yoke-derive 0.8.3` yanked; `release.yml` would fail its own gates~~ — closed 2026-10-15: lock-only update (`ammonia` 4.2.3, `yoke-derive` 0.8.4), deny and audit exit 0, sanitizer behaviour pinned by `planeter-web/tests/sanitize_advisories.rs` | re-baseline review request 2026-10-15 | closed |
 | IS-23 | 25 source files carry inline `#[cfg(test)]` modules, against `project-instructions-rust.md` | re-baseline review request 2026-10-15 | one separate mechanical migration handoff among the hardening handoffs; new tests never inline |
+| IS-24 | Sign-in, session and token checks, Argon2id verification and the SQLite mutex run synchronously on the async workers: the IS-4 class, reachable unauthenticated (found by the IS-4 review) | dev team 2026-10-15 | `rfcs/handoffs/002-authorization/auth-blocking-handoff-v1.md` (assignable; T0 measures first) |
+| IS-25 | No per-repository fairness: a slow repository can hold every prikk slot for the 120 s wall-time bound; options (a per-repository sub-cap, a shorter read bound) | dev team 2026-10-15 | decide after measurement (RFC 004 v2 D-5 and the spike); not assignable |
+| IS-26 | The CI compiler is the runner image's and `runs-on` is `ubuntu-latest`; release pins `1.99.0` | dev team 2026-10-15 | `rfcs/handoffs/010-upstream-and-supply-chain-maintenance/maintenance-gates-handoff-v2.md` (assignable) |
 
 ## Process lessons (keep — each one cost a bad push or a wrong claim)
 

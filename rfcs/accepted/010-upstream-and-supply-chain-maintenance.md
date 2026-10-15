@@ -97,7 +97,9 @@ cadences for planning (the CI schedule in D-3 is a mechanism, not a plan).
 - **D-5 — The build chain is pinned by digest, and checked.** Every `uses:` references a full commit SHA
   with its human tag in a comment; the base image is referenced by digest; the Rust toolchain is an explicit
   version, not `@stable`. A gate, `tools/pin-check`, fails on a mutable reference in `.github/workflows` or
-  the `Dockerfile`. Updating a pin is a reviewed change that names the upstream diff.
+  the `Dockerfile`. *(Amended 2026-10-15 on the dev team's finding, IS-26: CI and release use the **same**
+  pinned toolchain, and runner images are named by a fixed label such as `ubuntu-24.04`, never `-latest`;
+  `pin-check` also fails on a second toolchain version or a `-latest` runner.)* Updating a pin is a reviewed change that names the upstream diff.
 - **D-6 — Build identity.** `planeter --version` and `-V` print `planeter X.Y.Z`, the commit the build
   was made from (`unknown` when built without it, as from crates.io), and the prikk floor, then exit 0
   **without reading configuration or starting the server**. `--help` prints usage. Any other argument is

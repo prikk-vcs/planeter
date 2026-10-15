@@ -5,7 +5,7 @@ settled and the implementer may build the authorization service and the identity
 against it per the handoff. Defines *who a principal is*, *what they may do to which resource*, and *how
 a forge decision maps onto prikk without ever becoming a prikk signature*.
 Handoff: [`../handoffs/002-authorization/authorization-handoff-v1.md`](../handoffs/002-authorization/authorization-handoff-v1.md).
-**Deferred / follow-on (2026-10-15).** The audit sink is a null/in-memory seam; off-box shipping is unbuilt (SCHEDULE T7); the handler-enumeration test for `authorize()` is unwritten (IS-14). Follow-on handoffs live in this RFC's handoff directory.
+**Deferred / follow-on (2026-10-15).** The audit sink is a null/in-memory seam; off-box shipping is unbuilt (SCHEDULE T7); the handler-enumeration test for `authorize()` is unwritten (IS-14); sign-in and session work off the async workers (IS-24, `auth-blocking-handoff-v1.md`). Follow-on handoffs live in this RFC's handoff directory.
 **Tracks.** ROADMAP Phase A1 → M1 (Track A). Requirements `CAP-3`, `SEC-1/3/5`, `STD-2/3`; external
 design `AUTH-01…05`; internal design `AZ-1…4`, `LAY-2`; threat model `T-2/T-3`, `INV-4`, `C-2/C-3`.
 **Touches.** `planeter-auth` (principals, membership, tokens/keys — the inputs to a decision) and
