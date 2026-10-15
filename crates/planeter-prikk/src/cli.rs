@@ -20,7 +20,7 @@ use crate::sandbox::Sandbox;
 /// Raised to 0.46.0 (2026-09-22): it ships the read verbs planeter's browse needs — `tree`
 /// (`tree-listing-v1`), `cat` (`path-content-v1`), `diff` (`diff-report-v1`) — and carries the 0.44.0
 /// `bundle import` corruption fix (GHSA-px5q-233r-6hq5), the 0.45.0 format-7 signature union, and the
-/// key-id fix. The pin refuses anything older rather than guess.
+/// key-id fix.
 pub const MIN_PRIKK_VERSION: (u64, u64, u64) = (0, 46, 0);
 
 /// A prikk repository driven through the prikk CLI as a subprocess.
@@ -159,21 +159,7 @@ impl CliPrikkRepo {
     /// Run a JSON-emitting read command: parse stdout, **check `schema_version`**, deserialize to `T`.
     fn run_json<T: DeserializeOwned>(&self, args: &[&str], expected_schema: &str) -> Result<T> {
         let stdout = self.run(args)?;
-        let value: serde_json::Value = serde_json::from_str(&stdout)
-            .map_err(|e| PrikkError::Parse(format!("invalid JSON: {e}")))?;
-        match value
-            .get("schema_version")
-            .and_then(serde_json::Value::as_str)
-        {
-            Some(s) if s == expected_schema => {}
-            Some(other) => {
-                return Err(PrikkError::Parse(format!(
-                    "unexpected schema_version {other:?} (expected {expected_schema:?}) — prikk JSON may have drifted (PK-18)"
-                )));
-            }
-            None => return Err(PrikkError::Parse("missing schema_version".to_owned())),
-        }
-        serde_json::from_value(value).map_err(|e| PrikkError::Parse(e.to_string()))
+        parse_schema_json(&stdout, expected_schema)
     }
 
     /// Collect non-empty trimmed stdout lines (used by the exchange verbs whose exact output is
@@ -187,6 +173,26 @@ impl CliPrikkRepo {
             .map(str::to_owned)
             .collect())
     }
+}
+
+/// Parse a prikk `--format json` document: it must be JSON, carry `schema_version == expected_schema`
+/// (drift is refused loudly, PK-18), and deserialize into `T`.
+fn parse_schema_json<T: DeserializeOwned>(stdout: &str, expected_schema: &str) -> Result<T> {
+    let value: serde_json::Value = serde_json::from_str(stdout)
+        .map_err(|e| PrikkError::Parse(format!("invalid JSON: {e}")))?;
+    match value
+        .get("schema_version")
+        .and_then(serde_json::Value::as_str)
+    {
+        Some(s) if s == expected_schema => {}
+        Some(other) => {
+            return Err(PrikkError::Parse(format!(
+                "unexpected schema_version {other:?} (expected {expected_schema:?}) — prikk JSON may have drifted (PK-18)"
+            )));
+        }
+        None => return Err(PrikkError::Parse("missing schema_version".to_owned())),
+    }
+    serde_json::from_value(value).map_err(|e| PrikkError::Parse(e.to_string()))
 }
 
 /// Extract the version token from a `prikk --version` line (`"prikk 0.43.0\n"` → `"0.43.0"`).
@@ -321,19 +327,46 @@ impl super::repo::PrikkRepo for CliPrikkRepo {
         )
     }
 
+    /// `trust maintainer check`. prikk ≤ 0.46.0 answers "not trusted" with exit 0; **0.52.0 exits 1**
+    /// (ledger PK-42 / IS-21) and still writes the `trust-check-v1` document. Exit 1 is therefore read
+    /// as the answer `trusted: false` **only if** stdout is a well-formed `trust-check-v1` that itself
+    /// says `trusted: false`; every other non-zero exit (usage `2`, an unreadable policy, a missing or
+    /// contradictory document) stays a typed [`PrikkError::Command`] — exit status remains the signal
+    /// for real failures.
     fn trust_check(&self, key_id: &str) -> Result<model::TrustCheck> {
-        self.run_json(
-            &[
-                "trust",
-                "maintainer",
-                "check",
-                "--key-id",
-                key_id,
-                "--format",
-                "json",
-            ],
-            "trust-check-v1",
-        )
+        const SCHEMA: &str = "trust-check-v1";
+        let args = [
+            "trust",
+            "maintainer",
+            "check",
+            "--key-id",
+            key_id,
+            "--format",
+            "json",
+        ];
+        let output = self
+            .sandbox
+            .command(&self.binary, &self.root, &args)
+            .output()
+            .map_err(PrikkError::Spawn)?;
+        if output.status.success() {
+            let stdout = String::from_utf8(output.stdout)
+                .map_err(|e| PrikkError::Parse(format!("prikk stdout was not UTF-8: {e}")))?;
+            return parse_schema_json(&stdout, SCHEMA);
+        }
+        let code = output.status.code();
+        if code == Some(1) {
+            let parsed = std::str::from_utf8(&output.stdout)
+                .ok()
+                .and_then(|out| parse_schema_json::<model::TrustCheck>(out, SCHEMA).ok());
+            if let Some(check) = parsed.filter(|c| !c.trusted) {
+                return Ok(check);
+            }
+        }
+        Err(PrikkError::Command {
+            code,
+            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
+        })
     }
 
     fn bundle_export(&self, ref_name: &str, out: &Path) -> Result<()> {
@@ -344,7 +377,7 @@ impl super::repo::PrikkRepo for CliPrikkRepo {
 
     fn bundle_import(&self, artifact: &Path) -> Result<()> {
         let a = artifact.to_string_lossy();
-        self.run(&["bundle", "import", &a]).map(drop)
+        self.run(&["bundle", "import", "--input", &a]).map(drop)
     }
 
     fn sync_summary(&self, out: &Path) -> Result<()> {
