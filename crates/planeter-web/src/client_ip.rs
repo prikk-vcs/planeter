@@ -132,14 +132,17 @@ fn normalize(ip: IpAddr) -> IpAddr {
     }
 }
 
-/// The bind rule: loopback is always fine; a non-loopback bind needs trusted proxies configured.
-pub fn bind_allowed(addr: SocketAddr, trusted: &TrustedProxies) -> Result<(), String> {
-    let ip = normalize(addr.ip());
-    let loopback = match ip {
+/// Whether `ip` is a loopback address (an IPv4-mapped IPv6 loopback counts).
+pub fn is_loopback(ip: IpAddr) -> bool {
+    match normalize(ip) {
         IpAddr::V4(v4) => v4.is_loopback(),
         IpAddr::V6(v6) => v6 == Ipv6Addr::LOCALHOST,
-    };
-    if loopback || !trusted.is_empty() {
+    }
+}
+
+/// The bind rule: loopback is always fine; a non-loopback bind needs trusted proxies configured.
+pub fn bind_allowed(addr: SocketAddr, trusted: &TrustedProxies) -> Result<(), String> {
+    if is_loopback(addr.ip()) || !trusted.is_empty() {
         Ok(())
     } else {
         Err(format!(
@@ -147,6 +150,36 @@ pub fn bind_allowed(addr: SocketAddr, trusted: &TrustedProxies) -> Result<(), St
              loopback address, or set PLANETER_TRUSTED_PROXIES to the proxy's address(es)/CIDRs."
         ))
     }
+}
+
+/// The host this request was addressed to: the `Host` header, or `X-Forwarded-Host` **only** when the
+/// TCP peer is a configured trusted proxy (the same trust rule as [`client_ip`]). When the peer is a
+/// trusted proxy the **last** `X-Forwarded-Host` value is used: it is the one the directly connected
+/// proxy set or appended, so a client cannot choose it. `None` when no usable header is present.
+pub fn effective_host(
+    peer: Option<IpAddr>,
+    headers: &HeaderMap,
+    trusted: &TrustedProxies,
+) -> Option<String> {
+    let from_trusted_proxy = peer.is_some_and(|p| trusted.is_trusted(normalize(p)));
+    if from_trusted_proxy {
+        let forwarded = headers
+            .get_all("x-forwarded-host")
+            .iter()
+            .filter_map(|v| v.to_str().ok())
+            .flat_map(|line| line.split(','))
+            .map(str::trim)
+            .rfind(|s| !s.is_empty());
+        if let Some(h) = forwarded {
+            return Some(h.to_owned());
+        }
+    }
+    headers
+        .get(axum::http::header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(str::to_owned)
 }
 
 /// The TCP peer address, if the server was started with connect-info (tests driving the router

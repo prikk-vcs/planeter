@@ -81,6 +81,20 @@ docker run --rm ghcr.io/prikk-vcs/planeter:X.Y.Z --version
   planeter speaks plain HTTP: it **refuses a non-loopback bind unless trusted proxies are set**, takes
   the client IP from `X-Forwarded-For` only when the TCP peer is a trusted proxy, and marks cookies
   `Secure` (so the proxy must serve HTTPS).
+- **Raw content origin (IS-16):** raw repository bytes are always inert downloads (attachment,
+  `nosniff`, a sandbox CSP). *Isolation from the application's origin* holds only when
+  `PLANETER_CONTENT_ORIGIN` names a **different host** (a different port on the same host is not
+  isolation: cookies ignore the port). Then the raw route answers **only** for requests whose effective
+  host is that host, and the application's own host answers `404` exactly as for an unknown route. The
+  effective host is the `Host` header, or the last `X-Forwarded-Host` value **only** when the TCP peer is
+  in `PLANETER_TRUSTED_PROXIES`. Start-up: a non-loopback `PLANETER_ADDR` whose content origin has the
+  application's own host (the default is `http://<PLANETER_ADDR>`) **refuses to start**; on a loopback
+  bind it logs one warning and the raw route answers on the application host. There is no override: a
+  second host name for the same proxy is all it takes. **Proxy requirement:** preserve the original
+  `Host`, or send `X-Forwarded-Host` and list the proxy in `PLANETER_TRUSTED_PROXIES`; a proxy that
+  rewrites `Host` to the upstream's name makes the content host unreachable. **Breaking in 0.3.0:** a
+  production-shaped deployment with no distinct content host no longer starts, and raw bytes are no longer
+  served from the application's host when a distinct origin is configured.
 - **Cache directives and HSTS (IS-29):** the app sets its own `Cache-Control` (`private, no-cache` and
   `Vary: Cookie, Authorization` on dynamic responses, `no-store` on sign-in and sign-out, a one-hour
   `public` lifetime only on the stylesheet), so the proxy needs no cache rules of its own and must not
@@ -111,8 +125,8 @@ docker run --rm ghcr.io/prikk-vcs/planeter:X.Y.Z --version
 - **Container:** persist `/var/lib/planeter` (repos + SQLite). bubblewrap needs user namespaces
   inside the container: typically `--security-opt seccomp=unconfined` (or a seccomp profile allowing
   `unshare`/`clone` with `CLONE_NEWUSER`) and, on kernels that restrict unprivileged user namespaces,
-  `--cap-add SYS_ADMIN`. Serve raw content from a **distinct origin** (`PLANETER_CONTENT_ORIGIN`) in
-  front of the same server.
+  `--cap-add SYS_ADMIN`. Serve raw content from a **distinct host** (`PLANETER_CONTENT_ORIGIN`) in
+  front of the same server (see *Raw content origin* above).
 - **Format 7:** keep the serving prikk at or above the on-disk format your hosted repositories carry;
   planeter never upgrades a repository's format on its own.
 

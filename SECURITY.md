@@ -33,8 +33,11 @@ properties a report is measured against:
   environment, wall-time bound) and is the source of truth for every repository fact.
 - **One default-deny `authorize()`** on every read and write path; no existence leak for hidden
   repositories.
-- **Rendered content is sanitized** under a strict CSP; raw bytes are served only as inert downloads
-  from an isolated origin.
+- **Rendered content is sanitized** under a strict CSP; raw bytes are always served as inert downloads
+  (attachment, `nosniff`, a sandbox CSP). When a distinct content origin is configured
+  (`PLANETER_CONTENT_ORIGIN`, a different **host** from the application's), raw bytes are served only
+  there and the application's own host refuses the raw route. A non-loopback planeter refuses to start
+  without one; on a loopback bind it warns.
 - **Outbound requests pass an egress guard** (public unicast only, HTTPS only, no redirects, size and
   time bounds) and a confined `curl`.
 - **planeter speaks plain HTTP behind a TLS-terminating reverse proxy** it must be told about; it

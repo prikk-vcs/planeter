@@ -15,15 +15,127 @@ pub type Header = (&'static str, String);
 
 /// The isolated origin (a distinct scheme+host) that raw repository bytes are served from. Configured
 /// per deployment; distinct from the app origin (`T4`).
+///
+/// It also knows the **application's own host** (the host the server is bound to), when the binary
+/// supplies it. The raw route answers only on the content origin's host (IS-16); when the content
+/// origin's host *is* the application's host there is no isolation to enforce, and the route answers
+/// on that host (the loopback development shape; production refuses to start in that state).
 #[derive(Debug, Clone)]
-pub struct ContentOrigin(pub String);
+pub struct ContentOrigin {
+    origin: String,
+    app_host: Option<String>,
+}
 
 impl ContentOrigin {
+    /// An origin with the application's host unknown: the raw route is **gated** on the content host.
     pub fn new(origin: impl Into<String>) -> Self {
-        Self(origin.into())
+        Self {
+            origin: origin.into(),
+            app_host: None,
+        }
     }
+
+    /// Record the application's own host (the bound address). Used for the same-host decision only.
+    pub fn with_app_host(mut self, host: impl AsRef<str>) -> Self {
+        self.app_host = Some(normalize_host(host.as_ref()));
+        self
+    }
+
     pub fn as_str(&self) -> &str {
-        &self.0
+        &self.origin
+    }
+
+    /// The content origin's host, lower-case, without port or brackets. `None` when the configured
+    /// string has no recognizable host.
+    pub fn host(&self) -> Option<String> {
+        origin_host(&self.origin)
+    }
+
+    /// True when the content origin's host is the application's own host (a port-only difference is
+    /// *not* isolation: cookies are host-scoped and ignore the port).
+    pub fn same_host_as_app(&self) -> bool {
+        match (&self.app_host, self.host()) {
+            (Some(app), Some(content)) => *app == content,
+            _ => false,
+        }
+    }
+
+    /// Whether `effective_host` may be served the raw route. Same-host deployments are ungated (there
+    /// is nothing to isolate); otherwise the request's host must be the content origin's host.
+    pub fn serves_raw_on(&self, effective_host: Option<&str>) -> bool {
+        if self.same_host_as_app() {
+            return true;
+        }
+        match (self.host(), effective_host) {
+            (Some(content), Some(h)) => normalize_host(h) == content,
+            _ => false,
+        }
+    }
+}
+
+/// The host of an origin string `scheme://[userinfo@]host[:port][/...]`, normalized.
+pub(crate) fn origin_host(origin: &str) -> Option<String> {
+    let rest = origin.split_once("://")?.1;
+    let authority = rest.split(['/', '?', '#']).next()?;
+    let host = authority.rsplit('@').next()?;
+    let h = normalize_host(host);
+    (!h.is_empty()).then_some(h)
+}
+
+/// Lower-case, strip a `:port`, strip IPv6 brackets and one trailing dot. Accepts a bare host, a
+/// `host:port`, or a `Host`/`X-Forwarded-Host` header value.
+pub(crate) fn normalize_host(raw: &str) -> String {
+    let raw = raw.trim();
+    let host = if let Some(rest) = raw.strip_prefix('[') {
+        rest.split(']').next().unwrap_or("")
+    } else if raw.matches(':').count() == 1 {
+        raw.split(':').next().unwrap_or("")
+    } else {
+        // A bare IPv6 address (several colons, no brackets) or a plain name.
+        raw
+    };
+    host.trim_end_matches('.').to_ascii_lowercase()
+}
+
+/// What the start-up check found about the configured content origin.
+#[derive(Debug, PartialEq, Eq)]
+pub enum ContentOriginCheck {
+    /// A distinct host: the raw route is gated and the app host refuses it.
+    Isolated,
+    /// The same host as the application, on a loopback bind (development): one warning.
+    SameHostLoopback,
+}
+
+/// The message printed when planeter refuses to start (IS-16 T2).
+pub const REFUSE_SAME_HOST: &str = "planeter: refusing to start: raw repository content would be \
+served from the application's own host, which breaks the isolation the documentation promises. Set \
+PLANETER_CONTENT_ORIGIN to a different host (for example https://raw.example.org).";
+
+/// The one-line warning for a same-host content origin on a loopback bind.
+pub const WARN_SAME_HOST: &str = "planeter: warning: raw repository content is served from the \
+application's own host (PLANETER_CONTENT_ORIGIN is not a different host); acceptable for local \
+development only.";
+
+/// Decide, before serving, whether the content origin is acceptable for this bind address. `Err` is
+/// the full message to print (exit 1): either the refusal, or a malformed origin.
+pub fn check_content_origin(
+    content_origin: &ContentOrigin,
+    bind: std::net::SocketAddr,
+) -> Result<ContentOriginCheck, String> {
+    if content_origin.host().is_none() {
+        return Err(format!(
+            "planeter: PLANETER_CONTENT_ORIGIN is not an origin with a host (expected \
+             scheme://host[:port], got {:?})",
+            content_origin.as_str()
+        ));
+    }
+    if !content_origin.same_host_as_app() {
+        return Ok(ContentOriginCheck::Isolated);
+    }
+    if crate::client_ip::is_loopback(bind.ip()) {
+        Ok(ContentOriginCheck::SameHostLoopback)
+    } else {
+        Err(REFUSE_SAME_HOST.to_owned())
     }
 }
 

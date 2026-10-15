@@ -72,7 +72,10 @@ pub fn router(state: AppState) -> axum::Router {
         ))
 }
 pub use sanitize::{render_markdown, sanitize_html};
-pub use security::{ContentOrigin, app_csp, app_security_headers, raw_content_headers};
+pub use security::{
+    ContentOrigin, ContentOriginCheck, REFUSE_SAME_HOST, WARN_SAME_HOST, app_csp,
+    app_security_headers, check_content_origin, raw_content_headers,
+};
 
 /// Serve the read API on `addr` until the process is stopped.
 pub async fn serve(state: AppState, addr: std::net::SocketAddr) -> std::io::Result<()> {

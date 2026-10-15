@@ -209,8 +209,16 @@ async fn raw_handler(
     State(state): State<AppState>,
     Path((owner, name)): Path<(String, String)>,
     q: Result<Query<RawQuery>, QueryRejection>,
+    peer: crate::client_ip::PeerAddr,
     headers: HeaderMap,
 ) -> Response {
+    // IS-16: raw bytes are served only on the content origin's host. Decided first, before the query
+    // or the principal is looked at, and answered exactly as an unknown route is.
+    let host =
+        crate::client_ip::effective_host(peer.0.map(|a| a.ip()), &headers, &state.trusted_proxies);
+    if !state.content_origin.serves_raw_on(host.as_deref()) {
+        return code_response(&state, ErrorCode::NotFound);
+    }
     let Ok(Query(q)) = q else {
         return error_response(&state, Failure::Invalid);
     };

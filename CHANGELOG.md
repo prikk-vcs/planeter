@@ -5,6 +5,18 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **Raw content is gated by host, and isolation is enforced at start-up (IS-16; RFC 003 D-4).
+  Breaking.** The raw route (`/api/v1/repos/{owner}/{name}/raw`) now answers only on the content
+  origin's host; on any other host it is `404` with the body of an unknown route. The effective host is
+  `Host`, or the last `X-Forwarded-Host` only from a peer in `PLANETER_TRUSTED_PROXIES`. A different port
+  on the same host is *not* a distinct origin. **A non-loopback bind whose content origin has the
+  application's host (the default) now refuses to start**, with a message naming
+  `PLANETER_CONTENT_ORIGIN`; on a loopback bind one warning is logged and nothing else changes. There is
+  no override variable. A deployment that proxies a second host name to the same planeter and sets
+  `PLANETER_CONTENT_ORIGIN` to it keeps working. `planeter --help` is now the one list of environment
+  variables (the copy in `main.rs`'s header is gone, and a test keeps `--help` and the code in step).
+  A `PLANETER_CONTENT_ORIGIN` without a host (not `scheme://host[:port]`) is refused at start.
+
 - **A real API contract and safe cache headers (IS-28, IS-29; RFC 003 D-2, STD-3).** **Behaviour
   change: API error responses now carry a JSON body** `{"code", "message", "hint"}` with
   `Content-Type: application/json` (they were empty). Codes: `not_found` (a repository that is absent and

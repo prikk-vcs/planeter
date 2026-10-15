@@ -59,9 +59,9 @@ PLANETER_ADDR=127.0.0.1:8080 PLANETER_REPOS_ROOT=./planeter-repos PLANETER_DB=./
 
 planeter speaks plain HTTP and is built to sit behind a TLS-terminating reverse proxy: declare the
 proxy in `PLANETER_TRUSTED_PROXIES` (a non-loopback bind is refused without it), serve raw file
-downloads from a separate origin (`PLANETER_CONTENT_ORIGIN`), and set the `PLANETER_OIDC_*` variables
-for SSO. Every variable is documented at the top of `crates/planeter/src/main.rs`; deployment notes
-are in [`docs/RELEASING.md`](docs/RELEASING.md).
+downloads from a different host (`PLANETER_CONTENT_ORIGIN`; a non-loopback planeter refuses to start
+without one), and set the `PLANETER_OIDC_*` variables for SSO. `planeter --help` lists every variable;
+deployment notes are in [`docs/RELEASING.md`](docs/RELEASING.md).
 
 ## What works today
 

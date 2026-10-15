@@ -6,28 +6,8 @@
 //! local password (Argon2id) or OpenID Connect, behind sessions, CSRF protection and login throttles;
 //! every store persists in **SQLite**. Clone/push (RFC 004) is not here yet. `--version`/`-V` and
 //! `--help`/`-h` answer without reading configuration (see [`args`]); any other argument is refused
-//! with exit 2. Configuration is by environment variable:
-//!
-//! - `PLANETER_ADDR` — bind address (default `127.0.0.1:8080`)
-//! - `PLANETER_REPOS_ROOT` — where hosted repositories live (default `./planeter-repos`)
-//! - `PLANETER_CONTENT_ORIGIN` — the isolated origin for raw bytes (default `http://127.0.0.1:8080`)
-//! - `PLANETER_DB` — the SQLite database file (default `./planeter.db`; created if absent)
-//! - `PLANETER_TRUSTED_PROXIES` — comma-separated addresses/CIDRs of the TLS-terminating reverse proxies
-//!   (client IPs are taken from `X-Forwarded-For` only behind these). **A non-loopback `PLANETER_ADDR`
-//!   is refused unless this is set**: planeter speaks plain HTTP and must sit behind TLS termination.
-//! - `PLANETER_PRIKK_CONCURRENCY` — the most prikk subprocesses running at once, a positive integer
-//!   (default `min(available_parallelism, 8)`). Read-path prikk work runs off the async workers.
-//! - `PLANETER_PRIKK_QUEUE_WAIT_SECS` — how long a request waits for a slot before it is refused with
-//!   `503` and `Retry-After`, a positive integer (default 10).
-//! - `PLANETER_AUTH_CONCURRENCY` — the most password verifications (Argon2id) running at once, a
-//!   positive integer (default `min(available_parallelism, 4)`); a separate bound from the prikk one.
-//! - `PLANETER_AUTH_QUEUE_WAIT_SECS` — how long a sign-in waits for a slot before it is refused with
-//!   `503` and `Retry-After`, a positive integer (default 5). Unknown and existing accounts alike.
-//! - `PLANETER_OIDC_ISSUER`, `PLANETER_OIDC_CLIENT_ID`, `PLANETER_OIDC_REDIRECT_URI` (all three to enable
-//!   SSO) and optional `PLANETER_OIDC_CLIENT_SECRET` — the OpenID Connect provider. Discovery, JWKS and the
-//!   token exchange go through the egress guard and a confined `curl` (a runtime prerequisite like prikk
-//!   and bubblewrap). Accounts are linked to `(issuer, subject)` administratively; nothing is
-//!   auto-provisioned.
+//! with exit 2. Configuration is by environment variable; `planeter --help` lists every variable, with
+//! its default (the list lives in `args::USAGE` and nowhere else).
 
 mod args;
 
@@ -41,7 +21,7 @@ use planeter_core::{HostingService, NullAuditSink, ReadService};
 use planeter_store::{
     MembershipStore, RepositoryStore, SqliteDb, SqliteMembershipStore, SqliteRepositoryStore,
 };
-use planeter_web::{AppState, ContentOrigin};
+use planeter_web::AppState;
 
 #[tokio::main]
 async fn main() {
@@ -88,6 +68,21 @@ async fn main() {
     if let Err(e) = planeter_web::bind_allowed(addr, &trusted_proxies) {
         eprintln!("planeter: {e}");
         std::process::exit(1);
+    }
+
+    // IS-16: raw bytes are isolated only if the content origin is a different host. A production-shaped
+    // bind with the application's own host is refused; a loopback bind warns once.
+    let content_origin =
+        planeter_web::ContentOrigin::new(content_origin).with_app_host(addr.ip().to_string());
+    match planeter_web::check_content_origin(&content_origin, addr) {
+        Ok(planeter_web::ContentOriginCheck::Isolated) => {}
+        Ok(planeter_web::ContentOriginCheck::SameHostLoopback) => {
+            eprintln!("{}", planeter_web::WARN_SAME_HOST);
+        }
+        Err(message) => {
+            eprintln!("{message}");
+            std::process::exit(1);
+        }
     }
 
     // One SQLite database for every store; production hashers.
@@ -200,7 +195,7 @@ async fn main() {
         gate,
         auth_gate,
         auth,
-        content_origin: ContentOrigin::new(content_origin),
+        content_origin,
         sessions: Arc::new(sessions),
         login_throttle: Arc::new(planeter_auth::LoginThrottle::default()),
         ip_throttle: Arc::new(planeter_auth::LoginThrottle::new(20, 15 * 60)),

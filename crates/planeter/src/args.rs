@@ -70,7 +70,9 @@ With no argument, planeter reads its configuration from the environment and serv
 environment:
   PLANETER_ADDR                 bind address (default 127.0.0.1:8080)
   PLANETER_REPOS_ROOT           where hosted repositories live (default ./planeter-repos)
-  PLANETER_CONTENT_ORIGIN       the isolated origin for raw bytes (default http://<PLANETER_ADDR>)
+  PLANETER_CONTENT_ORIGIN       the origin raw bytes are served from; its host must differ from the
+                                application's (default http://<PLANETER_ADDR>, development only: a
+                                non-loopback bind with the same host is refused)
   PLANETER_DB                   the SQLite database file (default ./planeter.db; created if absent)
   PLANETER_TRUSTED_PROXIES      comma-separated addresses/CIDRs of the TLS-terminating reverse proxies;
                                 a non-loopback PLANETER_ADDR is refused unless this is set

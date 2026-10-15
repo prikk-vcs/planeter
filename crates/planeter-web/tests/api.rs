@@ -106,7 +106,10 @@ async fn send(
     bearer: Option<&str>,
     inm: Option<&str>,
 ) -> Response {
-    let mut req = Request::builder().uri(uri);
+    // The raw route answers only on the content origin's host (IS-16): these requests arrive there.
+    let mut req = Request::builder()
+        .uri(uri)
+        .header(header::HOST, "raw.planeter.example");
     if let Some(t) = bearer {
         req = req.header(header::AUTHORIZATION, format!("Bearer {t}"));
     }
