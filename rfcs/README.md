@@ -42,7 +42,7 @@ artifact) are accepted by the prikk owner, so 008 is gated on RFC 154 shipping; 
 | 001 | [Foundations: prikk-integration layer, the layering gate, multi-repo hosting & identity](done/001-foundations.md) | A0→A1 | **done** (0.1.0) |
 | 002 | [Authorization model (`authorize()`, roles, per-ref permissions)](done/002-authorization.md) | A1 | **done** (0.1.0; SSO in 0.2.0) |
 | 003 | [Read path & web browse (re-derivation, caching, safe rendering)](done/003-read-path.md) | A1 | **done** (0.1.0; UI in 0.1.1) |
-| 004 | [Transport: clone/push as a ferry over prikk's artifact exchange + client helper](proposed/004-transport.md) | A2 | **proposed** (re-opened 2026-10-15; v2 pending) |
+| 004 | [Transport, second edition: whole-artifact fetch, leased keyless push, recovery, client helper](proposed/004-transport.md) | A2 | **proposed** (re-opened 2026-10-15; v2 pending) |
 | 005 | [Change proposal and review, second edition (issues split out; merge is RFC 008 / D-8)](proposed/005-change-review.md) | A3 | **proposed** (re-opened 2026-10-15; v2 pending) |
 | 006 | [Continuous integration and the runner protocol](proposed/006-ci-runners.md) | A4 | **proposed** (re-opened 2026-10-15; v2 pending) |
 | 007 | [Package and artifact registry](proposed/007-registry.md) | A5 | **proposed** (re-opened 2026-10-15; v2 pending) |
