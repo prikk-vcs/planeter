@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | The rules that produced planeter's dependency tree, and the record of every supply-chain decision (accepted with its measured cost, rejected with its reason), so settled battles are not re-fought and new ones are decided the same way. |
-| As of | 2026-09-24 (lock: 200 runtime crates + 11 test-only) |
+| As of | 2026-10-15 (lock: 200 runtime crates + 11 test-only; unchanged by the advisory fix) |
 | Basis | RFC 001 (the sandboxed-subprocess pattern), threat model `T-11` (supply chain) and `C-8` (egress), `deny.toml`, `.cargo/audit.toml`, the 0.1.0–0.2.0 review packages |
 
 ## Rules
@@ -40,6 +40,7 @@
 | 2026-09-23 | `askama` 0.13 | +6 | compile-time, auto-escaping templates for the browse UI |
 | 2026-09-24 | `jsonwebtoken` 10 (`rust_crypto`, no default features) | 151 → 200 (+49) | OIDC verification; no `ring`/`aws-lc`; RUSTSEC-2023-0071 scoped ignore (rule 3) |
 | 2026-09-24 | `jsonwebtoken` `use_pem` (dev-dependency only) | +11 test-only (lock 211) | parses the ES256 fixture key in tests; brings `simple_asn1` (ISC) |
+| 2026-10-15 | `ammonia` 4.1.4 → 4.2.3, `yoke-derive` 0.8.3 → 0.8.4 (advisory fix, **lock-only**) | 211 → 211 (+0); 12 version bumps (`ammonia`, `cssparser`, `html5ever`, `markup5ever`, `phf`, `phf_codegen`, `phf_generator`, `phf_shared`, `string_cache`, `string_cache_codegen`, `web_atoms`, `yoke-derive`); deny: advisories, bans, licenses, sources ok; audit: 0 vulnerabilities; new licenses: none | RUSTSEC-2021-0157/-0158 and a yanked crate; `Cargo.toml` unchanged (`ammonia = "4"`), no ignore added; sanitizer behaviour pinned by `planeter-web/tests/sanitize_advisories.rs` on both versions |
 
 ## Ledger — rejected (do not re-propose without new facts)
 

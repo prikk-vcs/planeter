@@ -22,7 +22,7 @@
   (`prikk archive`, whole-repository; closure fix in 0.52.0); RFC 154 is **unscheduled**; a keyless delta
   form is **not planned**. The owner's ruling on what M2 becomes is pending; the scoping notes are
   private working material (`.git-exclude/specs/`), not decisions.
-- **Supply chain:** `cargo deny` / `cargo audit` **RED as of the 2026-10-15 re-baseline review** (IS-22: two `ammonia` advisories, one yanked crate; fix = the lock-update handoff). Checked at every push, release, re-baseline and RFC disposition (RFC 010 D-3).
+- **Supply chain:** `cargo deny` / `cargo audit` **green as of 2026-10-15** (IS-22 closed: `ammonia` 4.2.3, `yoke-derive` 0.8.4, lock-only). Checked at every push, release, re-baseline and RFC disposition (RFC 010 D-3).
 - **Runtime floor:** prikk ≥ 0.52.0 (`MIN_PRIKK_VERSION`, raised at the 0.52.0 re-baseline, 2026-10-15 — implemented and **conditionally approved by the architect**; to be pushed after the advisory lock update), bubblewrap, curl for SSO. Local binary: 0.52.0.
 - **Team:** migrating to a two-agent team (high-capability architect/reviewer + mid-capability
   implementer) under the owner's workflow (owner-directed 2026-09-24). **First assignment (owner ruling):
@@ -80,7 +80,7 @@ assigned until a handoff names it.
 | IS-19 | Requirements with no theme, RFC or milestone: CAP-10 (search, notifications); export (NG-7, OPS-6, CT-05); fork and mirror (CAP-1); the contribution model for non-writers (no `propose` action); the binding of a prikk author key to a forge account | architect review 2026-10-13 | decision requests (OQ-4) and RFCs before M3; RFC 005 v2 and an RFC 002 follow-on |
 | IS-20 | The RFC folders do not tell the truth (RFC 000): 004–009 sit in `accepted/` while quarantined; 001–003 are `done/` with deferred items recorded only in review requests and here | architect review 2026-10-13 | **closed 2026-10-15**: RFCs 004–009 re-opened to `proposed/`; deferred and follow-on notes added to the Status of RFCs 001–003 |
 | IS-21 | prikk 0.52.0's `trust maintainer check` exits 1 for "not trusted" (it exited 0); `planeter-prikk::trust_check` keys on exit status | prikk letter 2026-10-15 | re-baseline v2 T5 — implemented (document read on exit 1, typed failure otherwise), awaiting review |
-| IS-22 | The supply-chain gates are red: `ammonia 4.1.4` RUSTSEC-2021-0157 and -0158 (not reachable through the default `clean`, architect-tested) and `yoke-derive 0.8.3` yanked; `release.yml` would fail its own gates | re-baseline review request 2026-10-15 | `rfcs/handoffs/010-upstream-and-supply-chain-maintenance/supply-chain-advisories-lock-update-handoff-v1.md` (lock-only; before the push) |
+| IS-22 | ~~The supply-chain gates are red: `ammonia 4.1.4` RUSTSEC-2021-0157 and -0158 (not reachable through the default `clean`, architect-tested) and `yoke-derive 0.8.3` yanked; `release.yml` would fail its own gates~~ — closed 2026-10-15: lock-only update (`ammonia` 4.2.3, `yoke-derive` 0.8.4), deny and audit exit 0, sanitizer behaviour pinned by `planeter-web/tests/sanitize_advisories.rs` | re-baseline review request 2026-10-15 | closed |
 | IS-23 | 25 source files carry inline `#[cfg(test)]` modules, against `project-instructions-rust.md` | re-baseline review request 2026-10-15 | one separate mechanical migration handoff among the hardening handoffs; new tests never inline |
 
 ## Process lessons (keep — each one cost a bad push or a wrong claim)
