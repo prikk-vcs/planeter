@@ -35,6 +35,8 @@ reader must apply; the evidence is in `ROADMAP.md`, the dependency ledger (PK- r
   repository-complete artifact** (whole-artifact first; a delta form in its design round), and a
   planeter-created repository has **no sealed branch to serve** until RFC 154 adoption exists. **M2 is
   held until prikk ships RFC 155 then RFC 154 (after prikk 0.49.0)**; clone and push land together.
+  *Update 2026-10-15: RFC 155 shipped in 0.51.0; RFC 154 is unscheduled and a keyless delta form is not
+  planned; the owner's ruling on M2's shape is pending (ledger v1.5 §D).*
 - **CAP-5 / SEC-2 / UD-6 superseded:** prikk declined the client-sealable prepared plan (it is blind
   signing). The one-click merge is instead **the maintainer seals with their own prikk, client-side,
   and the forge *adopts* the trusted-maintainer-signed fast-forward** (prikk RFC 154, accepted
@@ -53,8 +55,8 @@ reader must apply; the evidence is in `ROADMAP.md`, the dependency ledger (PK- r
   yet. OPS-3/OPS-5 — backup and observability are not designed beyond the container's persist rule;
   they belong to B2 and 1.0 readiness. OPS-6 — Apache-2.0, attested releases, crates published.
 - **§9 UD- table, current state:** UD-1 closed except blame · UD-2 answered by RFC 154 (adoption) plus
-  keyless accept (PK-28) · UD-3: format 7 shipped (0.45.0, signature union), **format 8 announced for
-  0.48.0**, prikk RFC 114 §5.2 requires a tested migration before any format change, the hosting
+  keyless accept (PK-28) · UD-3: format 7 shipped (0.45.0, signature union), **format 8 was announced for
+  0.48.0 and does not exist (unscheduled; new repositories are format 7, 2026-10-15)**, prikk RFC 114 §5.2 requires a tested migration before any format change, the hosting
   mechanism is RFC 155 `import --adopt` (RFC 009) · UD-4 still open, to confirm in the transport v2
   handoff · UD-5 moot (no linking) · UD-6 withdrawn. **New: UD-7 keyless fetch = prikk RFC 155 (PK-27);
   UD-8 canonical branch by adoption = prikk RFC 154.** Both accepted upstream, neither shipped.

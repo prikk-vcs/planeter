@@ -100,8 +100,8 @@ work moves through it; [`SECURITY.md`](SECURITY.md) how to report a vulnerabilit
 ## Design notes
 
 - **prikk dependencies are tracked, not assumed.** The keyless canonical-branch, merge, relay, and
-  migration paths depend on prikk shipping RFC 155 then RFC 154 (both accepted by the prikk owner;
-  scheduled after prikk 0.49.0); their implementation is **gated on the prikk binary**, while the
+  migration paths depend on prikk's RFC 154 (accepted by the prikk owner, not yet scheduled; RFC 155 has
+  shipped as `prikk archive` in 0.51.0); their implementation is **gated on the prikk binary**, while the
   read/host/auth spine (M1, shipped) needed no prikk change. See the dependency ledger.
 - **Layering is a gate, not a diagram.** Dependencies point downward only; authorization is one core
   service consulted on every path; only the prikk-integration layer touches prikk — each enforced in CI.

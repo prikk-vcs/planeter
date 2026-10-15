@@ -26,9 +26,12 @@ every prikk release.
   ROADMAP §Dependencies and the milestone table when a schedule or ruling moved, and the affected
   handoff's hold note. The ledger's version line names the letter. The private letters are the source;
   the ledger is the record a new reader can rely on.
-- Open threads with prikk today: the fetch planning numbers (draft awaiting the owner); prikk's
-  invitation for planeter's input on the RFC 158 Stage B streaming-bound design (0.48.0); the RFC 155
-  all-or-nothing import round (R4), where planeter's input is invited.
+- Open threads with prikk today (2026-10-15): our reply to its CI read-side question (a read-only
+  command writing the files at a ref, a block id or one pending claim into an empty directory; draft with
+  the owner); prikk's decision on putting our fetch numbers and the append-only question to its owner as
+  one candidate (it will write back); RFC 158 Stage B's memory ceiling, unscheduled, where planeter's input
+  stands. Answered: the fetch numbers (sent 2026-10-13), keyless `archive import` (Q3), the delta form
+  (not planned).
 
 ## Re-baseline procedure (each prikk release)
 
@@ -48,7 +51,7 @@ every prikk release.
 5. **Record**: ledger version bump with the outcome per affected row; STATUS "pending upstream" table
    advanced; a hold note on any handoff whose assumptions the release changed.
 6. **Format changes are a deployment rule, not code**: a serving binary stays at or above the on-disk
-   format its hosted repositories carry (format 7 since 0.45.0; format 8 announced for 0.48.0);
+   format its hosted repositories carry (format 7 since 0.45.0; no format 8 exists yet, it is unscheduled);
    planeter never upgrades a hosted repository's format on its own.
 
 The first instance under the new team is 0.47.0:

@@ -59,7 +59,7 @@
 - **GATED table, current:** GATED-1 ruled and refined by RFC 154 (adoption) · GATED-2 settled (purely
   planeter's) · GATED-3 → RFC 009, gated on RFC 155 · GATED-4 open · GATED-5 open · GATED-6 resolved
   (independent driver) · GATED-7 closed except blame. **New gate: keyless fetch and the canonical
-  branch — prikk RFC 155 then 154, after prikk 0.49.0 — holds M2.**
+  branch — prikk RFC 155 then 154, after prikk 0.49.0 — holds M2.** *(Update 2026-10-15: RFC 155 shipped in 0.51.0; RFC 154 is unscheduled; a delta form is not planned — ledger v1.5 §D.)*
 - **§7 entry point, updated:** the design set is `planeter-00` (charter) · `01` (requirements v0.2) ·
   `02` (this) · `03` (threat model v0.3) · `04` (internal design v0.2) · the dependency ledger; with
   `ROADMAP.md`, `docs/SCHEDULE.md` and `docs/STATUS.md` around it.

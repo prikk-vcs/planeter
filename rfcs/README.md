@@ -32,10 +32,10 @@ complete. Track A: **001** foundations (A0) · **002** authorization + **003** r
 **Where it stands (2026-09-24).** **001–003 are done**: shipped as M1 (planeter 0.1.0, 2026-09-23) and
 extended by the 0.1.1 / 0.2.0 read-side increments (browse UI, sessions, trusted proxies, OpenID Connect).
 **004 is held** — measured on prikk 0.46.0, a keyless forge cannot build incremental fetch artifacts and
-has no servable canonical branch until prikk ships RFC 155 then RFC 154 (after prikk 0.49.0); see
+has no servable canonical branch until prikk's RFC 154 adoption exists (RFC 155 shipped in 0.51.0 as `archive`; RFC 154 is unscheduled and a keyless delta form is not planned, as of 2026-10-15); see
 `handoffs/004-transport/`. 005–007 wait on 004. The two prikk-side asks (008 §D-4, 009 §D-4) were
 conveyed and answered: prikk RFC 154 (trusted fast-forward adoption) and RFC 155 (the repository-complete
-artifact) are accepted by the prikk owner, so 008 and 009 are gated on those shipping.
+artifact) are accepted by the prikk owner, so 008 is gated on RFC 154 shipping; 009's carry-forward mechanism (RFC 155) has shipped, and its remaining gate is the owner's format-policy work.
 
 | # | RFC | Serves (phase) | State |
 |---|---|---|---|

@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | Handoff for the per-prikk-release re-baseline (ROADMAP §Release cycles: "planeter re-baselines against each prikk release", owner-confirmed 2026-09-23), instance **0.47.0**. Supporting work without an RFC of its own (workflow §6.6). |
-| Status | **Next assignment — held until prikk 0.47.0 is released and installed locally** (owner ruling 2026-09-24: the new team's first task). Not assignable before that: the version-pinned tests must run against the real binary, never be skipped into a false green. |
+| Status | **SUPERSEDED 2026-10-15 by [`prikk-0-52-0-rebaseline-handoff-v2.md`](prikk-0-52-0-rebaseline-handoff-v2.md)** (prikk is at 0.52.0; not assignable; kept for its reasoning). Original status: **Next assignment — held until prikk 0.47.0 is released and installed locally** (owner ruling 2026-09-24: the new team's first task). Not assignable before that: the version-pinned tests must run against the real binary, never be skipped into a false green. |
 | Basis | Dependency ledger v1.4 rows **PK-18** (JSON drift is a version-gated risk), **PK-26** (the floor), **PK-30** (0.45/0.46 regression, fixed 0.47.0), **PK-31** (0.47.0 accept size bound); `docs/UPSTREAM.md` §Re-baseline procedure; RFC 001 D-3 (version pin) and D-2 (the driver keys on exit status, never text); issue register IS-3. |
 | Audience | Dev team. Return a review-request package when green. |
 | Scope | The prikk boundary crate (`planeter-prikk`) and the records that pin the prikk version. **Non-change scope:** no transport code (M2 is held), no new dependencies, no design-set edits, no change to any `schema_version` string planeter expects unless 0.47.0 changed it (then: stop and file the drift, T1). |

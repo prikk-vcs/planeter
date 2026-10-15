@@ -51,6 +51,7 @@
   **handler-enumeration test is not written** (IS-14); ENF-5 trivially true (no cache); ENF-6 holds.
 - **Sequencing (SEQ):** SEQ-1 and SEQ-2 done (M0, M1, 0.1.1, 0.2.0). SEQ-3 and SEQ-4 are merged into
   **M2, held** until prikk RFC 155 then 154 (after prikk 0.49.0). SEQ-5 becomes adoption (RFC 154).
+  *Update 2026-10-15: RFC 155 shipped in 0.51.0; RFC 154 is unscheduled (ledger v1.5 §D).*
 - **RFC map (NR) and open questions (IQ):** NR-1 → RFC 004 (held, v2 pending) · NR-2 → RFC 002 (done)
   · NR-3 → RFC 005 (accepted v1; re-issue before M3) · NR-4 → RFC 008 re-based on RFC 154 adoption ·
   NR-5 → RFC 006 · NR-6 → RFC 007 · NR-7 → RFC 009. IQ-1 resolved (independent `planeter-prikk`) ·

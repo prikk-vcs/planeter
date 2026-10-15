@@ -74,8 +74,9 @@ prikk repositories). Requirements NG-1…NG-7.
   107's lesson). Runtime prerequisites are prikk at the pinned floor, bubblewrap, and curl for SSO.
 - **prikk moves fast and its JSON is pre-1.0.** planeter pins a floor, re-baselines at every prikk
   release, and treats schema drift as a version-gated risk (dependency ledger PK-18).
-- **The write path depends on prikk's schedule.** Keyless fetch and the canonical branch need prikk RFC
-  155 and 154 (after prikk 0.49.0). planeter designs to the accepted direction and waits for the binary
+- **The write path depends on prikk's schedule.** The canonical branch needs prikk RFC 154 (unscheduled);
+  keyless fetch is whole-artifact (RFC 155 shipped in 0.51.0; no delta form is planned). planeter designs
+  to the accepted direction and waits for the binary
   rather than inventing a prikk wire protocol.
 - **Supply chain is reviewed per crate**: measured growth, allow-listed licenses, no unscoped advisory
   ignores, a preference for confined subprocesses over in-process protocol stacks
