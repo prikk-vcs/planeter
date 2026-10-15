@@ -29,7 +29,7 @@
   held until prikk 0.47.0 is released and installed. **Overtaken 2026-10-15:** prikk is at 0.52.0, it is
   re-issued as [`../rfcs/handoffs/interim/prikk-0-52-0-rebaseline-handoff-v2.md`](../rfcs/handoffs/interim/prikk-0-52-0-rebaseline-handoff-v2.md)
   (T1 schema check, `trust_check` exit code, floor, ledger v1.7); **assignable: 0.52.0 is installed (2026-10-15)**.
-- **Active handoff:** the 0.52.0 re-baseline v2 is **implemented and awaiting architect review** (review request: [`../rfcs/handoffs/interim/prikk-0-52-0-rebaseline-review-request.md`](../rfcs/handoffs/interim/prikk-0-52-0-rebaseline-review-request.md)); the T13 measurement spike is authorized and waits on that review. Handoffs 004–009 are v1 (pre-measurement) — see the
+- **Active handoff:** the 0.52.0 re-baseline v2 is **implemented and awaiting architect review** (review request: `.git-exclude/review-requests/prikk-0-52-0-rebaseline-review-request.md` (private)); the T13 measurement spike is authorized and waits on that review. Handoffs 004–009 are v1 (pre-measurement) — see the
   quarantine rule in [`../rfcs/handoffs/README.md`](../rfcs/handoffs/README.md).
 
 ## Pending on the owner
