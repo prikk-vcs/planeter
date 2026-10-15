@@ -37,6 +37,7 @@
 | A8 | `archive export` duration and peak RSS at 50/200/1,000 MiB, cold and warm cache; spool disk used | Sizing for the spool | PK-32 |
 | A9 | Prefix stability: export, `sync accept` one more artifact, export again; compare each section's bytes and each manifest entry | Evidence for prikk's append-only question (ours, not a contract) | PK-38 |
 | A10 | `verify` and `tree` in a loop while an accept loop runs; count transient failures and their text | Whether readers must wait for writers | new: PK-45 |
+| A12 | **Change derivation (RFC 005 v2).** On a keyless forge: `sync pending` before and after one `sync accept` (the difference is the change's patches); an idempotent re-accept; an interrupted accept (`SIGKILL`) then retry; `show <patch-id> --format json` on each pending patch; the format of the claim lines in `accept`'s output and `--claims-out` across two runs; the relayed artifact accepted into a second keyed repository and `sync seal --claims`-ed under its own key; whether `sync pending` ever disagrees with `verify` | Whether the accept event is a race-free unit of a change, and whether the relay works end to end | PK-48 |
 | A11 | `archive import` into an **existing** repository (no `--adopt`, then with): what lands where; time and peak RSS | The fetch path of the client helper | PK-34 |
 
 ## Definition of done & handback

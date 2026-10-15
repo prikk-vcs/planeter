@@ -1,151 +1,220 @@
-# RFC 005 — Change proposal, review, and merge (and issues)
+# RFC 005 — Change proposal and review (second edition)
 
-**Status.** Proposed — **re-opened 2026-10-15 for revision** (RFC 000: the folder tells the truth). The 2026-09-15 acceptance stands as history and the implementer must not start until the revision is accepted. Reason: the change model depends on 004's publication reality, the contribution model for non-writers is undefined, and issues are bundled with review. The text below is the 2026-09-15 acceptance as revised on 2026-09-16.
-*Original status:* Accepted (2026-09-15) — the collaboration loop, M3. The design is settled and the implementer
-may build the change/review model, the merge flow, and the issue tracker against it per the handoff.
-Defines *how a proposed change is reviewed and merged* — where a "pull request" is prikk's own
-accepted-but-unsealed claim set, and a "merge" is a maintainer's own seal, never the forge's.
-Handoff: [`../handoffs/005-change-review/change-review-handoff-v1.md`](../handoffs/005-change-review/change-review-handoff-v1.md).
-**Tracks.** ROADMAP Phase A3 → M3 (Track A). Requirements `CAP-5`, `CAP-4`, `SEC-1`, `NG-3/6`; external
-design `WEB-02/03/06`, `FL-04/05`; internal design `WR-4/5`, `DM-2/4`, `RD-3`; threat model `T-1/T-10`,
-`INV-1/2`. Consumes RFC 002 (`authorize` merge-seal/review), RFC 003 (re-derived diff), RFC 004
-(accepted-pending claims).
-**Touches.** `planeter-core` (the change/review + issue model, the merge flow) and `planeter-web` (the
-review and issue UI + API). **Not here:** the **one-click seal mechanism** (RFC 008/UD-6 — this RFC
-uses the keyless fallback and is written to accept either), **CI execution** (RFC 006 — merge *gates on*
-its checks), and packages (RFC 007).
-
-## Revision 2026-09-16 — merge corrected to seal-then-adopt (prikk RFC 154)
-
-prikk measured that a keyless forge cannot advance its own ref by receiving a sealed block (a received
-sealed ref stays an untrusted `remotes/` pointer), so D-4's keyless-fallback-where-the-forge's-ref-advances
-does not work. The corrected model, **gated on the prikk binary** (RFC 154 + RFC 155 both accepted
-2026-09-16, unshipped; order post-0.43.0):
-
-- **Merge = a maintainer seals (their own key, client-side) + the forge *adopts* the resulting
-  trusted-maintainer-signed fast-forward advance (RFC 154).** The forge never signs; it adopts a
-  fully-verified fast-forward. Keyless, multi-maintainer. This supersedes D-4's fallback mechanism (the
-  *model* — merge is the maintainer's seal, honesty distinct from approval — is unchanged).
-- **Multi-maintainer resolution:** first fast-forward adoption wins; a maintainer whose seal is no longer
-  a fast-forward adopts the winner, re-merges on top, re-sends → one signed chain.
-- **The open change is still accepted-pending claims** (D-1/D-2); those claims travel in the RFC 155
-  artifact, and review state stays planeter metadata (confirmed by prikk). Approvals/checks still gate the
-  adoption at the authorization layer (D-5).
+**Status.** Proposed — **second edition, drafted 2026-10-15** for the owner's reading; the implementer must
+not start. It replaces the body of the 2026-09-15 acceptance (v1 is in this path's git history; its
+2026-09-16 revision preface is folded in below). **Issues (CAP-4), bundled in v1, are split out** (see
+§Scope). This RFC is not accepted until the unconfirmed upstream rows named in §Upstream facts are confirmed
+or the owner accepts that risk in writing (RFC 010 D-8).
+Handoff: v1 ([`../handoffs/005-change-review/change-review-handoff-v1.md`](../handoffs/005-change-review/change-review-handoff-v1.md))
+is superseded; **handoff v2 is written on acceptance.**
+**Tracks.** ROADMAP Phase A3 → M3. Requirements `CAP-5`, `SEC-1`, `NG-3`, `NG-6`; external design
+`WEB-02`, `WEB-06`, `FL-04`, `FL-08`; internal design `WR-4`, `DM-2`, `DM-4`, `RD-3`; threat model `T-1`,
+`T-3`, `T-9`, `T-10`, `INV-1`, `INV-2`, `INV-6`; RFC 002 (`authorize()`), RFC 003 (re-derivation), RFC 004 v2
+(accept and retained artifacts), RFC 006 v2 (checks, D-C6 accepted), RFC 008 and the owner's decision D-8
+(how a branch is published); ledger PK-2, PK-28, PK-34, PK-35, PK-46, PK-48, PK-49, PK-50.
+**Touches.** `planeter-core` (the change and review model), `planeter-store` (change, revision and review
+records), `planeter-web` (review UI and API), `planeter-transport` (the retained-artifact relay). **Not
+here:** how a published branch comes to contain a change (publication/merge: RFC 008 and decision D-8), CI
+execution (RFC 006), issues, notifications delivery, forks.
 
 ## Summary
 
-RFC 004 leaves pushed work as **accepted, verified, pending** claims (author-signed, ingested, not
-sealed onto a ref). This RFC turns that state into the familiar collaboration loop: **an open change is
-those pending claims plus forge review metadata; a merge is the maintainer sealing them onto the target
-ref with their own key.** The non-negotiable, from `SEC-1`/`INV-1`/`INV-2`: **the forge holds no signing
-key and seals nothing** — it presents the change (re-derived from prikk, RFC 003), gates the merge at the
-authorization layer (RFC 002), and the *maintainer's own prikk* produces the seal. "Approved on planeter"
-and "sealed & prikk-verified" stay distinct at every step (`WEB-06`). Issues (a forge-owned tracker) ride
-alongside, cross-referencing changes and prikk objects by prikk id.
+An **open change is exactly what prikk already holds**: patches a keyless `sync accept` has stored and not
+yet reached by any block. The forge adds *only* review state around it, keyed by prikk ids, and never copies
+history (NG-6). What v1 did not know, and this edition builds on, is how little of that structure prikk
+exposes: a **claim cannot be read** by any verb, **`sync pending` lists patch ids only (text)**, and the
+only reliable grouping of patches into "one proposal" is **the accept event itself**, which planeter
+serializes under its own lease. So v2 makes the *accept event* the unit of a change, keeps every accepted
+artifact verbatim so that a maintainer can take it into their own repository, and refuses to say anything
+about a change that prikk cannot be asked to confirm. Honesty is unchanged and now structural: a change is
+"held by the forge, unsealed, not prikk-verified" until a published tip reaches it, and a result or approval
+belongs to the exact revision and base it was given for.
 
-## The constraints that scope this design
+## Upstream facts (what this design stands on)
 
-- **A change is not a forge invention — it is prikk's accepted-unsealed state** (`DM-2`, RFC 004 D-4):
-  the patches live in prikk; the forge holds only the review wrapper, keyed to prikk claim ids.
-- **A merge is a seal, and the seal is the maintainer's** (OQ-1 a, `INV-2`): the forge never signs.
-  Today's keyless mechanism is fetch-seal-push locally (`WR-5b`); the one-click upgrade is RFC 008 (UD-6).
-- **prikk's merge model is its own, not Git's** (survey: `merge-evidence`/`merge-plan`/`merge`, block-
-  oriented patch theory): planeter surfaces **prikk's** merge, it does not impose Git rebase/squash
-  semantics on a VCS that does not share them.
-- **Honesty is a security property** (`INV-1`, `T-1`): an open (unsealed) change must never read as
-  prikk-verified, and a forge-approval must never look like a prikk signature.
+Measured by the architect on prikk 0.52.0, scratch directory, keyless receiver, 2026-10-15
+(`.git-exclude/reviewed/` note; the transport spike repeats and extends them):
+
+| ID | Fact | Label | Ledger |
+|---|---|---|---|
+| U-1 | `sync accept` prints one claim id per claim and, with `--claims-out`, writes them to a file; it reports each claim *Unverifiable* when the signer's key is not adopted ("its order is unattributed"). | V (measured) | PK-48 |
+| U-2 | `sync pending` prints the pending patch ids as text; `--format json` is refused. It lists no claim, parent, author or grouping. | V | PK-48 |
+| U-3 | `show <patch-id> --format json` works on a pending patch (`show-report-v1`, key `patches`); `show <claim-id>` is refused ("requires a Block or Patch id"). | V | PK-48 |
+| U-4 | On a keyless forge with only a received ref, `sync have heads/main` answers with an empty have-list; `sync have remotes/heads/main` is refused ("ref namespace is reserved"). A pusher therefore re-sends history the forge holds only as received or pending; accept is idempotent. | V | PK-49 |
+| U-5 | `verify` exits 1 ("publication-trust issues") while the keys that signed received or pending history are not adopted; adopting a public key (`trust maintainer add`) is the receiver's own trust decision. | V | PK-50 |
+| U-6 | A claim names the block it proposes and its parents; those blocks may be absent from the store. A patch is content-addressed and immutable. | D | PK-2 |
+| U-7 | A keyed receiver can `sync accept` an artifact built elsewhere and `sync seal --claims <file>` it under its own key; nothing about this needs the forge. | D (sync guide) | PK-2 |
+| U-8 | prikk is considering a read-only command whose point may be **one pending accepted claim** (files = its parent's files plus its patches); 0.54.0 behind a design round, not promised. | D | PK-46 |
+
+**Not yet confirmed** (RFC 010 D-8): that the accept output's claim lines are stable enough to parse (text);
+that pending-before/pending-after is a race-free derivation under the lease across idempotent re-accept and
+interrupted accept; that U-7 works end to end with an artifact relayed from the forge. These are rows A12 of
+the transport measurement handoff.
+
+## Goals
+
+- **G1.** A contributor can propose work and see exactly what the forge holds of it.
+- **G2.** A reviewer can read the proposed change, comment, and record a decision, bound to the revision and
+  base they actually reviewed.
+- **G3.** A maintainer can take a change into their own repository, byte-identical to what was pushed.
+- **G4.** At every step the forge tells the truth: unsealed is not verified; forge-approved is not
+  prikk-verified; a result is never carried to a base it did not run on.
+- **G5.** The model is correct on today's prikk and does not wait for RFC 154 or the delta archive.
+
+## Non-goals and scope
+
+- **Not here — publication/merge.** Whether `main` advances by a maintainer's sealed bundle ingested as a
+  received ref and chosen by rule, by RFC 154's act, or otherwise is **decision D-8** and RFC 008. This RFC
+  defines only the *observation* of landing (§D-6) and the artifact relay a maintainer needs.
+- **Not here — issues (CAP-4).** v1 D-8 bundled them with review. They share a comment machinery but no
+  prikk coupling and no dependency on publication; they can ship independently. **Issues are split out to a
+  separate RFC, to be numbered when the owner places it on the roadmap.** v1 D-8 is kept as input, undecided.
+- **Not here — forks, mirrors, notifications, search, suggested changes, draft changes, boards, wikis.** The
+  feature edge (OQ-4) is the owner's; §Open questions states the default and what each extension would add.
+- **Not a second merge.** The forge never computes "what main would look like with this change" (D-C6, and
+  prikk's own stance in its 2026-10-15 letter).
 
 ## Decisions
 
-- **D-1 — A change is accepted-pending claims + review metadata.** A **change** record:
-  `{ change-id, repo, source (the pending claim ids / proposed ref), target ref, author, status ∈
-  {open, merged, closed}, review state }`, stored forge-side keyed to prikk **claim ids** (`DM-2`). The
-  patches themselves stay in prikk (RFC 004); the forge never copies history (`NG-6`).
-- **D-2 — Opening a change.** A change opens from a push whose accepted-pending claims target a protected
-  or non-writable ref (RFC 004 D-4), or explicitly against a target ref. Its "diff" is **prikk's own
-  view** — `show`/patch content re-derived via RFC 003 — not a forge-computed diff.
-- **D-3 — Review.** Inline comments, threaded discussion, **approvals** and **requested-changes**, and
-  the required-approval / required-check state. Review metadata is forge-owned and authorized via
-  RFC 002 (`review`, `comment` actions). Approvals and checks feed the protected-ref rules that gate the
-  merge (D-5).
-- **D-4 — Merge = seal, by the maintainer's own key (WR-5, INV-2).** Merging seals the change's accepted
-  claims onto the target ref. The forge orchestrates and stores/verifies; **the seal is produced
-  client-side by the merging maintainer's own prikk** (OQ-1 a). Two mechanisms, and the flow accepts
-  either:
-  - **M3 default — the keyless fallback (`WR-5b`):** the maintainer's prikk fetches the pending claim
-    (RFC 004), `sync seal`s it locally, and pushes the sealed block, which planeter stores and re-verifies.
-    Works today, no prikk change; it is a guided flow, not yet one click.
-  - **The one-click upgrade (`WR-5a`, RFC 008/UD-6):** planeter hands the maintainer's client a sealable
-    package; their prikk seals it in one action and returns the sealed block. Ships within 0.x when UD-6
-    lands; **the merge flow here is written so adopting it changes the mechanism, not the model.**
-  - **Never:** a forge-held key sealing on the maintainer's behalf, except the explicit per-repo opt-in
-    (option b) behind the off-by-default feature (RFC 001 `LAY-4`, threat model `RR-2`).
-- **D-5 — Merge preconditions are authorization outcomes (RFC 002 D-6).** A merge proceeds only if the
-  protected-ref rules pass: required approvals present, required checks green (CI — RFC 006; the
-  check-gate seam is ready here and wired when 006 lands), no force-replace. A merge lacking them is
-  **denied at the authorization layer**, reachable by no surface — the seal step is never even offered.
-- **D-6 — Merge uses prikk's merge, surfaced honestly.** planeter shows `merge-evidence`/`merge-plan`
-  (read-only) as the **merge preview** and performs the merge via prikk's `merge` + seal. Where prikk's
-  merge refuses or flags (its patch-theory semantics), planeter **surfaces prikk's outcome** rather than
-  forcing a resolution — "where prikk refuses, planeter explains", the forge-side echo of stikk. No
-  Git-style rebase/squash is imposed.
-- **D-7 — Change lifecycle.** `open` → `merged` (D-4 sealed) or `closed` (without merge; may be
-  superseded by a new change). A merged change records the resulting sealed block's prikk id; a closed
-  one keeps its review record. Nothing is silently discarded.
-- **D-8 — Issues (CAP-4), the companion forge metadata.** A forge-owned issue tracker: issues with
-  labels, milestones, assignees, threaded comments, and **cross-references** to changes and prikk objects
-  by prikk id (`DM-4`). Purely forge metadata (no prikk coupling beyond the cross-ref ids), authorized via
-  RFC 002 (`comment`, `close`). Standard surface; it shares the review UI's comment/notification
-  machinery.
-- **D-9 — Honesty at every step (WEB-06/SEC-1/INV-1).** An open change is shown as **forge-approved,
-  unsealed** — never prikk-verified. A merged change shows **both** "approved by … on planeter" **and**
-  "sealed & prikk-verified" as distinct facts, the second re-derived from prikk's `verify` (RFC 003 D-5).
-  A forge approval is never rendered as, or convertible into, a prikk signature (`T-1`).
-
-## What "done" means (acceptance criteria)
-
-- A change opens from a push and explicitly (D-1/D-2); its diff is prikk's re-derived `show`/patch view.
-- Review works: comments, approvals, requested-changes; review state drives the protected-ref gate (D-3/D-5).
-- **Merge (D-4) via the keyless fallback:** a maintainer merges; the target ref advances by a seal
-  produced **by the maintainer's own key**; planeter stores and re-verifies it; **the forge holds no key
-  (ENF-2 still passes)**. A merge lacking required approvals/checks is **denied at the authorization
-  layer** (tested, no surface bypass).
-- **prikk's merge is surfaced, not overridden:** a prikk merge refusal/flag is shown as prikk's outcome,
-  not resolved by planeter (D-6).
-- **Honesty (tested):** an open change never renders as prikk-verified; a merged change shows approval
-  and prikk-verification as **distinct** facts, the latter re-derived (D-9, `INV-1`).
-- Issues: create/label/assign/comment/close, cross-reference a change and a prikk object by id (D-8).
-- Threat model re-verified: `INV-1` (no manufactured verification), `INV-2` (no forge seal path added);
-  `planeter-03` updated if a new data flow was introduced.
+- **D-1 — A change is one accept event, and its record is made under the write lease.** On a successful
+  `sync accept` (RFC 004 v2 lease class W), planeter records a **change revision**:
+  `{ revision_id, change_id, repo, artifact_digest, claim_ids (from --claims-out), patch_ids (the pending set
+  after minus the pending set before), claim outcomes (as reported), submitter principal, author key ids,
+  base (D-3), created_at }`. Nothing about history is copied (NG-6); ids only. Re-accepting an identical
+  artifact (same digest) finds the existing revision and creates nothing. An interrupted accept records
+  nothing and is retried (accept is idempotent, ledger PK-28).
+- **D-2 — A change is a series of immutable revisions.** A push names an existing `change_id` to add a
+  revision, or none to open a new change. A change has `target` (the ref name the submitter intends, advisory
+  only), a title and a description (Markdown, rendered through the RFC 003 sanitizer), and a state:
+  `open`, `landed` (D-6) or `closed` (withdrawn or rejected, with a reason). Nothing is deleted: a closed
+  change keeps its record, and **its bytes remain in the store** (no reclamation exists, ledger PK-41/E11);
+  the UI says so.
+- **D-3 — Base: declared by the client, verified as held.** The client helper states the block id it built
+  against (it knows it; claims' parents are unreadable by the forge). The forge accepts a revision only if
+  `show <base>` succeeds, i.e. the base is held (published or received); otherwise it refuses with a named
+  reason ("base unknown: push the base first"). A revision with no declared base records `base: none` and is
+  reviewable but its results never count (D-7). A *declaration* is not a fact about the artifact; the UI
+  labels it "declared base".
+- **D-4 — The review view is patch-level and re-derived.** For each patch in `patch_ids`, the diff is
+  prikk's own `show <patch-id> --format json` rendered through RFC 003 (sanitized, honest). Because patch
+  ids are content-addressed and immutable, caching by patch id is correct forever and does not conflict with
+  INV-6. A file-level tree view is added behind the same `ChangeView` interface **when** prikk ships its
+  read-only command with a claim as a point (U-8); until then the UI shows per-patch effects and says what
+  it cannot show.
+- **D-5 — Review state is forge-owned and bound to a revision.** Comments (anchored to a patch id and, where
+  prikk's view carries one, a path and span), threads, and a decision per reviewer per revision
+  (`approve` | `request-changes`), authorized by RFC 002's existing `comment` and `review` actions. A new
+  revision does **not** carry approvals over: they are shown on the revision they were given for, and a
+  later revision shows "approved on revision N". This keeps "approved" from silently covering code the
+  reviewer never saw.
+- **D-6 — Landing is observed, never asserted.** A change is `landed` when every patch id of its latest
+  revision has left the repository's pending set (they are now reachable from a block: `sync pending` no
+  longer lists them), re-derived from prikk. The forge never marks a change landed by its own say-so, and
+  records the first observation point (the ref or received ref that reaches them, where prikk reports it).
+- **D-7 — Checks and approvals are bound to (revision, base) and stale never counts.** As the owner
+  accepted for RFC 006 (D-C6): a result or approval belongs to the exact (revision, declared base) it was
+  given for; when the base is no longer the target's tip it is shown stale and is never counted toward any
+  gate; there is no merge simulation; one status per change, with the base label part of it.
+- **D-8 — The accepted artifact is retained and relayed verbatim.** The forge keeps each accepted artifact
+  (content-addressed by digest, immutable, inside a quota; retention while the change is `open`, plus a
+  stated grace after `landed` or `closed`) and serves it, to principals holding `review` or `merge-seal`, as
+  "download this change". A maintainer's own prikk then `sync accept`s it and, if they decide to merge,
+  `sync seal --claims`s it under their own key (U-7): the forge neither interprets nor rewrites it (RFC 004
+  D-1) and holds no key. **This is the one place a pushed artifact is served back out**, so it passes the same
+  serve rules as other artifacts (RFC 004 v2 S1: spool, never streamed under a lock).
+- **D-9 — Who may propose, and how much (owner decision D-9 in SCHEDULE).** A new repository-level action
+  **`propose`** gates `sync accept`; it is granted by default to `write` and above, never to anonymous, and a
+  repository setting `proposals: members | any-authenticated` (default `members`) can open it to any
+  authenticated principal. **Quotas are mandatory:** per principal per repository, accepted bytes, claim
+  count and open changes; a refusal names the quota. The quotas exist because an accepted patch cannot be
+  removed from a store (PK-41/E11). A change from a principal without `write` is an *untrusted change* for
+  CI (RFC 006 C8): no secrets, a maintainer's approval to run.
+- **D-10 — Honesty is a type, not a style.** The change view model carries an `Assurance` for every item:
+  `ForgeHeldUnsealed` (default), `SignatureOutcome { adopted | not-adopted }` per claim as accept reported it
+  (stored, not re-asserted), and `PrikkVerified` only for objects that a published or adopted tip reaches and
+  `verify` confirms. A forge approval is never rendered as, or convertible to, `PrikkVerified` (INV-1).
+  Because `verify` fails while signer keys are not adopted (U-5), the page shows **both** the repository's
+  verify state and which keys are adopted, and offers adoption only to `admin` (a trust decision).
 
 ## Alternatives considered
 
-- **Copy the change's patches into the forge DB as the authoritative PR state.** Rejected (`NG-6`/`INV-6`):
-  the patches stay in prikk (accepted-pending); the forge holds only the review wrapper keyed to prikk
-  ids, so a DB compromise cannot forge history (`T-10`).
-- **A forge-side merge button that seals with a forge key (default).** Rejected (`INV-2`): the default
-  merge is the maintainer's own seal (D-4); forge-side signing is the explicit per-repo opt-in only.
-- **Impose Git-style rebase/squash/merge-commit strategies.** Rejected (D-6): prikk has its own
-  patch-theory merge; planeter surfaces it faithfully rather than pretending prikk is Git.
-- **Block M3 on the one-click seal (UD-6).** Rejected: the keyless fallback (`WR-5b`) delivers merge now;
-  RFC 008 upgrades the *mechanism* without changing the model (D-4).
+- **A change per claim.** Rejected: claims are unreadable (U-3), so there is no per-claim data to show.
+- **A change as "a branch of pending patches" derived from parent relations.** Rejected: parents are not
+  exposed (U-2, U-3); deriving them would need an unconfirmed text format.
+- **Carry approvals across revisions when the diff is "small".** Rejected: needs a notion of equivalence
+  prikk does not give us, and the failure mode is approving unseen code.
+- **Compute the merged-onto-`main` tree for a change.** Rejected (D-7; prikk's letter): a second, silent merge.
+- **Keep issues in this RFC.** Rejected: unrelated decisions in one unit; issues need none of the above.
+- **Re-serve the change from the archive.** Rejected for D-8: the archive is the whole repository; the
+  contributor's artifact is exactly what the maintainer's prikk expects.
 
-## Open questions & dependencies
+## Security considerations
 
-- **RFC 008 / UD-6 (joint prikk)** — the one-click client-sealable claim; upgrades D-4's mechanism.
-  Not blocking M3 (the fallback ships).
-- **RFC 006 (CI)** — required-check gating (D-5); the seam is ready, wired when CI lands. M3 gates on
-  approvals + protected-ref rules with checks optional-if-present.
-- **OQ-2 (owner)** — if per-ref authority ever anchors to a prikk-side notion, D-5's protection source
-  shifts; the merge flow is unaffected.
-- **OQ-4 (owner)** — the review feature edge (suggested changes, review threads model, draft changes)
-  may refine D-3; the core loop here is sufficient for M3.
+New inbound flow with stored consequences (T-3, T-9): quotas (D-9) and the lease (RFC 004) bound it; stored
+Markdown is untrusted and rendered only through the sanitizer (T-6); the retained artifact is untrusted data
+served as an attachment from the isolated origin; an approver's decision is bound to a revision (D-5) so a
+force-update cannot inherit trust; the adoption of keys (D-10) is `admin`-only because it widens what the
+forge treats as attributable. INV-1 and INV-2 hold: nothing here signs, seals or publishes.
 
-## Sequencing & handoff
+## Compatibility and migration
 
-Builds on RFC 002 (merge-seal/review authorization), RFC 003 (re-derived diff, honesty display), and
-RFC 004 (accepted-pending claims). On acceptance, the architect writes `handoffs/005-change-review/` (the
-change/issue data model keyed to prikk ids, the review-state → protected-ref-gate wiring, the merge flow
-with the keyless-fallback steps and the UD-6-ready seam, the prikk-merge surfacing, and the tests above).
-Delivering this reaches **M3 (0.3.0)** — the full collaboration loop. Then RFC 006 (CI) adds automation
-for M4. All v0.x; 1.0 is the owner gate.
+Additive: new records in `planeter-store`, new routes. Behind RFC 004 v2; until transport ships there are
+no changes to record. v1's handoff is superseded, not migrated (no v1 code exists). If prikk later exposes
+claims (JSON for `sync pending`/`accept`, a claim as a point), D-1 and D-4 get better inputs without a model
+change; that is the intent of keeping the provider interface.
+
+## Operational considerations
+
+Change records and retained artifacts grow monotonically; a retention and quota policy is required before
+M3 (OPS-5 metering applies). Observability: counters for revisions, refusals by reason, bytes retained.
+
+## Testing and verification
+
+- **Model tests (pure):** revision derivation from (pending-before, pending-after); idempotent re-accept;
+  approvals not carried; staleness; landing observation from a recorded pending sequence.
+- **Authorization tests:** `propose` default-deny; setting `any-authenticated`; quotas; reviewers cannot
+  approve their own revision's artifact retention beyond quota.
+- **Honesty tests:** an open change never renders `PrikkVerified`; an approval never renders as verification.
+- **Real-binary tests (prikk on `PATH`, skipped visibly otherwise):** accept → revision → `show` per patch →
+  relay → second repository accepts the relayed artifact; the stand-in is allowed only for text formats.
+- **Hostile input:** a Markdown title/description with script/handler/URL attacks; an artifact over bound;
+  a base id that is not held.
+
+## Acceptance criteria
+
+A principal with `propose` pushes an artifact and sees a change with one revision, its patches rendered, its
+claim outcomes and a "declared base"; a second push with the same `change_id` adds revision 2 and approvals
+on revision 1 are shown as such; closing keeps the record; a maintainer downloads the artifact and a second
+repository accepts it byte-identically; the change shows `landed` only after prikk reports the patches no
+longer pending; nothing in the product can seal, merge or publish (ENF-2 passes); quotas refuse with named
+reasons; the threat model is updated in the same release.
+
+## Implementation boundaries
+
+`planeter-core` (model, `ChangeView` provider interface), `planeter-store` (records, quotas), `planeter-web`
+(UI/API), `planeter-transport` (the artifact relay) over RFC 004 v2. **Not** `planeter-prikk` beyond the
+read verbs already present (`show`, `sync pending` text reader, `sync accept` output reader); **not** any
+publication code.
+
+## Release implications
+
+M3's review half can ship without publication; "merge" is whatever D-8 settles. A release containing this
+adds a new inbound flow and a new action: threat model v0.4 and a security audit pass (project rule).
+
+## Open questions
+
+- **Q-1 (owner, OQ-4).** The review feature edge. **Default in this draft:** the core set above only.
+  Suggested changes, draft changes, review-thread resolution, required-reviewer lists and boards would each
+  be additions behind this model; none changes D-1…D-7.
+- **Q-2 (owner, D-9).** `proposals: members` as the default; quota values (set from measurement, not here).
+- **Q-3 (architect → prikk).** Asks for a later letter: JSON for `sync pending` and `sync accept` (claim →
+  patch ids, parents, signers) and a claim as a point for the read-only command. The transport measurement
+  handoff row A12 supplies the evidence.
+- **Q-4 (owner, D-8).** Publication. Nothing in D-1…D-10 depends on its answer; "landed" is observed.
+
+## Sequencing and handoff
+
+Needs RFC 004 v2 (the lease, the accept edge, the artifact store) and the owner's D-9; independent of D-8.
+On acceptance the architect writes handoff v2 (data model and migrations, the accept-event derivation, the
+review API, the relay, the honesty tests). Issues follow as their own RFC and handoff. All v0.x; 1.0 is the
+owner's gate.
