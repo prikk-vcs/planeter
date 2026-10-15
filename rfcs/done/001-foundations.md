@@ -5,6 +5,7 @@ on. The design is settled and the implementer may build the workspace skeleton a
 handoff. Defines *how planeter talks to prikk*, *how the crates are layered and gated*, and *how many
 anonymous prikk repositories become identified, hosted repositories*.
 Handoff: [`../handoffs/001-foundations/foundations-handoff-v1.md`](../handoffs/001-foundations/foundations-handoff-v1.md).
+**Deferred / follow-on (2026-10-15).** `prikk_format_version` is never populated and the OP-04 refusal is a deployment rule only (IS-13); the sandbox bounds wall-time only, memory/CPU/file-size limits are follow-on (IS-15, RFC 001 D-3). Follow-on handoffs live in this RFC's handoff directory.
 **Tracks.** ROADMAP Phase A0 → A1 (Track A — depends only on prikk's existing CLI). Internal design
 §1 (`CR-*`), §2 (`LAY-*`), §3 (`PKI-*`), §4 (`DM-*`), §11 (`ENF-*`); external design `PK-*`, `BD-03`;
 requirements `INT-1…6`, `BN-1…5`, `CAP-1`; threat model `INV-2/3/4/6`, `TB-4`, `C-4c`.

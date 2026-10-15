@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | Document | Companion execution doc for RFC 006 (CI + the runner protocol). Task/PR plan + QA checklist. |
-| Status | Inherited from RFC 006 — **Accepted**. |
-| Basis | [`../../accepted/006-ci-runners.md`](../../accepted/006-ci-runners.md) (D-1…D-9); RFC 002 (job authz), RFC 004 (a job pulls the change), RFC 005 (merge-gate seam); threat model `T-5`, `C-5`, `INV-5`, `INV-2`. |
+| Status | Inherited from RFC 006 — **Proposed (re-opened 2026-10-15)**: not startable; re-issued as v2 after the RFC's revision is accepted. |
+| Basis | [`../../proposed/006-ci-runners.md`](../../proposed/006-ci-runners.md) (D-1…D-9); RFC 002 (job authz), RFC 004 (a job pulls the change), RFC 005 (merge-gate seam); threat model `T-5`, `C-5`, `INV-5`, `INV-2`. |
 | Audience | Dev team. Return a review-request package when green. |
 | Scope | **Phase A4 → M4.** `planeter-ci` + `planeter-runner`. **Out of scope:** the registry (RFC 007 — CI publishes into it via D-8's seam). |
 

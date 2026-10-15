@@ -22,22 +22,18 @@ justifies a change; a **handoff** directs its implementation and must not silent
 - Evidence is by reference: commit hashes on `main`, CI run ids, and gate outputs quoted with their exit
   codes. A claim without a reference is not evidence.
 
-## Status of every handoff (2026-10-15)
+## State of handoffs
 
-| Directory | Handoff | Status |
-|---|---|---|
-| `001-foundations/` | v1 + A0 review request + T7 stikk-prikk evaluation | **done** — shipped in 0.1.0 |
-| `002-authorization/` | v1 + A1 review request | **done** — shipped in 0.1.0; SSO landed in 0.2.0 |
-| `003-read-path/` | v1 + review request + T7 gap catalogue | **done** — shipped in 0.1.0; UI in 0.1.1; the gap catalogue is closed except blame |
-| `004-transport/` | v1 (2026-09-15), hold note 2026-09-23 | **held, not assignable** — T1/T2 superseded by the owner's TLS/SSH ruling; D-2's keyless-fetch assumption corrected by PK-27; **v2 is written when prikk ships RFC 155 then 154** |
-| `004-transport/` measurement | v1 (2026-10-15) | **authorized investigation (SCHEDULE D-7)** — measures only; held until the advisory lock update is pushed |
-| `006-ci-runners/` measurement | v1 (2026-10-15) | **authorized investigation (SCHEDULE D-7)** — measures only; same precondition |
-| `010-upstream-and-supply-chain-maintenance/` | re-baseline v1 (superseded) and v2 (**implemented; conditionally approved 2026-10-15**; push waits on the lock update), advisory lock update v1, maintenance gates v1, build identity v1 | **Accepted — inherited from RFC 010 (2026-10-15); assignable** in this order: advisory lock update, maintenance gates, build identity |
-| `005-change-review/` … `009-hosted-format-durability/` | v1 (2026-09-15) | **not assignable** — written before any prikk measurement; each is re-issued as v2 (re-checked against the dependency ledger and the shipped prikk) before assignment |
+A handoff has no state of its own: it inherits its RFC's (RFC 000). **The RFC index
+([`../README.md`](../README.md)) is the single source of truth.** A handoff under an RFC in `proposed/` is
+not startable; under `accepted/` it is assignable; under `done/` it is history, with follow-on handoffs
+listed in the RFC's Status. A handoff of a re-opened RFC is superseded by a v2 (both stay).
 
-**Quarantine rule.** A handoff whose Status row does not say *assignable* (or *next assignment* with its
-precondition met) is not implemented from. The implementer's first check is this table; the architect's
-first duty at each prikk release and RFC disposition is to update it.
+Standing exceptions, both explicit: the **investigation** handoffs under RFC 004 and RFC 006
+(`transport-measurement-handoff-v1.md`, `ci-read-side-measurement-handoff-v1.md`) are authorized by the
+owner (SCHEDULE D-7) although their RFCs are `proposed/`, because they measure and change nothing (workflow
+Phases 1–2; RFC 010 D-8). The 0.52.0 re-baseline v2 under RFC 010 is implemented and conditionally approved;
+its push waits on the advisory lock update.
 
 ## What a review request carries back
 

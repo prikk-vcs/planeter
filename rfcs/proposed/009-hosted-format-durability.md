@@ -1,6 +1,7 @@
 # RFC 009 — Hosted-format durability: hosting prikk repos across an unstable format
 
-**Status.** Accepted (2026-09-15) — **Track B, owner-gated (OQ-6).** The design is settled; the
+**Status.** Proposed — **re-opened 2026-10-15 for revision** (RFC 000: the folder tells the truth). The 2026-09-15 acceptance stands as history and the implementer must not start until the revision is accepted. Reason: the carry-forward mechanism shipped (`prikk archive`, 0.51.0) and no format 8 exists; the owner's migrate-forward ruling (D-2) stands. The text below is the 2026-09-15 acceptance as revised on 2026-09-16.
+*Original status:* Accepted (2026-09-15) — **Track B, owner-gated (OQ-6).** The design is settled; the
 implementer may build against it per the handoff. The owner accepted the **migrate-forward** policy (D-2)
 in accepting this RFC; the prikk-side **migration dependency** (D-4) and prikk-1.0 timing (D-6) remain
 coordination items. Required before 1.0.

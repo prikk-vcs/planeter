@@ -1,6 +1,7 @@
 # RFC 007 — Package and artifact registry
 
-**Status.** Accepted (2026-09-15) — packages for M5. The design is settled and the implementer may build
+**Status.** Proposed — **re-opened 2026-10-15 for revision** (RFC 000: the folder tells the truth). The 2026-09-15 acceptance stands as history and the implementer must not start until the revision is accepted. Reason: object storage (S3) conflicts with the dependency policy's no-in-process-TLS rule; the protocol set needs the owner's feature ceiling (OQ-4). The text below is the 2026-09-15 acceptance as revised on 2026-09-16.
+*Original status:* Accepted (2026-09-15) — packages for M5. The design is settled and the implementer may build
 the registry against it per the handoff. Defines *how planeter hosts build outputs* — against the
 protocols their own tools already speak, authenticated and immutable, with the bytes in object storage.
 Handoff: [`../handoffs/007-registry/registry-handoff-v1.md`](../handoffs/007-registry/registry-handoff-v1.md).

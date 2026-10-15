@@ -1,6 +1,7 @@
 # RFC 006 — Continuous integration and the runner protocol
 
-**Status.** Accepted (2026-09-15) — automation for M4. The design is settled and the implementer may
+**Status.** Proposed — **re-opened 2026-10-15 for revision** (RFC 000: the folder tells the truth). The 2026-09-15 acceptance stands as history and the implementer must not start until the revision is accepted. Reason: runners' source input becomes a snapshot, the workflow format and the tree of an open change are undecided; evidence pending the T13 CI measurements. The text below is the 2026-09-15 acceptance as revised on 2026-09-16.
+*Original status:* Accepted (2026-09-15) — automation for M4. The design is settled and the implementer may
 build the pipeline model, the runner protocol, and `planeter-runner` against it per the handoff. Defines
 *how planeter runs untrusted build code safely* — on isolated, ephemeral runners in a separate trust
 domain, with a job identity that can build but can never sign or merge.

@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | Document | Companion execution doc for RFC 008. Covers **D-2 (UD-6a, CLI one-click)** — B1's buildable increment — plus the coordination items for D-3/D-4. |
-| Status | Inherited from RFC 008 — **Accepted**. |
-| Basis | [`../../accepted/008-seal-one-click-merge.md`](../../accepted/008-seal-one-click-merge.md) (D-1…D-6); RFC 004 (client helper, transport), RFC 005 (merge flow + seam); threat model `INV-2`, `RR-2`. |
+| Status | Inherited from RFC 008 — **Proposed (re-opened 2026-10-15)**: not startable; re-issued as v2 after the RFC's revision is accepted. |
+| Basis | [`../../proposed/008-seal-one-click-merge.md`](../../proposed/008-seal-one-click-merge.md) (D-1…D-6); RFC 004 (client helper, transport), RFC 005 (merge flow + seam); threat model `INV-2`, `RR-2`. |
 | Audience | Dev team (for D-2) + architect/owner (for the D-4 companion prikk RFC and the D-6 scope call). |
 | Scope | **Build D-2 now** (keyless CLI one-click). **D-3 (web one-click)** and **D-4 (prikk-side ask)** are coordination/design items, not code in this increment. |
 

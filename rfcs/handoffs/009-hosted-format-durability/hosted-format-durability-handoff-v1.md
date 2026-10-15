@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | Document | Companion execution doc for RFC 009 (Hosted-format durability). |
-| Status | Inherited from RFC 009 — **Accepted** (owner accepted the migrate-forward policy). |
-| Basis | [`../../accepted/009-hosted-format-durability.md`](../../accepted/009-hosted-format-durability.md) (D-1…D-6); RFC 001 (version pin D-3, `prikk_format_version` D-5); `OPS-3` (backup), `CON-1` (serialization). |
+| Status | Inherited from RFC 009 — **Proposed (re-opened 2026-10-15)**: not startable; re-issued as v2 after the RFC's revision is accepted. |
+| Basis | [`../../proposed/009-hosted-format-durability.md`](../../proposed/009-hosted-format-durability.md) (D-1…D-6); RFC 001 (version pin D-3, `prikk_format_version` D-5); `OPS-3` (backup), `CON-1` (serialization). |
 | Audience | Dev team + architect/owner (for the prikk migration dependency and prikk-1.0 coordination). |
 | Scope | **Phase B2 (Track B), required before 1.0.** Does not block Track A milestones. |
 

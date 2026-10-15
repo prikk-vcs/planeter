@@ -114,6 +114,10 @@ cadences for planning (the CI schedule in D-3 is a mechanism, not a plan).
   revised** (workflow Phases 1–2: limited investigation and small proofs of concept when requested), run in
   a scratch directory with no repository change, and their output is ledger rows.
 
+**Improvement on finding (owner, 2026-10-15).** The gates and their timing are improved whenever an issue
+exposes a gap in them: the finding, the gap and the change are recorded in the dependency-policy ledger and
+this RFC is amended, as D-3 was on the day it was accepted.
+
 ## Alternatives considered
 
 - **A dependency bot** (Dependabot, Renovate). Rejected for now: it adds a write-capable actor and a stream of

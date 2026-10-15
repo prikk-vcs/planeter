@@ -1,6 +1,7 @@
 # RFC 004 — Transport: clone and push as a ferry over prikk's artifact exchange
 
-**Status.** Accepted (2026-09-15) — opens M2 (clone/push). The design is settled and the implementer may
+**Status.** Proposed — **re-opened 2026-10-15 for revision** (RFC 000: the folder tells the truth). The 2026-09-15 acceptance stands as history and the implementer must not start until the revision is accepted. Reason: measured corrections (PK-27/28/29, the 2026-09-23 TLS/SSH ruling), RFC 155 shipped as `archive`, RFC 154 unscheduled, no delta form planned; revision scoped, evidence pending the T13 transport measurements. The text below is the 2026-09-15 acceptance as revised on 2026-09-16.
+*Original status:* Accepted (2026-09-15) — opens M2 (clone/push). The design is settled and the implementer may
 build the transport surface and the client helper against it per the handoff. Defines *how bytes move
 between a developer and planeter* — by carrying prikk's own `bundle`/`sync` artifacts over an
 authenticated, encrypted envelope, so **planeter invents no prikk wire protocol and holds no signing

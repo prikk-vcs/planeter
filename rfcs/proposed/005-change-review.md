@@ -1,6 +1,7 @@
 # RFC 005 — Change proposal, review, and merge (and issues)
 
-**Status.** Accepted (2026-09-15) — the collaboration loop, M3. The design is settled and the implementer
+**Status.** Proposed — **re-opened 2026-10-15 for revision** (RFC 000: the folder tells the truth). The 2026-09-15 acceptance stands as history and the implementer must not start until the revision is accepted. Reason: the change model depends on 004's publication reality, the contribution model for non-writers is undefined, and issues are bundled with review. The text below is the 2026-09-15 acceptance as revised on 2026-09-16.
+*Original status:* Accepted (2026-09-15) — the collaboration loop, M3. The design is settled and the implementer
 may build the change/review model, the merge flow, and the issue tracker against it per the handoff.
 Defines *how a proposed change is reviewed and merged* — where a "pull request" is prikk's own
 accepted-but-unsealed claim set, and a "merge" is a maintainer's own seal, never the forge's.

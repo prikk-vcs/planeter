@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | Document | Companion execution doc for RFC 005 (Change proposal, review, and merge; issues). |
-| Status | Inherited from RFC 005 — **Accepted**. |
-| Basis | [`../../accepted/005-change-review.md`](../../accepted/005-change-review.md) (D-1…D-9); RFC 002 (authz), RFC 003 (re-derived diff), RFC 004 (accepted-pending claims); threat model `INV-1/2`, `T-1/T-10`. |
+| Status | Inherited from RFC 005 — **Proposed (re-opened 2026-10-15)**: not startable; re-issued as v2 after the RFC's revision is accepted. |
+| Basis | [`../../proposed/005-change-review.md`](../../proposed/005-change-review.md) (D-1…D-9); RFC 002 (authz), RFC 003 (re-derived diff), RFC 004 (accepted-pending claims); threat model `INV-1/2`, `T-1/T-10`. |
 | Audience | Dev team. Return a review-request package when green. |
 | Scope | **Phase A3 → M3.** Change/review model, merge via the keyless fallback, issues. **Out of scope:** the one-click seal mechanism (RFC 008/UD-6 — leave the seam), CI execution (RFC 006 — wire the check-gate seam). |
 

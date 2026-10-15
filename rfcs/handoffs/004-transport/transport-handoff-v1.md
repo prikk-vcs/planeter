@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | Document | Companion execution doc for RFC 004 (Transport). Task/PR plan + QA checklist. |
-| Status | Inherited from RFC 004 — **Accepted**. |
-| Basis | [`../../accepted/004-transport.md`](../../accepted/004-transport.md) (decisions D-1…D-8); RFC 001 (driver, confinement, ENF-2), RFC 002 (`authorize` read/push); `STD-1`, `INT-2`, `NG-2`; threat model `T-4/T-9`, `INV-2/3`, `C-4`. |
+| Status | Inherited from RFC 004 — **Proposed (re-opened 2026-10-15)**: not startable; re-issued as v2 after the RFC's revision is accepted. |
+| Basis | [`../../proposed/004-transport.md`](../../proposed/004-transport.md) (decisions D-1…D-8); RFC 001 (driver, confinement, ENF-2), RFC 002 (`authorize` read/push); `STD-1`, `INT-2`, `NG-2`; threat model `T-4/T-9`, `INV-2/3`, `C-4`. |
 | Audience | Dev team. Return a review-request package when green. |
 | Scope | **Phase A2 → M2.** The clone/push transport and the client helper — prikk's **keyless** phase only. **Out of scope:** seal/merge (RFC 005/008), CI triggers (RFC 006). Build on A0 + A1. |
 

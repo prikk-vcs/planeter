@@ -3,8 +3,8 @@
 | | |
 |---|---|
 | Document | Companion execution doc for RFC 007 (Package and artifact registry). |
-| Status | Inherited from RFC 007 — **Accepted**. |
-| Basis | [`../../accepted/007-registry.md`](../../accepted/007-registry.md) (D-1…D-7); RFC 002 (publish authz), RFC 006 (CI publish token, provenance); `STD-5`, `SEC-4`, `OPS-1`. |
+| Status | Inherited from RFC 007 — **Proposed (re-opened 2026-10-15)**: not startable; re-issued as v2 after the RFC's revision is accepted. |
+| Basis | [`../../proposed/007-registry.md`](../../proposed/007-registry.md) (D-1…D-7); RFC 002 (publish authz), RFC 006 (CI publish token, provenance); `STD-5`, `SEC-4`, `OPS-1`. |
 | Audience | Dev team. Return a review-request package when green. |
 | Scope | **Phase A5 → M5.** `planeter-registry`. Orthogonal to prikk (touches no prikk verb). |
 

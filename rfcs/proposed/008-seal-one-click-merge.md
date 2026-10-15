@@ -1,6 +1,7 @@
 # RFC 008 — One-click merge without a forge key (UD-6): the sealing ergonomics problem
 
-**Status.** Accepted (2026-09-15) — **Track B, joint planeter + prikk, gated.** The planeter design is
+**Status.** Proposed — **re-opened 2026-10-15 for revision** (RFC 000: the folder tells the truth). The 2026-09-15 acceptance stands as history and the implementer must not start until the revision is accepted. Reason: its mechanism is superseded by prikk's RFC 154 adoption, which is unscheduled; the client-signer ladder needs re-scoping. The text below is the 2026-09-15 acceptance as revised on 2026-09-16.
+*Original status:* Accepted (2026-09-15) — **Track B, joint planeter + prikk, gated.** The planeter design is
 settled; the implementer may build the D-2 (CLI one-click) increment against it per the handoff. Carries
 a **prikk-side ask** (D-4) to be raised as a companion prikk RFC with the prikk project/owner, and a
 web-one-click scope decision (D-6) for the owner. Upgrades the *mechanism* of RFC 005's merge without
