@@ -136,6 +136,15 @@ the transport measurement handoff.
   Because `verify` fails while signer keys are not adopted (U-5), the page shows **both** the repository's
   verify state and which keys are adopted, and offers adoption only to `admin` (a trust decision).
 
+- **D-11 — Presentation: less is more, advanced on demand** (owner philosophy). A change's default view shows
+  only: the title, who proposed it, its state (*Open*, *Landed*, *Closed*), a one-line summary of what
+  changed, the review state (*awaiting review*, *approved*, *changes requested*) and the checks status, each
+  with its plain-language meaning on hover or in a line of text. Everything else is one click away under
+  **Details**: revisions, the patches, the claim signature outcomes, key ids, the declared base, retained
+  artifact digests. Wording uses the user's words ("built on", not "declared base", in the default view);
+  the honest qualifiers of D-10 are never removed, only stated in plain language ("held for review: not yet
+  part of the project's history"). No page offers an action whose consequence the page does not state.
+
 ## Alternatives considered
 
 - **A change per claim.** Rejected: claims are unreadable (U-3), so there is no per-claim data to show.

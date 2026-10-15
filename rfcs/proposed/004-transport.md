@@ -158,10 +158,19 @@ change to prikk. **Not** a Git transport (NG-1).
   the user merges (`merge --from`) until RFC 154's act exists. **Push:** advertise (have for the target) →
   `prikk sync build <ref> --have` → upload; the result names claim ids and the revision. A pusher needs a
   maintainer key adopted in their *own* repository (`prikk setup` provides it).
+  **Verbs say what happens (owner philosophy: users must not be confused).** The helper's commands are
+  `planeter clone`, `planeter fetch` and **`planeter propose`**, not `push`: on this forge a submission
+  becomes a *change* for review and does **not** move a branch, and a word that promises otherwise would
+  mislead. Its output says exactly what happened, in plain words and with the next step (for example:
+  "Proposed as change #7 (revision 1). Your work is held for review; no branch on the forge has changed.
+  Reviewers can see it at <url>."). Refusals state the reason in one sentence and what the user can do
+  about it; prikk's verbatim text is available behind `--verbose`, never the only message.
 - **D-11 — The HTTP envelope** (versioned under `/api/v1`, described in OpenAPI like the read API):
   advertise (refs, fingerprint, sizes), fetch (`kind`, `Range`, `ETag`), push (size-capped upload, result
   body), change artifact relay (RFC 005 D-8), ref chain. Errors: 401/403/404 existence-neutral; 413 over
-  bound; 429 rate; 409/503 with `Retry-After` for lease waits; 422 with prikk's named refusal.
+  bound; 429 rate; 409/503 with `Retry-After` for lease waits; 422 with prikk's named refusal. **One error
+  shape** everywhere: `{ code, message, hint }` where `code` is stable and machine-readable, `message` is a
+  plain-language sentence and `hint` says what to do next (STD-3: a single error shape).
 - **D-12 — Instrumentation from the first deployment.** Per fetch: changed vs unchanged, kind, bytes, wall
   time, lease wait; per push: bytes, refusal reason; per repository: export count and spool hit rate. These
   are the numbers prikk asked for (PK-47) and the evidence for the owner's decision on the fallback (D-13).
