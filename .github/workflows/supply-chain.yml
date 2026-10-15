@@ -1,0 +1,29 @@
+name: Supply chain (manual checkpoint)
+
+# RFC 010 D-3: the supply-chain gate runs at project events (a push, a release, a re-baseline, an RFC
+# disposition, an out-of-band report), not on a clock. This workflow exists so that a checkpoint can
+# leave a durable CI record. It is manual only: no `schedule`, no secrets, read-only token.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install cargo-deny and cargo-audit
+        run: cargo install cargo-deny cargo-audit --locked
+
+      # Both tools fetch the RustSec advisory database when they run, so a result reflects advisories
+      # published since the last code change.
+      - name: cargo-deny (freshly fetched advisory database)
+        run: cargo deny check
+
+      - name: cargo-audit (freshly fetched advisory database)
+        run: cargo audit

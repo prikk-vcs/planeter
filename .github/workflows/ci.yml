@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Format
         run: cargo fmt --all --check
@@ -30,16 +30,29 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: ENF-2 symbol-absence check
         run: tools/enf2-symbol-check/check.sh
+
+  # RFC 010 D-2 / D-5: the three prikk floors agree; nothing in the build chain is mutable.
+  maintenance-gates:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Floor check (cli.rs, release.yml, Dockerfile agree)
+        run: cargo run --locked -p planeter-floor-check
+
+      - name: Pin check (actions, base image, toolchain)
+        run: cargo run --locked -p planeter-pin-check
 
   supply-chain:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Install cargo-deny and cargo-audit
         run: cargo install cargo-deny cargo-audit --locked

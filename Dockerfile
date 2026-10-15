@@ -7,7 +7,7 @@
 # Running it: bubblewrap needs user namespaces. On most hosts that means `--security-opt
 # seccomp=unconfined` or a seccomp profile that permits unshare/clone with CLONE_NEWUSER, and
 # `--cap-add SYS_ADMIN` on kernels that restrict unprivileged user namespaces. See docs/RELEASING.md.
-FROM debian:bookworm-slim
+FROM debian:bookworm-slim@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587
 
 ARG TARGETARCH
 ARG PRIKK_VERSION=0.52.0
