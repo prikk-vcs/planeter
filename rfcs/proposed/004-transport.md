@@ -193,8 +193,8 @@ build. The threat model is updated in the same release (v0.4).
 
 ## Compatibility and migration
 
-Additive. `MIN_PRIKK_VERSION` is already 0.52.0. v1 handoff superseded, no v1 code exists. The C-5 envelope
-is versioned (`/api/v1`) from the first release.
+Additive. `MIN_PRIKK_VERSION` is already 0.52.0. v1 handoff superseded, no v1 code exists. The HTTP
+envelope is versioned (`/api/v1`) from the first release.
 
 ## Operational considerations
 
