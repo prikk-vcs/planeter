@@ -5,6 +5,13 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **`planeter --version` / `-V` and `--help` / `-h` (RFC 010 D-6, IS-1).** `--version` prints three lines
+  (`planeter X.Y.Z`, `commit <sha or unknown>`, `prikk-floor X.Y.Z`) and exits 0 **without reading
+  configuration or starting the server**; release builds report the tag's commit and `build-info.txt`
+  carries the same lines. **Behaviour change:** any other argument is now refused with a one-line error,
+  the usage and **exit 2**; before, an unrecognised argument started the server. A script that passed an
+  argument and relied on the server starting must drop it.
+
 - **Maintenance gates (RFC 010):** `tools/floor-check` (the three prikk floors must agree) and
   `tools/pin-check` (every action by commit SHA, base image by digest, toolchain by version) run in CI and
   in the release gates; a manual-only `supply-chain.yml` workflow records a deny/audit checkpoint. The

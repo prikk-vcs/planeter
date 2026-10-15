@@ -1128,6 +1128,7 @@ dependencies = [
  "planeter-auth",
  "planeter-ci",
  "planeter-core",
+ "planeter-prikk",
  "planeter-registry",
  "planeter-store",
  "planeter-transport",

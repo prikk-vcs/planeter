@@ -4,8 +4,9 @@
 //! The read/host spine (RFC 001–003) as a runnable server: create/host repositories over sandboxed
 //! prikk and browse them through the browse UI and the authorized, honest read API; sign in with a
 //! local password (Argon2id) or OpenID Connect, behind sessions, CSRF protection and login throttles;
-//! every store persists in **SQLite**. Clone/push (RFC 004) is not here yet. Configuration is by
-//! environment variable:
+//! every store persists in **SQLite**. Clone/push (RFC 004) is not here yet. `--version`/`-V` and
+//! `--help`/`-h` answer without reading configuration (see [`args`]); any other argument is refused
+//! with exit 2. Configuration is by environment variable:
 //!
 //! - `PLANETER_ADDR` — bind address (default `127.0.0.1:8080`)
 //! - `PLANETER_REPOS_ROOT` — where hosted repositories live (default `./planeter-repos`)
@@ -19,6 +20,8 @@
 //!   token exchange go through the egress guard and a confined `curl` (a runtime prerequisite like prikk
 //!   and bubblewrap). Accounts are linked to `(issuer, subject)` administratively; nothing is
 //!   auto-provisioned.
+
+mod args;
 
 use std::sync::Arc;
 
@@ -34,6 +37,28 @@ use planeter_web::{AppState, ContentOrigin};
 
 #[tokio::main]
 async fn main() {
+    // Identity and usage first (RFC 010 D-6): before any configuration is read or socket opened, so an
+    // operator or a release check can ask the binary what it is without starting a server.
+    match args::parse(std::env::args_os().skip(1)) {
+        args::Action::Serve => {}
+        args::Action::Version => {
+            print!(
+                "{}",
+                args::version_text(args::GIT_COMMIT, planeter_prikk::cli::MIN_PRIKK_VERSION)
+            );
+            return;
+        }
+        args::Action::Help => {
+            print!("{}", args::USAGE);
+            return;
+        }
+        args::Action::Unknown => {
+            eprintln!("planeter: unrecognized argument");
+            eprint!("{}", args::USAGE);
+            std::process::exit(2);
+        }
+    }
+
     let addr: std::net::SocketAddr = std::env::var("PLANETER_ADDR")
         .unwrap_or_else(|_| "127.0.0.1:8080".to_owned())
         .parse()

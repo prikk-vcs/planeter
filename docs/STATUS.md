@@ -59,7 +59,7 @@ assigned until a handoff names it.
 
 | ID | Issue | Origin | Disposition |
 |---|---|---|---|
-| IS-1 | `planeter` has no `--version` flag; an install check that ran the binary started a server | 0.2.0 release verification | next interim handoff (small) |
+| IS-1 | ~~`planeter` has no `--version` flag; an install check that ran the binary started a server~~ — fixed 2026-10-15 (RFC 010 D-6, build-identity handoff): `--version`/`-V`, `--help`/`-h`, unknown argument exit 2; awaiting review | 0.2.0 release verification | closed on review |
 | IS-2 | No admin path to link an OIDC `(issuer, subject)` to an account — store API only, so SSO needs code to become usable | 0.2.0 OIDC | design first (a `planeter admin link-oidc` subcommand or an equivalent), then a handoff |
 | IS-3 | The driver's `bundle_import` passes the artifact positionally; prikk 0.46.0 takes `--input` | transport measurement 2026-09-23 | **re-baseline v2 T4 — implemented (`--input`, round-trip test); architect review: approved** |
 | IS-4 | Synchronous prikk subprocess calls run inside async handlers without `spawn_blocking`, and nothing caps concurrent prikk subprocesses. **Re-rated 2026-10-15: an unauthenticated denial of service on any public repository** (each in-flight call pins a tokio worker for up to the 120 s bound) | RFC 003 review; architect review 2026-10-13 | **handoff `rfcs/handoffs/003-read-path/read-concurrency-handoff-v1.md` (assignable); blocks any public-deployment guidance and M2** |

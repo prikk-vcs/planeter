@@ -13,6 +13,7 @@ planeter-core = { path = "../planeter-core", version = "0.2.0" }
 planeter-auth = { path = "../planeter-auth", version = "0.2.0" }
 planeter-store = { path = "../planeter-store", version = "0.2.0" }
 planeter-web = { path = "../planeter-web", version = "0.2.0" }
+planeter-prikk = { path = "../planeter-prikk", version = "0.2.0" }
 planeter-transport = { path = "../planeter-transport", version = "0.2.0" }
 planeter-ci = { path = "../planeter-ci", version = "0.2.0" }
 planeter-registry = { path = "../planeter-registry", version = "0.2.0" }

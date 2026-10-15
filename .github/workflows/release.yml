@@ -78,9 +78,15 @@ jobs:
 
       - name: Build (x86_64-unknown-linux-gnu)
         if: matrix.target == 'x86_64-unknown-linux-gnu'
+        env:
+          # Compile-time identity (RFC 010 D-6): `planeter --version` reports this commit.
+          PLANETER_GIT_COMMIT: ${{ github.sha }}
         run: cargo build -p planeter --release --target x86_64-unknown-linux-gnu --locked
       - name: Build (aarch64-unknown-linux-gnu)
         if: matrix.target == 'aarch64-unknown-linux-gnu'
+        env:
+          # Compile-time identity (RFC 010 D-6): `planeter --version` reports this commit.
+          PLANETER_GIT_COMMIT: ${{ github.sha }}
         run: cargo build -p planeter --release --target aarch64-unknown-linux-gnu --locked
 
       - name: Package (x86_64-unknown-linux-gnu)
@@ -96,6 +102,8 @@ jobs:
           echo "tag: ${GITHUB_REF_NAME}" >> dist/planeter-x86_64-unknown-linux-gnu.build-info.txt
           echo "build: cargo build -p planeter --release --target x86_64-unknown-linux-gnu --locked" >> dist/planeter-x86_64-unknown-linux-gnu.build-info.txt
           echo "requires: prikk >= ${PRIKK_VERSION}, bubblewrap, curl (SSO only)" >> dist/planeter-x86_64-unknown-linux-gnu.build-info.txt
+          # The binary's own identity (version, commit, prikk floor): the same three lines as `--version`.
+          target/x86_64-unknown-linux-gnu/release/planeter --version >> dist/planeter-x86_64-unknown-linux-gnu.build-info.txt
           rustc -vV >> dist/planeter-x86_64-unknown-linux-gnu.build-info.txt
       - name: Package (aarch64-unknown-linux-gnu)
         if: matrix.target == 'aarch64-unknown-linux-gnu'
@@ -110,6 +118,8 @@ jobs:
           echo "tag: ${GITHUB_REF_NAME}" >> dist/planeter-aarch64-unknown-linux-gnu.build-info.txt
           echo "build: cargo build -p planeter --release --target aarch64-unknown-linux-gnu --locked" >> dist/planeter-aarch64-unknown-linux-gnu.build-info.txt
           echo "requires: prikk >= ${PRIKK_VERSION}, bubblewrap, curl (SSO only)" >> dist/planeter-aarch64-unknown-linux-gnu.build-info.txt
+          # The binary's own identity (version, commit, prikk floor): the same three lines as `--version`.
+          target/aarch64-unknown-linux-gnu/release/planeter --version >> dist/planeter-aarch64-unknown-linux-gnu.build-info.txt
           rustc -vV >> dist/planeter-aarch64-unknown-linux-gnu.build-info.txt
 
       # Build provenance (SLSA-style) for the tarball, signed by GitHub's OIDC identity of this run.
