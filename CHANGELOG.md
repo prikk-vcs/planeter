@@ -5,6 +5,14 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **Maintenance gates (RFC 010):** `tools/floor-check` (the three prikk floors must agree) and
+  `tools/pin-check` (every action by commit SHA, base image by digest, toolchain by version) run in CI and
+  in the release gates; a manual-only `supply-chain.yml` workflow records a deny/audit checkpoint. The
+  build chain is pinned: actions by commit SHA with the tag in a comment, `debian:bookworm-slim` by digest,
+  Rust 1.99.0 explicit in the release workflow. No product behaviour changes.
+- **Security hygiene:** `ammonia` 4.1.4 → 4.2.3 and `yoke-derive` 0.8.3 → 0.8.4 (lock-only), clearing
+  RUSTSEC-2021-0157 / -0158 and a yanked crate; the sanitizer's behaviour is pinned by regression tests.
+
 - **prikk floor → 0.52.0** (the tested version): the PK-30 fix, the accept size bound, crash-state
   recovery, dependency-ordered `bundle import` / `sync accept` writes. The container image bakes
   prikk 0.52.0 (it baked 0.46.0). Requires **prikk ≥ 0.52.0**.

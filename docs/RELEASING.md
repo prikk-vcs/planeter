@@ -9,12 +9,19 @@ published until M4. **Tagging and publishing are owner-authorized.**
 
 1. Gates green on `main`: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --locked
    -- -D warnings`, `cargo test --workspace --locked`, `cargo deny check`, `cargo audit`,
-   `tools/enf2-symbol-check/check.sh`.
+   `tools/enf2-symbol-check/check.sh`, and the two maintenance gates `cargo run --locked -p
+   planeter-floor-check` and `cargo run --locked -p planeter-pin-check` (RFC 010 D-2, D-5). The
+   supply-chain pair may also be run as a checkpoint with the manual `supply-chain.yml` workflow.
 2. `CHANGELOG.md` has a `## [X.Y.Z]` section for the release (the workflow refuses to publish
    without one).
 3. `Cargo.toml` `[workspace.package] version = "X.Y.Z"` equals the tag (the workflow's first gate).
 4. The prikk floor is current: `PRIKK_VERSION` in `release.yml` and `Dockerfile` match
-   `MIN_PRIKK_VERSION` in `crates/planeter-prikk/src/cli.rs` (dependency-ledger PK-26).
+   `MIN_PRIKK_VERSION` in `crates/planeter-prikk/src/cli.rs` (dependency-ledger PK-26); `floor-check`
+   enforces the equality, the review of which version is current is yours.
+5. **Review the pins against upstream releases and advisories before tagging** (RFC 010 R-1): every
+   `uses:` SHA and the base-image digest are immutable and do not refresh themselves. For each, compare the
+   pinned tag with the upstream's latest and read the advisories; an update is a reviewed change that names
+   the upstream diff, and `pin-check` must stay green.
 
 ## The tag (owner)
 

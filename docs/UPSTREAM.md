@@ -4,7 +4,7 @@
 |---|---|
 | Document | How planeter depends on prikk operationally: the correspondence protocol with the prikk team, the rule that every reply is folded into the records, and the per-prikk-release re-baseline procedure. |
 | As of | 2026-09-24 |
-| Basis | ROADMAP §Dependencies and §Release cycles ("re-baseline per prikk release", owner-confirmed 2026-09-23); the dependency ledger (`src/planeter-prikk-dependency-ledger.md`); RFC 001 D-3 (version pin), D-2 (exit-status keyed driver). |
+| Basis | RFC 010 (upstream tracking and supply-chain maintenance: the floor is one checked value, `tools/floor-check`; the gates run at project events); ROADMAP §Dependencies and §Release cycles ("re-baseline per prikk release", owner-confirmed 2026-09-23); the dependency ledger (`src/planeter-prikk-dependency-ledger.md`); RFC 001 D-3 (version pin), D-2 (exit-status keyed driver). |
 
 ## The relationship
 

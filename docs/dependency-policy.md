@@ -4,7 +4,7 @@
 |---|---|
 | Document | The rules that produced planeter's dependency tree, and the record of every supply-chain decision (accepted with its measured cost, rejected with its reason), so settled battles are not re-fought and new ones are decided the same way. |
 | As of | 2026-10-15 (lock: 200 runtime crates + 11 test-only; unchanged by the advisory fix) |
-| Basis | RFC 001 (the sandboxed-subprocess pattern), threat model `T-11` (supply chain) and `C-8` (egress), `deny.toml`, `.cargo/audit.toml`, the 0.1.0–0.2.0 review packages |
+| Basis | RFC 010 (D-3 supply-chain gate at project events, D-4 triage ladder, D-5 pinned build chain); RFC 001 (the sandboxed-subprocess pattern), threat model `T-11` (supply chain) and `C-8` (egress), `deny.toml`, `.cargo/audit.toml`, the 0.1.0–0.2.0 review packages |
 
 ## Rules
 
@@ -28,6 +28,32 @@
    signing path for prikk history (ENF-2 checks the built artifacts); the layering gate refuses a lower
    crate depending on an upper one.
 6. **`--locked` everywhere**; the lock is committed; a stale lock in a push is a bug (it happened once).
+
+## When the gates run (RFC 010 D-3)
+
+`cargo deny check` and `cargo audit` must exit 0 at each **project event**, not on a clock:
+
+- **(a)** every push and pull request (`ci.yml`, job `supply-chain`);
+- **(b)** every release (the `gates` job of `release.yml`);
+- **(c)** every prikk re-baseline;
+- **(d)** every RFC disposition checkpoint (accepted, done, superseded, withdrawn, deferred), where the
+  architect runs both against a freshly fetched advisory database;
+- **(e)** whenever the owner asks.
+
+A checkpoint may leave a durable CI record with the manually dispatched `supply-chain.yml`
+(`workflow_dispatch` only: no schedule, no secrets, `contents: read`). The result is one line in STATUS;
+red becomes an issue-register entry. This detects an advisory at the next event, not during a quiet period.
+
+## The build chain is pinned and checked (RFC 010 D-2, D-5)
+
+`tools/floor-check` fails unless `MIN_PRIKK_VERSION`, `PRIKK_VERSION` in `release.yml` and `ARG
+PRIKK_VERSION` in the `Dockerfile` are one `X.Y.Z`. `tools/pin-check` fails on any workflow `uses:` that
+is not a 40-hex commit SHA, any `image:` or Dockerfile `FROM` without a digest, and any toolchain named by
+channel. Both run in `ci.yml` and in the release `gates` job. **A pin is changed only by a reviewed change
+that names the upstream diff**; `docs/RELEASING.md` has the pre-tag review step. Not pinnable here and so
+out of the gate's scope: the runner image label (`runs-on: ubuntu-latest`) and the version of
+`cargo-deny`/`cargo-audit` installed by the workflows (deliberately current, so they can read the
+advisory database).
 
 ## Ledger — accepted
 
