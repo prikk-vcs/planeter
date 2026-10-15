@@ -1,0 +1,12 @@
+[package]
+name = "planeter-pin-check"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "The build-chain pin gate (RFC 010 D-5): every action, base image and toolchain reference must be pinned. Std-only; not a product crate."
+publish = false
+
+[dependencies]

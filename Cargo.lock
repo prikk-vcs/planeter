@@ -1174,6 +1174,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "planeter-floor-check"
+version = "0.2.0"
+
+[[package]]
+name = "planeter-pin-check"
+version = "0.2.0"
+
+[[package]]
 name = "planeter-prikk"
 version = "0.2.0"
 dependencies = [

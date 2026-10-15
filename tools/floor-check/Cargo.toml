@@ -1,0 +1,12 @@
+[package]
+name = "planeter-floor-check"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "The prikk-floor gate (RFC 010 D-2): the three places that name the minimum prikk version must agree. Std-only; not a product crate."
+publish = false
+
+[dependencies]

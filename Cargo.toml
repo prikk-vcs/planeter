@@ -12,6 +12,8 @@ members = [
     "crates/planeter",
     "crates/planeter-runner",
     "tools/boundary-check",
+    "tools/floor-check",
+    "tools/pin-check",
 ]
 
 # Shared metadata every crate inherits (RFC 001; ROADMAP: v0.x, MSRV 1.85, Rust 2024).
