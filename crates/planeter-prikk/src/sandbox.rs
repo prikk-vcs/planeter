@@ -29,6 +29,37 @@ impl Default for Sandbox {
     }
 }
 
+/// Bounds on incoming artifacts that prikk reads from its **environment** (dependency-ledger PK-31,
+/// PK-40). The sandbox clears the environment, so prikk's own defaults (256 MiB / 100,000 objects)
+/// apply unless a bound is set here; each `Some` value is passed as `--setenv NAME <n>` and a `None`
+/// emits nothing. This is the seam only: the accept-edge values are chosen by the transport design
+/// (RFC 004), not here.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct IncomingBounds {
+    /// `PRIKK_EXCHANGE_MAX_BYTES` — largest sync exchange artifact `sync accept` will read.
+    pub exchange_max_bytes: Option<u64>,
+    /// `PRIKK_EXCHANGE_MAX_OBJECTS` — most patches/blobs/keys/claims an exchange artifact may declare.
+    pub exchange_max_objects: Option<u64>,
+    /// `PRIKK_BUNDLE_MAX_BYTES` — largest bundle `bundle import`/`preview`/`verify` will read.
+    pub bundle_max_bytes: Option<u64>,
+    /// `PRIKK_BUNDLE_MAX_OBJECTS` — most objects a bundle may declare.
+    pub bundle_max_objects: Option<u64>,
+}
+
+impl IncomingBounds {
+    /// The `(NAME, value)` pairs that are set, in a fixed order.
+    fn pairs(&self) -> impl Iterator<Item = (&'static str, u64)> {
+        [
+            ("PRIKK_EXCHANGE_MAX_BYTES", self.exchange_max_bytes),
+            ("PRIKK_EXCHANGE_MAX_OBJECTS", self.exchange_max_objects),
+            ("PRIKK_BUNDLE_MAX_BYTES", self.bundle_max_bytes),
+            ("PRIKK_BUNDLE_MAX_OBJECTS", self.bundle_max_objects),
+        ]
+        .into_iter()
+        .filter_map(|(name, v)| v.map(|n| (name, n)))
+    }
+}
+
 /// Tunables for the bubblewrap sandbox.
 #[derive(Debug, Clone)]
 pub struct BwrapConfig {
@@ -38,6 +69,8 @@ pub struct BwrapConfig {
     pub timeout: OsString,
     /// Wall-time bound, in seconds, for one prikk invocation.
     pub timeout_secs: u64,
+    /// Incoming-artifact bounds passed to prikk through the environment (none set by default).
+    pub bounds: IncomingBounds,
 }
 
 impl Default for BwrapConfig {
@@ -46,6 +79,7 @@ impl Default for BwrapConfig {
             bwrap: OsString::from("bwrap"),
             timeout: OsString::from("timeout"),
             timeout_secs: 120,
+            bounds: IncomingBounds::default(),
         }
     }
 }
@@ -104,6 +138,10 @@ impl BwrapConfig {
         // queries (`key status`) correctly cannot run confined.
         c.arg("--clearenv");
         c.arg("--setenv").arg("PATH").arg("/usr/bin");
+        // Incoming-artifact bounds (PK-31/PK-40): only the ones that are set, never a default of ours.
+        for (name, value) in self.bounds.pairs() {
+            c.arg("--setenv").arg(name).arg(value.to_string());
+        }
 
         c.arg("--").arg(&prikk).args(args);
         c
