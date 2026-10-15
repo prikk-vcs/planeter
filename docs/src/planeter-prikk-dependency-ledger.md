@@ -72,7 +72,7 @@
 ### D. Folded 2026-10-15 — prikk 0.48.0 to 0.52.0 (letters 2026-10-13 and 2026-10-15; prikk RFC 155, ROADMAP and reference pages)
 
 *Evidence kinds: **prikk-measured** means prikk's architect measured it on the named binary and says so in a
-letter; planeter has **not** re-measured it (the local binary is 0.46.0; the spike is
+letter; planeter has **not** re-measured it (the local binary was 0.46.0 until 2026-10-15 and is now 0.52.0, on which PK-30/31/42/43 were measured; the spike is
 `.git-exclude/specs/rfc-004-transport-v2-scoping.md` §7). "Documented" means stated in prikk's RFC or
 reference pages.*
 
@@ -99,7 +99,7 @@ reference pages.*
 
 - **Section A is the floor** — real today, safe to build M1 (host/browse/auth + keyless `accept`) on.
 - **Section B is the gate** — the keyless canonical-branch, merge, relay and migration paths are *designed* but wait on prikk **shipping** PK-14 (RFC 154) and PK-15 (RFC 155), scheduled on 2026-09-23 for 0.48.0 onward — **overtaken 2026-10-15: RFC 155 shipped in 0.51.0, RFC 154 is unscheduled (section D)**. PK-16 (key-id) shipped in 0.45.0. PK-15 (RFC 155) remains the highest-leverage unshipped dependency; its all-or-nothing import (R4) gets its own design round, though **R6 is already answered** by format 7's signature union.
-- **The version floor moved (2026-09-22, PK-26):** the read/hosting floor is **prikk ≥ 0.46.0** (to use `tree`/`cat`/`diff`, PK-23/24/25), which also carries the GHSA-px5q-233r-6hq5 fix (0.44.0), the format-7 signature union and the key-id fix (0.45.0). planeter bumps its version pin to 0.46.0 **once the local binary is upgraded** (the pin refuses out-of-range, so the binary must be present to keep the integration tests green). **Format 7 is a breaking, explicit-only `prikk format upgrade`** with no downgrade — a hosting decision: the serving binary must stay ≥ the format the hosted repos carry.
+- **The version floor moved again (2026-10-15, re-baseline v2): now prikk ≥ 0.52.0**, the tested version (entry below is the 0.46.0 step). **The version floor moved (2026-09-22, PK-26):** the read/hosting floor is **prikk ≥ 0.46.0** (to use `tree`/`cat`/`diff`, PK-23/24/25), which also carries the GHSA-px5q-233r-6hq5 fix (0.44.0), the format-7 signature union and the key-id fix (0.45.0). planeter bumps its version pin to 0.46.0 **once the local binary is upgraded** (the pin refuses out-of-range, so the binary must be present to keep the integration tests green). **Format 7 is a breaking, explicit-only `prikk format upgrade`** with no downgrade — a hosting decision: the serving binary must stay ≥ the format the hosted repos carry.
 - **Section C is the watch list** — especially **PK-18** (pre-1.0 JSON drift) and **PK-19** (locking), which no correspondence has settled and which implementation must verify rather than assume.
 
 Update this file whenever prikk ships, measures, or rules something a row depends on.

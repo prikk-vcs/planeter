@@ -53,5 +53,5 @@
 
 ## Runtime prerequisites (not crates, but part of the supply chain)
 
-prikk ≥ 0.46.0 (checksum-verified release asset in the image; the version pin refuses older),
+prikk ≥ 0.52.0 (checksum-verified release asset in the image; the version pin refuses older; raised from 0.46.0 at the 0.52.0 re-baseline),
 bubblewrap, curl (SSO only). Each is named in `build-info.txt`, the release notes and RELEASING.
