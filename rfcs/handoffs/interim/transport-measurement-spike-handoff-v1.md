@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | A **measurement-only** handoff: it turns the assumptions under RFC 004 v2 (transport) and RFC 006 v2 (CI) into evidence, so that those RFCs and the owner's ruling on M2's shape rest on measured behaviour, not on documents. It writes no product code. Supporting work without an RFC of its own (workflow §6.6). Theme **T13** in `docs/SCHEDULE.md`. |
-| Status | **Held — not assignable.** Preconditions: (1) the owner authorizes it (SCHEDULE decision **D-7**); (2) prikk **0.52.0** is installed locally (`prikk --version`); (3) the re-baseline handoff v2 is done, so the dev team has one measured cadence on that binary. |
+| Status | **Authorized by the owner 2026-10-15 (SCHEDULE D-7); held until preconditions (2) and (3) hold, so not yet assignable.** Preconditions: (1) the owner authorizes it — **done**; (2) prikk **0.52.0** is installed locally (`prikk --version`); (3) the re-baseline handoff v2 is done, so the dev team has one measured cadence on that binary. |
 | Basis | Dependency ledger v1.5 §D (the rows marked *prikk-measured* or *ASSUMED*: PK-33, PK-37–PK-41, PK-43 and the candidates below); prikk letters 2026-10-13 and 2026-10-15; prikk RFC 155 §9.3–§9.6; `docs/dependency-policy.md` rule 1 (no manifest changes here). |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-request/`) and the raw logs. |
 | Scope | Run the measurements below on a prikk 0.52.0 binary, **in a scratch directory outside the repository**, and report results with their commands, exit codes and peak memory. **Non-change scope:** no change to any file in the repository except the review request; no product code; no manifest changes; no prikk patches; no letters to prikk (the architect drafts them from the results). |

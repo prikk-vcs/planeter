@@ -42,7 +42,7 @@
   is superseded.
 - Install prikk 0.52.0 (`cargo install prikk --version 0.52.0 --locked`): it is the re-baseline target
   (0.47.0 is overtaken) and the binary the measurement spike needs. Decide the floor at that point.
-- **Authorize the measurement spike** (SCHEDULE D-7; [`../rfcs/handoffs/interim/transport-measurement-spike-handoff-v1.md`](../rfcs/handoffs/interim/transport-measurement-spike-handoff-v1.md)): measurement only, scratch directory, no repository change. It waits on 0.52.0 being installed and the re-baseline being done.
+- The measurement spike (SCHEDULE D-7) is **authorized (owner, 2026-10-15)**; it starts when prikk 0.52.0 is installed and the re-baseline is done. Handoff: [`../rfcs/handoffs/interim/transport-measurement-spike-handoff-v1.md`](../rfcs/handoffs/interim/transport-measurement-spike-handoff-v1.md) (measurement only, scratch directory, no repository change).
 - Rule on what M2 becomes (SCHEDULE D-8) once the spike reports.
 
 ## Pending upstream (prikk's actual releases and plan, from its letters and ROADMAP of 2026-10-13/15)

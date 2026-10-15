@@ -103,10 +103,12 @@ C-11 (supply chain) is checked at every crate.               C-14 (owner availab
 - **D-4** T8 before T9 or the reverse — after M2; recommended T8.
 - **D-5** whether T7's MFA lands during the hold or with M3 — recommended during the hold if a release touching auth opens.
 - **D-6** the 1.0 promotion — the owner's alone, after T10/T11 and the readiness report.
-- **D-7** authorize the T13 spike (measurement only; no repository change) — when prikk 0.52.0 is installed and T1 is done.
+- **D-7** authorize the T13 spike (measurement only; no repository change) — **AUTHORIZED by the owner 2026-10-15**; it becomes assignable when prikk 0.52.0 is installed and T1 is done.
 - **D-8** the ruling on M2's shape and on what a branch is while publication is unavailable (private RFC 004
   scoping note D-T1/D-T2) — at T13's review request. The architect's lean is stated there; it is the owner's call.
 - **D-9** the contribution model for non-writers (the `propose` action, the proposals setting, quotas; D-T3) — with RFC 005 v2.
 - **D-10** the CI decisions: how a runner gets the tree of an open change, the workflow subset, runner
   isolation, the job network default (D-C2, D-C3, D-C4, D-C5; D-C6 is accepted) — with RFC 006 v2, after T13.
 - **D-11** the version and timing of candidate release 0.2.1 and its content (floor 0.52.0 plus hardening) — at step 3's end.
+
+*Owner, 2026-10-15: D-7 granted; the plan's order and the triggers of D-8 to D-11 accepted. D-8 to D-11 are **not** decided: each is taken at its trigger, on the evidence then available. A decision made earlier than its trigger would be made on documents, which is what C-15 forbids.*

@@ -31,7 +31,7 @@ justifies a change; a **handoff** directs its implementation and must not silent
 | `005-change-review/` … `009-hosted-format-durability/` | v1 (2026-09-15) | **not assignable** — written before any prikk measurement; each is re-issued as v2 (re-checked against the dependency ledger and the shipped prikk) before assignment |
 | `interim/prikk-0-47-0-rebaseline-handoff-v1.md` | v1 (2026-09-24) | **superseded by v2 (2026-10-15)** — prikk moved past 0.47.0; kept for its reasoning, not assignable |
 | `interim/prikk-0-52-0-rebaseline-handoff-v2.md` | v2 (2026-10-15) | **next assignment** — precondition: prikk 0.52.0 (published) installed locally by the owner |
-| `interim/transport-measurement-spike-handoff-v1.md` | v1 (2026-10-15) | **held, not assignable** — preconditions: the owner's authorization (SCHEDULE D-7), prikk 0.52.0 installed, the re-baseline v2 done; measurement only |
+| `interim/transport-measurement-spike-handoff-v1.md` | v1 (2026-10-15) | **authorized 2026-10-15 (D-7); held until** prikk 0.52.0 is installed and the re-baseline v2 is done; measurement only |
 
 **Quarantine rule.** A handoff whose Status row does not say *assignable* (or *next assignment* with its
 precondition met) is not implemented from. The implementer's first check is this table; the architect's
