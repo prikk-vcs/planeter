@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | The dated brief a new session reads **first**: where the project is, what is held and why, what is pending on whom, and the issue register. Updated at every release, RFC disposition and owner ruling. |
-| As of | 2026-09-24 — planeter **0.2.0** released |
+| As of | 2026-10-15 — planeter **0.2.0** released (2026-09-24); prikk is at **0.52.0**; upstream facts folded into ledger v1.5 |
 | Read next | [`src/planeter-00-project-charter.md`](src/planeter-00-project-charter.md) (background, goals, governance) → [`../ROADMAP.md`](../ROADMAP.md) → [`SCHEDULE.md`](SCHEDULE.md) (themes, plans, concerns) → [`../rfcs/README.md`](../rfcs/README.md) → [`../rfcs/handoffs/README.md`](../rfcs/handoffs/README.md) and the active handoff → [`src/planeter-prikk-dependency-ledger.md`](src/planeter-prikk-dependency-ledger.md) → [`src/planeter-03-threat-model-v0.1.md`](src/planeter-03-threat-model-v0.1.md) (v0.3) → [`UPSTREAM.md`](UPSTREAM.md) → [`dependency-policy.md`](dependency-policy.md) |
 
 ## Where we are
@@ -18,11 +18,17 @@
   incremental-fetch artifacts (`sync build` needs a maintainer key, PK-27) and a planeter-created
   repository has no servable branch until prikk RFC 154 adoption. It resumes when prikk ships
   **RFC 155 then RFC 154, after prikk 0.49.0**, with a v2 transport handoff.
+  **2026-10-15 — the hold's premise was overtaken (ledger v1.5, section D):** RFC 155 shipped in 0.51.0
+  (`prikk archive`, whole-repository; closure fix in 0.52.0); RFC 154 is **unscheduled**; a keyless delta
+  form is **not planned**. The owner's ruling on what M2 becomes is pending; the scoping notes are
+  private working material (`.git-exclude/specs/`), not decisions.
 - **Runtime floor:** prikk ≥ 0.46.0 (`MIN_PRIKK_VERSION`), bubblewrap, curl for SSO. Local binary: 0.46.0.
 - **Team:** migrating to a two-agent team (high-capability architect/reviewer + mid-capability
   implementer) under the owner's workflow (owner-directed 2026-09-24). **First assignment (owner ruling):
   the prikk 0.47.0 re-baseline** — [`../rfcs/handoffs/interim/prikk-0-47-0-rebaseline-handoff-v1.md`](../rfcs/handoffs/interim/prikk-0-47-0-rebaseline-handoff-v1.md),
-  held until prikk 0.47.0 is released and installed.
+  held until prikk 0.47.0 is released and installed. **Overtaken 2026-10-15:** prikk is at 0.52.0, so the
+  architect re-issues it as v2 against 0.52.0 (T1 schema check, `trust_check` exit code, floor, ledger);
+  it stays held until that binary is installed.
 - **Active handoff:** none assignable today. Handoffs 004–009 are v1 (pre-measurement) — see the
   quarantine rule in [`../rfcs/handoffs/README.md`](../rfcs/handoffs/README.md).
 
@@ -30,19 +36,23 @@
 
 - Make the `ghcr.io/prikk-vcs/planeter` package public (until then the image attestation cannot be
   verified anonymously; the tarball attestations verify).
-- Adjust and send the draft letter to the prikk team (planning-assumption numbers for their fetch
-  design): `.git-exclude/upstream/prikk/send/draft/2026-09-23-ack-sync-build-ruling-and-fetch-numbers.md` (private).
-- Install prikk 0.47.0 when it ships (`cargo install prikk --version 0.47.0 --locked`) — that starts
-  the re-baseline handoff.
+- Adjust and send the reply to prikk's letter of 2026-10-15 (the CI read-side shape; the base-as-pushed
+  answer): `.git-exclude/upstream/prikk/send/draft/2026-10-15-answers-ci-read-side-shape.md` (private).
+  The 2026-10-13 letter (fetch numbers, four questions) was sent and answered; its 2026-09-23 predecessor
+  is superseded.
+- Install prikk 0.52.0 (`cargo install prikk --version 0.52.0 --locked`): it is the re-baseline target
+  (0.47.0 is overtaken) and the binary the measurement spike needs. Decide the floor at that point.
+- Rule on what M2 becomes (decisions D-T1/D-T2 in the private RFC 004 scoping note) once the spike reports.
 
-## Pending upstream (prikk's schedule of 2026-09-23, by theme, no dates)
+## Pending upstream (prikk's actual releases and plan, from its letters and ROADMAP of 2026-10-13/15)
 
-| prikk release | Contents that touch planeter | planeter action |
+| prikk | What touches planeter | planeter action |
 |---|---|---|
-| **0.47.0** | PK-30 fix (explicit `--ref` on an unsealed repo), PK-31 (`sync accept` refuses over-size before reading; `PRIKK_EXCHANGE_MAX_BYTES`), RFC 136 inc. 2c | the re-baseline handoff (first assignment) |
-| **0.48.0** | RFC 158 B/C: streaming, chunk manifests, **repository format 8** | re-baseline; check format-8 consequences for hosted repos (RELEASING §Format 7 rule generalizes); prikk invited planeter's input on the streaming-bound design |
-| **0.49.0** | RFC 158 D (reclamation) | re-baseline |
-| after 0.49.0 | **RFC 155** (repository-complete artifact) then **RFC 154** (trusted fast-forward adoption) | transport handoff v2 → M2; Track B1/B2 |
+| **0.47.0–0.50.0** (released) | PK-30 fix, `PRIKK_EXCHANGE_MAX_BYTES` (0.47.0); recovery and cost at depth (0.48.0); crash-state recovery, import refusals, dependency-ordered writes, `ref complete` (0.49.0); corrections (0.50.0) | one re-baseline handoff v2 against **0.52.0** (the 0.47.0 handoff is overtaken); floor decision (PK-42) |
+| **0.51.0** (released 2026-10-13) | RFC 155 as `prikk archive`; closure defect for repositories that accepted a push | do not serve archives from 0.51.0 |
+| **0.52.0** (released) | archive closure fix; export refuses over-256 MiB objects; `verify` names a failed received ref; `trust maintainer check` exit code | re-baseline target; spike M1–M11 (RFC 004 scoping); `trust_check` exit-status handling |
+| **0.53.0 / 0.54.0-candidate** | commit cost (F4 with M6); `bundle import` memory | watch; no planeter action |
+| **unscheduled** | RFC 154 adoption act; a keyless delta form (**not planned**); RFC 158 Stages B–D incl. format 8; a read-only "files at a point" command (under consideration, not proposed) | plan as unavailable; revisit on prikk's word (ledger PK-35, PK-36, PK-41) |
 
 ## Issue register
 
