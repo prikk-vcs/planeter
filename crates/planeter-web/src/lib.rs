@@ -14,7 +14,10 @@ pub mod api;
 pub(crate) mod authn;
 pub mod client_ip;
 pub mod cookies;
+pub mod errors;
 pub mod gate;
+pub mod headers;
+pub mod openapi;
 pub mod principal;
 pub mod sanitize;
 pub mod security;
@@ -25,8 +28,48 @@ pub use client_ip::{TrustedProxies, bind_allowed, client_ip};
 pub use gate::{AuthGate, BlockingGate, PrikkGate};
 
 /// The full application router: the JSON read API under `/api/v1/…` merged with the browse UI.
+///
+/// Around the routes: unknown `/api/` paths and wrong methods on them answer in the API's one error shape
+/// (other unknown paths keep the bare `404` of the UI), and every response passes through the
+/// response-policy layer ([`headers`]): cache directives, `Vary`, `Permissions-Policy` and, behind
+/// declared trusted proxies, HSTS.
 pub fn router(state: AppState) -> axum::Router {
-    api::router(state.clone()).merge(ui::router(state))
+    let for_fallback = state.clone();
+    let for_405 = state.clone();
+    let for_layer = state.clone();
+    api::router(state.clone())
+        .merge(ui::router(state))
+        .fallback(move |uri: axum::http::Uri| {
+            let state = for_fallback.clone();
+            async move {
+                if uri.path().starts_with("/api/") {
+                    api::code_response(&state, errors::ErrorCode::NotFound)
+                } else {
+                    axum::http::Response::builder()
+                        .status(axum::http::StatusCode::NOT_FOUND)
+                        .body(axum::body::Body::empty())
+                        .expect("empty 404")
+                }
+            }
+        })
+        .method_not_allowed_fallback(move |uri: axum::http::Uri| {
+            let state = for_405.clone();
+            async move {
+                let mut resp = if uri.path().starts_with("/api/") {
+                    api::code_response(&state, errors::ErrorCode::InvalidRequest)
+                } else {
+                    axum::http::Response::builder()
+                        .body(axum::body::Body::empty())
+                        .expect("empty response")
+                };
+                *resp.status_mut() = axum::http::StatusCode::METHOD_NOT_ALLOWED;
+                resp
+            }
+        })
+        .layer(axum::middleware::from_fn_with_state(
+            for_layer,
+            headers::response_policy,
+        ))
 }
 pub use sanitize::{render_markdown, sanitize_html};
 pub use security::{ContentOrigin, app_csp, app_security_headers, raw_content_headers};

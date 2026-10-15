@@ -11,11 +11,11 @@
 //! the review package) — this module ships the bounded-`limit` + `ETag` conventions honestly rather than
 //! emitting rate-limit numbers it does not enforce.
 
-use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 
 use axum::Router;
 use axum::body::Body;
+use axum::extract::rejection::QueryRejection;
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::Response;
@@ -26,6 +26,7 @@ use planeter_auth::Authenticator;
 use planeter_core::{RawFile, ReadError, ReadService};
 use planeter_store::Owner;
 
+use crate::errors::ErrorCode;
 use crate::gate::{GateError, PrikkGate};
 use crate::security::{ContentOrigin, app_security_headers, raw_content_headers};
 
@@ -60,20 +61,32 @@ pub struct AppState {
     pub oidc: Option<Arc<planeter_auth::OidcProvider>>,
 }
 
-/// Build the read-API router.
+/// The API's route paths. The router and the OpenAPI document both take their paths from here, and
+/// `tests/api_contract.rs` holds an independent list, so they cannot drift unnoticed.
+pub mod paths {
+    pub const HISTORY: &str = "/api/v1/repos/{owner}/{name}/history";
+    pub const CHANGE: &str = "/api/v1/repos/{owner}/{name}/change/{target}";
+    pub const FILE: &str = "/api/v1/repos/{owner}/{name}/file";
+    pub const TREE: &str = "/api/v1/repos/{owner}/{name}/tree";
+    pub const RAW: &str = "/api/v1/repos/{owner}/{name}/raw";
+    pub const REFS: &str = "/api/v1/repos/{owner}/{name}/refs";
+    pub const VERIFY: &str = "/api/v1/repos/{owner}/{name}/verify";
+    pub const OPENAPI: &str = "/api/v1/openapi.json";
+    /// Every route, in document order.
+    pub const ALL: [&str; 8] = [HISTORY, CHANGE, FILE, TREE, RAW, REFS, VERIFY, OPENAPI];
+}
+
+/// Build the read-API router. This is the only place API routes are registered.
 pub fn router(state: AppState) -> Router {
     Router::new()
-        .route("/api/v1/repos/{owner}/{name}/history", get(history_handler))
-        .route(
-            "/api/v1/repos/{owner}/{name}/change/{target}",
-            get(change_handler),
-        )
-        .route("/api/v1/repos/{owner}/{name}/file", get(file_handler))
-        .route("/api/v1/repos/{owner}/{name}/tree", get(tree_handler))
-        .route("/api/v1/repos/{owner}/{name}/raw", get(raw_handler))
-        .route("/api/v1/repos/{owner}/{name}/refs", get(refs_handler))
-        .route("/api/v1/repos/{owner}/{name}/verify", get(verify_handler))
-        .route("/api/v1/openapi.json", get(openapi_handler))
+        .route(paths::HISTORY, get(history_handler))
+        .route(paths::CHANGE, get(change_handler))
+        .route(paths::FILE, get(file_handler))
+        .route(paths::TREE, get(tree_handler))
+        .route(paths::RAW, get(raw_handler))
+        .route(paths::REFS, get(refs_handler))
+        .route(paths::VERIFY, get(verify_handler))
+        .route(paths::OPENAPI, get(openapi_handler))
         .with_state(state)
 }
 
@@ -118,9 +131,12 @@ pub struct RawQuery {
 async fn history_handler(
     State(state): State<AppState>,
     Path((owner, name)): Path<(String, String)>,
-    Query(q): Query<HistoryQuery>,
+    q: Result<Query<HistoryQuery>, QueryRejection>,
     headers: HeaderMap,
 ) -> Response {
+    let Ok(Query(q)) = q else {
+        return error_response(&state, Failure::Invalid);
+    };
     let principal = crate::principal::principal_from_request(&headers, &state).await;
     let limit = q.limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT);
     let result = read_blocking(&state, move |read| {
@@ -148,9 +164,12 @@ async fn change_handler(
 async fn file_handler(
     State(state): State<AppState>,
     Path((owner, name)): Path<(String, String)>,
-    Query(q): Query<FileQuery>,
+    q: Result<Query<FileQuery>, QueryRejection>,
     headers: HeaderMap,
 ) -> Response {
+    let Ok(Query(q)) = q else {
+        return error_response(&state, Failure::Invalid);
+    };
     let principal = crate::principal::principal_from_request(&headers, &state).await;
     let result = read_blocking(&state, move |read| {
         try_both_owners(&owner, |o| {
@@ -164,9 +183,12 @@ async fn file_handler(
 async fn tree_handler(
     State(state): State<AppState>,
     Path((owner, name)): Path<(String, String)>,
-    Query(q): Query<TreeQuery>,
+    q: Result<Query<TreeQuery>, QueryRejection>,
     headers: HeaderMap,
 ) -> Response {
+    let Ok(Query(q)) = q else {
+        return error_response(&state, Failure::Invalid);
+    };
     let principal = crate::principal::principal_from_request(&headers, &state).await;
     let result = read_blocking(&state, move |read| {
         try_both_owners(&owner, |o| {
@@ -186,9 +208,12 @@ async fn tree_handler(
 async fn raw_handler(
     State(state): State<AppState>,
     Path((owner, name)): Path<(String, String)>,
-    Query(q): Query<RawQuery>,
+    q: Result<Query<RawQuery>, QueryRejection>,
     headers: HeaderMap,
 ) -> Response {
+    let Ok(Query(q)) = q else {
+        return error_response(&state, Failure::Invalid);
+    };
     let principal = crate::principal::principal_from_request(&headers, &state).await;
     let result = read_blocking(&state, move |read| {
         try_both_owners(&owner, |o| {
@@ -212,9 +237,12 @@ async fn raw_handler(
 async fn refs_handler(
     State(state): State<AppState>,
     Path((owner, name)): Path<(String, String)>,
-    Query(q): Query<RefsQuery>,
+    q: Result<Query<RefsQuery>, QueryRejection>,
     headers: HeaderMap,
 ) -> Response {
+    let Ok(Query(q)) = q else {
+        return error_response(&state, Failure::Invalid);
+    };
     let principal = crate::principal::principal_from_request(&headers, &state).await;
     let result = read_blocking(&state, move |read| {
         try_both_owners(&owner, |o| read.refs(&principal, o, &name, q.all))
@@ -237,7 +265,7 @@ async fn verify_handler(
 }
 
 async fn openapi_handler(State(state): State<AppState>) -> Response {
-    let doc = openapi_doc();
+    let doc = crate::openapi::document();
     let body = serde_json::to_string(&doc).unwrap_or_default();
     build_json(&state, &body, None)
 }
@@ -250,6 +278,8 @@ pub(crate) enum Failure {
     Read(ReadError),
     /// No prikk slot became free within the bounded wait (IS-4): `503` with `Retry-After`.
     Busy,
+    /// A malformed query (a missing or unparsable parameter): `400`, `invalid_request`.
+    Invalid,
 }
 
 impl From<ReadError> for Failure {
@@ -300,8 +330,9 @@ fn respond<T: Serialize>(
 ) -> Response {
     match result {
         Ok(view) => {
+            let value = serde_json::to_value(&view).unwrap_or_default();
             let body = serde_json::to_string(&view).unwrap_or_default();
-            let etag = etag_of(&body);
+            let etag = etag_of_json(&value);
             // Conditional GET: unchanged → 304, no body.
             if req_headers
                 .get(header::IF_NONE_MATCH)
@@ -350,23 +381,29 @@ fn build_raw(_state: &AppState, raw: &RawFile) -> Response {
         .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response_fallback())
 }
 
-fn error_response(state: &AppState, e: Failure) -> Response {
-    let (status, retry_after) = match e {
-        Failure::Busy => (
-            StatusCode::SERVICE_UNAVAILABLE,
-            Some(retry_after_secs(state)),
-        ),
-        Failure::Read(ReadError::NotFound) => (StatusCode::NOT_FOUND, None),
-        Failure::Read(ReadError::Unavailable(_)) => (StatusCode::SERVICE_UNAVAILABLE, None),
-        // Backend and any future variant map to 500 (existence-neutral).
-        Failure::Read(_) => (StatusCode::INTERNAL_SERVER_ERROR, None),
+/// The API error response: the one JSON error shape, the security headers, and `Retry-After` for
+/// `busy`. Status and body come from [`ErrorCode`], so nothing here can leak a path or tool output.
+pub(crate) fn error_response(state: &AppState, e: Failure) -> Response {
+    let code = match e {
+        Failure::Busy => ErrorCode::Busy,
+        Failure::Invalid => ErrorCode::InvalidRequest,
+        Failure::Read(ReadError::NotFound) => ErrorCode::NotFound,
+        Failure::Read(ReadError::Unavailable(_)) => ErrorCode::Unavailable,
+        // Backend and any future variant: an internal fault (existence-neutral).
+        Failure::Read(_) => ErrorCode::Internal,
     };
-    let mut builder = with_security_headers(state, Response::builder().status(status));
-    if let Some(secs) = retry_after {
-        builder = builder.header(header::RETRY_AFTER, secs.to_string());
+    code_response(state, code)
+}
+
+/// A response for an [`ErrorCode`] (used by the router fallbacks too).
+pub(crate) fn code_response(state: &AppState, code: ErrorCode) -> Response {
+    let mut builder = with_security_headers(state, Response::builder().status(code.status()))
+        .header(header::CONTENT_TYPE, "application/json");
+    if code == ErrorCode::Busy {
+        builder = builder.header(header::RETRY_AFTER, retry_after_secs(state).to_string());
     }
     builder
-        .body(Body::empty())
+        .body(Body::from(code.body()))
         .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response_fallback())
 }
 
@@ -385,27 +422,45 @@ pub(crate) fn with_security_headers(
     builder
 }
 
-fn etag_of(body: &str) -> String {
-    let mut h = std::collections::hash_map::DefaultHasher::new();
-    body.hash(&mut h);
-    format!("\"{:x}\"", h.finish())
+/// A strong validator over the **canonical** form of a JSON value: object keys sorted, no whitespace.
+/// SHA-256 truncated to 128 bits, hex, quoted. The output is specified (unlike `DefaultHasher`, which
+/// is not stable across compilers or releases) and does not depend on key order.
+pub fn etag_of_json(value: &serde_json::Value) -> String {
+    let mut canonical = String::new();
+    write_canonical(value, &mut canonical);
+    let digest = planeter_auth::sha256_hex(canonical.as_bytes());
+    format!("\"{}\"", &digest[..32])
 }
 
-/// A minimal OpenAPI 3.0 description of the read API.
-fn openapi_doc() -> serde_json::Value {
-    serde_json::json!({
-        "openapi": "3.0.3",
-        "info": {"title": "planeter read API", "version": "0.1.0"},
-        "paths": {
-            "/api/v1/repos/{owner}/{name}/history": {"get": {"summary": "Repository history"}},
-            "/api/v1/repos/{owner}/{name}/change/{target}": {"get": {"summary": "A change's content"}},
-            "/api/v1/repos/{owner}/{name}/file": {"get": {"summary": "A file's content at a ref"}},
-            "/api/v1/repos/{owner}/{name}/tree": {"get": {"summary": "Directory listing at a ref"}},
-            "/api/v1/repos/{owner}/{name}/raw": {"get": {"summary": "Raw file bytes (download)"}},
-            "/api/v1/repos/{owner}/{name}/refs": {"get": {"summary": "Branches and tags"}},
-            "/api/v1/repos/{owner}/{name}/verify": {"get": {"summary": "Verify status"}}
+fn write_canonical(v: &serde_json::Value, out: &mut String) {
+    use serde_json::Value;
+    match v {
+        Value::Object(map) => {
+            let mut keys: Vec<&String> = map.keys().collect();
+            keys.sort();
+            out.push('{');
+            for (i, k) in keys.into_iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                out.push_str(&serde_json::to_string(k).unwrap_or_default());
+                out.push(':');
+                write_canonical(&map[k], out);
+            }
+            out.push('}');
         }
-    })
+        Value::Array(items) => {
+            out.push('[');
+            for (i, item) in items.iter().enumerate() {
+                if i > 0 {
+                    out.push(',');
+                }
+                write_canonical(item, out);
+            }
+            out.push(']');
+        }
+        scalar => out.push_str(&scalar.to_string()),
+    }
 }
 
 /// Small shim so the `unwrap_or_else` fallbacks above type-check to `Response`.

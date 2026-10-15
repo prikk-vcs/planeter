@@ -81,6 +81,14 @@ docker run --rm ghcr.io/prikk-vcs/planeter:X.Y.Z --version
   planeter speaks plain HTTP: it **refuses a non-loopback bind unless trusted proxies are set**, takes
   the client IP from `X-Forwarded-For` only when the TCP peer is a trusted proxy, and marks cookies
   `Secure` (so the proxy must serve HTTPS).
+- **Cache directives and HSTS (IS-29):** the app sets its own `Cache-Control` (`private, no-cache` and
+  `Vary: Cookie, Authorization` on dynamic responses, `no-store` on sign-in and sign-out, a one-hour
+  `public` lifetime only on the stylesheet), so the proxy needs no cache rules of its own and must not
+  override them. When `PLANETER_TRUSTED_PROXIES` is set the app also sends
+  `Strict-Transport-Security: max-age=15552000` (180 days; no `includeSubDomains`, no `preload`): the
+  proxy must therefore serve HTTPS for the whole host. A proxy that adds its own HSTS header should
+  replace the app's value, not append a second one. API errors are JSON (`{code, message, hint}`); a proxy's own
+  error pages are not.
 - **Sign-in concurrency (IS-24, IS-31):** password verification (Argon2id) runs off the async workers
   behind its own gate, separate from the prikk one. **`PLANETER_AUTH_CONCURRENCY`** is the most
   verifications at once (positive integer; default `min(CPUs, 4)`); **`PLANETER_AUTH_QUEUE_WAIT_SECS`**

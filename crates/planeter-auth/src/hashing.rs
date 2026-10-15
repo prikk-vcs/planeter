@@ -132,6 +132,18 @@ impl PasswordHasher for Argon2idHasher {
     }
 }
 
+/// The lowercase hex SHA-256 of `bytes` (64 characters). A specified, stable digest for callers that
+/// need a validator or a fingerprint (the read API's `ETag`); not a password or token hasher.
+pub fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::Digest as _;
+    let digest = sha2::Sha256::digest(bytes);
+    let mut hex = String::with_capacity(64);
+    for b in digest {
+        hex.push_str(&format!("{b:02x}"));
+    }
+    hex
+}
+
 /// SHA-256 token hashing with constant-time verification. Stored form: `sha256$<hex digest>`.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Sha256TokenHasher;

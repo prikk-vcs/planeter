@@ -200,7 +200,11 @@ async fn past_the_bounded_wait_the_request_is_503_with_retry_after_and_counted()
     let (status, headers, body_len) = get(h.router.clone(), HISTORY).await;
     assert_eq!(status, StatusCode::SERVICE_UNAVAILABLE);
     assert_eq!(headers.get(header::RETRY_AFTER).unwrap(), "1");
-    assert_eq!(body_len, 0, "existence-neutral: no body, no prikk output");
+    assert_eq!(
+        body_len,
+        planeter_web::errors::ErrorCode::Busy.body().len(),
+        "existence-neutral: the fixed `busy` body, no prikk output"
+    );
     assert!(started.elapsed() >= Duration::from_millis(900));
     assert_eq!(h.gate.rejected(), 1);
 

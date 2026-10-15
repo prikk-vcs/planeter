@@ -5,6 +5,22 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **A real API contract and safe cache headers (IS-28, IS-29; RFC 003 D-2, STD-3).** **Behaviour
+  change: API error responses now carry a JSON body** `{"code", "message", "hint"}` with
+  `Content-Type: application/json` (they were empty). Codes: `not_found` (a repository that is absent and
+  one the caller may not see are byte-identical), `unavailable`, `busy` (with `Retry-After`),
+  `invalid_request` (a malformed query, a wrong method; was an unstructured `400`) and `internal`. Status
+  codes and success bodies are unchanged. `GET /api/v1/openapi.json` is now a complete OpenAPI 3.0.3
+  document (parameters, responses, schemas, security, the package version); `ETag` values are now a
+  specified hash of the canonical JSON and **change once on upgrade**, then stay stable across restarts,
+  releases of the compiler and key order. **Caching change:** every dynamic response is
+  `Cache-Control: private, no-cache` with `Vary: Cookie, Authorization` (sign-in, sign-out and any
+  response that sets a cookie: `no-store`); the stylesheet is `public, max-age=3600`; every response
+  carries `Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()`; with
+  `PLANETER_TRUSTED_PROXIES` set (the app declared to sit behind TLS) responses also carry
+  `Strict-Transport-Security: max-age=15552000` (no `includeSubDomains`, no `preload`). Unknown `/api/`
+  paths now answer with the JSON `not_found`; other unknown paths are unchanged.
+
 - **Sign-in work off the async workers, and constant-work sign-in (IS-24, IS-31).** Password
   verification, token and session checks, session writes and the SSO hand-shake now run on the blocking
   pool, so a sign-in flood can no longer stall the server. Password verification is bounded by its own
