@@ -22,15 +22,14 @@
   (`prikk archive`, whole-repository; closure fix in 0.52.0); RFC 154 is **unscheduled**; a keyless delta
   form is **not planned**. The owner's ruling on what M2 becomes is pending; the scoping notes are
   private working material (`.git-exclude/specs/`), not decisions.
-- **Runtime floor:** prikk ≥ 0.52.0 (`MIN_PRIKK_VERSION`, raised at the 0.52.0 re-baseline, 2026-10-15 — implemented, awaiting architect review), bubblewrap, curl for SSO. Local binary: 0.52.0.
+- **Runtime floor:** prikk ≥ 0.52.0 (`MIN_PRIKK_VERSION`, raised at the 0.52.0 re-baseline, 2026-10-15 — implemented and **conditionally approved by the architect**; to be pushed after the advisory lock update), bubblewrap, curl for SSO. Local binary: 0.52.0.
 - **Team:** migrating to a two-agent team (high-capability architect/reviewer + mid-capability
   implementer) under the owner's workflow (owner-directed 2026-09-24). **First assignment (owner ruling):
   the prikk 0.47.0 re-baseline** — [`../rfcs/handoffs/interim/prikk-0-47-0-rebaseline-handoff-v1.md`](../rfcs/handoffs/interim/prikk-0-47-0-rebaseline-handoff-v1.md),
   held until prikk 0.47.0 is released and installed. **Overtaken 2026-10-15:** prikk is at 0.52.0, it is
   re-issued as [`../rfcs/handoffs/interim/prikk-0-52-0-rebaseline-handoff-v2.md`](../rfcs/handoffs/interim/prikk-0-52-0-rebaseline-handoff-v2.md)
   (T1 schema check, `trust_check` exit code, floor, ledger v1.7); **assignable: 0.52.0 is installed (2026-10-15)**.
-- **Active handoff:** the 0.52.0 re-baseline v2 is **implemented and awaiting architect review** (review request: `.git-exclude/review-requests/prikk-0-52-0-rebaseline-review-request.md` (private)); the T13 measurement spike is authorized and waits on that review. Handoffs 004–009 are v1 (pre-measurement) — see the
-  quarantine rule in [`../rfcs/handoffs/README.md`](../rfcs/handoffs/README.md).
+- **Active handoff:** [`../rfcs/handoffs/interim/supply-chain-advisories-lock-update-handoff-v1.md`](../rfcs/handoffs/interim/supply-chain-advisories-lock-update-handoff-v1.md) (assignable; lands before the re-baseline is pushed). The 0.52.0 re-baseline v2 is implemented and conditionally approved; the T13 measurement spike is authorized and follows. Handoffs 004–009 are v1 (pre-measurement) — see the quarantine rule in [`../rfcs/handoffs/README.md`](../rfcs/handoffs/README.md).
 
 ## Pending on the owner
 
@@ -60,7 +59,7 @@ assigned until a handoff names it.
 |---|---|---|---|
 | IS-1 | `planeter` has no `--version` flag; an install check that ran the binary started a server | 0.2.0 release verification | next interim handoff (small) |
 | IS-2 | No admin path to link an OIDC `(issuer, subject)` to an account — store API only, so SSO needs code to become usable | 0.2.0 OIDC | design first (a `planeter admin link-oidc` subcommand or an equivalent), then a handoff |
-| IS-3 | The driver's `bundle_import` passes the artifact positionally; prikk 0.46.0 takes `--input` | transport measurement 2026-09-23 | **re-baseline v2 T4 — implemented (`--input`, round-trip test), awaiting review** |
+| IS-3 | The driver's `bundle_import` passes the artifact positionally; prikk 0.46.0 takes `--input` | transport measurement 2026-09-23 | **re-baseline v2 T4 — implemented (`--input`, round-trip test); architect review: approved** |
 | IS-4 | Synchronous prikk subprocess calls run inside async handlers without `spawn_blocking`, and nothing caps concurrent prikk subprocesses. **Re-rated 2026-10-15: an unauthenticated denial of service on any public repository** (each in-flight call pins a tokio worker for up to the 120 s bound) | RFC 003 review; architect review 2026-10-13 | **first interim handoff after the re-baseline; blocks any public-deployment guidance and M2** |
 | IS-5 | Blame/annotate view awaits a prikk verb (gap catalogue A3, not scheduled by prikk) | RFC 003 T7 | gated on prikk |
 | IS-6 | Derived read cache (RFC 003 D-1/D-3) not built — nothing invalidates it until writes exist | RFC 003 | with M2 |
@@ -79,6 +78,8 @@ assigned until a handoff names it.
 | IS-19 | Requirements with no theme, RFC or milestone: CAP-10 (search, notifications); export (NG-7, OPS-6, CT-05); fork and mirror (CAP-1); the contribution model for non-writers (no `propose` action); the binding of a prikk author key to a forge account | architect review 2026-10-13 | decision requests (OQ-4) and RFCs before M3; RFC 005 v2 and an RFC 002 follow-on |
 | IS-20 | The RFC folders do not tell the truth (RFC 000): 004–009 sit in `accepted/` while quarantined; 001–003 are `done/` with deferred items recorded only in review requests and here | architect review 2026-10-13 | with the v2 RFC work: move re-issued RFCs to `proposed/` and add "deferred" notes |
 | IS-21 | prikk 0.52.0's `trust maintainer check` exits 1 for "not trusted" (it exited 0); `planeter-prikk::trust_check` keys on exit status | prikk letter 2026-10-15 | re-baseline v2 T5 — implemented (document read on exit 1, typed failure otherwise), awaiting review |
+| IS-22 | The supply-chain gates are red: `ammonia 4.1.4` RUSTSEC-2021-0157 and -0158 (not reachable through the default `clean`, architect-tested) and `yoke-derive 0.8.3` yanked; `release.yml` would fail its own gates | re-baseline review request 2026-10-15 | `rfcs/handoffs/interim/supply-chain-advisories-lock-update-handoff-v1.md` (lock-only; before the push) |
+| IS-23 | 25 source files carry inline `#[cfg(test)]` modules, against `project-instructions-rust.md` | re-baseline review request 2026-10-15 | one separate mechanical migration handoff among the hardening handoffs; new tests never inline |
 
 ## Process lessons (keep — each one cost a bad push or a wrong claim)
 

@@ -12,6 +12,9 @@
 
 - **Scratch only.** One new, empty directory per fixture; scripts live in a different directory from the data
   they read; treat every archive, bundle and artifact as untrusted data (never execute or `cd` into one).
+- **The sandbox binds only the repository root** (re-baseline review, F5): in runs that use planeter's own
+  sandbox argument vector (A7), artifacts must live inside the repository directory. That restriction is
+  itself a finding for RFC 004 v2; record what you had to do.
 - **Keyless means keyless.** The forge-side repository is created with `env -i PATH=… prikk init` (no `HOME`,
   no key directory, no seed). The client-side repository uses `prikk setup` with its own keys.
 - **Record, per measurement:** `prikk --version`, the exact command, exit status, the relevant output

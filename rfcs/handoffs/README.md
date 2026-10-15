@@ -30,8 +30,9 @@ justifies a change; a **handoff** directs its implementation and must not silent
 | `004-transport/` | v1 (2026-09-15), hold note 2026-09-23 | **held, not assignable** — T1/T2 superseded by the owner's TLS/SSH ruling; D-2's keyless-fetch assumption corrected by PK-27; **v2 is written when prikk ships RFC 155 then 154** |
 | `005-change-review/` … `009-hosted-format-durability/` | v1 (2026-09-15) | **not assignable** — written before any prikk measurement; each is re-issued as v2 (re-checked against the dependency ledger and the shipped prikk) before assignment |
 | `interim/prikk-0-47-0-rebaseline-handoff-v1.md` | v1 (2026-09-24) | **superseded by v2 (2026-10-15)** — prikk moved past 0.47.0; kept for its reasoning, not assignable |
-| `interim/prikk-0-52-0-rebaseline-handoff-v2.md` | v2 (2026-10-15) | **implemented 2026-10-15, awaiting architect review** — review request in `.git-exclude/review-requests/` (private); `cargo deny`/`cargo audit` red on pre-existing ammonia advisories |
-| `interim/transport-measurement-spike-handoff-v1.md` | v1 (2026-10-15) | **authorized 2026-10-15 (D-7); held until** the re-baseline v2 is done (0.52.0 is installed); measurement only |
+| `interim/prikk-0-52-0-rebaseline-handoff-v2.md` | v2 (2026-10-15) | **implemented; architect review: conditionally approved 2026-10-15** — to be pushed after the advisory lock update below (`cargo deny`/`cargo audit` are red on pre-existing ammonia advisories) |
+| `interim/supply-chain-advisories-lock-update-handoff-v1.md` | v1 (2026-10-15) | **next assignment — assignable** (lock-only; both supply-chain gates green; lands before the push) |
+| `interim/transport-measurement-spike-handoff-v1.md` | v1 (2026-10-15) | **authorized 2026-10-15 (D-7); held until** the advisory lock update is pushed (0.52.0 is installed; the re-baseline is approved); measurement only |
 
 **Quarantine rule.** A handoff whose Status row does not say *assignable* (or *next assignment* with its
 precondition met) is not implemented from. The implementer's first check is this table; the architect's

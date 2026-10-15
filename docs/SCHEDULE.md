@@ -31,8 +31,8 @@ Each plan names what it waits on and what it unblocks. Order within a tier is th
 across tiers is fixed by the dependencies.
 
 1. **Now, during the M2 hold** — in this order (the architect's; each step names its precondition):
-   1. **T1**, the 0.52.0 re-baseline (handoff v2). *Waits on:* nothing: prikk 0.52.0 was installed 2026-10-15, so it is assignable.
-   2. **T13**, the measurement spike. *Waits on:* step 1 (D-7 is granted). Unblocks: D-8 and the
+   1. **T1**, the 0.52.0 re-baseline (handoff v2): **implemented and conditionally approved 2026-10-15**; it is pushed after the advisory lock update (IS-22, a lock-only handoff, assignable now).
+   2. **T13**, the measurement spike. *Waits on:* step 1 pushed (D-7 is granted). Unblocks: D-8 and the
       evidence for RFC 004 v2 and RFC 006 v2. Measurement only.
    3. **Defects and hardening, one small handoff each** (no prikk dependency; the architect may reorder
       against step 2 if the owner prefers): IS-4 (a denial of service on public repositories: first, and it

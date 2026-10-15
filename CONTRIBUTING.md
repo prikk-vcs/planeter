@@ -50,7 +50,10 @@ RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --locked
 ```
 
 Run the test suite twice before pushing: once with prikk on `PATH`, once with it shimmed off (a
-directory containing only `cargo`, `rustc`, `rustup` symlinks, put first on `PATH`). The second run is
+directory containing only `cargo`, `rustc`, `rustup` symlinks, put first on `PATH`). **Symlink the real
+toolchain binaries (`rustup which cargo`, `rustup which rustc`), not the `~/.cargo/bin` proxies:** a proxy
+re-adds `~/.cargo/bin` to the child's `PATH` and prikk is found anyway. A shimmed run that shows no
+"skipping: prikk not on PATH" lines was not shimmed. The second run is
 what CI sees. Any manifest change follows [`docs/dependency-policy.md`](docs/dependency-policy.md):
 measure, report the delta with `cargo deny` and `cargo audit` results, then commit.
 
