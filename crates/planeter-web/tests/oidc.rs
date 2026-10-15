@@ -126,6 +126,7 @@ fn app(subdir: &str) -> (AppState, Arc<MockFetcher>) {
     ));
     let state = AppState {
         read,
+        gate: Arc::new(planeter_web::PrikkGate::default()),
         auth,
         content_origin: ContentOrigin::new("https://raw.planeter.example"),
         sessions: Arc::new(InMemorySessionStore::new()),

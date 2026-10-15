@@ -7,11 +7,13 @@
 //! [`ui`], both calling `planeter_core::ReadService` behind the one `authorize(_, Read, _)` gate; the
 //! [`principal`] extractor (session cookie or bearer token), the [`cookies`] helpers (CSRF double-submit,
 //! `HttpOnly`/`SameSite=Strict`/`Secure`), sign-in (local password or OIDC) with the login throttles, and
-//! the trusted-proxy [`client_ip`](mod@client_ip) rules.
+//! the trusted-proxy [`client_ip`](mod@client_ip) rules. Every read-path prikk call runs through the
+//! [`gate`]: off the async workers, under a bounded number of concurrent invocations (IS-4).
 
 pub mod api;
 pub mod client_ip;
 pub mod cookies;
+pub mod gate;
 pub mod principal;
 pub mod sanitize;
 pub mod security;
@@ -19,6 +21,7 @@ pub mod ui;
 
 pub use api::AppState;
 pub use client_ip::{TrustedProxies, bind_allowed, client_ip};
+pub use gate::PrikkGate;
 
 /// The full application router: the JSON read API under `/api/v1/…` merged with the browse UI.
 pub fn router(state: AppState) -> axum::Router {

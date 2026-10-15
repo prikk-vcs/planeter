@@ -26,6 +26,7 @@ use planeter_auth::Authenticator;
 use planeter_core::{RawFile, ReadError, ReadService};
 use planeter_store::Owner;
 
+use crate::gate::{GateError, PrikkGate};
 use crate::security::{ContentOrigin, app_security_headers, raw_content_headers};
 
 /// Default and maximum history page size (bounded — `STD-3`).
@@ -39,6 +40,8 @@ const RAW_MAX_BYTES: u64 = 25 * 1024 * 1024;
 #[derive(Clone)]
 pub struct AppState {
     pub read: Arc<ReadService>,
+    /// The bound on concurrent prikk invocations and the place blocking prikk work runs (IS-4).
+    pub gate: Arc<PrikkGate>,
     pub auth: Arc<Authenticator>,
     pub content_origin: ContentOrigin,
     /// Browser sessions (the UI's sign-in); the API accepts the session cookie too.
@@ -118,11 +121,12 @@ async fn history_handler(
 ) -> Response {
     let principal = crate::principal::principal_from_request(&headers, &state);
     let limit = q.limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT);
-    let result = try_both_owners(&owner, |o| {
-        state
-            .read
-            .history(&principal, o, &name, q.ref_name.as_deref(), Some(limit))
-    });
+    let result = read_blocking(&state, move |read| {
+        try_both_owners(&owner, |o| {
+            read.history(&principal, o, &name, q.ref_name.as_deref(), Some(limit))
+        })
+    })
+    .await;
     respond(&state, &headers, result)
 }
 
@@ -132,7 +136,10 @@ async fn change_handler(
     headers: HeaderMap,
 ) -> Response {
     let principal = crate::principal::principal_from_request(&headers, &state);
-    let result = try_both_owners(&owner, |o| state.read.change(&principal, o, &name, &target));
+    let result = read_blocking(&state, move |read| {
+        try_both_owners(&owner, |o| read.change(&principal, o, &name, &target))
+    })
+    .await;
     respond(&state, &headers, result)
 }
 
@@ -143,11 +150,12 @@ async fn file_handler(
     headers: HeaderMap,
 ) -> Response {
     let principal = crate::principal::principal_from_request(&headers, &state);
-    let result = try_both_owners(&owner, |o| {
-        state
-            .read
-            .file(&principal, o, &name, q.ref_name.as_deref(), &q.path)
-    });
+    let result = read_blocking(&state, move |read| {
+        try_both_owners(&owner, |o| {
+            read.file(&principal, o, &name, q.ref_name.as_deref(), &q.path)
+        })
+    })
+    .await;
     respond(&state, &headers, result)
 }
 
@@ -158,15 +166,18 @@ async fn tree_handler(
     headers: HeaderMap,
 ) -> Response {
     let principal = crate::principal::principal_from_request(&headers, &state);
-    let result = try_both_owners(&owner, |o| {
-        state.read.tree(
-            &principal,
-            o,
-            &name,
-            q.ref_name.as_deref(),
-            q.prefix.as_deref(),
-        )
-    });
+    let result = read_blocking(&state, move |read| {
+        try_both_owners(&owner, |o| {
+            read.tree(
+                &principal,
+                o,
+                &name,
+                q.ref_name.as_deref(),
+                q.prefix.as_deref(),
+            )
+        })
+    })
+    .await;
     respond(&state, &headers, result)
 }
 
@@ -177,16 +188,19 @@ async fn raw_handler(
     headers: HeaderMap,
 ) -> Response {
     let principal = crate::principal::principal_from_request(&headers, &state);
-    let result = try_both_owners(&owner, |o| {
-        state.read.raw_file(
-            &principal,
-            o,
-            &name,
-            q.ref_name.as_deref(),
-            &q.path,
-            Some(RAW_MAX_BYTES),
-        )
-    });
+    let result = read_blocking(&state, move |read| {
+        try_both_owners(&owner, |o| {
+            read.raw_file(
+                &principal,
+                o,
+                &name,
+                q.ref_name.as_deref(),
+                &q.path,
+                Some(RAW_MAX_BYTES),
+            )
+        })
+    })
+    .await;
     match result {
         Ok(raw) => build_raw(&state, &raw),
         Err(e) => error_response(&state, e),
@@ -200,7 +214,10 @@ async fn refs_handler(
     headers: HeaderMap,
 ) -> Response {
     let principal = crate::principal::principal_from_request(&headers, &state);
-    let result = try_both_owners(&owner, |o| state.read.refs(&principal, o, &name, q.all));
+    let result = read_blocking(&state, move |read| {
+        try_both_owners(&owner, |o| read.refs(&principal, o, &name, q.all))
+    })
+    .await;
     respond(&state, &headers, result)
 }
 
@@ -210,7 +227,10 @@ async fn verify_handler(
     headers: HeaderMap,
 ) -> Response {
     let principal = crate::principal::principal_from_request(&headers, &state);
-    let result = try_both_owners(&owner, |o| state.read.verify(&principal, o, &name));
+    let result = read_blocking(&state, move |read| {
+        try_both_owners(&owner, |o| read.verify(&principal, o, &name))
+    })
+    .await;
     respond(&state, &headers, result)
 }
 
@@ -221,6 +241,41 @@ async fn openapi_handler(State(state): State<AppState>) -> Response {
 }
 
 // -- helpers --
+
+/// Why a read produced no value: the read service's own error, or the gate refusing for lack of a slot.
+#[derive(Debug)]
+pub(crate) enum Failure {
+    Read(ReadError),
+    /// No prikk slot became free within the bounded wait (IS-4): `503` with `Retry-After`.
+    Busy,
+}
+
+impl From<ReadError> for Failure {
+    fn from(e: ReadError) -> Self {
+        Failure::Read(e)
+    }
+}
+
+/// Run a blocking read-service job through the gate (RFC 003 D-8, IS-4). **Every** handler reaches the
+/// read service through this one function, so that none can forget `spawn_blocking` or the cap.
+///
+/// A page that needs several prikk calls does them all inside one job, under one permit: it either
+/// gets its slot or is refused as a whole, never half-rendered.
+pub(crate) async fn read_blocking<T, F>(state: &AppState, job: F) -> Result<T, Failure>
+where
+    F: FnOnce(&ReadService) -> Result<T, ReadError> + Send + 'static,
+    T: Send + 'static,
+{
+    let read = Arc::clone(&state.read);
+    match state.gate.run(move || job(&read)).await {
+        Ok(result) => result.map_err(Failure::Read),
+        Err(GateError::Busy) => Err(Failure::Busy),
+        // A panicking job or a shutting-down runtime: an internal fault, not a missing repository.
+        Err(GateError::Aborted) => Err(Failure::Read(ReadError::Backend(
+            "the read task did not complete".to_owned(),
+        ))),
+    }
+}
 
 /// Try the handle as a user, then as an org. A `NotFound` for the user is retried as an org (the two are
 /// a shared namespace); any other outcome is returned as-is.
@@ -239,7 +294,7 @@ pub(crate) fn try_both_owners<T>(
 fn respond<T: Serialize>(
     state: &AppState,
     req_headers: &HeaderMap,
-    result: Result<T, ReadError>,
+    result: Result<T, Failure>,
 ) -> Response {
     match result {
         Ok(view) => {
@@ -293,16 +348,29 @@ fn build_raw(_state: &AppState, raw: &RawFile) -> Response {
         .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response_fallback())
 }
 
-fn error_response(state: &AppState, e: ReadError) -> Response {
-    let status = match e {
-        ReadError::NotFound => StatusCode::NOT_FOUND,
-        ReadError::Unavailable(_) => StatusCode::SERVICE_UNAVAILABLE,
+fn error_response(state: &AppState, e: Failure) -> Response {
+    let (status, retry_after) = match e {
+        Failure::Busy => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Some(retry_after_secs(state)),
+        ),
+        Failure::Read(ReadError::NotFound) => (StatusCode::NOT_FOUND, None),
+        Failure::Read(ReadError::Unavailable(_)) => (StatusCode::SERVICE_UNAVAILABLE, None),
         // Backend and any future variant map to 500 (existence-neutral).
-        _ => StatusCode::INTERNAL_SERVER_ERROR,
+        Failure::Read(_) => (StatusCode::INTERNAL_SERVER_ERROR, None),
     };
-    with_security_headers(state, Response::builder().status(status))
+    let mut builder = with_security_headers(state, Response::builder().status(status));
+    if let Some(secs) = retry_after {
+        builder = builder.header(header::RETRY_AFTER, secs.to_string());
+    }
+    builder
         .body(Body::empty())
         .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response_fallback())
+}
+
+/// The `Retry-After` value for a refused request: the configured wait, at least one second.
+pub(crate) fn retry_after_secs(state: &AppState) -> u64 {
+    state.gate.wait().as_secs().max(1)
 }
 
 pub(crate) fn with_security_headers(

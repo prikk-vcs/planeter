@@ -20,7 +20,9 @@ use planeter_auth::{
 };
 use planeter_core::{Assurance, Principal, ReadError, TreeEntryView};
 
-use crate::api::{AppState, try_both_owners, with_security_headers};
+use crate::api::{
+    AppState, Failure, read_blocking, retry_after_secs, try_both_owners, with_security_headers,
+};
 use crate::client_ip::{PeerAddr, client_ip};
 use crate::cookies::{
     CSRF_COOKIE, OIDC_STATE_COOKIE, SESSION_COOKIE, clear_cookie, get_cookie, set_cookie,
@@ -127,9 +129,27 @@ fn render<T: Template>(state: &AppState, status: StatusCode, tpl: &T, c: &Ctx) -
     }
 }
 
-fn error_page(state: &AppState, c: &Ctx, e: ReadError) -> Response {
+fn error_page(state: &AppState, c: &Ctx, e: Failure) -> Response {
     match e {
-        ReadError::NotFound => render(
+        // No prikk slot within the bounded wait (IS-4): the same existence-neutral page, plus
+        // `Retry-After`.
+        Failure::Busy => {
+            let mut resp = render(
+                state,
+                StatusCode::SERVICE_UNAVAILABLE,
+                &UnavailableTpl {
+                    user: c.user.clone(),
+                    csrf: c.csrf.clone(),
+                },
+                c,
+            );
+            if let Ok(v) = retry_after_secs(state).to_string().parse() {
+                resp.headers_mut()
+                    .insert(axum::http::header::RETRY_AFTER, v);
+            }
+            resp
+        }
+        Failure::Read(ReadError::NotFound) => render(
             state,
             StatusCode::NOT_FOUND,
             &NotFoundTpl {
@@ -675,30 +695,40 @@ async fn repo_home(
 ) -> Response {
     let c = ctx(&headers, &state);
     let r = q.ref_name.as_deref();
-    let tree = try_both_owners(&owner, |o| state.read.tree(&c.principal, o, &name, r, None));
-    let tree = match tree {
-        Ok(t) => t,
+    // The page's four prikk calls run in one gated job, under one permit (RFC 003 D-8, IS-4).
+    let (principal, o, n, rr) = (
+        c.principal.clone(),
+        owner.clone(),
+        name.clone(),
+        r.map(str::to_owned),
+    );
+    let page = read_blocking(&state, move |read| {
+        let r = rr.as_deref();
+        let tree = try_both_owners(&o, |ow| read.tree(&principal, ow, &n, r, None))?;
+        let refs = try_both_owners(&o, |ow| read.refs(&principal, ow, &n, false)).ok();
+        let verify = try_both_owners(&o, |ow| read.verify(&principal, ow, &n));
+        let readme = tree
+            .entries
+            .iter()
+            .find(|e| e.path.eq_ignore_ascii_case("README.md"))
+            .and_then(|e| {
+                try_both_owners(&o, |ow| {
+                    read.raw_file(&principal, ow, &n, r, &e.path, Some(1 << 20))
+                })
+                .ok()
+            });
+        Ok((tree, refs, verify, readme))
+    })
+    .await;
+    let (tree, refs, verify, readme) = match page {
+        Ok(p) => p,
         Err(e) => return error_page(&state, &c, e),
     };
-    let refs = try_both_owners(&owner, |o| state.read.refs(&c.principal, o, &name, false)).ok();
-    let verify = try_both_owners(&owner, |o| state.read.verify(&c.principal, o, &name));
     let (ac, al) = match &verify {
         Ok(v) => assurance(v.assurance()),
         Err(_) => ("bad", "verify unavailable"),
     };
-    let readme_html = tree
-        .entries
-        .iter()
-        .find(|e| e.path.eq_ignore_ascii_case("README.md"))
-        .and_then(|e| {
-            try_both_owners(&owner, |o| {
-                state
-                    .read
-                    .raw_file(&c.principal, o, &name, r, &e.path, Some(1 << 20))
-            })
-            .ok()
-        })
-        .map(|raw| render_markdown(&String::from_utf8_lossy(&raw.bytes)));
+    let readme_html = readme.map(|raw| render_markdown(&String::from_utf8_lossy(&raw.bytes)));
     let (dirs, files) = listing(&tree.entries, "");
     render(
         &state,
@@ -730,11 +760,19 @@ async fn tree_page(
     let c = ctx(&headers, &state);
     let r = q.ref_name.as_deref();
     let prefix = path.trim_matches('/').to_owned();
-    let tree = try_both_owners(&owner, |o| {
-        state
-            .read
-            .tree(&c.principal, o, &name, r, Some(prefix.as_str()))
-    });
+    let (principal, o, n, rr, pf) = (
+        c.principal.clone(),
+        owner.clone(),
+        name.clone(),
+        r.map(str::to_owned),
+        prefix.clone(),
+    );
+    let tree = read_blocking(&state, move |read| {
+        try_both_owners(&o, |ow| {
+            read.tree(&principal, ow, &n, rr.as_deref(), Some(pf.as_str()))
+        })
+    })
+    .await;
     let tree = match tree {
         Ok(t) => t,
         Err(e) => return error_page(&state, &c, e),
@@ -766,11 +804,19 @@ async fn file_page(
 ) -> Response {
     let c = ctx(&headers, &state);
     let r = q.ref_name.as_deref();
-    let raw = try_both_owners(&owner, |o| {
-        state
-            .read
-            .raw_file(&c.principal, o, &name, r, &path, Some(4 << 20))
-    });
+    let (principal, o, n, rr, p) = (
+        c.principal.clone(),
+        owner.clone(),
+        name.clone(),
+        r.map(str::to_owned),
+        path.clone(),
+    );
+    let raw = read_blocking(&state, move |read| {
+        try_both_owners(&o, |ow| {
+            read.raw_file(&principal, ow, &n, rr.as_deref(), &p, Some(4 << 20))
+        })
+    })
+    .await;
     let raw = match raw {
         Ok(f) => f,
         Err(e) => return error_page(&state, &c, e),
@@ -821,16 +867,24 @@ async fn history_page(
 ) -> Response {
     let c = ctx(&headers, &state);
     let r = q.ref_name.as_deref();
-    let h = try_both_owners(&owner, |o| {
-        state
-            .read
-            .history(&c.principal, o, &name, r, Some(HISTORY_PAGE))
-    });
-    let h = match h {
-        Ok(h) => h,
+    let (principal, o, n, rr) = (
+        c.principal.clone(),
+        owner.clone(),
+        name.clone(),
+        r.map(str::to_owned),
+    );
+    let page = read_blocking(&state, move |read| {
+        let h = try_both_owners(&o, |ow| {
+            read.history(&principal, ow, &n, rr.as_deref(), Some(HISTORY_PAGE))
+        })?;
+        let verify = try_both_owners(&o, |ow| read.verify(&principal, ow, &n));
+        Ok((h, verify))
+    })
+    .await;
+    let (h, verify) = match page {
+        Ok(p) => p,
         Err(e) => return error_page(&state, &c, e),
     };
-    let verify = try_both_owners(&owner, |o| state.read.verify(&c.principal, o, &name));
     let (ac, al) = match &verify {
         Ok(v) => assurance(v.assurance()),
         Err(_) => ("bad", "verify unavailable"),
@@ -870,9 +924,16 @@ async fn change_page(
     headers: HeaderMap,
 ) -> Response {
     let c = ctx(&headers, &state);
-    let ch = try_both_owners(&owner, |o| {
-        state.read.change(&c.principal, o, &name, &target)
-    });
+    let (principal, o, n, t) = (
+        c.principal.clone(),
+        owner.clone(),
+        name.clone(),
+        target.clone(),
+    );
+    let ch = read_blocking(&state, move |read| {
+        try_both_owners(&o, |ow| read.change(&principal, ow, &n, &t))
+    })
+    .await;
     let ch = match ch {
         Ok(v) => v,
         Err(e) => return error_page(&state, &c, e),
@@ -918,7 +979,11 @@ async fn refs_page(
     headers: HeaderMap,
 ) -> Response {
     let c = ctx(&headers, &state);
-    let v = try_both_owners(&owner, |o| state.read.refs(&c.principal, o, &name, true));
+    let (principal, o, n) = (c.principal.clone(), owner.clone(), name.clone());
+    let v = read_blocking(&state, move |read| {
+        try_both_owners(&o, |ow| read.refs(&principal, ow, &n, true))
+    })
+    .await;
     let v = match v {
         Ok(v) => v,
         Err(e) => return error_page(&state, &c, e),
@@ -960,7 +1025,11 @@ async fn verify_page(
     headers: HeaderMap,
 ) -> Response {
     let c = ctx(&headers, &state);
-    let v = try_both_owners(&owner, |o| state.read.verify(&c.principal, o, &name));
+    let (principal, o, n) = (c.principal.clone(), owner.clone(), name.clone());
+    let v = read_blocking(&state, move |read| {
+        try_both_owners(&o, |ow| read.verify(&principal, ow, &n))
+    })
+    .await;
     let v = match v {
         Ok(v) => v,
         Err(e) => return error_page(&state, &c, e),

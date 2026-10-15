@@ -74,6 +74,8 @@ environment:
   PLANETER_DB                   the SQLite database file (default ./planeter.db; created if absent)
   PLANETER_TRUSTED_PROXIES      comma-separated addresses/CIDRs of the TLS-terminating reverse proxies;
                                 a non-loopback PLANETER_ADDR is refused unless this is set
+  PLANETER_PRIKK_CONCURRENCY    most prikk subprocesses at once (default min(CPUs, 8))
+  PLANETER_PRIKK_QUEUE_WAIT_SECS  seconds a request waits for a slot before 503 (default 10)
   PLANETER_OIDC_ISSUER, PLANETER_OIDC_CLIENT_ID, PLANETER_OIDC_REDIRECT_URI
                                 all three enable OpenID Connect sign-in
   PLANETER_OIDC_CLIENT_SECRET   optional OpenID Connect client secret

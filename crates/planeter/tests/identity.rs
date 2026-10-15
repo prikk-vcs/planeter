@@ -150,16 +150,26 @@ fn no_argument_serves_as_before() {
     let stderr = child.stderr.take().unwrap();
     let (tx, rx) = mpsc::channel();
     std::thread::spawn(move || {
-        let mut line = String::new();
-        let _ = BufReader::new(stderr).read_line(&mut line);
-        let _ = tx.send(line);
+        // Start-up lines up to and including the announcement.
+        let mut seen = String::new();
+        for line in BufReader::new(stderr).lines().map_while(Result::ok).take(8) {
+            let done = line.starts_with("planeter listening on ");
+            seen.push_str(&line);
+            seen.push('\n');
+            if done {
+                break;
+            }
+        }
+        let _ = tx.send(seen);
     });
     let announced = rx.recv_timeout(TIMEOUT);
     let _ = child.kill();
     let _ = child.wait();
-    let line = announced.expect("planeter announced itself within the timeout");
+    let seen = announced.expect("planeter announced itself within the timeout");
     assert!(
-        line.starts_with("planeter listening on http://127.0.0.1:"),
-        "{line}"
+        seen.contains("planeter listening on http://127.0.0.1:"),
+        "{seen}"
     );
+    // The prikk concurrency cap and wait are logged once at start (IS-4).
+    assert!(seen.contains("concurrent prikk invocations"), "{seen}");
 }
