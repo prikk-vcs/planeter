@@ -23,6 +23,7 @@
 | **T11 hardening and operations** | OPS-2/3/5, 1.0 readiness | backup as one coherent set with a rehearsed restore; observability (metrics, structured logs, health); multi-replica story (throttles at the proxy, PostgreSQL path) | T3–T10 substantially done | new RFC (operations) before 1.0 |
 | **T12 API write side + webhooks** | CAP-9 | the write endpoints for T4/T6, `Link` pagination and enforced rate-limit headers, HMAC-signed webhooks through the egress guard | T3/T4 | RFC 003 follow-on; STD-4 |
 | **T13 measurement spike (transport and CI read side)** | M2's shape, M4 | measurements A1–A11 and B1–B7 on prikk 0.52.0 in a scratch directory (keyless receive, push memory and bounds, `sync have` on a keyless forge, locks under kill, export timing, snapshot mechanisms, runner isolation, workflow census); ledger rows promoted from ASSUMED; **no product code** | the owner's authorization (D-7); prikk 0.52.0 installed; T1 done | `rfcs/handoffs/004-transport/transport-measurement-handoff-v1.md` and `rfcs/handoffs/006-ci-runners/ci-read-side-measurement-handoff-v1.md` |
+| **T14 web UI foundations** | M3 (the review UI), usability | language (i18n catalogs), plain vocabulary and guidance, accessibility, the home and repository list (IS-7); a new RFC, not yet numbered | the owner placing it on the roadmap; i18n before RFC 005's UI | to be written |
 | **Deferred** | post-1.0 | federation, portable identity, built-in AI (forge-commons verdicts) | the owner's call after 1.0 | ROADMAP §Later |
 
 ## 2. Plans, in order
@@ -111,6 +112,7 @@ C-11 (supply chain) is checked at every crate.               C-14 (owner availab
 - **D-9** the contribution model for non-writers (the `propose` action, the proposals setting, quotas; D-T3) — with RFC 005 v2.
 - **D-10** the CI decisions: how a runner gets the tree of an open change, the workflow subset, runner
   isolation, the job network default (D-C2, D-C3, D-C4, D-C5; D-C6 is accepted) — with RFC 006 v2, after T13.
+- **D-12** include the API-contract and cache-header handoff (IS-28, IS-29: one error shape, a real OpenAPI document, stable ETags, `Cache-Control`/`Vary`/`Permissions-Policy`/HSTS) in release 0.3.0 — **requested 2026-10-15**: 0.3.0 is the cheapest minor for the contract, and the cache headers are a safe default. Excluding it leaves the API contract to the next minor, after clients exist.
 - **D-11** authorize candidate release 0.3.0: its version, content and criteria (§5) — **AUTHORIZED by the owner 2026-10-15 (Option A: 0.3.0 with the full content)**; the tag and the publish remain the owner's act at release time.
 
 *Owner, 2026-10-15: D-7 granted; the plan's order and the triggers of D-8 to D-11 accepted. D-8 to D-11 are **not** decided: each is taken at its trigger, on the evidence then available. A decision made earlier than its trigger would be made on documents, which is what C-15 forbids.*
