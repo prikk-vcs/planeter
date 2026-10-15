@@ -29,7 +29,7 @@
   held until prikk 0.47.0 is released and installed. **Overtaken 2026-10-15:** prikk is at 0.52.0, it is
   re-issued as [`../rfcs/handoffs/interim/prikk-0-52-0-rebaseline-handoff-v2.md`](../rfcs/handoffs/interim/prikk-0-52-0-rebaseline-handoff-v2.md)
   (T1 schema check, `trust_check` exit code, floor, ledger v1.6); assignable once 0.52.0 is installed.
-- **Active handoff:** none assignable today. Handoffs 004–009 are v1 (pre-measurement) — see the
+- **Active handoff:** none assignable today (the 0.52.0 re-baseline v2 waits on the binary; the T13 measurement spike waits on the owner's authorization and on it). Handoffs 004–009 are v1 (pre-measurement) — see the
   quarantine rule in [`../rfcs/handoffs/README.md`](../rfcs/handoffs/README.md).
 
 ## Pending on the owner
@@ -42,7 +42,8 @@
   is superseded.
 - Install prikk 0.52.0 (`cargo install prikk --version 0.52.0 --locked`): it is the re-baseline target
   (0.47.0 is overtaken) and the binary the measurement spike needs. Decide the floor at that point.
-- Rule on what M2 becomes (decisions D-T1/D-T2 in the private RFC 004 scoping note) once the spike reports.
+- **Authorize the measurement spike** (SCHEDULE D-7; [`../rfcs/handoffs/interim/transport-measurement-spike-handoff-v1.md`](../rfcs/handoffs/interim/transport-measurement-spike-handoff-v1.md)): measurement only, scratch directory, no repository change. It waits on 0.52.0 being installed and the re-baseline being done.
+- Rule on what M2 becomes (SCHEDULE D-8) once the spike reports.
 
 ## Pending upstream (prikk's actual releases and plan, from its letters and ROADMAP of 2026-10-13/15)
 

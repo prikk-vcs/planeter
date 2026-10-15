@@ -22,6 +22,7 @@
 | **T10 hosted-format durability** | B2 | carry-forward across prikk formats via RFC 155 `import --adopt`; the format-pin/refuse rule as code (needs IS-13) | prikk RFC 155 (shipped in 0.51.0 as `archive`; closure fix 0.52.0); a real format change does not exist yet (format 8 is unscheduled) | RFC 009 |
 | **T11 hardening and operations** | OPS-2/3/5, 1.0 readiness | backup as one coherent set with a rehearsed restore; observability (metrics, structured logs, health); multi-replica story (throttles at the proxy, PostgreSQL path) | T3–T10 substantially done | new RFC (operations) before 1.0 |
 | **T12 API write side + webhooks** | CAP-9 | the write endpoints for T4/T6, `Link` pagination and enforced rate-limit headers, HMAC-signed webhooks through the egress guard | T3/T4 | RFC 003 follow-on; STD-4 |
+| **T13 measurement spike (transport and CI read side)** | M2's shape, M4 | measurements A1–A11 and B1–B7 on prikk 0.52.0 in a scratch directory (keyless receive, push memory and bounds, `sync have` on a keyless forge, locks under kill, export timing, snapshot mechanisms, runner isolation, workflow census); ledger rows promoted from ASSUMED; **no product code** | the owner's authorization (D-7); prikk 0.52.0 installed; T1 done | `rfcs/handoffs/interim/transport-measurement-spike-handoff-v1.md` |
 | **Deferred** | post-1.0 | federation, portable identity, built-in AI (forge-commons verdicts) | the owner's call after 1.0 | ROADMAP §Later |
 
 ## 2. Plans, in order
@@ -29,16 +30,26 @@
 Each plan names what it waits on and what it unblocks. Order within a tier is the architect's; order
 across tiers is fixed by the dependencies.
 
-1. **Now, during the M2 hold** — T1 (the 0.52.0 re-baseline, as the new team's first assignment), then T2 items
-   one handoff each (IS-1, IS-14, IS-4, IS-13, IS-2, IS-7 — smallest first), and the *design* of T4
-   (RFC 005 v2 against measured 0.46.0 behaviour) so M3 does not start from a pre-measurement RFC.
-   Unblocks: a measured two-agent cadence; a re-issuable RFC 005; the hosting rule for the next format change.
+1. **Now, during the M2 hold** — in this order (the architect's; each step names its precondition):
+   1. **T1**, the 0.52.0 re-baseline (handoff v2). *Waits on:* the owner installing prikk 0.52.0.
+   2. **T13**, the measurement spike. *Waits on:* D-7 (authorization) and step 1. Unblocks: D-8 and the
+      evidence for RFC 004 v2 and RFC 006 v2. Measurement only.
+   3. **Defects and hardening, one small handoff each** (no prikk dependency; the architect may reorder
+      against step 2 if the owner prefers): IS-4 (a denial of service on public repositories: first, and it
+      blocks any public-deployment guidance), IS-15 (limits seam), IS-17 (pin actions by digest), IS-16
+      (raw-content host gating), IS-14 (ENF-4 test, before any write handler), then IS-1, IS-13, IS-2,
+      IS-7 smallest first.
+   4. **Architect, in parallel, no dev time:** RFC 005 v2 (waits on nothing but D-2), then RFC 004 v2 and
+      RFC 006 v2 after step 2; each moves its RFC to `proposed/` while it is revised (IS-20).
+   5. **Candidate release 0.2.1** (a patch: no new features): the 0.52.0 floor, step 3's hardening, IS-1.
+      The architect recommends it at step 3's end; tag and publish are the owner's.
+   Unblocks: a measured two-agent cadence; re-issuable RFCs 004–006; the owner's ruling on M2 (D-8).
 2. **When prikk next changes the repository format** (format 8 is unscheduled) — T1 again; T10's first
    real case (what the serving rule and the record mean for repositories already hosted in format 7);
    planeter's input on RFC 158's streaming bound if prikk reopens it. Unblocks: the durability rule.
 3. **The write path.** RFC 155 has shipped (whole-repository); **RFC 154 is unscheduled and a keyless delta
    form is not planned.** So the plan is the owner's ruling on M2's shape after the measurement spike
-   (private RFC 004 scoping note, §7): RFC 004 handoff v2, then T3, on whole artifacts. **Forge-side branch
+   (theme T13, `rfcs/handoffs/interim/transport-measurement-spike-handoff-v1.md`): RFC 004 handoff v2, then T3, on whole artifacts. **Forge-side branch
    advance (merge) and incremental fetch are what wait for prikk.** Unblocks: T4's review side, T6, T8, T9, T12.
 4. **After M2** — T4 (M3) with T5 riding on it (adoption is small once RFC 154 exists), T12's write
    endpoints alongside; T6 as the administration those need. T7's MFA can land in any tier, since it
@@ -65,12 +76,14 @@ across tiers is fixed by the dependencies.
 | **C-11** | A dependency advisory with no upstream fix (as `rsa` today) turns the audit gate red | risk (supply chain) | any theme adding a crate | T3 (TLS/SSH kept out of the tree), T9 (registry stacks) | scoped, justified ignores only; the subprocess pattern for protocol stacks; the rejected-crate ledger |
 | **C-12** | The open owner questions OQ-4 (feature ceiling) and OQ-5 (Git mirror-out) shape T4/T6 and T9 | concern (scope) | T4, T6, T9 | D-2, D-3 | raise as decision requests before the affected handoffs, not during |
 | **C-13** | Blame/annotate is unscheduled by prikk (gap catalogue A3) | concern (feature) | T2, T4 | — | the view stays "pending a prikk increment"; not faked |
+| **C-15** | The design basis of RFC 004 v2 and RFC 006 v2 is documents, not measurements: keyless `archive import`, `sync have` on a keyless forge, lock behaviour under our sandbox, memory multipliers and the snapshot mechanisms are ASSUMED or prikk-measured only | risk (design) | T3, T8, M2's shape | C-1, C-2, C-5 | T13 first; no v2 RFC is accepted before its rows are CONFIRMED; a measurement that contradicts a ledger row stops the spike |
 | **C-14** | A single human authority; rulings, tags and letters wait on the owner's availability | concern (governance) | releases, upstream | C-1 | batch decision requests; nothing technical blocks on a ruling; the read side never waits |
 
 **Relations, as a map** (an arrow reads "unblocks" or "is the first real case for"):
 
 ```
-prikk 0.52.0 ─► T1 ─► (C-4 checked) ─► T2 items ─► measured cadence (C-5) ─► RFC 005 v2 (C-6)
+prikk 0.52.0 ─► T1 ─► (C-4 checked) ─► T13 spike (D-7) ─► D-8 ruling on M2 ─► RFC 004 v2 / RFC 006 v2
+                       └──────────► T2 items ─► measured cadence (C-5) ─► RFC 005 v2 (C-6)
 a future format change ─► T1 ─► (C-3) ─► T10 rule ◄─ IS-13 (C-9)
 prikk archive (0.51.0) ─► whole-artifact fetch (C-2) ─┐
                                       ├─► RFC 004 v2 ─► T3 (M2) ─► T4 (M3) ─► T5 (B1)
@@ -90,3 +103,10 @@ C-11 (supply chain) is checked at every crate.               C-14 (owner availab
 - **D-4** T8 before T9 or the reverse — after M2; recommended T8.
 - **D-5** whether T7's MFA lands during the hold or with M3 — recommended during the hold if a release touching auth opens.
 - **D-6** the 1.0 promotion — the owner's alone, after T10/T11 and the readiness report.
+- **D-7** authorize the T13 spike (measurement only; no repository change) — when prikk 0.52.0 is installed and T1 is done.
+- **D-8** the ruling on M2's shape and on what a branch is while publication is unavailable (private RFC 004
+  scoping note D-T1/D-T2) — at T13's review request. The architect's lean is stated there; it is the owner's call.
+- **D-9** the contribution model for non-writers (the `propose` action, the proposals setting, quotas; D-T3) — with RFC 005 v2.
+- **D-10** the CI decisions: how a runner gets the tree of an open change, the workflow subset, runner
+  isolation, the job network default (D-C2, D-C3, D-C4, D-C5; D-C6 is accepted) — with RFC 006 v2, after T13.
+- **D-11** the version and timing of candidate release 0.2.1 and its content (floor 0.52.0 plus hardening) — at step 3's end.
