@@ -27,6 +27,7 @@ use planeter_store::{
     InMemoryMembershipStore, InMemoryRepositoryStore, MembershipStore, Owner, RepoId,
     RepositoryRecord, RepositoryStore, Visibility,
 };
+use planeter_web::errors::ErrorCode;
 use planeter_web::{
     AppState, BlockingGate, ContentOrigin, ContentOriginCheck, PrikkGate, REFUSE_SAME_HOST,
     TrustedProxies, WARN_SAME_HOST, check_content_origin, router,
@@ -135,10 +136,11 @@ async fn raw_is_served_on_the_content_host_and_refused_on_the_app_host() {
     assert!(passed(&on_content), "{:?}", on_content.status);
     let on_app = send(&r, RAW_NO_PATH, Some(APP), &[], Some(OUTSIDER)).await;
     assert_eq!(on_app.status, StatusCode::NOT_FOUND);
-    // …with the same body as a route that does not exist.
+    // …with the code that says where raw bytes live, which is not the unknown-route body.
     let unknown = send(&r, UNKNOWN, Some(APP), &[], Some(OUTSIDER)).await;
     assert_eq!(unknown.status, StatusCode::NOT_FOUND);
-    assert_eq!(on_app.body, unknown.body, "refused host == unknown route");
+    assert_eq!(on_app.body, ErrorCode::RawElsewhere.body().into_bytes());
+    assert_eq!(unknown.body, ErrorCode::NotFound.body().into_bytes());
 }
 
 #[tokio::test]

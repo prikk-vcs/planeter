@@ -217,7 +217,8 @@ async fn raw_handler(
     let host =
         crate::client_ip::effective_host(peer.0.map(|a| a.ip()), &headers, &state.trusted_proxies);
     if !state.content_origin.serves_raw_on(host.as_deref()) {
-        return code_response(&state, ErrorCode::NotFound);
+        // Decided from the host alone: the same for a hidden, an absent and a public repository.
+        return code_response(&state, ErrorCode::RawElsewhere);
     }
     let Ok(Query(q)) = q else {
         return error_response(&state, Failure::Invalid);
@@ -273,7 +274,7 @@ async fn verify_handler(
 }
 
 async fn openapi_handler(State(state): State<AppState>) -> Response {
-    let doc = crate::openapi::document();
+    let doc = crate::openapi::document(state.content_origin.as_str());
     let body = serde_json::to_string(&doc).unwrap_or_default();
     build_json(&state, &body, None)
 }
@@ -288,6 +289,8 @@ pub(crate) enum Failure {
     Busy,
     /// A malformed query (a missing or unparsable parameter): `400`, `invalid_request`.
     Invalid,
+    /// A view that could not be serialized: `500`, `internal`.
+    Internal,
 }
 
 impl From<ReadError> for Failure {
@@ -338,8 +341,11 @@ fn respond<T: Serialize>(
 ) -> Response {
     match result {
         Ok(view) => {
-            let value = serde_json::to_value(&view).unwrap_or_default();
-            let body = serde_json::to_string(&view).unwrap_or_default();
+            // A view that cannot be serialized is an internal error, never an ETag over `null`.
+            let (Ok(value), Ok(body)) = (serde_json::to_value(&view), serde_json::to_string(&view))
+            else {
+                return error_response(state, Failure::Internal);
+            };
             let etag = etag_of_json(&value);
             // Conditional GET: unchanged → 304, no body.
             if req_headers
@@ -359,6 +365,13 @@ fn respond<T: Serialize>(
         }
         Err(e) => error_response(state, e),
     }
+}
+
+/// `respond` for a view alone (no request, no read), so a test can hand it a value whose
+/// serialization fails.
+#[doc(hidden)]
+pub fn respond_for_test<T: Serialize>(state: &AppState, view: T) -> Response {
+    respond(state, &HeaderMap::new(), Ok::<T, Failure>(view))
 }
 
 fn build_json(state: &AppState, body: &str, etag: Option<String>) -> Response {
@@ -395,6 +408,7 @@ pub(crate) fn error_response(state: &AppState, e: Failure) -> Response {
     let code = match e {
         Failure::Busy => ErrorCode::Busy,
         Failure::Invalid => ErrorCode::InvalidRequest,
+        Failure::Internal => ErrorCode::Internal,
         Failure::Read(ReadError::NotFound) => ErrorCode::NotFound,
         Failure::Read(ReadError::Unavailable(_)) => ErrorCode::Unavailable,
         // Backend and any future variant: an internal fault (existence-neutral).
@@ -409,6 +423,9 @@ pub(crate) fn code_response(state: &AppState, code: ErrorCode) -> Response {
         .header(header::CONTENT_TYPE, "application/json");
     if code == ErrorCode::Busy {
         builder = builder.header(header::RETRY_AFTER, retry_after_secs(state).to_string());
+    }
+    if code == ErrorCode::MethodNotAllowed {
+        builder = builder.header(header::ALLOW, "GET");
     }
     builder
         .body(Body::from(code.body()))

@@ -55,15 +55,13 @@ pub fn router(state: AppState) -> axum::Router {
         .method_not_allowed_fallback(move |uri: axum::http::Uri| {
             let state = for_405.clone();
             async move {
-                let mut resp = if uri.path().starts_with("/api/") {
-                    api::code_response(&state, errors::ErrorCode::InvalidRequest)
-                } else {
-                    axum::http::Response::builder()
-                        .body(axum::body::Body::empty())
-                        .expect("empty response")
-                };
-                *resp.status_mut() = axum::http::StatusCode::METHOD_NOT_ALLOWED;
-                resp
+                if uri.path().starts_with("/api/") {
+                    return api::code_response(&state, errors::ErrorCode::MethodNotAllowed);
+                }
+                axum::http::Response::builder()
+                    .status(axum::http::StatusCode::METHOD_NOT_ALLOWED)
+                    .body(axum::body::Body::empty())
+                    .expect("empty 405")
             }
         })
         .layer(axum::middleware::from_fn_with_state(

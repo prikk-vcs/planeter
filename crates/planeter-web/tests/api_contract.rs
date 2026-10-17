@@ -201,9 +201,9 @@ async fn unknown_api_routes_and_wrong_methods_use_the_same_shape() {
         .body(Body::empty())
         .unwrap();
     let reply = send(&r, post).await;
+    assert_error(&reply, ErrorCode::MethodNotAllowed);
+    assert_eq!(header_str(&reply.1, "allow"), "GET");
     assert_eq!(reply.0, StatusCode::METHOD_NOT_ALLOWED);
-    let v: Value = serde_json::from_slice(&reply.2).unwrap();
-    assert_eq!(v["code"], "invalid_request");
     // A non-API unknown path keeps the UI's bare 404.
     let ui = send(&r, get("/definitely/not/a/page/at/all/x")).await;
     assert_eq!(ui.0, StatusCode::NOT_FOUND);
@@ -224,7 +224,7 @@ fn every_code_has_one_plain_sentence_and_the_shape_is_stable() {
             assert_eq!(text.matches(". ").count(), 0, "one sentence: {text:?}");
         }
     }
-    assert_eq!(seen.len(), 5);
+    assert_eq!(seen.len(), 7);
 }
 
 // ---------------------------------------------------------------- T2: the OpenAPI document
@@ -528,9 +528,13 @@ async fn every_view_serializes_to_exactly_the_declared_fields() {
     }
     // The other FileContent shapes, and the Assurance values, are also declared.
     for content in [
-        serde_json::to_value(FileContentView::Text("t".into())).unwrap(),
+        serde_json::to_value(FileContentView::Text { text: "t".into() }).unwrap(),
+        serde_json::to_value(FileContentView::Binary {
+            blob_id: "b".into(),
+            size: 2,
+        })
+        .unwrap(),
         serde_json::to_value(FileContentView::Opaque { size: 1 }).unwrap(),
-        serde_json::to_value(FileContentView::NotFound).unwrap(),
     ] {
         check(
             schemas,
@@ -723,4 +727,158 @@ fn api_routes_are_registered_only_through_the_shared_paths() {
         route_lines.iter().all(|l| l.contains("paths::")),
         "a route is registered with a literal path: {route_lines:?}"
     );
+}
+
+// ---------------------------------------------------------------- IS-33 refinements
+
+#[test]
+fn each_content_kind_serializes_exactly_as_documented() {
+    assert_eq!(
+        serde_json::to_value(FileContentView::Text { text: "x".into() }).unwrap(),
+        json!({"kind": "text", "text": "x"})
+    );
+    assert_eq!(
+        serde_json::to_value(FileContentView::Binary {
+            blob_id: "b".into(),
+            size: 3
+        })
+        .unwrap(),
+        json!({"kind": "binary", "blob_id": "b", "size": 3})
+    );
+    assert_eq!(
+        serde_json::to_value(FileContentView::Opaque { size: 9 }).unwrap(),
+        json!({"kind": "opaque", "size": 9})
+    );
+}
+
+#[tokio::test]
+async fn the_content_schema_is_a_kind_discriminated_union_with_no_not_found() {
+    let r = router(state(""));
+    let doc = document(&r).await;
+    let content = &doc["components"]["schemas"]["FileContent"];
+    assert_eq!(content["discriminator"]["propertyName"], "kind");
+    let mapping = content["discriminator"]["mapping"].as_object().unwrap();
+    let mut kinds: Vec<&str> = mapping.keys().map(String::as_str).collect();
+    kinds.sort_unstable();
+    assert_eq!(kinds, ["binary", "opaque", "text"]);
+    assert_eq!(content["oneOf"].as_array().unwrap().len(), 3);
+    assert!(
+        !doc.to_string().contains("NotFound"),
+        "the old marker is gone"
+    );
+}
+
+#[tokio::test]
+async fn the_raw_operation_names_the_content_origin_and_only_it() {
+    let r = router(state(""));
+    let doc = document(&r).await;
+    let raw = &doc["paths"]["/api/v1/repos/{owner}/{name}/raw"];
+    assert_eq!(
+        raw["servers"],
+        json!([{
+            "url": "https://raw.planeter.example",
+            "description": "The content origin: the only host that serves raw file bytes."
+        }])
+    );
+    assert!(
+        raw["get"]["description"]
+            .as_str()
+            .unwrap()
+            .contains("raw_elsewhere")
+    );
+    assert!(
+        raw["get"]["responses"]["404"]["description"]
+            .as_str()
+            .unwrap()
+            .contains("raw_elsewhere")
+    );
+    // No other path item carries `servers`, and the origin appears nowhere else in the document.
+    for (path, item) in doc["paths"].as_object().unwrap() {
+        if !path.ends_with("/raw") {
+            assert!(item.get("servers").is_none(), "{path}");
+        }
+    }
+    assert_eq!(doc.to_string().matches("raw.planeter.example").count(), 1);
+}
+
+#[tokio::test]
+async fn every_operation_documents_method_not_allowed_with_allow() {
+    let r = router(state(""));
+    let doc = document(&r).await;
+    for (path, item) in doc["paths"].as_object().unwrap() {
+        if path.ends_with("openapi.json") {
+            continue;
+        }
+        let resp = &item["get"]["responses"]["405"];
+        assert!(
+            resp["description"]
+                .as_str()
+                .unwrap()
+                .contains("method_not_allowed"),
+            "{path}"
+        );
+        assert!(resp["headers"]["Allow"].is_object(), "{path}");
+    }
+}
+
+/// The 404 for the raw route on the wrong host depends on nothing about any repository.
+#[tokio::test]
+async fn raw_elsewhere_is_identical_for_hidden_absent_and_public_repositories() {
+    let r = router(state(""));
+    let ask = |repo: &str| {
+        Request::builder()
+            .uri(format!("/api/v1/repos/alice/{repo}/raw?path=a.txt"))
+            .header(header::HOST, "app.planeter.example")
+            .body(Body::empty())
+            .unwrap()
+    };
+    let hidden = send(&r, ask("secret")).await;
+    let absent = send(&r, ask("no-such-repo")).await;
+    let public = send(&r, ask("open")).await;
+    assert_error(&hidden, ErrorCode::RawElsewhere);
+    assert_eq!(hidden.0, StatusCode::NOT_FOUND);
+    assert_eq!(
+        (&hidden.0, &hidden.1, &hidden.2),
+        (&absent.0, &absent.1, &absent.2)
+    );
+    assert_eq!(
+        (&hidden.0, &hidden.1, &hidden.2),
+        (&public.0, &public.1, &public.2)
+    );
+    // The content origin appears nowhere in the response.
+    assert!(!String::from_utf8_lossy(&hidden.2).contains("planeter.example"));
+    // (The app CSP already names the content origin on every response; no other header may.)
+    for (name, value) in &hidden.1 {
+        if name != "content-security-policy" {
+            assert!(
+                !value
+                    .to_str()
+                    .unwrap_or("")
+                    .contains("raw.planeter.example"),
+                "{name}"
+            );
+        }
+    }
+    // And it is not `not_found`: a client can tell it to look elsewhere.
+    let v: Value = serde_json::from_slice(&hidden.2).unwrap();
+    assert_eq!(v["code"], "raw_elsewhere");
+}
+
+/// A view that cannot be serialized is `internal`, never an ETag over `null`.
+#[tokio::test]
+async fn an_unserializable_view_is_an_internal_error_not_a_null_etag() {
+    use planeter_web::api::respond_for_test;
+    struct Broken;
+    impl serde::Serialize for Broken {
+        fn serialize<S: serde::Serializer>(&self, _: S) -> Result<S::Ok, S::Error> {
+            Err(serde::ser::Error::custom("boom"))
+        }
+    }
+    let reply = respond_for_test(&state(""), Broken);
+    assert_eq!(reply.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    assert!(reply.headers().get(header::ETAG).is_none());
+    let bytes = axum::body::to_bytes(reply.into_body(), 1 << 16)
+        .await
+        .unwrap();
+    assert_eq!(bytes.as_ref(), ErrorCode::Internal.body().as_bytes());
 }

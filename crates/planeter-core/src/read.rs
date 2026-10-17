@@ -212,35 +212,38 @@ pub struct FileView {
     pub content: FileContentView,
 }
 
+/// A file's content as the API serializes it: a tagged object, `{"kind": "text", "text": …}`,
+/// `{"kind": "binary", "blob_id": …, "size": …}` or `{"kind": "opaque", "size": …}`. A path that is not
+/// in the repository is not a content value: [`FileView::from_patch_plan`] returns `None` for it.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
+#[serde(tag = "kind", rename_all = "kebab-case")]
 pub enum FileContentView {
-    Text(String),
+    Text { text: String },
     Binary { blob_id: String, size: u64 },
     Opaque { size: u64 },
-    NotFound,
 }
 
 impl FileView {
     /// Build the view for `path` from a patch-plan-content report (which may cover several paths).
-    pub fn from_patch_plan(plan: &model::PatchPlanContent, path: &str) -> Self {
+    /// `None` when the report has no entry for `path`.
+    pub fn from_patch_plan(plan: &model::PatchPlanContent, path: &str) -> Option<Self> {
         let content = plan
             .content
             .iter()
             .find(|e| e.path == path)
             .map(|e| match &e.content {
-                model::PathContent::Text { text } => FileContentView::Text(text.clone()),
+                model::PathContent::Text { text } => FileContentView::Text { text: text.clone() },
                 model::PathContent::Binary { blob_id, size } => FileContentView::Binary {
                     blob_id: blob_id.clone(),
                     size: *size,
                 },
                 model::PathContent::Opaque { size } => FileContentView::Opaque { size: *size },
-            })
-            .unwrap_or(FileContentView::NotFound);
-        Self {
+            });
+        Some(Self {
             ref_name: plan.ref_name.clone(),
             path: path.to_owned(),
-            content,
-        }
+            content: content?,
+        })
     }
 }
 
@@ -573,7 +576,9 @@ impl ReadService {
         let plan = driver
             .patch_plan_content(ref_name, &[path])
             .map_err(|e| ReadError::Unavailable(e.to_string()))?;
-        Ok(FileView::from_patch_plan(&plan, path))
+        // A path that is not in the repository is `NotFound`, like a missing repository (never a
+        // successful view that says "not found").
+        FileView::from_patch_plan(&plan, path).ok_or(ReadError::NotFound)
     }
 
     /// Refs/branches/tags (`branch` + `tag`).

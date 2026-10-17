@@ -16,19 +16,26 @@ pub enum ErrorCode {
     Unavailable,
     /// 503 from the gate: too many requests in flight; carries `Retry-After`.
     Busy,
-    /// 400: a malformed query parameter or an unsupported method.
+    /// 400: a malformed query parameter.
     InvalidRequest,
+    /// 405: the method is not supported on this route; carries `Allow: GET`.
+    MethodNotAllowed,
+    /// 404 from the raw route on any host but the content origin's. Decided from the request's host
+    /// alone, before any lookup, so it says nothing about any repository.
+    RawElsewhere,
     /// 500: an internal fault.
     Internal,
 }
 
 impl ErrorCode {
     /// Every code, in a fixed order (the OpenAPI enum).
-    pub const ALL: [ErrorCode; 5] = [
+    pub const ALL: [ErrorCode; 7] = [
         ErrorCode::NotFound,
         ErrorCode::Unavailable,
         ErrorCode::Busy,
         ErrorCode::InvalidRequest,
+        ErrorCode::MethodNotAllowed,
+        ErrorCode::RawElsewhere,
         ErrorCode::Internal,
     ];
 
@@ -39,6 +46,8 @@ impl ErrorCode {
             ErrorCode::Unavailable => "unavailable",
             ErrorCode::Busy => "busy",
             ErrorCode::InvalidRequest => "invalid_request",
+            ErrorCode::MethodNotAllowed => "method_not_allowed",
+            ErrorCode::RawElsewhere => "raw_elsewhere",
             ErrorCode::Internal => "internal",
         }
     }
@@ -46,7 +55,8 @@ impl ErrorCode {
     /// The HTTP status.
     pub fn status(self) -> StatusCode {
         match self {
-            ErrorCode::NotFound => StatusCode::NOT_FOUND,
+            ErrorCode::NotFound | ErrorCode::RawElsewhere => StatusCode::NOT_FOUND,
+            ErrorCode::MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
             ErrorCode::Unavailable | ErrorCode::Busy => StatusCode::SERVICE_UNAVAILABLE,
             ErrorCode::InvalidRequest => StatusCode::BAD_REQUEST,
             ErrorCode::Internal => StatusCode::INTERNAL_SERVER_ERROR,
@@ -60,6 +70,8 @@ impl ErrorCode {
             ErrorCode::Unavailable => "The repository could not be read right now.",
             ErrorCode::Busy => "The server is busy.",
             ErrorCode::InvalidRequest => "The request is malformed.",
+            ErrorCode::MethodNotAllowed => "That method is not supported here.",
+            ErrorCode::RawElsewhere => "Raw file bytes are not served from this address.",
             ErrorCode::Internal => "The server could not complete the request.",
         }
     }
@@ -75,6 +87,10 @@ impl ErrorCode {
             ErrorCode::InvalidRequest => {
                 "Check the request against the OpenAPI document at /api/v1/openapi.json."
             }
+            ErrorCode::MethodNotAllowed => "Use GET.",
+            ErrorCode::RawElsewhere => {
+                "Use the link on the file's page, or the content origin named in the OpenAPI document."
+            }
             ErrorCode::Internal => "Try again later; if it persists, tell the operator.",
         }
     }
@@ -85,7 +101,13 @@ impl ErrorCode {
             ErrorCode::NotFound => "no such resource, or the caller may not read it",
             ErrorCode::Unavailable => "the repository could not be read right now",
             ErrorCode::Busy => "too many requests in flight (carries Retry-After)",
-            ErrorCode::InvalidRequest => "a malformed parameter or an unsupported method",
+            ErrorCode::InvalidRequest => "a malformed parameter",
+            ErrorCode::MethodNotAllowed => {
+                "the method is not supported (the response carries `Allow: GET`)"
+            }
+            ErrorCode::RawElsewhere => {
+                "the raw route, asked on a host other than the content origin's (raw bytes are served only there)"
+            }
             ErrorCode::Internal => "an internal fault",
         }
     }

@@ -95,6 +95,11 @@ docker run --rm ghcr.io/prikk-vcs/planeter:X.Y.Z --version
   rewrites `Host` to the upstream's name makes the content host unreachable. **Breaking in 0.3.0:** a
   production-shaped deployment with no distinct content host no longer starts, and raw bytes are no longer
   served from the application's host when a distinct origin is configured.
+- **API clients and raw bytes (IS-33):** an API client asking the application's host for
+  `…/raw?path=…` gets `404` with the code `raw_elsewhere`. It should send the same request to the content
+  origin, which the OpenAPI document (`/api/v1/openapi.json`) names in the `servers` entry of the raw
+  operation; the file page's own link already points there. `raw_elsewhere` depends only on the host
+  asked, never on the repository or the caller, so it says nothing about whether a repository exists.
 - **Cache directives and HSTS (IS-29):** the app sets its own `Cache-Control` (`private, no-cache` and
   `Vary: Cookie, Authorization` on dynamic responses, `no-store` on sign-in and sign-out, a one-hour
   `public` lifetime only on the stylesheet), so the proxy needs no cache rules of its own and must not

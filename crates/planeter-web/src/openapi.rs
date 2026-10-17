@@ -59,6 +59,7 @@ fn errors(extra: &[ErrorCode]) -> Value {
     let mut out = serde_json::Map::new();
     for code in [
         ErrorCode::InvalidRequest,
+        ErrorCode::MethodNotAllowed,
         ErrorCode::NotFound,
         ErrorCode::Internal,
         ErrorCode::Unavailable,
@@ -76,6 +77,12 @@ fn errors(extra: &[ErrorCode]) -> Value {
         } else {
             format!("{existing}; {add}")
         });
+    }
+    if let Some(r) = out.get_mut("405") {
+        r["headers"] = json!({"Allow": {
+            "description": "The methods this route supports: always `GET`.",
+            "schema": {"type": "string"}
+        }});
     }
     // The 503 from the gate also sets Retry-After.
     if let Some(r) = out.get_mut("503") {
@@ -158,12 +165,28 @@ fn schemas() -> Value {
             "operations": array_of("Operation")
         })),
         "ChangeView": obj(&["patches"], json!({"patches": array_of("ChangePatch")})),
-        "FileContent": {"oneOf": [
-            obj(&["Text"], json!({"Text": string_prop()})),
-            obj(&["Binary"], json!({"Binary": obj(&["blob_id", "size"], json!({"blob_id": string_prop(), "size": {"type": "integer", "minimum": 0}}))})),
-            obj(&["Opaque"], json!({"Opaque": obj(&["size"], json!({"size": {"type": "integer", "minimum": 0}}))})),
-            {"type": "string", "enum": ["NotFound"]}
-        ]},
+        "FileContentText": obj(&["kind", "text"], json!({
+            "kind": {"type": "string", "enum": ["text"]}, "text": string_prop()
+        })),
+        "FileContentBinary": obj(&["kind", "blob_id", "size"], json!({
+            "kind": {"type": "string", "enum": ["binary"]}, "blob_id": string_prop(),
+            "size": {"type": "integer", "minimum": 0}
+        })),
+        "FileContentOpaque": obj(&["kind", "size"], json!({
+            "kind": {"type": "string", "enum": ["opaque"]}, "size": {"type": "integer", "minimum": 0}
+        })),
+        "FileContent": {
+            "oneOf": [
+                {"$ref": "#/components/schemas/FileContentText"},
+                {"$ref": "#/components/schemas/FileContentBinary"},
+                {"$ref": "#/components/schemas/FileContentOpaque"}
+            ],
+            "discriminator": {"propertyName": "kind", "mapping": {
+                "text": "#/components/schemas/FileContentText",
+                "binary": "#/components/schemas/FileContentBinary",
+                "opaque": "#/components/schemas/FileContentOpaque"
+            }}
+        },
         "FileView": obj(&["ref_name", "path", "content"], json!({
             "ref_name": string_prop(), "path": string_prop(), "content": {"$ref": "#/components/schemas/FileContent"}
         })),
@@ -198,7 +221,7 @@ fn schemas() -> Value {
 }
 
 /// The full document.
-pub fn document() -> Value {
+pub fn document(content_origin: &str) -> Value {
     let mut history_params = owner_name();
     history_params.push(ref_param());
     history_params.push(param(
@@ -256,7 +279,7 @@ pub fn document() -> Value {
         let mut op = json!({"get": {
             "operationId": "getRaw",
             "summary": "Raw file bytes, as an inert download",
-            "description": "Served with `Content-Disposition: attachment`, `nosniff` and a sandbox CSP; never rendered. Larger than the response cap is refused.",
+            "description": "Served with `Content-Disposition: attachment`, `nosniff` and a sandbox CSP; never rendered. Larger than the response cap is refused. **Raw bytes are served only on the content origin named in this path's `servers` entry**; any other host answers `404` with the code `raw_elsewhere`.",
             "parameters": raw_params,
             "security": [{"bearerToken": []}, {"sessionCookie": []}, {}],
             "responses": {
@@ -266,7 +289,7 @@ pub fn document() -> Value {
                 }
             },
         }});
-        let errs = errors(&[ErrorCode::Busy]);
+        let errs = errors(&[ErrorCode::Busy, ErrorCode::RawElsewhere]);
         let responses = op["get"]["responses"].as_object_mut().expect("responses");
         for (k, v) in errs.as_object().expect("errors") {
             responses.insert(k.clone(), v.clone());
@@ -324,6 +347,11 @@ pub fn document() -> Value {
             &busy,
         ),
     );
+    let mut raw = raw;
+    raw["servers"] = json!([{
+        "url": content_origin.trim_end_matches('/'),
+        "description": "The content origin: the only host that serves raw file bytes."
+    }]);
     paths_obj.insert(paths::RAW.into(), raw);
     paths_obj.insert(
         paths::REFS.into(),
@@ -357,7 +385,7 @@ pub fn document() -> Value {
         "info": {
             "title": "planeter read API",
             "version": env!("CARGO_PKG_VERSION"),
-            "description": "Read-only JSON over a planeter repository. Every error has the one `Error` shape. Hidden and absent repositories are indistinguishable (`not_found`)."
+            "description": "Read-only JSON over a planeter repository. Every error has the one `Error` shape. Hidden and absent repositories are indistinguishable (`not_found`). Raw file bytes are served only on the content origin named on the raw operation."
         },
         "paths": Value::Object(paths_obj),
         "components": {

@@ -5,6 +5,17 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **API contract refinements (IS-33). Breaking for any client of 0.2.0's file endpoint.**
+  `GET …/file` now serializes `content` as an object tagged by `kind`: `{"kind":"text","text":…}`,
+  `{"kind":"binary","blob_id":…,"size":…}`, `{"kind":"opaque","size":…}` (it was serde's
+  `{"Text":…}` / `{"Binary":{…}}` / `"NotFound"`). **A path that is not in a readable repository is now
+  `404 not_found`** (it was `200` with a "not found" content value). The raw route, asked on any host but
+  the content origin's, answers `404` with the new code `raw_elsewhere` (it was the generic `not_found`,
+  whose hint sent callers looking at the wrong thing); the OpenAPI document names the content origin in a
+  `servers` entry on the raw operation. A wrong method is `405` `method_not_allowed` with `Allow: GET`
+  (it was `invalid_request`). A view that cannot be serialized is a `500 internal`, no longer an ETag over
+  `null`. The web pages are unchanged.
+
 - **Raw content is gated by host, and isolation is enforced at start-up (IS-16; RFC 003 D-4).
   Breaking.** The raw route (`/api/v1/repos/{owner}/{name}/raw`) now answers only on the content
   origin's host; on any other host it is `404` with the body of an unknown route. The effective host is
@@ -21,7 +32,8 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
   change: API error responses now carry a JSON body** `{"code", "message", "hint"}` with
   `Content-Type: application/json` (they were empty). Codes: `not_found` (a repository that is absent and
   one the caller may not see are byte-identical), `unavailable`, `busy` (with `Retry-After`),
-  `invalid_request` (a malformed query, a wrong method; was an unstructured `400`) and `internal`. Status
+  `invalid_request` (a malformed query; was an unstructured `400`), `method_not_allowed` (`405` with
+  `Allow: GET`), `raw_elsewhere` (see below) and `internal`. Status
   codes and success bodies are unchanged. `GET /api/v1/openapi.json` is now a complete OpenAPI 3.0.3
   document (parameters, responses, schemas, security, the package version); `ETag` values are now a
   specified hash of the canonical JSON and **change once on upgrade**, then stay stable across restarts,
