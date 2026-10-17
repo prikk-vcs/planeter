@@ -79,8 +79,12 @@ PK-51 and PK-52; prikk 0.52.0; a shared, non-idle development host (so latencies
   `log`), waits at most the existing bounded wait for budget, and is refused with `busy` and `Retry-After`
   when the wait ends. A request whose own cost exceeds the whole budget is refused at once with a distinct
   error (D-4), never queued. The budget defaults to **a quarter of the memory the process may use** (the
-  cgroup limit if one is set, otherwise physical memory) and is set by one new variable,
-  `PLANETER_PRIKK_MEMORY_BUDGET_MB`, validated like the existing gate variables and logged at start. The cost
+  cgroup limit if one is set, otherwise physical memory), **never less than 256 MiB and never more than 4 GiB**
+  (the cap is about twice the largest single call measured: a `verify` of a 1 GiB repository needs ≈ 2.05
+  GiB), and is set by one new variable,
+  `PLANETER_PRIKK_MEMORY_BUDGET_MB`, validated like the existing gate variables. **An explicit value is not capped:** the cap bounds only the
+  default, so a large host raises it deliberately. The start-up log states the budget, where it came from
+  (default, capped default, or variable) and the variable to change it. The cost
   model lives in one table, covered by a test that fails when a verb is added without a cost. In-process or
   subprocess, the same budget applies (the design does not depend on the process model).
 - **D-2 — Per-call ceiling.** Every sandboxed prikk call runs with an address-space or data limit of
@@ -161,8 +165,11 @@ descendants' memory held at the budget.
 
 ## Open questions
 
-1. Is a quarter of available memory the right default budget, or should the server refuse to start without an
-   explicit one on hosts above a size?
+1. ~~Is a quarter of available memory the right default budget?~~ Asked by the owner 2026-10-17 whether the
+   rule should be proportional only or also capped; the architect recommends the capped, floored rule above
+   (a proportion alone grows to a meaningless 64 GB on a 256 GB host and makes the default unreviewable; a cap
+   with an uncapped explicit override keeps the default safe and the large host in control). Awaiting the
+   owner's confirmation. The server does not refuse to start without an explicit value.
 2. Should D-3's bound be a variable? (Recommendation: no; one constant, like raw's, until a deployment needs
    otherwise.)
 3. Status `422` versus a 4xx/5xx of your preference for `too_large`.
