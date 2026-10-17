@@ -147,7 +147,7 @@ approved scope, and the release-candidate work is done from `docs/RELEASING.md` 
 | R2 | IS-24 (auth path), IS-16 (raw-content origin) and the API contract and cache headers (D-12), each reviewed | dev team, then architect review | **done, all three approved 2026-10-16** |
 | R2b | API contract refinements (IS-33, D-14) and MSRV declaration (IS-32, D-13), each reviewed | dev team, then architect review | **done, both approved 2026-10-17** |
 | R3 | Threat-model status lines (T-9 / C-9b, T-6 / C-6c, T-7 / C-2 constant-work sign-in), SECURITY.md, README and RELEASING checked against the code; CHANGELOG `[Unreleased]` reviewed for the operator-visible changes | architect | **done 2026-10-17** (threat model v0.4: T-2, T-6, T-7, T-9 status lines; SECURITY.md; CHANGELOG cross-references corrected) |
-| R4 | Release-candidate commit: workspace version 0.3.0, CHANGELOG `[0.3.0]`, floors and pins checked, **a dry-run dispatch of `release.yml`** with nothing published; report with evidence | dev team | R3 |
+| R4 | Release-candidate commit: workspace version 0.3.0, CHANGELOG `[0.3.0]`, floors and pins checked, **a dry-run dispatch of `release.yml`** with nothing published; report with evidence | dev team (`rfcs/handoffs/010-upstream-and-supply-chain-maintenance/release-candidate-0-3-0-handoff-v1.md`) | **assigned 2026-10-17** (R3 done) |
 | R5 | Release-readiness report and recommendation (workflow Phase 8) | architect | R4 evidence reviewed |
 | R6 | Make the `ghcr.io/prikk-vcs/planeter` package public; signed tag `0.3.0`; the workflow; publish crates in order | **owner** | R5 |
 | R7 | Exit criteria verified (above); post-release evaluation; gate improvements recorded | architect, dev team | R6 |
