@@ -61,8 +61,8 @@ PK-51 and PK-52; prikk 0.52.0; a shared, non-idle development host (so latencies
   estimate. Not measured. The handoff's first task measures the cost and accuracy of the candidates.
 - **U2. How a ceiling is applied without a new unsafe block or a new prerequisite:** a wrapper command
   named in `BwrapConfig.timeout` (`prlimit` is in util-linux, present on the supported hosts but a new
-  runtime prerequisite) versus `setrlimit` in a pre-exec hook (needs `unsafe`, which the workspace forbids
-  elsewhere?). To be settled in the handoff with the project's unsafe-code rule in view.
+  runtime prerequisite) versus `setrlimit` in a pre-exec hook (needs `unsafe`, and `planeter-prikk` declares
+  `#![forbid(unsafe_code)]`, as do the other library crates). To be settled in the handoff with the project's unsafe-code rule in view.
 - **U3. How to tie the child's lifetime to the server:** `PR_SET_PDEATHSIG` fires when the parent *thread*
   exits, and a tokio blocking-pool thread can exit while the process lives, which would kill healthy
   children early. A supervised process group, a dedicated spawner thread or a wall-time implementation inside
