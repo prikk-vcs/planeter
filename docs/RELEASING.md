@@ -7,7 +7,8 @@ published until M4. **Tagging and publishing are owner-authorized.**
 
 ## Before the tag (the release-candidate commit)
 
-1. Gates green on `main`: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --locked
+1. **Immediately before the tag** (an advisory can appear between the release candidate and the tag, as RUSTSEC-2026-0373 did for 0.3.0): refresh the advisory database and run `cargo deny check` and `cargo audit` on the exact commit to be tagged.
+   Gates green on `main`: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --locked
    -- -D warnings`, `cargo test --workspace --locked`, `cargo deny check`, `cargo audit`,
    `tools/enf2-symbol-check/check.sh`, and the two maintenance gates `cargo run --locked -p
    planeter-floor-check` and `cargo run --locked -p planeter-pin-check` (RFC 010 D-2, D-5). The
@@ -51,7 +52,7 @@ the attestations, and the notes assembled from a tag's CHANGELOG section.
 ## What the workflow does
 
 1. **gates** — re-runs every gate on the tagged commit and checks tag == version.
-2. **build** — `planeter` for `x86_64-unknown-linux-gnu` (ubuntu-latest) and
+2. **build** — `planeter` for `x86_64-unknown-linux-gnu` (ubuntu-24.04) and
    `aarch64-unknown-linux-gnu` (native arm runner); tarball + `.sha256` + `build-info.txt`; a
    **build-provenance attestation** for each tarball.
 3. **container** — `ghcr.io/prikk-vcs/planeter:<tag>` and `:latest`, `linux/amd64` + `linux/arm64`,
