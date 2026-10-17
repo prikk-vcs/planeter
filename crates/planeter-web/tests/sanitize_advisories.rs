@@ -95,3 +95,55 @@ fn the_same_shapes_are_inert_through_markdown() {
     assert!(out.contains("kept") && out.contains("para"), "{out}");
     assert_inert(&out);
 }
+
+// ---- RUSTSEC-2026-0373: a mixed-case CSS `URL(` function (IS-38) ----------------------------------
+
+#[test]
+fn a_mixed_case_css_url_function_in_a_style_attribute_leaves_nothing() {
+    // The advisory's shape: `filter_style_properties` missed a non-lowercase `url(`. planeter's default
+    // configuration drops the `style` attribute whole, so none of these may survive.
+    for call in [
+        r#"URL("https://evil.example/x")"#,
+        r#"Url('https://evil.example/x')"#,
+        r#"uRl(https://evil.example/x)"#,
+        r#"URL( "https://evil.example/x" )"#,
+    ] {
+        let dirty = format!(r#"<p style="background:{call};color:red">kept</p>"#);
+        let out = sanitize_html(&dirty);
+        assert!(out.contains("kept"), "text must survive: {out}");
+        assert_inert(&out);
+        assert!(
+            !out.to_ascii_lowercase().contains("evil.example"),
+            "{call}: {out}"
+        );
+        assert!(!out.to_ascii_lowercase().contains("url("), "{call}: {out}");
+    }
+}
+
+#[test]
+fn a_mixed_case_css_url_function_in_a_style_element_leaves_nothing() {
+    for call in [
+        r#"URL("https://evil.example/x")"#,
+        r#"Url(https://evil.example/x)"#,
+    ] {
+        let dirty = format!("<style>p{{background:{call}}}</style><p>kept</p>");
+        let out = sanitize_html(&dirty);
+        assert!(out.contains("kept"), "text must survive: {out}");
+        assert_inert(&out);
+        assert!(
+            !out.to_ascii_lowercase().contains("evil.example"),
+            "{call}: {out}"
+        );
+        assert!(!out.to_ascii_lowercase().contains("url("), "{call}: {out}");
+    }
+}
+
+#[test]
+fn the_mixed_case_url_shapes_are_inert_through_markdown() {
+    let md = "para\n\n<p style=\"background:URL('https://evil.example/x')\">kept</p>\n\n\
+              <style>p{background:Url(https://evil.example/x)}</style>\n";
+    let out = render_markdown(md);
+    assert!(out.contains("kept") && out.contains("para"), "{out}");
+    assert_inert(&out);
+    assert!(!out.to_ascii_lowercase().contains("evil.example"), "{out}");
+}

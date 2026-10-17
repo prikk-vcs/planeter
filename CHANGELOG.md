@@ -5,6 +5,13 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **Security hygiene: `ammonia` 4.2.3 → 4.2.4 (lock-only), RUSTSEC-2026-0373 (IS-38).** The advisory, published
+  2026-10-16, is a missing case-insensitive match for the CSS `url(` function; it affects an `ammonia` builder
+  configured to allow inline `style` with `filter_style_properties` and a restricted `url_schemes`. planeter
+  calls `ammonia::clean` with the default configuration (which drops `style` entirely), so it was **not
+  reachable** here; the lock is updated so the supply-chain gates stay green. No manifest change; sanitizer
+  behaviour is pinned by new regression tests.
+
 ## [0.3.0] — 2026-10-17 — safe by default: non-blocking sign-in, a real API contract, isolated raw content
 
 **Upgrading from 0.2.0**
