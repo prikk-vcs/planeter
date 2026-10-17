@@ -1,10 +1,13 @@
 # RFC 011 — The read-path resource model: bounding memory, size and lifetime of what planeter asks prikk to do
 
-**Status.** Proposed (2026-10-17) by the architect, from the owner's question whether running prikk as a
-subprocess makes the server more stable (SCHEDULE D-16) and the measurements that answered it. **Direction
-accepted by the owner 2026-10-17 (O-1) and O-3 granted; O-2 (the budget default, the variable's name, the
-status of `too_large`) awaits the owner's answer to the architect's recommendations,** after which the RFC
-moves to `accepted/`. Handoffs are written after acceptance.
+**Status.** **Accepted (2026-10-18) by the owner.** Proposed (2026-10-17) by the architect, from the owner's question whether running prikk as a
+subprocess makes the server more stable (SCHEDULE D-16) and the measurements that answered it. Direction
+accepted 2026-10-17 (O-1); O-3 granted (the letter to prikk will be sent by the owner); O-2 settled
+2026-10-18: the variable `PLANETER_PRIKK_MEMORY_BUDGET_MB`, status `422` for `too_large`, one constant for the
+file-size bound, no refusal to start, and the default budget a quarter of usable memory floored at 256 MiB and
+capped at 4 GiB (the owner approved the capped form and is not tied to the figure: it is derived from the
+largest single call measured, ≈ 2.05 GiB, and is revisited when a deployment's numbers say otherwise).
+Handoffs: [`../handoffs/011-read-path-resource-model/`](../handoffs/011-read-path-resource-model/).
 **Tracks.** Issue register IS-36 (the gate does not bound memory; the `file` route is unbounded) and IS-37
 (a killed server leaves its prikk tree running); threat model T-9 / C-9a / C-9b, C-4c, TB-4; RFC 001 D-3 and
 its "Alternatives considered"; RFC 003 D-8 (the gate); dependency ledger PK-46, PK-51, PK-52.
@@ -168,8 +171,9 @@ descendants' memory held at the budget.
 1. ~~Is a quarter of available memory the right default budget?~~ Asked by the owner 2026-10-17 whether the
    rule should be proportional only or also capped; the architect recommends the capped, floored rule above
    (a proportion alone grows to a meaningless 64 GB on a 256 GB host and makes the default unreviewable; a cap
-   with an uncapped explicit override keeps the default safe and the large host in control). Awaiting the
-   owner's confirmation. The server does not refuse to start without an explicit value.
+   with an uncapped explicit override keeps the default safe and the large host in control). **Approved by the owner
+   2026-10-18** (the figure 4 GiB is not binding on the owner). The server does not refuse to start without an
+   explicit value.
 2. Should D-3's bound be a variable? (Recommendation: no; one constant, like raw's, until a deployment needs
    otherwise.)
 3. Status `422` versus a 4xx/5xx of your preference for `too_large`.

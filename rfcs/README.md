@@ -49,14 +49,14 @@ artifact) are accepted by the prikk owner, so 008 is gated on RFC 154 shipping; 
 | 008 | [*(joint prikk)* One-click merge without a forge key (UD-6)](proposed/008-seal-one-click-merge.md) | B1 | **proposed** (re-opened 2026-10-15; v2 pending) |
 | 009 | [Hosted-format durability: hosting prikk repos across an unstable format](proposed/009-hosted-format-durability.md) | B2 | **proposed** (re-opened 2026-10-15; v2 pending) |
 | 010 | [Upstream tracking and supply-chain maintenance](accepted/010-upstream-and-supply-chain-maintenance.md) | all (maintenance) | **accepted** (2026-10-15) |
-| 011 | [The read-path resource model](proposed/011-read-path-resource-model.md) | before RFC 004's first write path | **proposed** (2026-10-17) |
+| 011 | [The read-path resource model](accepted/011-read-path-resource-model.md) | before RFC 004's first write path | **accepted** (2026-10-18) |
 
 ## Current state
 
 | State | RFCs |
 |---|---|
 | Proposed | [004](proposed/004-transport.md), [005](proposed/005-change-review.md), [006](proposed/006-ci-runners.md), [007](proposed/007-registry.md), [008](proposed/008-seal-one-click-merge.md), [009](proposed/009-hosted-format-durability.md) — re-opened 2026-10-15 for revision |
-| Accepted | [010 — Upstream tracking and supply-chain maintenance](accepted/010-upstream-and-supply-chain-maintenance.md) |
+| Accepted | [010 — Upstream tracking and supply-chain maintenance](accepted/010-upstream-and-supply-chain-maintenance.md), [011 — The read-path resource model](accepted/011-read-path-resource-model.md) |
 | Done | [001 — Foundations](done/001-foundations.md), [002 — Authorization](done/002-authorization.md), [003 — Read path](done/003-read-path.md) — shipped in 0.1.0 (2026-09-23) |
 | Archived | *(none yet)* |
 
