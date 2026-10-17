@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | A **follow-on** handoff of the accepted RFC 010 (D-5: the build chain is pinned and nothing in it is mutable; D-1/D-2 floors are checked). It corrects a finding of the maintenance-gates v2 review: **IS-32**. |
-| Status | **Held for the owner's decision D-13** (SCHEDULE; include in release 0.3.0). |
+| Status | **Assigned** — included in release 0.3.0 by the owner's decision D-13 (2026-10-17). |
 | Basis | RFC 010 D-5 (amended); the maintenance-gates v2 review request, note 8; `Cargo.toml` (`rust-version = "1.85"`, edition 2024); let-chains in `planeter-web/src/principal.rs`, `planeter-core/src/egress.rs`, `planeter-auth/src/oidc.rs`, `planeter-auth/src/throttle.rs` (verified by the architect). |
 | Audience | Dev team. |
 

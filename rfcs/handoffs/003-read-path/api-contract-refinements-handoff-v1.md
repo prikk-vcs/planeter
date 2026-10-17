@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | A **follow-on** handoff of the done RFC 003 (D-2: the read API is OpenAPI-described; STD-3: one error shape). It closes four contract gaps found when the architect reviewed the API-contract (IS-28), raw-origin (IS-16) and read-view code together: **IS-33**. |
-| Status | **Held for the owner's decision D-14** (SCHEDULE; include in release 0.3.0). Not assignable until decided. |
+| Status | **Assigned** — included in release 0.3.0 by the owner's decision D-14 (2026-10-17). |
 | Basis | [`../../done/003-read-path.md`](../../done/003-read-path.md) D-2, D-6; requirements STD-3; the architect's reviews `.git-exclude/reviewed/api-contract-and-headers-review-v1.md` (follow-ups 1–5) and `.git-exclude/reviewed/raw-origin-gating-review-v1.md` (follow-up 2); `crates/planeter-web/src/{errors,openapi,api}.rs`, `crates/planeter-core/src/read.rs` (`FileContentView`). |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 
