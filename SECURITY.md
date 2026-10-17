@@ -24,7 +24,7 @@ policy; issues in how planeter *drives* prikk are planeter's.
 ## Scope and the security model, briefly
 
 planeter's threat model is a first-class deliverable:
-[`docs/src/planeter-03-threat-model-v0.1.md`](docs/src/planeter-03-threat-model-v0.1.md) (v0.3). The
+[`docs/src/planeter-03-threat-model-v0.1.md`](docs/src/planeter-03-threat-model-v0.1.md) (v0.4). The
 properties a report is measured against:
 
 - **The forge holds no history-signing key.** A compromised planeter can deny history but cannot forge
@@ -32,7 +32,8 @@ properties a report is measured against:
 - **prikk runs in a sandbox** (bubblewrap: no network, repository-directory-only writes, cleared
   environment, wall-time bound) and is the source of truth for every repository fact.
 - **One default-deny `authorize()`** on every read and write path; no existence leak for hidden
-  repositories.
+  repositories, in a response or in sign-in timing (an unknown account costs the same verification as a
+  wrong password).
 - **Rendered content is sanitized** under a strict CSP; raw bytes are always served as inert downloads
   (attachment, `nosniff`, a sandbox CSP). When a distinct content origin is configured
   (`PLANETER_CONTENT_ORIGIN`, a different **host** from the application's), raw bytes are served only

@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | planeter Threat Model (security) |
-| Version | v0.3 (2026-09-24 — 0.2.0: OpenID Connect under T-2/C-2a, the trusted-proxy client-IP rule and per-client-IP throttle under RR-11, the first egress-guard caller under T-8; the two residual risks v0.2 added are renumbered RR-10/RR-11 because v0.2 reused the ids RR-6/RR-7 already held by the CI-runner and supply-chain risks; v0.2 2026-09-23 recorded implementation status through 0.1.x under T-2/T-6/T-8; v0.1 2026-09-15 was the review draft) |
+| Version | v0.4 (2026-10-17 — release 0.3.0 status lines under T-2, T-6, T-7 and T-9: constant-work sign-in and the auth gate, host-gated raw content, cache directives, the bounded read and auth paths; no new threat or control id; v0.3 2026-09-24 — 0.2.0: OpenID Connect under T-2/C-2a, the trusted-proxy client-IP rule and per-client-IP throttle under RR-11, the first egress-guard caller under T-8; the two residual risks v0.2 added are renumbered RR-10/RR-11 because v0.2 reused the ids RR-6/RR-7 already held by the CI-runner and supply-chain risks; v0.2 2026-09-23 recorded implementation status through 0.1.x under T-2/T-6/T-8; v0.1 2026-09-15 was the review draft) |
 | Date | 2026-09-24 (v0.3); 2026-09-23 (v0.2); 2026-09-15 (v0.1) |
 | Basis | planeter Requirements v0.1 (PU/NG/CAP/STD/SEC/INT/OPS/BN/UD/OQ) and External Design v0.1 (BD/AC/TX/WEB/API/AUTH/CI/REG/HOOK/PK/FL/CT/OP/GATED); **forge-commons** (the standards frame); prikk reality (2026-09-15 survey, prikk `HEAD f6cbd057`); project rules (a threat model is a first-class release deliverable) |
 | ID scheme | `A-` asset · `TB-` trust boundary · `T-` threat · `C-` control · `INV-` security invariant · `RR-` residual risk · `ASSUME-` assumption |
@@ -125,6 +125,17 @@ password refused while locked) **and a per-client-IP throttle** (20 failures acr
 IP via the trusted-proxy rules; RR-11). C-2c **implemented** as above; token revocation is by deleting the
 stored hash.
 
+**Status (0.3.0, 2026-10-17).** *Corrected:* through 0.2.0 sign-in was **not** indistinguishable between
+"no such account" and "wrong password": an unknown or password-less account returned without an Argon2id
+verification (≈ 0 ms against ≈ 9 ms), an account-existence timing oracle that this model's wording denied
+(IS-31; found by measurement, 2026-10-15). *Implemented in 0.3.0:* every password sign-in performs exactly one
+verification (an unknown or password-less account against a dummy hash made at start), so the response and the
+work no longer reveal existence (C-2b); password verification, token and session checks run off the async
+workers, and password verification is bounded by its own gate (`PLANETER_AUTH_CONCURRENCY`, default
+`min(CPUs, 4)`, bounded wait then `503` + `Retry-After`; the refusal is the same for existing and unknown
+names and is not counted as a failed attempt) (→ C-9b). *Known limit:* a stored hash made with other Argon2id
+parameters than the dummy would cost differently; there is no rehash-on-upgrade yet.
+
 ### T-3 (Elevation) — authorization bypass / confused deputy
 A user reaches a repository, ref, or action they are not entitled to: insecure direct object references,
 missing checks on a code path, a low-scope token performing a high-scope action, privilege escalation
@@ -194,9 +205,24 @@ a page (scripts, handlers, `javascript:`/`data:` URLs stripped; tested); C-6c �
 served only as inert downloads (`Content-Disposition: attachment`, `nosniff`, a `sandbox` CSP) from the
 configured isolated content origin, which the UI links to and never inlines.
 
+**Status (0.3.0, 2026-10-17).** C-6c is now **enforced, not only configured** (IS-16): the raw route answers only
+on the content origin's host (the `Host` header, or the last `X-Forwarded-Host` only from a trusted proxy) and
+answers `404` `raw_elsewhere` elsewhere, decided before any repository lookup; a non-loopback bind whose content
+origin has the application's host **refuses to start**, and a loopback bind warns; a port-only difference is not
+isolation (cookies ignore ports). *Limits, stated:* the process knows its bound address, not its public name, so a
+content origin equal to the application's public name behind a wildcard bind passes the check and isolates
+nothing (IS-34); and the content host still answers the application's other routes (host-scoped cookies keep the
+session off it). The operator supplies DNS and the proxy; planeter enforces the gate.
+
 ### T-7 (Information disclosure) — confidentiality of private content
 Private repository content or metadata leaks: an authorization gap (T-3), cross-tenant bleed, secrets
 committed *inside* repository history, or content in logs (A-CONTENT).
+
+*Status (0.3.0, 2026-10-17):* the planeter-side caches no longer leak by default — every dynamic response is
+`Cache-Control: private, no-cache` with `Vary: Cookie, Authorization` (`no-store` for credential flows), so a
+browser or shared cache neither serves a private page to someone else nor skips revalidation (IS-29); API errors
+are one fixed-sentence shape that never carries a path, tool output or a repository's existence, and a hidden
+repository is byte-identical to an absent one (IS-28). An operator's proxy may override the cache directives.
 
 - **C-7a — access control on every read path** (C-3a); private-by-default where appropriate (SEC-3).
 - **C-7b — planeter does not worsen secrets-in-history exposure, and states the risk.** prikk carries
@@ -237,6 +263,12 @@ a normal operating condition as much as an attack (A-AVAILABILITY, A-HOST).
   resource-bounded; a ceiling hit is a refusal, not an OOM.
 - **C-9c — meter and alert** (OPS-5): disk especially (repos, artifacts and packages only grow); alert
   before exhaustion, not after an outage.
+
+**Status (0.3.0, 2026-10-17).** *Implemented for the read and sign-in paths:* every read-path prikk invocation
+goes through a bounded gate (`PLANETER_PRIKK_CONCURRENCY`, `PLANETER_PRIKK_QUEUE_WAIT_SECS`) off the async
+workers (IS-4), and password verification through a second, separate gate (IS-24); past the bounded wait the
+request is `503` with `Retry-After`, counted, and the rest of the server stays responsive (tested with a full
+gate). *Not yet:* C-9a rate limits and quotas, fairness between tenants (IS-25), and C-9c metering.
 
 ### T-10 (Tampering) — the forge metadata store as a false source of truth
 An attacker who corrupts planeter's database or cache makes the *web view* show false history, or tries

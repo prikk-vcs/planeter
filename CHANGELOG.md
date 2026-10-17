@@ -26,7 +26,7 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 - **Raw content is gated by host, and isolation is enforced at start-up (IS-16; RFC 003 D-4).
   Breaking.** The raw route (`/api/v1/repos/{owner}/{name}/raw`) now answers only on the content
-  origin's host; on any other host it is `404` with the body of an unknown route. The effective host is
+  origin's host; on any other host it is `404` `raw_elsewhere` (see the API contract entry). The effective host is
   `Host`, or the last `X-Forwarded-Host` only from a peer in `PLANETER_TRUSTED_PROXIES`. A different port
   on the same host is *not* a distinct origin. **A non-loopback bind whose content origin has the
   application's host (the default) now refuses to start**, with a message naming
@@ -41,8 +41,8 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
   `Content-Type: application/json` (they were empty). Codes: `not_found` (a repository that is absent and
   one the caller may not see are byte-identical), `unavailable`, `busy` (with `Retry-After`),
   `invalid_request` (a malformed query; was an unstructured `400`), `method_not_allowed` (`405` with
-  `Allow: GET`), `raw_elsewhere` (see below) and `internal`. Status
-  codes and success bodies are unchanged. `GET /api/v1/openapi.json` is now a complete OpenAPI 3.0.3
+  `Allow: GET`), `raw_elsewhere` (the raw route asked on a host other than the content origin's) and `internal`. Status
+  codes are unchanged, and the one change to a success body is the file endpoint's `content` shape (see "API contract refinements" above). `GET /api/v1/openapi.json` is now a complete OpenAPI 3.0.3
   document (parameters, responses, schemas, security, the package version); `ETag` values are now a
   specified hash of the canonical JSON and **change once on upgrade**, then stay stable across restarts,
   releases of the compiler and key order. **Caching change:** every dynamic response is
