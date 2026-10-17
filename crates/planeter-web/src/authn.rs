@@ -98,15 +98,15 @@ pub(crate) async fn principal(headers: &HeaderMap, state: &AppState) -> Principa
     }
     let now = (state.now_unix)();
     let resolved = blocking(state, move |s| {
-        if let Some(token) = bearer {
-            if let Ok(principal) = s.auth.authenticate_token(&token) {
-                return principal;
-            }
+        if let Some(token) = bearer
+            && let Ok(principal) = s.auth.authenticate_token(&token)
+        {
+            return principal;
         }
-        if let Some(id) = session_id {
-            if let Ok(Some(session)) = s.sessions.get(&SessionId(id), now) {
-                return Principal::User(session.user);
-            }
+        if let Some(id) = session_id
+            && let Ok(Some(session)) = s.sessions.get(&SessionId(id), now)
+        {
+            return Principal::User(session.user);
         }
         Principal::Anonymous
     })

@@ -5,6 +5,14 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **The declared minimum compiler is now true and checked (IS-32). The minimum rises from 1.85 to
+  1.88.** `rust-version` was `1.85`, but the code uses let-chains, which need Rust 1.88; nothing built on
+  1.85 and no gate noticed, so `cargo install planeter` on an older compiler failed with a compiler error
+  instead of a clear message. `rust-version` is now `1.88.0`, the lowest compiler that builds the
+  workspace (measured), and a new CI job `msrv` runs `cargo check --workspace --locked` on exactly that
+  version. `pin-check` fails if that job's compiler and `rust-version` differ. The release itself is still
+  built with 1.99.0.
+
 - **API contract refinements (IS-33). Breaking for any client of 0.2.0's file endpoint.**
   `GET …/file` now serializes `content` as an object tagged by `kind`: `{"kind":"text","text":…}`,
   `{"kind":"binary","blob_id":…,"size":…}`, `{"kind":"opaque","size":…}` (it was serde's

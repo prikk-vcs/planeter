@@ -52,7 +52,14 @@ is not a 40-hex commit SHA, any `image:` or Dockerfile `FROM` without a digest, 
 channel. It also fails when the `toolchain:` inputs across the workflows are not one and the same version
 (CI, the manual checkpoint and the release build with **one compiler**, `1.99.0`), and when a `runs-on` or
 matrix `os` names a moving label (`*-latest`): runners are named (`ubuntu-24.04`,
-`ubuntu-24.04-arm`). Both gates run in `ci.yml` and in the release `gates` job. **A pin is changed only by
+`ubuntu-24.04-arm`). **The declared minimum compiler** (`rust-version` in the root `Cargo.toml`, `1.88.0`,
+IS-32) means: the lowest stable compiler that builds the whole workspace with `--locked`, which is the
+one that stabilized let-chains (measured: 1.85 and 1.87 fail on them, 1.88 builds and passes every test;
+no dependency raises it). It is proved by the `msrv` job of `ci.yml`, which runs `cargo check --workspace
+--locked` on exactly that compiler. That job is the one named exception to "one compiler": `pin-check`
+fails unless its `toolchain:` equals `rust-version`, and fails if a declared minimum has no `msrv` job.
+Raising the minimum is a reviewed change to `rust-version` and the job together; nothing is rewritten to
+make an older compiler work. Both gates run in `ci.yml` and in the release `gates` job. **A pin is changed only by
 a reviewed change that names the upstream diff**; `docs/RELEASING.md` has the pre-tag review step and the
 release dry run. Deliberately out of the gate's scope: the version of `cargo-deny`/`cargo-audit` installed
 by the workflows (current on purpose, so they can read the advisory database) and the content of a named

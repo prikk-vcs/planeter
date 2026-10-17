@@ -31,6 +31,23 @@ jobs:
       - name: Test (includes the layering gate)
         run: cargo test --workspace --locked
 
+  msrv:
+    # IS-32 (RFC 010 D-5): the declared minimum compiler is built with, so the claim cannot be false.
+    # This job's toolchain must equal `rust-version` in Cargo.toml (pin-check enforces it); it is the one
+    # named exception to "one compiler for CI and release".
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Rust toolchain (the declared minimum, not the pinned build compiler)
+        uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable branch head, 2026-10-15; toolchain pinned by input
+        with:
+          toolchain: 1.88.0
+
+      - name: Check the workspace at the declared minimum
+        run: cargo check --workspace --locked
+
   enf2:
     # ENF-2 (RFC 001 §0a / INV-2): the keyless forge ships no history-signing symbol by default.
     runs-on: ubuntu-24.04

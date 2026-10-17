@@ -214,3 +214,111 @@ fn a_bad_root_is_a_usage_error() {
     let (code, _) = run(Path::new("/definitely/not/a/directory"));
     assert_eq!(code, 2);
 }
+
+// ---- IS-32: the declared minimum compiler is the `msrv` job's, and nothing else's ----
+
+/// A CI workflow with a build job on `build` and a job `msrv_id` on `msrv`.
+fn two_job_ci(msrv_id: &str, build: &str, msrv: &str) -> String {
+    format!(
+        "name: t\non: push\njobs:\n  build:\n    runs-on: ubuntu-24.04\n    steps:\n      - uses: dtolnay/rust-toolchain@{SHA}\n        with:\n          toolchain: {build}\n  {msrv_id}:\n    runs-on: ubuntu-24.04\n    steps:\n      - uses: dtolnay/rust-toolchain@{SHA}\n        with:\n          toolchain: {msrv}\n"
+    )
+}
+
+fn manifest(rust_version: &str) -> String {
+    format!("[workspace.package]\nedition = \"2024\"\nrust-version = \"{rust_version}\"\n")
+}
+
+#[test]
+fn the_msrv_job_may_differ_from_the_build_compiler_when_it_equals_rust_version() {
+    let ci = two_job_ci("msrv", "1.99.0", "1.88.0");
+    for declared in ["1.88.0", "1.88"] {
+        let (code, text) = run(&fixture(
+            "msrv-ok",
+            &[
+                (".github/workflows/ci.yml", &ci),
+                ("Cargo.toml", &manifest(declared)),
+            ],
+        ));
+        assert_eq!(code, 0, "{declared}: {text}");
+    }
+}
+
+#[test]
+fn a_planted_mismatch_between_the_msrv_job_and_rust_version_fails_and_names_both_files() {
+    let ci = two_job_ci("msrv", "1.99.0", "1.87.0");
+    expect_fail(
+        "msrv-mismatch",
+        &[
+            (".github/workflows/ci.yml", &ci),
+            ("Cargo.toml", &manifest("1.88.0")),
+        ],
+        &[
+            ".github/workflows/ci.yml:15:",
+            "job `msrv` builds with \"1.87.0\"",
+            "Cargo.toml:3 declares rust-version 1.88.0",
+        ],
+    );
+}
+
+#[test]
+fn a_declared_minimum_with_no_msrv_job_fails_and_names_cargo_toml() {
+    let ci = workflow(&format!(
+        "      - uses: dtolnay/rust-toolchain@{SHA}\n        with:\n          toolchain: 1.99.0\n"
+    ));
+    expect_fail(
+        "msrv-missing",
+        &[
+            (".github/workflows/ci.yml", &ci),
+            ("Cargo.toml", &manifest("1.88.0")),
+        ],
+        &[
+            "Cargo.toml:3:",
+            "rust-version 1.88.0 is declared but no job `msrv`",
+        ],
+    );
+}
+
+#[test]
+fn only_a_job_named_msrv_is_exempt_from_the_one_compiler_rule() {
+    // Same two versions, but the second job is not called `msrv`: it is a second compiler.
+    let ci = two_job_ci("lint", "1.99.0", "1.88.0");
+    expect_fail(
+        "msrv-wrong-name",
+        &[
+            (".github/workflows/ci.yml", &ci),
+            ("Cargo.toml", &manifest("1.88.0")),
+        ],
+        &["disagrees with the other workflows", "no job `msrv`"],
+    );
+}
+
+#[test]
+fn the_msrv_job_does_not_count_towards_the_build_compilers_agreement() {
+    // Build jobs in two files agree; the msrv job is a third version and is checked on its own.
+    let a = two_job_ci("msrv", "1.99.0", "1.88.0");
+    let b = workflow(&format!(
+        "      - uses: dtolnay/rust-toolchain@{SHA}\n        with:\n          toolchain: 1.99.0\n"
+    ));
+    let (code, text) = run(&fixture(
+        "msrv-third-version",
+        &[
+            (".github/workflows/ci.yml", &a),
+            (".github/workflows/release.yml", &b),
+            ("Cargo.toml", &manifest("1.88.0")),
+        ],
+    ));
+    assert_eq!(code, 0, "{text}");
+}
+
+#[test]
+fn a_channel_in_the_msrv_job_is_still_refused() {
+    let ci = two_job_ci("msrv", "1.99.0", "stable");
+    expect_fail(
+        "msrv-channel",
+        &[
+            (".github/workflows/ci.yml", &ci),
+            ("Cargo.toml", &manifest("1.88.0")),
+        ],
+        &["toolchain \"stable\" is not an explicit X.Y.Z version"],
+    );
+}

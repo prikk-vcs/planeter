@@ -18,6 +18,9 @@ published until M4. **Tagging and publishing are owner-authorized.**
 4. The prikk floor is current: `PRIKK_VERSION` in `release.yml` and `Dockerfile` match
    `MIN_PRIKK_VERSION` in `crates/planeter-prikk/src/cli.rs` (dependency-ledger PK-26); `floor-check`
    enforces the equality, the review of which version is current is yours.
+   The declared minimum compiler (`rust-version` in `Cargo.toml`) is the `msrv` job's toolchain in
+   `ci.yml` (`pin-check` enforces it); the `msrv` job is green on the release-candidate commit. If a
+   change raised the minimum (a language feature, a dependency), it says so in the CHANGELOG.
 5. **Review the pins against upstream releases and advisories before tagging** (RFC 010 R-1): every
    `uses:` SHA and the base-image digest are immutable and do not refresh themselves. For each, compare the
    pinned tag with the upstream's latest and read the advisories; an update is a reviewed change that names

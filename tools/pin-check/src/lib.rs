@@ -11,6 +11,9 @@
 //!   input, a `rustup` command line, or the `channel` of a `rust-toolchain` file;
 //! - `toolchain:` inputs that are not one and the same version across the workflows (CI and release
 //!   must build with one compiler, RFC 010 D-5);
+//! - the one named exception to "one compiler": a job whose id is `msrv` builds with the workspace's
+//!   declared minimum, so its `toolchain:` must equal `rust-version` in the root `Cargo.toml` (as
+//!   `X.Y.Z`; `1.88` means `1.88.0`), and that job must exist whenever `rust-version` is declared (IS-32);
 //! - a runner image named by a moving label: any `runs-on` or matrix `os` value ending in `-latest`.
 //!
 //! It has no allow-list. It reads text only, so it understands the shapes this repository uses, and
@@ -119,10 +122,49 @@ pub fn check(root: &Path) -> io::Result<Report> {
     Ok(report)
 }
 
-/// One finding per `toolchain:` input when the workflows do not agree on a single version. Inputs that
-/// are not `X.Y.Z` are already findings of their own and are left out of the comparison.
+/// The id of the one job allowed to build with a different compiler: the declared minimum (IS-32).
+const MSRV_JOB: &str = "msrv";
+
+/// The workspace's declared minimum compiler as `(line, "X.Y.Z")`, from the root `Cargo.toml`. `None`
+/// when there is no root manifest or it declares none.
+fn declared_minimum(root: &Path) -> io::Result<Option<(usize, String)>> {
+    let Ok(text) = fs::read_to_string(root.join("Cargo.toml")) else {
+        return Ok(None);
+    };
+    for (i, line) in text.lines().enumerate() {
+        let code = strip_comment(line).trim();
+        let value = code
+            .strip_prefix("rust-version")
+            .and_then(|rest| rest.trim_start().strip_prefix('='))
+            .map(|v| v.trim().trim_matches(['"', '\'']).to_owned());
+        if let Some(v) = value {
+            let mut parts: Vec<&str> = v.split('.').collect();
+            if parts.len() == 2 {
+                parts.push("0");
+            }
+            return Ok(Some((i + 1, parts.join("."))));
+        }
+    }
+    Ok(None)
+}
+
+/// The id of the job a line of a workflow belongs to: a two-space-indented `id:` key under `jobs:`.
+fn job_id(line: &str) -> Option<&str> {
+    let code = strip_comment(line).trim_end();
+    let rest = code.strip_prefix("  ")?;
+    if rest.starts_with(' ') {
+        return None;
+    }
+    let id = rest.strip_suffix(':')?;
+    (!id.is_empty() && !id.contains([' ', ':'])).then_some(id)
+}
+
+/// Findings when the workflows do not agree on a single compiler, outside the one named exception: the
+/// `msrv` job, whose compiler must be the declared minimum. Inputs that are not `X.Y.Z` are already
+/// findings of their own and are left out of the comparison.
 fn toolchain_disagreements(root: &Path, workflows: &[PathBuf]) -> io::Result<Vec<Finding>> {
     let mut inputs: Vec<(String, usize, String)> = Vec::new();
+    let mut msrv_inputs: Vec<(String, usize, String)> = Vec::new();
     for rel in workflows {
         let text = fs::read_to_string(root.join(rel))?;
         let file = rel
@@ -130,32 +172,67 @@ fn toolchain_disagreements(root: &Path, workflows: &[PathBuf]) -> io::Result<Vec
             .map(|c| c.as_os_str().to_string_lossy())
             .collect::<Vec<_>>()
             .join("/");
+        let mut job = "";
         for (i, line) in text.lines().enumerate() {
-            if let Some(v) = value_of(line, "toolchain") {
-                if is_semver(v) {
-                    inputs.push((file.clone(), i + 1, v.to_owned()));
-                }
+            if let Some(id) = job_id(line) {
+                job = id;
+            }
+            if let Some(v) = value_of(line, "toolchain")
+                && is_semver(v)
+            {
+                let list = if job == MSRV_JOB {
+                    &mut msrv_inputs
+                } else {
+                    &mut inputs
+                };
+                list.push((file.clone(), i + 1, v.to_owned()));
             }
         }
     }
+    let mut findings = msrv_findings(root, &msrv_inputs)?;
     let mut versions: Vec<&str> = inputs.iter().map(|(_, _, v)| v.as_str()).collect();
     versions.sort_unstable();
     versions.dedup();
     if versions.len() < 2 {
-        return Ok(Vec::new());
+        return Ok(findings);
     }
     let summary = inputs
         .iter()
         .map(|(f, l, v)| format!("{v} in {f}:{l}"))
         .collect::<Vec<_>>()
         .join("; ");
-    Ok(inputs
-        .iter()
-        .map(|(file, line, v)| Finding {
-            file: file.clone(),
-            line: *line,
+    findings.extend(inputs.iter().map(|(file, line, v)| Finding {
+        file: file.clone(),
+        line: *line,
+        message: format!(
+            "toolchain {v:?} disagrees with the other workflows; CI and release must use one version ({summary})"
+        ),
+    }));
+    Ok(findings)
+}
+
+/// The `msrv` job's compiler is the declared minimum, and the job exists when a minimum is declared.
+fn msrv_findings(root: &Path, msrv_inputs: &[(String, usize, String)]) -> io::Result<Vec<Finding>> {
+    let Some((line, declared)) = declared_minimum(root)? else {
+        return Ok(Vec::new());
+    };
+    if msrv_inputs.is_empty() {
+        return Ok(vec![Finding {
+            file: "Cargo.toml".to_owned(),
+            line,
             message: format!(
-                "toolchain {v:?} disagrees with the other workflows; CI and release must use one version ({summary})"
+                "rust-version {declared} is declared but no job `{MSRV_JOB}` in .github/workflows builds with it"
+            ),
+        }]);
+    }
+    Ok(msrv_inputs
+        .iter()
+        .filter(|(_, _, v)| *v != declared)
+        .map(|(file, l, v)| Finding {
+            file: file.clone(),
+            line: *l,
+            message: format!(
+                "job `{MSRV_JOB}` builds with {v:?} but Cargo.toml:{line} declares rust-version {declared}; they must be the same version"
             ),
         })
         .collect())
@@ -259,10 +336,12 @@ fn scan_workflow(text: &str) -> Hits {
                     format!("runner image {label:?} is a moving label; name the image (e.g. ubuntu-24.04)"),
                 ));
             }
-        } else if let Some(v) = value_of(line, "image") {
-            if !v.is_empty() && !v.contains("${{") && !v.contains("@sha256:") {
-                hits.push((n, format!("image {v:?} has no @sha256: digest")));
-            }
+        } else if let Some(v) = value_of(line, "image")
+            && !v.is_empty()
+            && !v.contains("${{")
+            && !v.contains("@sha256:")
+        {
+            hits.push((n, format!("image {v:?} has no @sha256: digest")));
         }
         // `rustup default stable`, `rustup toolchain install nightly`, `rustup update beta`, …
         let code = strip_comment(line);
