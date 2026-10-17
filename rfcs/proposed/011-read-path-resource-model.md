@@ -1,8 +1,10 @@
 # RFC 011 — The read-path resource model: bounding memory, size and lifetime of what planeter asks prikk to do
 
 **Status.** Proposed (2026-10-17) by the architect, from the owner's question whether running prikk as a
-subprocess makes the server more stable (SCHEDULE D-16) and the measurements that answered it. Not
-acceptable until the owner rules on the decisions in §Owner decisions. Handoffs are written after acceptance.
+subprocess makes the server more stable (SCHEDULE D-16) and the measurements that answered it. **Direction
+accepted by the owner 2026-10-17 (O-1) and O-3 granted; O-2 (the budget default, the variable's name, the
+status of `too_large`) awaits the owner's answer to the architect's recommendations,** after which the RFC
+moves to `accepted/`. Handoffs are written after acceptance.
 **Tracks.** Issue register IS-36 (the gate does not bound memory; the `file` route is unbounded) and IS-37
 (a killed server leaves its prikk tree running); threat model T-9 / C-9a / C-9b, C-4c, TB-4; RFC 001 D-3 and
 its "Alternatives considered"; RFC 003 D-8 (the gate); dependency ledger PK-46, PK-51, PK-52.
@@ -78,7 +80,7 @@ PK-51 and PK-52; prikk 0.52.0; a shared, non-idle development host (so latencies
   when the wait ends. A request whose own cost exceeds the whole budget is refused at once with a distinct
   error (D-4), never queued. The budget defaults to **a quarter of the memory the process may use** (the
   cgroup limit if one is set, otherwise physical memory) and is set by one new variable,
-  `PLANETER_READ_MEMORY_BUDGET_MB`, validated like the existing gate variables and logged at start. The cost
+  `PLANETER_PRIKK_MEMORY_BUDGET_MB`, validated like the existing gate variables and logged at start. The cost
   model lives in one table, covered by a test that fails when a verb is added without a cost. In-process or
   subprocess, the same budget applies (the design does not depend on the process model).
 - **D-2 — Per-call ceiling.** Every sandboxed prikk call runs with an address-space or data limit of
@@ -111,9 +113,11 @@ PK-51 and PK-52; prikk 0.52.0; a shared, non-idle development host (so latencies
   reopened only if prikk offers a stable library facet that is read-only by construction and carries no
   signing code **and** our measurements show process start matters; before any prikk crate becomes a
   dependency, ENF-2's check is strengthened to detect signing code by what is linked, not by one marker name.
-- **D-8 — What we ask prikk (the owner conveys).** The 0.54.0 "files at a point" command (PK-46) should cost
-  **the file, not the repository** (F7), and report its memory need. Added to the requirements note for their
-  design round.
+- **D-8 — What we ask prikk (the owner conveys; granted O-3).** The 0.54.0 "files at a point" command
+  (PK-46) should cost **the point it writes, not the repository's store** (F7); let us learn the point's file
+  count and bytes before paying for it; refuse past a limit, all-or-nothing and before writing; and state its
+  memory need. Two questions about `cat`/`tree`: is the whole-repository cost inherent, and is the memory
+  multiple a documented, stable property. Drafted as a letter for the owner to convey.
 
 ## Alternatives considered
 
