@@ -5,6 +5,19 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+## [0.3.0] — 2026-10-17 — safe by default: non-blocking sign-in, a real API contract, isolated raw content
+
+**Upgrading from 0.2.0**
+
+- Needs **prikk ≥ 0.52.0** (the container image bakes 0.52.0; it baked 0.46.0).
+- The declared minimum compiler rises from 1.85 to **1.88** (`cargo install planeter` on an older one is now refused up front).
+- A non-loopback bind now needs a **distinct content host**: `PLANETER_CONTENT_ORIGIN` must name a different host from the application's, or planeter refuses to start (on a loopback bind it warns).
+- An **unknown command-line argument exits 2** instead of starting the server (`--version`/`-V` and `--help`/`-h` are new).
+- **API errors are JSON** (`{"code","message","hint"}`, were empty bodies), and ETags change once.
+- File `content` is **`kind`-tagged** (`{"kind":"text","text":…}`), and a **missing file is `404`** (was `200`).
+- New **caching and browser-policy headers** on every response (`Cache-Control`, `Vary`, `Permissions-Policy`, and HSTS behind trusted proxies).
+- New variables: `PLANETER_AUTH_CONCURRENCY` and `PLANETER_AUTH_QUEUE_WAIT_SECS` (sign-in), and `PLANETER_PRIKK_CONCURRENCY` and `PLANETER_PRIKK_QUEUE_WAIT_SECS` (read path); defaults need no action.
+
 - **The declared minimum compiler is now true and checked (IS-32). The minimum rises from 1.85 to
   1.88.** `rust-version` was `1.85`, but the code uses let-chains, which need Rust 1.88; nothing built on
   1.85 and no gate noticed, so `cargo install planeter` on an older compiler failed with a compiler error

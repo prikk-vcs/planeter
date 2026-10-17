@@ -3,11 +3,14 @@
 | | |
 |---|---|
 | Document | The dated brief a new session reads **first**: where the project is, what is held and why, what is pending on whom, and the issue register. Updated at every release, RFC disposition and owner ruling. |
-| As of | 2026-10-15 — planeter **0.2.0** released (2026-09-24); prikk is at **0.52.0**; upstream facts folded into ledger v1.5 |
+| As of | 2026-10-17 — planeter **0.2.0** released (2026-09-24); **0.3.0 release candidate ready (not released)**; prikk is at **0.52.0**; upstream facts folded into ledger v1.5 |
 | Read next | [`src/planeter-00-project-charter.md`](src/planeter-00-project-charter.md) (background, goals, governance) → [`../ROADMAP.md`](../ROADMAP.md) → [`SCHEDULE.md`](SCHEDULE.md) (themes, plans, concerns) → [`../rfcs/README.md`](../rfcs/README.md) → [`../rfcs/handoffs/README.md`](../rfcs/handoffs/README.md) and the active handoff → [`src/planeter-prikk-dependency-ledger.md`](src/planeter-prikk-dependency-ledger.md) → [`src/planeter-03-threat-model-v0.1.md`](src/planeter-03-threat-model-v0.1.md) (v0.3) → [`UPSTREAM.md`](UPSTREAM.md) → [`dependency-policy.md`](dependency-policy.md) |
 
 ## Where we are
 
+- **0.3.0 release candidate ready (2026-10-17), not released.** Version `0.3.0`, CHANGELOG `[0.3.0]` section,
+  every gate green (including `msrv`), a dry run of `release.yml` verified to publish nothing. Awaiting the
+  architect's review of the candidate, then the owner's R6 acts (below). Nothing is tagged.
 - **Shipped: 0.2.0 (2026-09-24)** — host + browse + auth: bubblewrap-sandboxed prikk hosting, browse UI
   and read API, local passwords (Argon2id), OpenID Connect SSO (accounts linked administratively),
   scoped tokens, ed25519 SSH keys, sessions + CSRF, per-account and per-IP login throttles, trusted
