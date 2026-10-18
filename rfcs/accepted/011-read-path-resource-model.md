@@ -88,7 +88,11 @@ PK-51 and PK-52; prikk 0.52.0; a shared, non-idle development host (so latencies
   `PLANETER_PRIKK_MEMORY_BUDGET_MB`, validated like the existing gate variables. **An explicit value is not capped:** the cap bounds only the
   default, so a large host raises it deliberately. The start-up log states the budget, where it came from
   (default, capped default, or variable) and the variable to change it. The cost
-  model lives in one table, covered by a test that fails when a verb is added without a cost. In-process or
+  model lives in one table, covered by a test that fails when a verb is added without a cost. **The table is a
+  per-prikk-release measurement, not a constant** (prikk, 2026-10-18, PK-53: the multiples are undocumented,
+  depend on history since the last snapshot, and are meant to fall): it carries the prikk version it was
+  measured on, and re-measuring it is an output of the re-baseline procedure (RFC 010 D-1). A cost estimate that
+  is too high only makes admission conservative; one too low is caught by D-2's ceiling. In-process or
   subprocess, the same budget applies (the design does not depend on the process model).
 - **D-2 — Per-call ceiling.** Every sandboxed prikk call runs with an address-space or data limit of
   **cost × 1.25** (never above the budget). The limit is the enforcement the admission estimate cannot give:
