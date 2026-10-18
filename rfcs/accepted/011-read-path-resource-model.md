@@ -5,8 +5,9 @@ subprocess makes the server more stable (SCHEDULE D-16) and the measurements tha
 accepted 2026-10-17 (O-1); O-3 granted (the letter to prikk will be sent by the owner); O-2 settled
 2026-10-18: the variable `PLANETER_PRIKK_MEMORY_BUDGET_MB`, status `422` for `too_large`, one constant for the
 file-size bound, no refusal to start, and the default budget a quarter of usable memory floored at 256 MiB and
-capped at 4 GiB (the owner approved the capped form and is not tied to the figure: it is derived from the
-largest single call measured, ≈ 2.05 GiB, and is revisited when a deployment's numbers say otherwise).
+capped at **8 GiB** (the owner approved the capped form on 2026-10-18 and, after the investigation corrected
+the multiples, chose 8 GiB as about twice the worst single call measured, ≈ 4.1 GiB; it is revisited when a
+deployment's numbers say otherwise).
 Handoffs: [`../handoffs/011-read-path-resource-model/`](../handoffs/011-read-path-resource-model/).
 **Tracks.** Issue register IS-36 (the gate does not bound memory; the `file` route is unbounded) and IS-37
 (a killed server leaves its prikk tree running); threat model T-9 / C-9a / C-9b, C-4c, TB-4; RFC 001 D-3 and
@@ -99,10 +100,10 @@ are folded into D-1, D-2 and D-5 below. U4 (the default) is decided by the owner
   multiples hold only for many-small-file repositories), waits at most the existing bounded wait for budget, and is refused with `busy` and `Retry-After`
   when the wait ends. A request whose own cost exceeds the whole budget is refused at once with a distinct
   error (D-4), never queued. The budget defaults to **a quarter of the memory the process may use** (the
-  cgroup limit if one is set, otherwise physical memory), **never less than 256 MiB and never more than 4 GiB**
-  (the cap was set at about twice the largest single call then measured, ≈ 2.05 GiB; **with the worst-case
-  multiples a `verify` of a 1 GiB repository costs up to ≈ 4.1 GiB and would exceed this default, so the cap is
-  to be raised or reconsidered: the owner's decision, and the owner is not tied to the figure**), and is set by one new variable,
+  cgroup limit if one is set, otherwise physical memory), **never less than 256 MiB and never more than 8 GiB**
+  (**decided by the owner 2026-10-18**: the cap is about twice the worst single call measured with the
+  worst-case multiples, a `verify` of a 1 GiB repository ≈ 4.1 GiB; the first figure, 4 GiB, predated that
+  correction, and the owner is not tied to any figure), and is set by one new variable,
   `PLANETER_PRIKK_MEMORY_BUDGET_MB`, validated like the existing gate variables. **An explicit value is not capped:** the cap bounds only the
   default, so a large host raises it deliberately. The start-up log states the budget, where it came from
   (default, capped default, or variable) and the variable to change it. The cost
