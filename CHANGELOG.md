@@ -5,6 +5,25 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **Reads are admitted by estimated memory; `too_large`; files above 4 MiB are refused (RFC 011 D-1…D-4,
+  D-6; IS-36). New variable, new error code, behaviour changes.** The prikk gate used to bound only the
+  *number* of prikk processes, while a read's memory follows the repository's size (eight concurrent
+  `verify` calls on a 1 GiB repository held 16 GB). It now also holds a **memory budget**:
+  `PLANETER_PRIKK_MEMORY_BUDGET_MB` (MiB; default a quarter of the memory the process may use — its cgroup
+  limit or physical memory — **at least 256 MiB and at most 8 GiB**; a value you set is never capped; the
+  start-up log states the budget and its source). Each read is costed from the repository's store size and
+  the verb, must fit the budget and a slot within the existing bounded wait, and runs under a memory
+  ceiling of 1.25 × its cost. **Answers:** a read that cannot fit the whole budget is **`422 too_large`**
+  (new code: message "This is too large to serve here."; the UI shows the same, plainly); a wait that ends
+  is `503 busy` as before; a call that hits its ceiling is `503 unavailable` and logs one line. Size your
+  budget at ≥ 4.1 × the largest repository you expect to `verify`. **The API's `file` view and the raw route
+  now share one bound of 4 MiB** and refuse a larger file with `422 too_large`: the raw route used to allow
+  25 MiB on the API (and answered `503 unavailable` when over its cap). `raw` and the repository's page no
+  longer report a **timeout as "not found"**: only a missing path is `404`. The repository page's `verify`
+  badge is admitted separately, so a repository whose `verify` does not fit the budget still gets its page
+  ("verify unavailable"). A repository whose store cannot be measured is `503` with a log line.
+  The OpenAPI document gains the `422` response on every read operation.
+
 - **A killed server no longer leaves its children running; `prlimit` is a new runtime prerequisite and
   `timeout` no longer is (RFC 011 D-2, D-5; IS-37).** Every prikk call now runs as `bwrap` directly under
   the server (the `timeout` hop is gone), so `--die-with-parent` ties the whole sandbox to the server: a

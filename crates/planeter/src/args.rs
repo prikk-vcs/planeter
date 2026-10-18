@@ -78,6 +78,9 @@ environment:
                                 a non-loopback PLANETER_ADDR is refused unless this is set
   PLANETER_PRIKK_CONCURRENCY    most prikk subprocesses at once (default min(CPUs, 8))
   PLANETER_PRIKK_QUEUE_WAIT_SECS  seconds a request waits for a slot before 503 (default 10)
+  PLANETER_PRIKK_MEMORY_BUDGET_MB  memory reads may hold at once, in MiB (default a quarter of the memory
+                                the process may use, at least 256 MiB and at most 8 GiB; a value you set
+                                is never capped; a read above it is refused with 422 too_large)
   PLANETER_AUTH_CONCURRENCY     most password verifications at once (default min(CPUs, 4))
   PLANETER_AUTH_QUEUE_WAIT_SECS seconds a sign-in waits for a slot before 503 (default 5)
   PLANETER_OIDC_ISSUER, PLANETER_OIDC_CLIENT_ID, PLANETER_OIDC_REDIRECT_URI

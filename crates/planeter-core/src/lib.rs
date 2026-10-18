@@ -16,6 +16,7 @@
 //! absence; it passes trivially today (there is nothing to find) and stays as the guard that keeps
 //! INV-2 true as write code arrives. The feature is reserved here; **no seal code exists yet.**
 
+pub mod admission;
 pub mod audit;
 pub mod authorize;
 pub mod egress;

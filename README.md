@@ -41,6 +41,11 @@ accounts, authorization), and builds it all on prikk's stable command surface, n
 `bwrap` and `prlimit` (util-linux) on `PATH`, plus `curl` if you enable SSO. planeter refuses to start
 without `prlimit`. The container image bundles all of them.
 
+Reads are admitted by estimated memory: set `PLANETER_PRIKK_MEMORY_BUDGET_MB` for the host (default a
+quarter of its memory, between 256 MiB and 8 GiB; it should be at least 4.1 × the largest repository you
+will `verify`). A read that cannot fit the budget is answered `422 too_large`; see
+[`docs/RELEASING.md`](docs/RELEASING.md).
+
 Install one of:
 
 - **Container:** `ghcr.io/prikk-vcs/planeter:<version>` (`linux/amd64` + `linux/arm64`; persist

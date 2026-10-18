@@ -136,6 +136,30 @@ docker run --rm ghcr.io/prikk-vcs/planeter:X.Y.Z --version
   is refused with `503` and `Retry-After` (positive integer; default 10). Both values are logged once at
   start. A low cap starves legitimate bursts; raise it with the host's memory in mind (prikk's figures
   are several times the repository's content, dependency ledger PK-40).
+- **Read memory budget (RFC 011 D-1, IS-36):** the process-count gate above bounds how many prikk
+  processes run, not how much memory they use (a read's memory follows the *repository's size*, not the
+  answer's: eight concurrent `verify` calls on a 1 GiB repository held 16 GB). Reads are therefore also
+  admitted by **estimated memory**: each read declares a cost from the repository's store size S (a fresh
+  walk of its `.prikk` at every request) and the verb — `tree`/`cat` 2.1 × S, `verify` 4.1 × S, `show`
+  3.6 × S, the API's `file` view 2.1 × S plus 12.4 MiB, `log`/refs a fixed 16 MiB; none less than 16 MiB
+  — and must fit the budget **and** a process slot within the one bounded wait
+  (`PLANETER_PRIKK_QUEUE_WAIT_SECS`). **`PLANETER_PRIKK_MEMORY_BUDGET_MB`** (positive integer, MiB) sets
+  the budget; unset, it is **a quarter of the memory the process may use** (its cgroup's `memory.max`
+  when set, otherwise physical memory), **at least 256 MiB and at most 8 GiB**. A value you set is never
+  capped. The start-up log states the budget, where it came from and the variable to change it.
+  **Sizing rule: budget ≥ 4.1 × the largest repository you expect to `verify`** (a 1 GiB repository
+  needs ≈ 4.2 GiB). Answers: a read that does not fit the *whole* budget is refused at once with
+  `422 too_large` (never queued; "ask the operator to raise the read memory budget" — this variable); a
+  wait that ends is `503 busy` + `Retry-After`. Each prikk call also runs under a memory **ceiling** of
+  1.25 × its cost (never above the budget), so a wrong estimate costs one failed call (`503
+  unavailable`, one log line naming the verb and the ceiling), not the host. Every refusal logs one
+  line (verb, cost, budget; no path, no repository name). The repository page shows its `verify` badge
+  from a separate admission: a repository whose `verify` does not fit still gets its page, with
+  "verify unavailable". The costs are measured on a prikk release (0.52.0) and are re-measured at every
+  floor change (`docs/UPSTREAM.md`).
+- **Bounded content (RFC 011 D-3, D-4):** the API's `file` view and the raw route share one bound,
+  4 MiB; a larger file is `422 too_large` (the raw route used to allow 25 MiB on the API; it answered
+  `503 unavailable` when over its cap). The UI's file page uses the same bound.
 - **SSO (OIDC):** set `PLANETER_OIDC_ISSUER`, `PLANETER_OIDC_CLIENT_ID`, `PLANETER_OIDC_REDIRECT_URI`
   (and `PLANETER_OIDC_CLIENT_SECRET` for a confidential client). The provider is reached only through
   the egress guard and a bubblewrap-confined **`curl`** (add `curl` to the runtime prerequisites; it is

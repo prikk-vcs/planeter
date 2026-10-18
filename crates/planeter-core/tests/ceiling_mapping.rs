@@ -122,18 +122,17 @@ fn a_ceiling_hit_is_unavailable_never_notfound_and_never_a_verification_result()
     assert!(svc.verify(&anon, &owner, "big", free).expect("verify").ok);
     assert!(svc.tree(&anon, &owner, "big", None, None, free).is_ok());
     assert!(svc.raw_file(&anon, &owner, "big", BIG, free).is_ok());
-    assert!(
-        svc.file(&anon, &owner, "big", None, "big.bin", free)
-            .is_ok()
-    );
+    // `file` refuses a 16 MiB file (above the 4 MiB bound) before reading any content (RFC 011 D-3).
+    assert!(matches!(
+        svc.file(&anon, &owner, "big", None, "big.bin", free),
+        Err(ReadError::TooLarge)
+    ));
 
     // Under a ceiling below the need each one is `Unavailable`, naming the verb and the ceiling.
     unavailable_naming_the_ceiling(svc.verify(&anon, &owner, "big", LOW), "verify");
     unavailable_naming_the_ceiling(svc.tree(&anon, &owner, "big", None, None, LOW), "tree");
-    unavailable_naming_the_ceiling(
-        svc.file(&anon, &owner, "big", None, "big.bin", LOW),
-        "checkout",
-    );
+    // `file` learns the size from a tree pre-check first, so the pre-check is the call that trips.
+    unavailable_naming_the_ceiling(svc.file(&anon, &owner, "big", None, "big.bin", LOW), "tree");
     // `raw_file` asks `cat --format json` first and turns a command failure into `NotFound` ("no such
     // path"): a ceiling hit there must NOT be read as a missing path.
     unavailable_naming_the_ceiling(svc.raw_file(&anon, &owner, "big", BIG, LOW), "cat");

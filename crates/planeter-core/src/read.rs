@@ -24,6 +24,7 @@ use planeter_prikk::{CallLimits, PrikkRepo, model};
 use planeter_store::membership::owner_org;
 use planeter_store::{MembershipStore, Owner, RepositoryRecord};
 
+use crate::admission::CONTENT_MAX_BYTES;
 use crate::audit::AuditSink;
 use crate::authorize::{AccessContext, Action, Principal, RepoResource, Resource, authorize};
 use crate::hosting::HostingService;
@@ -38,6 +39,11 @@ pub enum ReadError {
     NotFound,
     /// prikk could not be reached or returned an error (the repository exists and is authorized).
     Unavailable(String),
+    /// The response would exceed what this server serves (a file above
+    /// [`CONTENT_MAX_BYTES`]), or the repository needs more memory
+    /// than the read budget permits (RFC 011 D-3, D-4). Only ever produced for a repository the caller
+    /// may read, so it reveals nothing about a hidden one.
+    TooLarge,
     /// A backend (store/membership) failure.
     Backend(String),
 }
@@ -47,6 +53,7 @@ impl std::fmt::Display for ReadError {
         match self {
             ReadError::NotFound => f.write_str("not found"),
             ReadError::Unavailable(e) => write!(f, "repository temporarily unavailable: {e}"),
+            ReadError::TooLarge => f.write_str("too large to serve here"),
             ReadError::Backend(e) => write!(f, "backend error: {e}"),
         }
     }
@@ -542,6 +549,18 @@ impl ReadService {
             .map_err(|e| ReadError::Unavailable(e.to_string()))
     }
 
+    /// The repository's store size **S** for admission (RFC 011 D-1, T2) — after the one read gate. A
+    /// repository the principal may not read, or that does not exist, is [`ReadError::NotFound`] (so
+    /// neither the cost nor `too_large` can reveal a hidden repository); a walk that fails is
+    /// [`ReadError::Unavailable`] with one log line, never a guess.
+    pub fn store_bytes(&self, principal: &Principal, owner: &Owner, name: &str) -> Result<u64> {
+        let record = self.authorize_read(principal, owner, name)?;
+        crate::admission::store_size(&record.path).map_err(|e| {
+            eprintln!("planeter: a read was not admitted: {e}");
+            ReadError::Unavailable(e.to_string())
+        })
+    }
+
     /// History of a ref (`log`), bounded by `limit`.
     pub fn history(
         &self,
@@ -585,6 +604,18 @@ impl ReadService {
     ) -> Result<FileView> {
         let record = self.authorize_read(principal, owner, name)?;
         let driver = self.open(&record, limits)?;
+        // RFC 011 D-3: learn the entry's size from the tree listing and refuse a file above the shared
+        // bound *before* any content is read (the patch-plan read holds ≈ 3.1 × the file, in prikk and
+        // again here). A path that is not an entry is `NotFound`, as before.
+        let listing = driver.tree(ref_name, Some(path)).map_err(unavailable)?;
+        let entry = listing
+            .entries
+            .iter()
+            .find(|e| e.path == path)
+            .ok_or(ReadError::NotFound)?;
+        if entry.size > CONTENT_MAX_BYTES {
+            return Err(ReadError::TooLarge);
+        }
         let plan = driver
             .patch_plan_content(ref_name, &[path])
             .map_err(unavailable)?;
@@ -646,12 +677,26 @@ impl ReadService {
         // Metadata first: a missing path becomes NotFound (not a generic unavailable).
         let meta = match driver.path_content_meta(point, path) {
             Ok(m) => m,
-            Err(planeter_prikk::PrikkError::Command { .. }) => return Err(ReadError::NotFound),
+            // Only prikk's own "no such path" is `NotFound`. A timeout (status 124), a ceiling hit or any
+            // other failure says nothing about the path: `Unavailable` (RFC 011 handoff 1, deviation 4).
+            Err(e) if is_missing_path(&e) => return Err(ReadError::NotFound),
             Err(e) => return Err(unavailable(e)),
         };
-        let bytes = driver
-            .cat_bytes(point, path, max_bytes)
-            .map_err(unavailable)?;
+        // RFC 011 D-4: a file above the bound is `TooLarge` (a retry cannot help), decided from the
+        // metadata before `cat` runs. `cat --max-bytes` below stays as the backstop.
+        if max_bytes.is_some_and(|max| meta.size > max) {
+            return Err(ReadError::TooLarge);
+        }
+        let bytes = match driver.cat_bytes(point, path, max_bytes) {
+            Ok(b) => b,
+            // The file grew between the two reads: the same answer as above.
+            Err(planeter_prikk::PrikkError::Command { stderr, .. })
+                if stderr.contains("above the --max-bytes bound") =>
+            {
+                return Err(ReadError::TooLarge);
+            }
+            Err(e) => return Err(unavailable(e)),
+        };
         Ok(RawFile {
             path: path.to_owned(),
             encoding: meta.encoding,
@@ -673,6 +718,15 @@ impl ReadService {
         let v = driver.verify().map_err(unavailable)?;
         Ok(VerifyView::from_verify(&v))
     }
+}
+
+/// Whether a failed `cat` is prikk's own "the path does not exist at this point" (exit 1, "path … does
+/// not exist at …"), as opposed to a timeout, a ceiling hit or any other failure.
+fn is_missing_path(e: &planeter_prikk::PrikkError) -> bool {
+    matches!(
+        e,
+        planeter_prikk::PrikkError::Command { code: Some(1), stderr } if stderr.contains("does not exist")
+    )
 }
 
 /// A failed prikk call as the read service reports it: `Unavailable` — and, when the cause is the call's

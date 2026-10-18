@@ -134,6 +134,44 @@ async fn main() {
         gate.wait().as_secs()
     );
 
+    // RFC 011 D-1: the read memory budget. Default: a quarter of the memory this process may use (its
+    // cgroup limit, else physical memory), floored at 256 MiB and capped at 8 GiB; an explicit value is
+    // never capped. The log line says which one it is and how to change it.
+    let budget_var = std::env::var("PLANETER_PRIKK_MEMORY_BUDGET_MB").ok();
+    let usable = match budget_var.as_deref() {
+        // An explicit value needs no probe of the host.
+        Some(v) if !v.is_empty() => 0,
+        _ => match planeter_web::budget::read_usable_memory() {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!(
+                    "planeter: {e}; set {} to the memory budget for reads, in MiB",
+                    planeter_web::budget::VAR
+                );
+                std::process::exit(1);
+            }
+        },
+    };
+    let (budget_bytes, budget_source) =
+        match planeter_web::budget::budget_from_var(budget_var.as_deref(), usable) {
+            Ok(b) => b,
+            Err(e) => {
+                eprintln!("planeter: {e}");
+                std::process::exit(1);
+            }
+        };
+    eprintln!(
+        "planeter: read memory budget {} MiB ({}); change it with {}",
+        budget_bytes / planeter_web::budget::MIB,
+        budget_source.label(),
+        planeter_web::budget::VAR
+    );
+    let gate = Arc::new(
+        Arc::try_unwrap(gate)
+            .expect("the gate is not shared yet")
+            .with_budget(budget_bytes),
+    );
+
     // The separate, small bound on password verification (IS-24). Logged once.
     let auth_gate = match planeter_web::BlockingGate::auth_from_vars(
         std::env::var("PLANETER_AUTH_CONCURRENCY").ok().as_deref(),

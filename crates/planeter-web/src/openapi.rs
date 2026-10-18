@@ -63,6 +63,7 @@ fn errors(extra: &[ErrorCode]) -> Value {
         ErrorCode::NotFound,
         ErrorCode::Internal,
         ErrorCode::Unavailable,
+        ErrorCode::TooLarge,
     ]
     .iter()
     .chain(extra)

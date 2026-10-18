@@ -23,19 +23,17 @@ use axum::routing::get;
 use serde::Serialize;
 
 use planeter_auth::Authenticator;
-use planeter_core::{CallLimits, RawFile, RawTarget, ReadError, ReadService};
+use planeter_core::admission::{CONTENT_MAX_BYTES, ReadVerb, ceiling_for};
+use planeter_core::{CallLimits, Principal, RawFile, RawTarget, ReadError, ReadService};
 use planeter_store::Owner;
 
 use crate::errors::ErrorCode;
-use crate::gate::{GateError, PrikkGate};
+use crate::gate::{AdmitError, PrikkGate, offload};
 use crate::security::{ContentOrigin, app_security_headers, raw_content_headers};
 
 /// Default and maximum history page size (bounded — `STD-3`).
 const DEFAULT_LIMIT: usize = 50;
 const MAX_LIMIT: usize = 200;
-/// The cap on raw file bytes served in one response (`cat --max-bytes`). Bounds the *response*; hostile
-/// input is bounded upstream, at the accept edge (PK-24).
-const RAW_MAX_BYTES: u64 = 25 * 1024 * 1024;
 
 /// Shared application state (cheap to clone — all `Arc`).
 #[derive(Clone)]
@@ -139,7 +137,8 @@ async fn history_handler(
     };
     let principal = crate::principal::principal_from_request(&headers, &state).await;
     let limit = q.limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT);
-    let result = read_blocking(&state, move |read, limits| {
+    let subject = Subject::new(&principal, &owner, &name, &[ReadVerb::Log]);
+    let result = read_blocking(&state, subject, move |read, adm| {
         try_both_owners(&owner, |o| {
             read.history(
                 &principal,
@@ -147,7 +146,7 @@ async fn history_handler(
                 &name,
                 q.ref_name.as_deref(),
                 Some(limit),
-                limits,
+                adm.limits(ReadVerb::Log),
             )
         })
     })
@@ -161,9 +160,10 @@ async fn change_handler(
     headers: HeaderMap,
 ) -> Response {
     let principal = crate::principal::principal_from_request(&headers, &state).await;
-    let result = read_blocking(&state, move |read, limits| {
+    let subject = Subject::new(&principal, &owner, &name, &[ReadVerb::Show]);
+    let result = read_blocking(&state, subject, move |read, adm| {
         try_both_owners(&owner, |o| {
-            read.change(&principal, o, &name, &target, limits)
+            read.change(&principal, o, &name, &target, adm.limits(ReadVerb::Show))
         })
     })
     .await;
@@ -180,9 +180,17 @@ async fn file_handler(
         return error_response(&state, Failure::Invalid);
     };
     let principal = crate::principal::principal_from_request(&headers, &state).await;
-    let result = read_blocking(&state, move |read, limits| {
+    let subject = Subject::new(&principal, &owner, &name, &[ReadVerb::FileContent]);
+    let result = read_blocking(&state, subject, move |read, adm| {
         try_both_owners(&owner, |o| {
-            read.file(&principal, o, &name, q.ref_name.as_deref(), &q.path, limits)
+            read.file(
+                &principal,
+                o,
+                &name,
+                q.ref_name.as_deref(),
+                &q.path,
+                adm.limits(ReadVerb::FileContent),
+            )
         })
     })
     .await;
@@ -199,7 +207,8 @@ async fn tree_handler(
         return error_response(&state, Failure::Invalid);
     };
     let principal = crate::principal::principal_from_request(&headers, &state).await;
-    let result = read_blocking(&state, move |read, limits| {
+    let subject = Subject::new(&principal, &owner, &name, &[ReadVerb::Tree]);
+    let result = read_blocking(&state, subject, move |read, adm| {
         try_both_owners(&owner, |o| {
             read.tree(
                 &principal,
@@ -207,7 +216,7 @@ async fn tree_handler(
                 &name,
                 q.ref_name.as_deref(),
                 q.prefix.as_deref(),
-                limits,
+                adm.limits(ReadVerb::Tree),
             )
         })
     })
@@ -234,7 +243,8 @@ async fn raw_handler(
         return error_response(&state, Failure::Invalid);
     };
     let principal = crate::principal::principal_from_request(&headers, &state).await;
-    let result = read_blocking(&state, move |read, limits| {
+    let subject = Subject::new(&principal, &owner, &name, &[ReadVerb::Cat]);
+    let result = read_blocking(&state, subject, move |read, adm| {
         try_both_owners(&owner, |o| {
             read.raw_file(
                 &principal,
@@ -243,9 +253,9 @@ async fn raw_handler(
                 RawTarget {
                     point: q.ref_name.as_deref(),
                     path: &q.path,
-                    max_bytes: Some(RAW_MAX_BYTES),
+                    max_bytes: Some(CONTENT_MAX_BYTES),
                 },
-                limits,
+                adm.limits(ReadVerb::Cat),
             )
         })
     })
@@ -266,8 +276,11 @@ async fn refs_handler(
         return error_response(&state, Failure::Invalid);
     };
     let principal = crate::principal::principal_from_request(&headers, &state).await;
-    let result = read_blocking(&state, move |read, limits| {
-        try_both_owners(&owner, |o| read.refs(&principal, o, &name, q.all, limits))
+    let subject = Subject::new(&principal, &owner, &name, &[ReadVerb::Refs]);
+    let result = read_blocking(&state, subject, move |read, adm| {
+        try_both_owners(&owner, |o| {
+            read.refs(&principal, o, &name, q.all, adm.limits(ReadVerb::Refs))
+        })
     })
     .await;
     respond(&state, &headers, result)
@@ -279,8 +292,11 @@ async fn verify_handler(
     headers: HeaderMap,
 ) -> Response {
     let principal = crate::principal::principal_from_request(&headers, &state).await;
-    let result = read_blocking(&state, move |read, limits| {
-        try_both_owners(&owner, |o| read.verify(&principal, o, &name, limits))
+    let subject = Subject::new(&principal, &owner, &name, &[ReadVerb::Verify]);
+    let result = read_blocking(&state, subject, move |read, adm| {
+        try_both_owners(&owner, |o| {
+            read.verify(&principal, o, &name, adm.limits(ReadVerb::Verify))
+        })
     })
     .await;
     respond(&state, &headers, result)
@@ -312,26 +328,116 @@ impl From<ReadError> for Failure {
     }
 }
 
-/// Run a blocking read-service job through the gate (RFC 003 D-8, IS-4). **Every** handler reaches the
-/// read service through this one function, so that none can forget `spawn_blocking` or the cap.
+/// Who is reading what — the inputs of admission (RFC 011 D-1).
+pub(crate) struct Subject {
+    principal: Principal,
+    owner: String,
+    name: String,
+    /// Every verb the job will run; the admission cost is the largest of their costs (the calls run one
+    /// after another inside the job, so only one child is alive at a time).
+    verbs: &'static [ReadVerb],
+}
+
+impl Subject {
+    pub(crate) fn new(
+        principal: &Principal,
+        owner: &str,
+        name: &str,
+        verbs: &'static [ReadVerb],
+    ) -> Self {
+        Self {
+            principal: principal.clone(),
+            owner: owner.to_owned(),
+            name: name.to_owned(),
+            verbs,
+        }
+    }
+}
+
+/// What the gate admitted: the repository's store size and the budget, from which each call's memory
+/// ceiling follows (`cost × 1.25`, never above the budget — RFC 011 D-2).
+pub(crate) struct Admitted {
+    store_bytes: u64,
+    budget: Option<u64>,
+}
+
+impl Admitted {
+    /// The per-call limits for one prikk call of `verb` made inside the admitted job.
+    pub(crate) fn limits(&self, verb: ReadVerb) -> CallLimits {
+        CallLimits::data_ceiling(ceiling_for(verb.cost(self.store_bytes), self.budget))
+    }
+}
+
+/// Run a blocking read-service job through the gate (RFC 003 D-8, IS-4; RFC 011 D-1). **Every** handler
+/// reaches the read service through this one function, so that none can forget `spawn_blocking`, the cap
+/// or the budget.
 ///
-/// A page that needs several prikk calls does them all inside one job, under one permit: it either
-/// gets its slot or is refused as a whole, never half-rendered.
-pub(crate) async fn read_blocking<T, F>(state: &AppState, job: F) -> Result<T, Failure>
+/// Two phases, in this order, so that neither `busy` nor `too_large` can reveal a hidden repository:
+///
+/// 1. **authorize and measure** (ungated, on the blocking pool): the one read gate, then a fresh walk of
+///    the repository's store. A repository the principal may not read, or that does not exist, is
+///    `NotFound` here — before any budget is looked at;
+/// 2. **admit** by estimated memory ([`PrikkGate::run_weighted`]): the budget and a slot within one
+///    bounded wait; a cost above the whole budget is `too_large` at once.
+///
+/// A page that needs several prikk calls does them all inside one job, under one admission: it either
+/// gets its budget and slot or is refused as a whole, never half-rendered.
+pub(crate) async fn read_blocking<T, F>(
+    state: &AppState,
+    subject: Subject,
+    job: F,
+) -> Result<T, Failure>
 where
-    F: FnOnce(&ReadService, CallLimits) -> Result<T, ReadError> + Send + 'static,
+    F: FnOnce(&ReadService, &Admitted) -> Result<T, ReadError> + Send + 'static,
     T: Send + 'static,
 {
     let read = Arc::clone(&state.read);
-    // Per-call limits for every prikk call the job makes. `NONE` until admission (RFC 011 D-1, the next
-    // handoff) supplies a ceiling; the mechanism is in place and tested, the production value is "no
-    // ceiling" so default behaviour is unchanged.
-    let limits = CallLimits::NONE;
-    match state.gate.run(move || job(&read, limits)).await {
+
+    // Phase 1.
+    let store_bytes = {
+        let (read, principal, owner, name) = (
+            Arc::clone(&read),
+            subject.principal.clone(),
+            subject.owner.clone(),
+            subject.name.clone(),
+        );
+        offload(move || try_both_owners(&owner, |o| read.store_bytes(&principal, o, &name)))
+            .await
+            .map_err(|_| {
+                Failure::Read(ReadError::Backend(
+                    "the read task did not complete".to_owned(),
+                ))
+            })?
+            .map_err(Failure::Read)?
+    };
+
+    // Phase 2.
+    let cost = subject
+        .verbs
+        .iter()
+        .map(|v| v.cost(store_bytes))
+        .max()
+        .unwrap_or(0);
+    let what = subject
+        .verbs
+        .iter()
+        .map(|v| v.name())
+        .collect::<Vec<_>>()
+        .join("+");
+    let admitted = Admitted {
+        store_bytes,
+        budget: state.gate.budget_bytes(),
+    };
+    match state
+        .gate
+        .run_weighted(cost, &what, move || job(&read, &admitted))
+        .await
+    {
         Ok(result) => result.map_err(Failure::Read),
-        Err(GateError::Busy) => Err(Failure::Busy),
+        Err(AdmitError::Busy) => Err(Failure::Busy),
+        Err(AdmitError::TooLarge { .. }) => Err(Failure::Read(ReadError::TooLarge)),
         // A panicking job or a shutting-down runtime: an internal fault, not a missing repository.
-        Err(GateError::Aborted) => Err(Failure::Read(ReadError::Backend(
+        Err(AdmitError::Aborted) => Err(Failure::Read(ReadError::Backend(
             "the read task did not complete".to_owned(),
         ))),
     }
@@ -428,6 +534,7 @@ pub(crate) fn error_response(state: &AppState, e: Failure) -> Response {
         Failure::Internal => ErrorCode::Internal,
         Failure::Read(ReadError::NotFound) => ErrorCode::NotFound,
         Failure::Read(ReadError::Unavailable(_)) => ErrorCode::Unavailable,
+        Failure::Read(ReadError::TooLarge) => ErrorCode::TooLarge,
         // Backend and any future variant: an internal fault (existence-neutral).
         Failure::Read(_) => ErrorCode::Internal,
     };

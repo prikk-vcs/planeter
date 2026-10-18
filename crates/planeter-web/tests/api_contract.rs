@@ -48,6 +48,9 @@ const EXPECTED_PATHS: [&str; 8] = [
 fn state(trusted: &str) -> AppState {
     let root = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("api-contract");
     let store = Arc::new(InMemoryRepositoryStore::new());
+    // Admission measures `<repo>/.prikk` before any prikk call, so these stand-in repositories carry a
+    // store directory; what fails afterwards is prikk itself (`/nonexistent/prikk`).
+    std::fs::create_dir_all(root.join("never-opened/.prikk")).unwrap();
     for (id, name, vis) in [
         ("r1", "secret", Visibility::Private),
         ("r2", "open", Visibility::Public),
@@ -224,7 +227,7 @@ fn every_code_has_one_plain_sentence_and_the_shape_is_stable() {
             assert_eq!(text.matches(". ").count(), 0, "one sentence: {text:?}");
         }
     }
-    assert_eq!(seen.len(), 7);
+    assert_eq!(seen.len(), 8);
 }
 
 // ---------------------------------------------------------------- T2: the OpenAPI document
@@ -297,10 +300,10 @@ async fn the_document_describes_parameters_responses_security_and_the_error_sche
     assert_eq!(limit["schema"]["default"], 50);
     assert_eq!(limit["schema"]["maximum"], 200);
     assert_eq!(limit["required"], false);
-    for status in ["200", "304", "400", "404", "500", "503"] {
+    for status in ["200", "304", "400", "404", "422", "500", "503"] {
         assert!(history["responses"][status].is_object(), "{status}");
     }
-    for status in ["400", "404", "500", "503"] {
+    for status in ["400", "404", "422", "500", "503"] {
         assert_eq!(
             history["responses"][status]["content"]["application/json"]["schema"]["$ref"],
             "#/components/schemas/Error"

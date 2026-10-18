@@ -107,37 +107,47 @@ fn wait_for<F: FnMut() -> bool>(limit: Duration, mut ok: F) -> bool {
 }
 
 /// Start the server on a port reserved just before (the server announces its configured address, not the
-/// bound one), return it and the port.
+/// bound one), return it and the port. Another process can take a freed port in the gap, so a start that
+/// does not end up accepting connections is retried with a new port.
 fn start_server(dir: &Path, bin_dir: &Path) -> (Child, u16) {
-    let port = std::net::TcpListener::bind("127.0.0.1:0")
-        .unwrap()
-        .local_addr()
-        .unwrap()
-        .port();
-    let mut server = Command::new(env!("CARGO_BIN_EXE_planeter"))
-        .env_clear()
-        .env("PATH", format!("{}:/usr/bin:/bin", bin_dir.display()))
-        .env("PLANETER_ADDR", format!("127.0.0.1:{port}"))
-        .env("PLANETER_REPOS_ROOT", dir.join("repos"))
-        .env("PLANETER_DB", dir.join("db.sqlite"))
-        .env("PLANETER_CONTENT_ORIGIN", "https://raw.invalid")
-        .current_dir(dir)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn planeter");
-    let stderr = server.stderr.take().unwrap();
-    // Wait for "planeter listening on …" so the socket is open before the request is sent.
-    let mut lines = BufReader::new(stderr).lines();
-    for line in lines.by_ref().map_while(Result::ok) {
-        if line.starts_with("planeter listening on ") {
-            break;
+    for attempt in 1..=5 {
+        let port = std::net::TcpListener::bind("127.0.0.1:0")
+            .unwrap()
+            .local_addr()
+            .unwrap()
+            .port();
+        let mut server = Command::new(env!("CARGO_BIN_EXE_planeter"))
+            .env_clear()
+            .env("PATH", format!("{}:/usr/bin:/bin", bin_dir.display()))
+            .env("PLANETER_ADDR", format!("127.0.0.1:{port}"))
+            .env("PLANETER_REPOS_ROOT", dir.join("repos"))
+            .env("PLANETER_DB", dir.join("db.sqlite"))
+            .env("PLANETER_CONTENT_ORIGIN", "https://raw.invalid")
+            .current_dir(dir)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped())
+            .spawn()
+            .expect("spawn planeter");
+        let stderr = server.stderr.take().unwrap();
+        let mut lines = BufReader::new(stderr).lines();
+        let mut listening = false;
+        for line in lines.by_ref().map_while(Result::ok) {
+            if line.starts_with("planeter listening on ") {
+                listening = true;
+                break;
+            }
         }
+        // Keep draining: closing the read end would hand the running server a broken pipe on its next log line.
+        std::thread::spawn(move || for _ in lines {});
+        if listening && TcpStream::connect(("127.0.0.1", port)).is_ok() {
+            return (server, port);
+        }
+        eprintln!("server start attempt {attempt} did not accept on port {port}; retrying");
+        let _ = server.kill();
+        let _ = server.wait();
     }
-    // Keep draining: closing the read end would hand the running server a broken pipe on its next log line.
-    std::thread::spawn(move || for _ in lines {});
-    (server, port)
+    panic!("the server never accepted connections");
 }
 
 #[test]
@@ -149,7 +159,9 @@ fn a_sigkilled_server_leaves_no_bwrap_or_prikk_process_of_an_in_flight_call() {
     let dir = scratch("kill");
     let repo_dir = dir.join("repo");
     let bin_dir = dir.join("bin");
-    std::fs::create_dir_all(&repo_dir).unwrap();
+    // The stand-in repository needs a store directory: admission measures `.prikk` before any prikk call.
+    std::fs::create_dir_all(repo_dir.join(".prikk")).unwrap();
+    std::fs::write(repo_dir.join(".prikk/FORMAT"), b"7\n").unwrap();
     std::fs::create_dir_all(&bin_dir).unwrap();
 
     // A stand-in prikk: answers the version pin, then hangs for any other verb (the in-flight read).

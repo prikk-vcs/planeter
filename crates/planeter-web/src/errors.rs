@@ -20,6 +20,9 @@ pub enum ErrorCode {
     InvalidRequest,
     /// 405: the method is not supported on this route; carries `Allow: GET`.
     MethodNotAllowed,
+    /// 422: the response would exceed what this server serves, or the repository needs more memory than
+    /// the read budget permits (RFC 011 D-4). Not retryable as is, unlike `busy`.
+    TooLarge,
     /// 404 from the raw route on any host but the content origin's. Decided from the request's host
     /// alone, before any lookup, so it says nothing about any repository.
     RawElsewhere,
@@ -29,13 +32,14 @@ pub enum ErrorCode {
 
 impl ErrorCode {
     /// Every code, in a fixed order (the OpenAPI enum).
-    pub const ALL: [ErrorCode; 7] = [
+    pub const ALL: [ErrorCode; 8] = [
         ErrorCode::NotFound,
         ErrorCode::Unavailable,
         ErrorCode::Busy,
         ErrorCode::InvalidRequest,
         ErrorCode::MethodNotAllowed,
         ErrorCode::RawElsewhere,
+        ErrorCode::TooLarge,
         ErrorCode::Internal,
     ];
 
@@ -48,6 +52,7 @@ impl ErrorCode {
             ErrorCode::InvalidRequest => "invalid_request",
             ErrorCode::MethodNotAllowed => "method_not_allowed",
             ErrorCode::RawElsewhere => "raw_elsewhere",
+            ErrorCode::TooLarge => "too_large",
             ErrorCode::Internal => "internal",
         }
     }
@@ -57,6 +62,7 @@ impl ErrorCode {
         match self {
             ErrorCode::NotFound | ErrorCode::RawElsewhere => StatusCode::NOT_FOUND,
             ErrorCode::MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
+            ErrorCode::TooLarge => StatusCode::UNPROCESSABLE_ENTITY,
             ErrorCode::Unavailable | ErrorCode::Busy => StatusCode::SERVICE_UNAVAILABLE,
             ErrorCode::InvalidRequest => StatusCode::BAD_REQUEST,
             ErrorCode::Internal => StatusCode::INTERNAL_SERVER_ERROR,
@@ -72,6 +78,7 @@ impl ErrorCode {
             ErrorCode::InvalidRequest => "The request is malformed.",
             ErrorCode::MethodNotAllowed => "That method is not supported here.",
             ErrorCode::RawElsewhere => "Raw file bytes are not served from this address.",
+            ErrorCode::TooLarge => "This is too large to serve here.",
             ErrorCode::Internal => "The server could not complete the request.",
         }
     }
@@ -88,6 +95,9 @@ impl ErrorCode {
                 "Check the request against the OpenAPI document at /api/v1/openapi.json."
             }
             ErrorCode::MethodNotAllowed => "Use GET.",
+            ErrorCode::TooLarge => {
+                "Download it from the content origin, or ask the operator to raise the read memory budget."
+            }
             ErrorCode::RawElsewhere => {
                 "Use the link on the file's page, or the content origin named in the OpenAPI document."
             }
@@ -107,6 +117,9 @@ impl ErrorCode {
             }
             ErrorCode::RawElsewhere => {
                 "the raw route, asked on a host other than the content origin's (raw bytes are served only there)"
+            }
+            ErrorCode::TooLarge => {
+                "the response would exceed what this server serves, or the repository needs more memory than the read budget permits (not retryable as is)"
             }
             ErrorCode::Internal => "an internal fault",
         }

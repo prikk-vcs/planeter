@@ -18,16 +18,19 @@ use axum::routing::{get, post};
 use planeter_auth::{
     OidcError, PENDING_TTL_SECS, SESSION_TTL_SECS, SessionId, random_token, tokens_match,
 };
-use planeter_core::{Assurance, Principal, RawTarget, ReadError, TreeEntryView};
+use planeter_core::admission::{CONTENT_MAX_BYTES, ReadVerb};
+use planeter_core::{Assurance, Principal, RawTarget, ReadError, TreeEntryView, VerifyView};
 
 use crate::api::{
-    AppState, Failure, read_blocking, retry_after_secs, try_both_owners, with_security_headers,
+    AppState, Failure, Subject, read_blocking, retry_after_secs, try_both_owners,
+    with_security_headers,
 };
 use crate::authn;
 use crate::client_ip::{PeerAddr, client_ip};
 use crate::cookies::{
     CSRF_COOKIE, OIDC_STATE_COOKIE, SESSION_COOKIE, clear_cookie, get_cookie, set_cookie,
 };
+use crate::errors::ErrorCode;
 use crate::gate::GateError;
 use crate::principal::principal_from_request;
 use crate::sanitize::render_markdown;
@@ -136,6 +139,18 @@ fn error_page(state: &AppState, c: &Ctx, e: Failure) -> Response {
         // No prikk slot within the bounded wait (IS-4): the same existence-neutral page, plus
         // `Retry-After`.
         Failure::Busy => busy_page(state, c, retry_after_secs(state)),
+        // RFC 011 D-4: the plain page for "too large" (the same message as the API's `too_large`).
+        Failure::Read(ReadError::TooLarge) => render(
+            state,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            &TooLargeTpl {
+                user: c.user.clone(),
+                csrf: c.csrf.clone(),
+                message: ErrorCode::TooLarge.message(),
+                hint: ErrorCode::TooLarge.hint(),
+            },
+            c,
+        ),
         Failure::Read(ReadError::NotFound) => render(
             state,
             StatusCode::NOT_FOUND,
@@ -278,6 +293,14 @@ struct NotFoundTpl {
 struct UnavailableTpl {
     user: Option<String>,
     csrf: String,
+}
+#[derive(Template)]
+#[template(path = "toolarge.html")]
+struct TooLargeTpl {
+    user: Option<String>,
+    csrf: String,
+    message: &'static str,
+    hint: &'static str,
 }
 #[derive(Template)]
 #[template(path = "repo.html")]
@@ -738,6 +761,25 @@ async fn oidc_callback(
     }
 }
 
+/// The repository badge's `verify`, admitted on its own: it is the page's most expensive call
+/// (4.1 × the store) and optional — the page shows "verify unavailable" when it is refused or fails — so
+/// it must not decide whether the rest of the page can be served.
+async fn badge_verify(
+    state: &AppState,
+    principal: &Principal,
+    owner: &str,
+    name: &str,
+) -> Result<VerifyView, Failure> {
+    let (p, o, n) = (principal.clone(), owner.to_owned(), name.to_owned());
+    let subject = Subject::new(principal, owner, name, &[ReadVerb::Verify]);
+    read_blocking(state, subject, move |read, adm| {
+        try_both_owners(&o, |ow| {
+            read.verify(&p, ow, &n, adm.limits(ReadVerb::Verify))
+        })
+    })
+    .await
+}
+
 async fn repo_home(
     State(state): State<AppState>,
     Path((owner, name)): Path<(String, String)>,
@@ -753,11 +795,24 @@ async fn repo_home(
         name.clone(),
         r.map(str::to_owned),
     );
-    let page = read_blocking(&state, move |read, limits| {
+    // The badge's `verify` is admitted on its own (below): it costs 4.1 × the store, twice a `tree`, and
+    // the page renders "verify unavailable" without it — so a repository whose `verify` does not fit the
+    // budget still gets its page instead of `too_large`.
+    let subject = Subject::new(
+        &c.principal,
+        &owner,
+        &name,
+        &[ReadVerb::Tree, ReadVerb::Refs, ReadVerb::Cat],
+    );
+    let page = read_blocking(&state, subject, move |read, adm| {
         let r = rr.as_deref();
-        let tree = try_both_owners(&o, |ow| read.tree(&principal, ow, &n, r, None, limits))?;
-        let refs = try_both_owners(&o, |ow| read.refs(&principal, ow, &n, false, limits)).ok();
-        let verify = try_both_owners(&o, |ow| read.verify(&principal, ow, &n, limits));
+        let tree = try_both_owners(&o, |ow| {
+            read.tree(&principal, ow, &n, r, None, adm.limits(ReadVerb::Tree))
+        })?;
+        let refs = try_both_owners(&o, |ow| {
+            read.refs(&principal, ow, &n, false, adm.limits(ReadVerb::Refs))
+        })
+        .ok();
         let readme = tree
             .entries
             .iter()
@@ -773,18 +828,19 @@ async fn repo_home(
                             path: &e.path,
                             max_bytes: Some(1 << 20),
                         },
-                        limits,
+                        adm.limits(ReadVerb::Cat),
                     )
                 })
                 .ok()
             });
-        Ok((tree, refs, verify, readme))
+        Ok((tree, refs, readme))
     })
     .await;
-    let (tree, refs, verify, readme) = match page {
+    let (tree, refs, readme) = match page {
         Ok(p) => p,
         Err(e) => return error_page(&state, &c, e),
     };
+    let verify = badge_verify(&state, &c.principal, &owner, &name).await;
     let (ac, al) = match &verify {
         Ok(v) => assurance(v.assurance()),
         Err(_) => ("bad", "verify unavailable"),
@@ -828,9 +884,17 @@ async fn tree_page(
         r.map(str::to_owned),
         prefix.clone(),
     );
-    let tree = read_blocking(&state, move |read, limits| {
+    let subject = Subject::new(&c.principal, &owner, &name, &[ReadVerb::Tree]);
+    let tree = read_blocking(&state, subject, move |read, adm| {
         try_both_owners(&o, |ow| {
-            read.tree(&principal, ow, &n, rr.as_deref(), Some(pf.as_str()), limits)
+            read.tree(
+                &principal,
+                ow,
+                &n,
+                rr.as_deref(),
+                Some(pf.as_str()),
+                adm.limits(ReadVerb::Tree),
+            )
         })
     })
     .await;
@@ -872,7 +936,8 @@ async fn file_page(
         r.map(str::to_owned),
         path.clone(),
     );
-    let raw = read_blocking(&state, move |read, limits| {
+    let subject = Subject::new(&c.principal, &owner, &name, &[ReadVerb::Cat]);
+    let raw = read_blocking(&state, subject, move |read, adm| {
         try_both_owners(&o, |ow| {
             read.raw_file(
                 &principal,
@@ -881,9 +946,9 @@ async fn file_page(
                 RawTarget {
                     point: rr.as_deref(),
                     path: &p,
-                    max_bytes: Some(4 << 20),
+                    max_bytes: Some(CONTENT_MAX_BYTES),
                 },
-                limits,
+                adm.limits(ReadVerb::Cat),
             )
         })
     })
@@ -944,25 +1009,25 @@ async fn history_page(
         name.clone(),
         r.map(str::to_owned),
     );
-    let page = read_blocking(&state, move |read, limits| {
-        let h = try_both_owners(&o, |ow| {
+    let subject = Subject::new(&c.principal, &owner, &name, &[ReadVerb::Log]);
+    let page = read_blocking(&state, subject, move |read, adm| {
+        try_both_owners(&o, |ow| {
             read.history(
                 &principal,
                 ow,
                 &n,
                 rr.as_deref(),
                 Some(HISTORY_PAGE),
-                limits,
+                adm.limits(ReadVerb::Log),
             )
-        })?;
-        let verify = try_both_owners(&o, |ow| read.verify(&principal, ow, &n, limits));
-        Ok((h, verify))
+        })
     })
     .await;
-    let (h, verify) = match page {
-        Ok(p) => p,
+    let h = match page {
+        Ok(h) => h,
         Err(e) => return error_page(&state, &c, e),
     };
+    let verify = badge_verify(&state, &c.principal, &owner, &name).await;
     let (ac, al) = match &verify {
         Ok(v) => assurance(v.assurance()),
         Err(_) => ("bad", "verify unavailable"),
@@ -1008,8 +1073,11 @@ async fn change_page(
         name.clone(),
         target.clone(),
     );
-    let ch = read_blocking(&state, move |read, limits| {
-        try_both_owners(&o, |ow| read.change(&principal, ow, &n, &t, limits))
+    let subject = Subject::new(&c.principal, &owner, &name, &[ReadVerb::Show]);
+    let ch = read_blocking(&state, subject, move |read, adm| {
+        try_both_owners(&o, |ow| {
+            read.change(&principal, ow, &n, &t, adm.limits(ReadVerb::Show))
+        })
     })
     .await;
     let ch = match ch {
@@ -1058,8 +1126,11 @@ async fn refs_page(
 ) -> Response {
     let c = ctx(&headers, &state).await;
     let (principal, o, n) = (c.principal.clone(), owner.clone(), name.clone());
-    let v = read_blocking(&state, move |read, limits| {
-        try_both_owners(&o, |ow| read.refs(&principal, ow, &n, true, limits))
+    let subject = Subject::new(&c.principal, &owner, &name, &[ReadVerb::Refs]);
+    let v = read_blocking(&state, subject, move |read, adm| {
+        try_both_owners(&o, |ow| {
+            read.refs(&principal, ow, &n, true, adm.limits(ReadVerb::Refs))
+        })
     })
     .await;
     let v = match v {
@@ -1104,8 +1175,11 @@ async fn verify_page(
 ) -> Response {
     let c = ctx(&headers, &state).await;
     let (principal, o, n) = (c.principal.clone(), owner.clone(), name.clone());
-    let v = read_blocking(&state, move |read, limits| {
-        try_both_owners(&o, |ow| read.verify(&principal, ow, &n, limits))
+    let subject = Subject::new(&c.principal, &owner, &name, &[ReadVerb::Verify]);
+    let v = read_blocking(&state, subject, move |read, adm| {
+        try_both_owners(&o, |ow| {
+            read.verify(&principal, ow, &n, adm.limits(ReadVerb::Verify))
+        })
     })
     .await;
     let v = match v {

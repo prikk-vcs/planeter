@@ -12,6 +12,7 @@
 
 pub mod api;
 pub(crate) mod authn;
+pub mod budget;
 pub mod client_ip;
 pub mod cookies;
 pub mod errors;

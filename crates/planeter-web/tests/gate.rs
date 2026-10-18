@@ -69,6 +69,8 @@ fn harness(name: &str, concurrency: usize, wait: Duration, sleep_secs: &str) -> 
     let _ = std::fs::remove_dir_all(&repo);
     std::fs::create_dir_all(&repo).unwrap();
     std::fs::write(repo.join("sleep"), sleep_secs).unwrap();
+    // Admission measures `.prikk` before any prikk call; the stand-in repository carries a store directory.
+    std::fs::create_dir_all(repo.join(".prikk")).unwrap();
 
     let store = Arc::new(InMemoryRepositoryStore::new());
     store

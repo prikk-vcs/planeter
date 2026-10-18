@@ -50,7 +50,16 @@ every prikk release.
    the version.
 5. **Record**: ledger version bump with the outcome per affected row; STATUS "pending upstream" table
    advanced; a hold note on any handoff whose assumptions the release changed.
-6. **Format changes are a deployment rule, not code**: a serving binary stays at or above the on-disk
+6. **Re-measure the read-path cost table** (RFC 011 D-1; `planeter-core::admission::ReadVerb::rule`). Each
+   rule carries the prikk version it was measured on and a test fails when that is not `MIN_PRIKK_VERSION`,
+   so this step cannot be skipped after a floor bump. Method (the private investigation's, reused): on the
+   fixture set — 1/16/64/200/1,000 MiB many-file repositories, a 1,000-block history, 10,000 small files, and
+   the single-large-file shapes (64 MiB binary, 64/200 MiB text) — record the peak memory and the smallest
+   working `RLIMIT_DATA` of `log`, `show`, `branch`/`tag`, `tree`, `cat`, `checkout --patch-plan` and
+   `verify`; update the multiples **only from the measurement** (never to make a test pass) and the
+   calibration rows in `crates/planeter-core/tests/admission.rs`. prikk's own multiples are undocumented
+   and are meant to fall (ledger PK-53), so a re-measurement is expected to lower some of them.
+7. **Format changes are a deployment rule, not code**: a serving binary stays at or above the on-disk
    format its hosted repositories carry (format 7 since 0.45.0; no format 8 exists yet, it is unscheduled);
    planeter never upgrades a hosted repository's format on its own.
 
