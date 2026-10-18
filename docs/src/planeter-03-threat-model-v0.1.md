@@ -270,6 +270,15 @@ workers (IS-4), and password verification through a second, separate gate (IS-24
 request is `503` with `Retry-After`, counted, and the rest of the server stays responsive (tested with a full
 gate). *Not yet:* C-9a rate limits and quotas, fairness between tenants (IS-25), and C-9c metering.
 
+**Status (main after 0.3.0, 2026-10-18; RFC 011 handoff 1, in the next release).** The sandboxed call is now
+`bwrap` as the server's direct child (no `timeout` hop): `--die-with-parent` removes the sandbox when the server
+dies (verified by killing a real server mid-call), the wall-time bound is kept by the server (SIGKILL at the
+deadline), and the call can carry a **per-call data ceiling** through a `prlimit` prefix (`prlimit` is a
+runtime prerequisite probed at start). A call that hits its ceiling is an `unavailable` outcome and never a
+verification result. The ceiling is not yet set by anything: memory-weighted admission and the size bounds are
+the next handoff, so the open exposure of IS-36 (memory not bounded by the gate; `file` unbounded) remains until
+then.
+
 ### T-10 (Tampering) — the forge metadata store as a false source of truth
 An attacker who corrupts planeter's database or cache makes the *web view* show false history, or tries
 to make the forge itself the authority for what history *is* (A-HISTORY).
