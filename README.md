@@ -38,7 +38,8 @@ accounts, authorization), and builds it all on prikk's stable command surface, n
 ## Getting started
 
 **Runtime prerequisites** (Linux only — the sandbox is bubblewrap): a `prikk` binary **≥ 0.52.0** and
-`bwrap` on `PATH`, plus `curl` if you enable SSO. The container image bundles all three.
+`bwrap` and `prlimit` (util-linux) on `PATH`, plus `curl` if you enable SSO. planeter refuses to start
+without `prlimit`. The container image bundles all of them.
 
 Install one of:
 

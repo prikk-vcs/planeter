@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::process::Command;
 use std::sync::Arc;
 
-use planeter_core::{HostingService, Principal, ReadError, ReadService};
+use planeter_core::{CallLimits, HostingService, Principal, RawTarget, ReadError, ReadService};
 use planeter_prikk::Sandbox;
 use planeter_store::{
     InMemoryMembershipStore, InMemoryRepositoryStore, MembershipStore, Owner, RepositoryStore,
@@ -43,26 +43,42 @@ fn owner_browses_history_refs_and_verify() {
 
     // A fresh repo: these all succeed and re-derive from prikk.
     let history = svc
-        .history(&alice, &owner, "app", None, None)
+        .history(&alice, &owner, "app", None, None, CallLimits::NONE)
         .expect("history");
     assert_eq!(history.ref_name, "heads/main");
 
-    let refs = svc.refs(&alice, &owner, "app", false).expect("refs");
+    let refs = svc
+        .refs(&alice, &owner, "app", false, CallLimits::NONE)
+        .expect("refs");
     // A fresh repo has at least the main branch reported by `branch`.
     let _ = refs.branches;
 
-    let verify = svc.verify(&alice, &owner, "app").expect("verify");
+    let verify = svc
+        .verify(&alice, &owner, "app", CallLimits::NONE)
+        .expect("verify");
     // Honesty: the verdict is re-derived from prikk; a fresh repo verifies.
     assert!(verify.ok);
 
     // tree on a fresh (unsealed) repo authorizes and returns an empty listing.
-    let tree = svc.tree(&alice, &owner, "app", None, None).expect("tree");
+    let tree = svc
+        .tree(&alice, &owner, "app", None, None, CallLimits::NONE)
+        .expect("tree");
     assert_eq!(tree.point, "heads/main");
     assert!(tree.entries.is_empty());
 
     // raw_file for a path that does not exist is NotFound (not a generic error).
     assert!(matches!(
-        svc.raw_file(&alice, &owner, "app", None, "nope.txt", None),
+        svc.raw_file(
+            &alice,
+            &owner,
+            "app",
+            RawTarget {
+                point: None,
+                path: "nope.txt",
+                max_bytes: None
+            },
+            CallLimits::NONE
+        ),
         Err(ReadError::NotFound)
     ));
 }
@@ -76,7 +92,14 @@ fn anonymous_is_denied_tree_and_raw() {
     let (svc, owner) = fixture("read-anon-tree-raw");
     // The new browse surfaces share the one authorize(_, Read, _) gate.
     assert!(matches!(
-        svc.tree(&Principal::Anonymous, &owner, "app", None, None),
+        svc.tree(
+            &Principal::Anonymous,
+            &owner,
+            "app",
+            None,
+            None,
+            CallLimits::NONE
+        ),
         Err(ReadError::NotFound)
     ));
     assert!(matches!(
@@ -84,9 +107,12 @@ fn anonymous_is_denied_tree_and_raw() {
             &Principal::Anonymous,
             &owner,
             "app",
-            None,
-            "README.md",
-            None
+            RawTarget {
+                point: None,
+                path: "README.md",
+                max_bytes: None
+            },
+            CallLimits::NONE
         ),
         Err(ReadError::NotFound)
     ));
@@ -100,6 +126,13 @@ fn anonymous_is_denied_a_private_repo() {
     }
     let (svc, owner) = fixture("read-anon-denied");
     // Anonymous read of a private repo → NotFound (T-7), and prikk is never consulted.
-    let r = svc.history(&Principal::Anonymous, &owner, "app", None, None);
+    let r = svc.history(
+        &Principal::Anonymous,
+        &owner,
+        "app",
+        None,
+        None,
+        CallLimits::NONE,
+    );
     assert!(matches!(r, Err(ReadError::NotFound)));
 }

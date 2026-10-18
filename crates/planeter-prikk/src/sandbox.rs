@@ -1,18 +1,74 @@
-//! Confinement of the prikk subprocess (RFC 001 T4 / D-3, threat model INV-3 / C-4c).
+//! Confinement of the prikk subprocess (RFC 001 T4 / D-3, threat model INV-3 / C-4c; RFC 011 D-2 and D-5).
 //!
 //! The prikk subprocess parses **untrusted pushed bytes**, so it runs confined: writable access to
-//! only its repository directory, **no network**, and a wall-time bound. The mechanism (owner-ruled
-//! 2026-09-16) is **bubblewrap** (`bwrap`): a user-namespace sandbox that read-only-binds the system,
-//! makes only the repo dir writable, unshares the network, and dies with its parent. A dev-only
-//! [`Sandbox::Unconfined`] runs prikk directly — **never** for hosting untrusted input.
+//! only its repository directory, **no network**, a wall-time bound and, when the caller sets one, a
+//! **memory ceiling**. The mechanism (owner-ruled 2026-09-16) is **bubblewrap** (`bwrap`): a user-namespace
+//! sandbox that read-only-binds the system, makes only the repo dir writable, unshares the network, and
+//! dies with its parent. A dev-only [`Sandbox::Unconfined`] runs prikk directly — **never** for hosting
+//! untrusted input.
 //!
-//! First-cut scope: fs-scope + no-network + wall-time (via `timeout`). Memory/CPU/fsize rlimits are a
-//! documented hardening follow-on; the artifact size/count/ratio bounds that matter most for untrusted
-//! input are enforced by planeter *before* handing bytes to prikk (RFC 004 transport), not here.
+//! # Process model (RFC 011 D-2, D-5)
+//!
+//! - **`bwrap` is the server's direct child.** There is no `timeout` hop: `--die-with-parent` ties the
+//!   whole namespace to the server, so a killed server no longer leaves `bwrap`/prikk running (IS-37). The
+//!   wall-time bound is kept **by the server** ([`Sandbox::run`]): at the deadline it sends `SIGKILL` and
+//!   reports the same status the old `timeout` did ([`TIMEOUT_EXIT_CODE`]).
+//! - **Spawn and wait must happen on one thread.** `--die-with-parent` is `PR_SET_PDEATHSIG` on the parent
+//!   *thread*: if the thread that spawned `bwrap` exits while the process lives, `bwrap` and the call are
+//!   killed — a healthy 14 s call died at exactly 10.0 s when its spawning tokio blocking-pool thread
+//!   expired (investigation I3). [`Sandbox::run`] spawns and waits on the calling thread and never hands
+//!   the child to another one; keep it that way (a test pins it).
+//! - **The memory ceiling is `prlimit --data=<N> --` in front of the vector** ([`CallLimits`]): safe code,
+//!   deterministic (the limit is set before `bwrap` is exec'd and inherited by everything under it), about
+//!   0.15 ms. It needs `prlimit` (util-linux), which [`probe_prlimit`] checks at start. A call that hits
+//!   the ceiling is reported as `PrikkError::CeilingExceeded`, never as a verdict.
+//!
+//! The artifact size/count/ratio bounds that matter most for untrusted input are enforced by planeter
+//! *before* handing bytes to prikk (RFC 004 transport), not here.
 
 use std::ffi::{OsStr, OsString};
+use std::io::Read;
 use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::process::{Command, ExitStatus, Stdio};
+use std::sync::mpsc;
+use std::time::{Duration, Instant};
+
+/// The exit status reported for a call killed at the wall-time deadline: the convention of coreutils
+/// `timeout` (124), kept so the error callers already saw does not change when `timeout` goes away.
+pub const TIMEOUT_EXIT_CODE: i32 = 124;
+
+/// The memory-ceiling wrapper (util-linux). A runtime prerequisite since RFC 011 D-2.
+pub const PRLIMIT: &str = "prlimit";
+
+/// Per-call limits applied to the prikk subprocess.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct CallLimits {
+    /// `RLIMIT_DATA` for the call, in bytes (`None` = no ceiling). Applied as `prlimit --data=<N> --`.
+    pub data_ceiling: Option<u64>,
+}
+
+impl CallLimits {
+    /// No limits: what production passes until admission supplies a value (RFC 011 D-1).
+    pub const NONE: CallLimits = CallLimits { data_ceiling: None };
+
+    /// A data ceiling of `bytes`.
+    pub const fn data_ceiling(bytes: u64) -> Self {
+        CallLimits {
+            data_ceiling: Some(bytes),
+        }
+    }
+}
+
+/// What a bounded run produced.
+#[derive(Debug)]
+pub struct Run {
+    /// The child's exit status (for a deadline kill: the `SIGKILL` status; check [`Run::timed_out`]).
+    pub status: ExitStatus,
+    pub stdout: Vec<u8>,
+    pub stderr: Vec<u8>,
+    /// The wall-time bound fired and the server killed the call.
+    pub timed_out: bool,
+}
 
 /// How the prikk subprocess is confined.
 #[derive(Debug, Clone)]
@@ -65,9 +121,10 @@ impl IncomingBounds {
 pub struct BwrapConfig {
     /// The `bwrap` binary (default: `bwrap` on `PATH`).
     pub bwrap: OsString,
-    /// The `timeout` binary used for the wall-time bound (default: `timeout`).
-    pub timeout: OsString,
-    /// Wall-time bound, in seconds, for one prikk invocation.
+    /// The `prlimit` binary used for the memory ceiling (default: `prlimit` on `PATH`).
+    pub prlimit: OsString,
+    /// Wall-time bound, in seconds, for one prikk invocation. Enforced by the server ([`Sandbox::run`]),
+    /// not by an external `timeout`.
     pub timeout_secs: u64,
     /// Incoming-artifact bounds passed to prikk through the environment (none set by default).
     pub bounds: IncomingBounds,
@@ -77,7 +134,7 @@ impl Default for BwrapConfig {
     fn default() -> Self {
         Self {
             bwrap: OsString::from("bwrap"),
-            timeout: OsString::from("timeout"),
+            prlimit: OsString::from(PRLIMIT),
             timeout_secs: 120,
             bounds: IncomingBounds::default(),
         }
@@ -86,17 +143,71 @@ impl Default for BwrapConfig {
 
 impl Sandbox {
     /// Build the [`Command`] that runs `prikk_binary <args>` against repository `root`, confined
-    /// according to this policy. `prikk_binary` should be an absolute path when sandboxing (so bwrap can
-    /// bind it); [`Sandbox::command`] resolves it via `PATH` when it is not.
+    /// according to this policy, with **no per-call limits**. `prikk_binary` should be an absolute path when
+    /// sandboxing (so bwrap can bind it); it is resolved via `PATH` when it is not.
     pub fn command(&self, prikk_binary: &OsStr, root: &Path, args: &[&str]) -> Command {
-        match self {
+        self.command_with(prikk_binary, root, args, CallLimits::NONE)
+    }
+
+    /// Like [`Sandbox::command`], with per-call `limits`. A data ceiling puts `prlimit --data=<N> --` in
+    /// front of the whole vector (`prlimit` then `exec`s `bwrap`, so the limit is set before anything under
+    /// it starts and is inherited by all of it). No ceiling: the vector is exactly the unlimited one.
+    pub fn command_with(
+        &self,
+        prikk_binary: &OsStr,
+        root: &Path,
+        args: &[&str],
+        limits: CallLimits,
+    ) -> Command {
+        let (inner, prlimit) = match self {
             Sandbox::Unconfined => {
                 let mut c = Command::new(prikk_binary);
                 c.current_dir(root).args(args);
+                (c, OsString::from(PRLIMIT))
+            }
+            Sandbox::Bwrap(cfg) => (cfg.command(prikk_binary, root, args), cfg.prlimit.clone()),
+        };
+        match limits.data_ceiling {
+            None => inner,
+            Some(bytes) => {
+                let mut c = Command::new(prlimit);
+                c.arg(format!("--data={bytes}"))
+                    .arg("--")
+                    .arg(inner.get_program())
+                    .args(inner.get_args());
+                if let Some(dir) = inner.get_current_dir() {
+                    c.current_dir(dir);
+                }
                 c
             }
-            Sandbox::Bwrap(cfg) => cfg.command(prikk_binary, root, args),
         }
+    }
+
+    /// The wall-time bound of one call: [`BwrapConfig::timeout_secs`] when sandboxed; none for the
+    /// dev-only unconfined mode.
+    pub fn deadline(&self) -> Option<Duration> {
+        match self {
+            Sandbox::Unconfined => None,
+            Sandbox::Bwrap(cfg) => Some(Duration::from_secs(cfg.timeout_secs)),
+        }
+    }
+
+    /// Run one call to completion under this policy: spawn it, collect stdout and stderr, and enforce the
+    /// wall-time bound **in the server** (`SIGKILL` at the deadline; [`Run::timed_out`]).
+    ///
+    /// The child is spawned **and** waited for on the calling thread (see the module docs): never move
+    /// the spawn or the wait to another thread.
+    pub fn run(
+        &self,
+        prikk_binary: &OsStr,
+        root: &Path,
+        args: &[&str],
+        limits: CallLimits,
+    ) -> std::io::Result<Run> {
+        run_bounded(
+            self.command_with(prikk_binary, root, args, limits),
+            self.deadline(),
+        )
     }
 }
 
@@ -104,10 +215,8 @@ impl BwrapConfig {
     fn command(&self, prikk_binary: &OsStr, root: &Path, args: &[&str]) -> Command {
         let prikk = resolve_binary(prikk_binary);
 
-        // Outer: `timeout <secs> bwrap <flags> -- <prikk> <args>`.
-        let mut c = Command::new(&self.timeout);
-        c.arg("--kill-after=5").arg(self.timeout_secs.to_string());
-        c.arg(&self.bwrap);
+        // `bwrap <flags> -- <prikk> <args>`: bwrap is the server's direct child (no `timeout` hop).
+        let mut c = Command::new(&self.bwrap);
 
         // A read-only view of the system so prikk finds its libraries and binary...
         c.arg("--ro-bind").arg("/usr").arg("/usr");
@@ -148,6 +257,103 @@ impl BwrapConfig {
     }
 }
 
+/// Spawn `cmd`, collect its output, and kill it at `deadline`.
+///
+/// Spawn and wait both happen on **this** thread: the sandbox's `--die-with-parent` binds the child to the
+/// spawning *thread*, so handing the child to another thread (or spawning from one that then exits) would
+/// kill healthy calls. Only the two pipe readers run elsewhere, and they never touch the child.
+///
+/// No polling in the common path: the wait is a `recv_timeout` on "stdout reached EOF", which happens when
+/// the call is over, so a normal call adds no latency; only an exit that lags EOF is polled, briefly.
+fn run_bounded(mut cmd: Command, deadline: Option<Duration>) -> std::io::Result<Run> {
+    cmd.stdin(Stdio::null())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped());
+    let mut child = cmd.spawn()?;
+    let started = Instant::now();
+    let (mut out, mut err) = match (child.stdout.take(), child.stderr.take()) {
+        (Some(o), Some(e)) => (o, e),
+        _ => unreachable!("stdout and stderr were requested as pipes"),
+    };
+    let (eof_tx, eof_rx) = mpsc::channel::<()>();
+    let out_reader = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = out.read_to_end(&mut buf);
+        let _ = eof_tx.send(());
+        buf
+    });
+    let err_reader = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        let _ = err.read_to_end(&mut buf);
+        buf
+    });
+
+    // 1. Wait for the call's output to end (or the deadline).
+    let mut timed_out = match deadline {
+        None => {
+            let _ = eof_rx.recv();
+            false
+        }
+        Some(d) => matches!(eof_rx.recv_timeout(d), Err(mpsc::RecvTimeoutError::Timeout)),
+    };
+    // 2. Output has ended; the exit normally follows at once. Poll only if it lags, still bounded.
+    if !timed_out {
+        let mut pause = Duration::from_micros(50);
+        let status = loop {
+            if let Some(st) = child.try_wait()? {
+                break Some(st);
+            }
+            if let Some(d) = deadline
+                && started.elapsed() >= d
+            {
+                timed_out = true;
+                break None;
+            }
+            std::thread::sleep(pause);
+            pause = (pause * 2).min(Duration::from_millis(5));
+        };
+        if let Some(status) = status {
+            let stdout = out_reader.join().unwrap_or_default();
+            let stderr = err_reader.join().unwrap_or_default();
+            return Ok(Run {
+                status,
+                stdout,
+                stderr,
+                timed_out: false,
+            });
+        }
+    }
+    // Deadline: SIGKILL the direct child (bwrap, or the `prlimit` that exec'd into it). Its
+    // `--die-with-parent` takes the namespace with it. The readers are left to finish by themselves when
+    // the pipes close; nothing waits on them, so a stray pipe holder can never hang the server.
+    let _ = child.kill();
+    let status = child.wait()?;
+    drop((out_reader, err_reader));
+    Ok(Run {
+        status,
+        stdout: Vec::new(),
+        stderr: Vec::new(),
+        timed_out,
+    })
+}
+
+/// Check that the memory-ceiling wrapper can be run (`<binary> --version`). Called once at start: since
+/// RFC 011 D-2 `prlimit` (util-linux) is a runtime prerequisite, and its absence must refuse to start
+/// rather than surface later as a misleading "No such file or directory" from a read.
+pub fn probe_prlimit(binary: &OsStr) -> Result<(), String> {
+    match Command::new(binary)
+        .arg("--version")
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+    {
+        Ok(st) if st.success() => Ok(()),
+        Ok(st) => Err(format!("`--version` exited with {st}")),
+        Err(e) => Err(e.to_string()),
+    }
+}
+
 /// Resolve a binary name to an absolute path via `PATH`; pass through paths that already contain a
 /// separator. Falls back to the input unchanged if resolution fails (the spawn then surfaces the error).
 fn resolve_binary(binary: &OsStr) -> PathBuf {
@@ -179,14 +385,14 @@ mod tests {
     }
 
     #[test]
-    fn bwrap_wraps_with_timeout_isolation_and_the_repo_as_the_only_writable_bind() {
+    fn bwrap_wraps_with_isolation_and_the_repo_as_the_only_writable_bind() {
         let c = Sandbox::default().command(OsStr::new("prikk"), Path::new("/repo"), &["status"]);
-        assert_eq!(c.get_program(), OsStr::new("timeout"));
+        // RFC 011 D-5: bwrap is the direct child — no `timeout` in front of it.
+        assert_eq!(c.get_program(), OsStr::new("bwrap"));
         let args: Vec<String> = c
             .get_args()
             .map(|a| a.to_string_lossy().into_owned())
             .collect();
-        assert!(args.contains(&"bwrap".to_owned()));
         assert!(args.contains(&"--unshare-all".to_owned()));
         assert!(args.contains(&"--die-with-parent".to_owned()));
         // the repo is bound rw with --bind (not --ro-bind), and is the chdir target

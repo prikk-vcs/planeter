@@ -20,7 +20,7 @@
 
 use std::sync::Arc;
 
-use planeter_prikk::{PrikkRepo, model};
+use planeter_prikk::{CallLimits, PrikkRepo, model};
 use planeter_store::membership::owner_org;
 use planeter_store::{MembershipStore, Owner, RepositoryRecord};
 
@@ -302,6 +302,15 @@ pub struct RawFile {
     pub bytes: Vec<u8>,
 }
 
+/// What [`ReadService::raw_file`] reads: the file `path` at `point` (the current branch when `None`),
+/// refused if larger than `max_bytes`.
+#[derive(Debug, Clone, Copy)]
+pub struct RawTarget<'a> {
+    pub point: Option<&'a str>,
+    pub path: &'a str,
+    pub max_bytes: Option<u64>,
+}
+
 /// Refs/branches/tags (from `branch` + `tag`).
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct RefsView {
@@ -523,9 +532,13 @@ impl ReadService {
         })
     }
 
-    fn open(&self, record: &RepositoryRecord) -> Result<planeter_prikk::CliPrikkRepo> {
+    fn open(
+        &self,
+        record: &RepositoryRecord,
+        limits: CallLimits,
+    ) -> Result<planeter_prikk::CliPrikkRepo> {
         self.hosting
-            .open_record(record)
+            .open_record_with(record, limits)
             .map_err(|e| ReadError::Unavailable(e.to_string()))
     }
 
@@ -537,12 +550,11 @@ impl ReadService {
         name: &str,
         ref_name: Option<&str>,
         limit: Option<usize>,
+        limits: CallLimits,
     ) -> Result<HistoryView> {
         let record = self.authorize_read(principal, owner, name)?;
-        let driver = self.open(&record)?;
-        let log = driver
-            .log(ref_name, limit)
-            .map_err(|e| ReadError::Unavailable(e.to_string()))?;
+        let driver = self.open(&record, limits)?;
+        let log = driver.log(ref_name, limit).map_err(unavailable)?;
         Ok(HistoryView::from_log(&log))
     }
 
@@ -553,12 +565,11 @@ impl ReadService {
         owner: &Owner,
         name: &str,
         target: &str,
+        limits: CallLimits,
     ) -> Result<ChangeView> {
         let record = self.authorize_read(principal, owner, name)?;
-        let driver = self.open(&record)?;
-        let show = driver
-            .show(target)
-            .map_err(|e| ReadError::Unavailable(e.to_string()))?;
+        let driver = self.open(&record, limits)?;
+        let show = driver.show(target).map_err(unavailable)?;
         Ok(ChangeView::from_show(&show))
     }
 
@@ -570,12 +581,13 @@ impl ReadService {
         name: &str,
         ref_name: Option<&str>,
         path: &str,
+        limits: CallLimits,
     ) -> Result<FileView> {
         let record = self.authorize_read(principal, owner, name)?;
-        let driver = self.open(&record)?;
+        let driver = self.open(&record, limits)?;
         let plan = driver
             .patch_plan_content(ref_name, &[path])
-            .map_err(|e| ReadError::Unavailable(e.to_string()))?;
+            .map_err(unavailable)?;
         // A path that is not in the repository is `NotFound`, like a missing repository (never a
         // successful view that says "not found").
         FileView::from_patch_plan(&plan, path).ok_or(ReadError::NotFound)
@@ -588,15 +600,12 @@ impl ReadService {
         owner: &Owner,
         name: &str,
         include_closed: bool,
+        limits: CallLimits,
     ) -> Result<RefsView> {
         let record = self.authorize_read(principal, owner, name)?;
-        let driver = self.open(&record)?;
-        let branches = driver
-            .branches(include_closed)
-            .map_err(|e| ReadError::Unavailable(e.to_string()))?;
-        let tags = driver
-            .tags()
-            .map_err(|e| ReadError::Unavailable(e.to_string()))?;
+        let driver = self.open(&record, limits)?;
+        let branches = driver.branches(include_closed).map_err(unavailable)?;
+        let tags = driver.tags().map_err(unavailable)?;
         Ok(RefsView::from_lists(&branches, &tags))
     }
 
@@ -608,12 +617,11 @@ impl ReadService {
         name: &str,
         point: Option<&str>,
         prefix: Option<&str>,
+        limits: CallLimits,
     ) -> Result<TreeView> {
         let record = self.authorize_read(principal, owner, name)?;
-        let driver = self.open(&record)?;
-        let listing = driver
-            .tree(point, prefix)
-            .map_err(|e| ReadError::Unavailable(e.to_string()))?;
+        let driver = self.open(&record, limits)?;
+        let listing = driver.tree(point, prefix).map_err(unavailable)?;
         Ok(TreeView::from_tree(&listing))
     }
 
@@ -625,21 +633,25 @@ impl ReadService {
         principal: &Principal,
         owner: &Owner,
         name: &str,
-        point: Option<&str>,
-        path: &str,
-        max_bytes: Option<u64>,
+        target: RawTarget<'_>,
+        limits: CallLimits,
     ) -> Result<RawFile> {
+        let RawTarget {
+            point,
+            path,
+            max_bytes,
+        } = target;
         let record = self.authorize_read(principal, owner, name)?;
-        let driver = self.open(&record)?;
+        let driver = self.open(&record, limits)?;
         // Metadata first: a missing path becomes NotFound (not a generic unavailable).
         let meta = match driver.path_content_meta(point, path) {
             Ok(m) => m,
             Err(planeter_prikk::PrikkError::Command { .. }) => return Err(ReadError::NotFound),
-            Err(e) => return Err(ReadError::Unavailable(e.to_string())),
+            Err(e) => return Err(unavailable(e)),
         };
         let bytes = driver
             .cat_bytes(point, path, max_bytes)
-            .map_err(|e| ReadError::Unavailable(e.to_string()))?;
+            .map_err(unavailable)?;
         Ok(RawFile {
             path: path.to_owned(),
             encoding: meta.encoding,
@@ -649,14 +661,34 @@ impl ReadService {
     }
 
     /// The repository verify status (`verify`) — always re-derived, never cached (T5 honesty).
-    pub fn verify(&self, principal: &Principal, owner: &Owner, name: &str) -> Result<VerifyView> {
+    pub fn verify(
+        &self,
+        principal: &Principal,
+        owner: &Owner,
+        name: &str,
+        limits: CallLimits,
+    ) -> Result<VerifyView> {
         let record = self.authorize_read(principal, owner, name)?;
-        let driver = self.open(&record)?;
-        let v = driver
-            .verify()
-            .map_err(|e| ReadError::Unavailable(e.to_string()))?;
+        let driver = self.open(&record, limits)?;
+        let v = driver.verify().map_err(unavailable)?;
         Ok(VerifyView::from_verify(&v))
     }
+}
+
+/// A failed prikk call as the read service reports it: `Unavailable` — and, when the cause is the call's
+/// own memory ceiling (RFC 011 D-2), one log line naming the verb and the ceiling (no path, no tool
+/// output). A ceiling hit says nothing about the repository, so it is never mapped to a verdict.
+fn unavailable(e: planeter_prikk::PrikkError) -> ReadError {
+    if let planeter_prikk::PrikkError::CeilingExceeded {
+        verb,
+        ceiling_bytes,
+    } = &e
+    {
+        eprintln!(
+            "planeter: a read hit its memory ceiling: verb={verb} ceiling={ceiling_bytes} bytes"
+        );
+    }
+    ReadError::Unavailable(e.to_string())
 }
 
 fn default_now() -> u64 {
@@ -746,10 +778,24 @@ mod tests {
     fn anonymous_read_of_private_is_notfound_indistinguishable_from_missing() {
         let (svc, owner) = service_with_repo(Visibility::Private);
         // Private repo, anonymous: denied → NotFound (never opens prikk, path is bogus).
-        let denied = svc.history(&Principal::Anonymous, &owner, "app", None, None);
+        let denied = svc.history(
+            &Principal::Anonymous,
+            &owner,
+            "app",
+            None,
+            None,
+            CallLimits::NONE,
+        );
         assert!(matches!(denied, Err(ReadError::NotFound)));
         // A genuinely missing repo: also NotFound. The two are indistinguishable (T-7).
-        let missing = svc.history(&Principal::Anonymous, &owner, "does-not-exist", None, None);
+        let missing = svc.history(
+            &Principal::Anonymous,
+            &owner,
+            "does-not-exist",
+            None,
+            None,
+            CallLimits::NONE,
+        );
         assert!(matches!(missing, Err(ReadError::NotFound)));
     }
 
@@ -757,7 +803,14 @@ mod tests {
     fn anonymous_read_of_internal_is_denied() {
         let (svc, owner) = service_with_repo(Visibility::Internal);
         assert!(matches!(
-            svc.history(&Principal::Anonymous, &owner, "app", None, None),
+            svc.history(
+                &Principal::Anonymous,
+                &owner,
+                "app",
+                None,
+                None,
+                CallLimits::NONE
+            ),
             Err(ReadError::NotFound)
         ));
     }

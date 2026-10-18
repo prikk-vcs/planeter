@@ -14,7 +14,7 @@ use std::ffi::OsString;
 use std::sync::Arc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use planeter_prikk::{CliPrikkRepo, PrikkError};
+use planeter_prikk::{CallLimits, CliPrikkRepo, PrikkError};
 use planeter_store::{Owner, RepoId, RepositoryRecord, RepositoryStore, StoreError, Visibility};
 
 use crate::layout::{DefaultRepoIdAllocator, RepoIdAllocator, RepoLayout};
@@ -217,7 +217,17 @@ impl HostingService {
     /// Open a driver bound to a record's path with this service's binary/sandbox, version-pinned. Lets
     /// the read path open a repository it has already fetched and authorized (avoids a second lookup).
     pub fn open_record(&self, record: &RepositoryRecord) -> Result<CliPrikkRepo> {
-        Ok(self.driver_at(&record.path).checked()?)
+        self.open_record_with(record, CallLimits::NONE)
+    }
+
+    /// [`HostingService::open_record`] with per-call `limits` (a memory ceiling, RFC 011 D-2) applied to
+    /// every prikk invocation made through the returned driver — including the version pin.
+    pub fn open_record_with(
+        &self,
+        record: &RepositoryRecord,
+        limits: CallLimits,
+    ) -> Result<CliPrikkRepo> {
+        Ok(self.driver_at(&record.path).with_limits(limits).checked()?)
     }
 }
 

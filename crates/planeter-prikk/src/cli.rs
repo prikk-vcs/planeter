@@ -13,7 +13,7 @@ use serde::de::DeserializeOwned;
 
 use crate::error::{PrikkError, Result};
 use crate::model;
-use crate::sandbox::Sandbox;
+use crate::sandbox::{CallLimits, Run, Sandbox, TIMEOUT_EXIT_CODE};
 
 /// planeter's minimum supported prikk version (RFC 001 D-3 / dependency-ledger PK-26).
 ///
@@ -37,6 +37,8 @@ pub struct CliPrikkRepo {
     binary: OsString,
     /// How the prikk subprocess is confined (default: bubblewrap — RFC 001 T4).
     sandbox: Sandbox,
+    /// Per-call limits (RFC 011 D-2): none by default.
+    limits: CallLimits,
 }
 
 impl CliPrikkRepo {
@@ -46,6 +48,7 @@ impl CliPrikkRepo {
             root: root.into(),
             binary: OsString::from("prikk"),
             sandbox: Sandbox::default(),
+            limits: CallLimits::NONE,
         }
     }
 
@@ -55,6 +58,7 @@ impl CliPrikkRepo {
             root: root.into(),
             binary: binary.into(),
             sandbox: Sandbox::default(),
+            limits: CallLimits::NONE,
         }
     }
 
@@ -63,6 +67,14 @@ impl CliPrikkRepo {
     #[must_use]
     pub fn with_sandbox(mut self, sandbox: Sandbox) -> Self {
         self.sandbox = sandbox;
+        self
+    }
+
+    /// Apply per-call limits (a memory ceiling) to every invocation made through this handle
+    /// (RFC 011 D-2). A call that hits the ceiling fails as [`PrikkError::CeilingExceeded`].
+    #[must_use]
+    pub fn with_limits(mut self, limits: CallLimits) -> Self {
+        self.limits = limits;
         self
     }
 
@@ -125,39 +137,70 @@ impl CliPrikkRepo {
         }
     }
 
-    /// Run a prikk subcommand, returning raw stdout bytes. A non-zero exit is a typed
-    /// [`PrikkError::Command`]. Used by the byte-oriented verbs (e.g. `cat` of binary content).
-    fn run_bytes(&self, args: &[&str]) -> Result<Vec<u8>> {
-        let output = self
-            .sandbox
-            .command(&self.binary, &self.root, args)
-            .output()
-            .map_err(PrikkError::Spawn)?;
-        if output.status.success() {
-            Ok(output.stdout)
-        } else {
-            Err(PrikkError::Command {
-                code: output.status.code(),
-                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-            })
+    /// Run one prikk subcommand under the sandbox, the limits and the server-side wall-time bound.
+    fn execute(&self, args: &[&str]) -> Result<Run> {
+        self.sandbox
+            .run(&self.binary, &self.root, args, self.limits)
+            .map_err(PrikkError::Spawn)
+    }
+
+    /// The typed failure for a call that did not succeed.
+    ///
+    /// - the wall-time bound fired: the status `timeout` used to report ([`TIMEOUT_EXIT_CODE`]);
+    /// - a **ceiling hit** (only when a ceiling was set): prikk aborted on an allocation failure (exit 134
+    ///   behind `bwrap`, `SIGABRT` unconfined, or the Rust "memory allocation of … failed" line), or
+    ///   `verify` stopped with "did not complete every stage". A *genuine* verification failure says
+    ///   "found at least one failed object, block, or ref" with every stage evaluated, and is not
+    ///   mistaken for this. Either way the result is an error, never a verdict;
+    /// - anything else: the plain non-zero exit.
+    fn failure(&self, args: &[&str], run: &Run) -> PrikkError {
+        use std::os::unix::process::ExitStatusExt;
+        if run.timed_out {
+            return PrikkError::Command {
+                code: Some(TIMEOUT_EXIT_CODE),
+                stderr: String::new(),
+            };
+        }
+        let stderr = String::from_utf8_lossy(&run.stderr);
+        if let Some(bytes) = self.limits.data_ceiling {
+            let aborted = run.status.code() == Some(134) || run.status.signal() == Some(6);
+            let alloc_failed = stderr.contains("memory allocation of") && stderr.contains("failed");
+            let partial_verify =
+                run.status.code() == Some(1) && stderr.contains("did not complete every stage");
+            if aborted || alloc_failed || partial_verify {
+                return PrikkError::CeilingExceeded {
+                    verb: args.first().copied().unwrap_or("").to_owned(),
+                    ceiling_bytes: bytes,
+                };
+            }
+        }
+        PrikkError::Command {
+            code: run.status.code(),
+            stderr: stderr.into_owned(),
         }
     }
 
-    /// Run a prikk subcommand, returning its stdout. A non-zero exit is a typed [`PrikkError::Command`].
+    /// Run a prikk subcommand, returning raw stdout bytes. A non-zero exit is a typed
+    /// [`PrikkError::Command`] (or [`PrikkError::CeilingExceeded`]). Used by the byte-oriented verbs
+    /// (e.g. `cat` of binary content).
+    fn run_bytes(&self, args: &[&str]) -> Result<Vec<u8>> {
+        let run = self.execute(args)?;
+        if run.status.success() && !run.timed_out {
+            Ok(run.stdout)
+        } else {
+            Err(self.failure(args, &run))
+        }
+    }
+
+    /// Run a prikk subcommand, returning its stdout. A non-zero exit is a typed [`PrikkError::Command`]
+    /// (or [`PrikkError::CeilingExceeded`]).
     fn run(&self, args: &[&str]) -> Result<String> {
-        let output = self
-            .sandbox
-            .command(&self.binary, &self.root, args)
-            .output()
-            .map_err(PrikkError::Spawn)?;
-        if output.status.success() {
-            String::from_utf8(output.stdout)
+        let run = self.execute(args)?;
+        if run.status.success() && !run.timed_out {
+            String::from_utf8(run.stdout)
                 .map_err(|e| PrikkError::Parse(format!("prikk stdout was not UTF-8: {e}")))
         } else {
-            Err(PrikkError::Command {
-                code: output.status.code(),
-                stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-            })
+            Err(self.failure(args, &run))
         }
     }
 
@@ -349,29 +392,25 @@ impl super::repo::PrikkRepo for CliPrikkRepo {
             "--format",
             "json",
         ];
-        let output = self
-            .sandbox
-            .command(&self.binary, &self.root, &args)
-            .output()
-            .map_err(PrikkError::Spawn)?;
-        if output.status.success() {
-            let stdout = String::from_utf8(output.stdout)
+        let run = self.execute(&args)?;
+        if run.timed_out {
+            return Err(self.failure(&args, &run));
+        }
+        if run.status.success() {
+            let stdout = String::from_utf8(run.stdout)
                 .map_err(|e| PrikkError::Parse(format!("prikk stdout was not UTF-8: {e}")))?;
             return parse_schema_json(&stdout, SCHEMA);
         }
-        let code = output.status.code();
+        let code = run.status.code();
         if code == Some(1) {
-            let parsed = std::str::from_utf8(&output.stdout)
+            let parsed = std::str::from_utf8(&run.stdout)
                 .ok()
                 .and_then(|out| parse_schema_json::<model::TrustCheck>(out, SCHEMA).ok());
             if let Some(check) = parsed.filter(|c| !c.trusted) {
                 return Ok(check);
             }
         }
-        Err(PrikkError::Command {
-            code,
-            stderr: String::from_utf8_lossy(&output.stderr).into_owned(),
-        })
+        Err(self.failure(&args, &run))
     }
 
     fn bundle_export(&self, ref_name: &str, out: &Path) -> Result<()> {

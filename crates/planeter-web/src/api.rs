@@ -23,7 +23,7 @@ use axum::routing::get;
 use serde::Serialize;
 
 use planeter_auth::Authenticator;
-use planeter_core::{RawFile, ReadError, ReadService};
+use planeter_core::{CallLimits, RawFile, RawTarget, ReadError, ReadService};
 use planeter_store::Owner;
 
 use crate::errors::ErrorCode;
@@ -139,9 +139,16 @@ async fn history_handler(
     };
     let principal = crate::principal::principal_from_request(&headers, &state).await;
     let limit = q.limit.unwrap_or(DEFAULT_LIMIT).min(MAX_LIMIT);
-    let result = read_blocking(&state, move |read| {
+    let result = read_blocking(&state, move |read, limits| {
         try_both_owners(&owner, |o| {
-            read.history(&principal, o, &name, q.ref_name.as_deref(), Some(limit))
+            read.history(
+                &principal,
+                o,
+                &name,
+                q.ref_name.as_deref(),
+                Some(limit),
+                limits,
+            )
         })
     })
     .await;
@@ -154,8 +161,10 @@ async fn change_handler(
     headers: HeaderMap,
 ) -> Response {
     let principal = crate::principal::principal_from_request(&headers, &state).await;
-    let result = read_blocking(&state, move |read| {
-        try_both_owners(&owner, |o| read.change(&principal, o, &name, &target))
+    let result = read_blocking(&state, move |read, limits| {
+        try_both_owners(&owner, |o| {
+            read.change(&principal, o, &name, &target, limits)
+        })
     })
     .await;
     respond(&state, &headers, result)
@@ -171,9 +180,9 @@ async fn file_handler(
         return error_response(&state, Failure::Invalid);
     };
     let principal = crate::principal::principal_from_request(&headers, &state).await;
-    let result = read_blocking(&state, move |read| {
+    let result = read_blocking(&state, move |read, limits| {
         try_both_owners(&owner, |o| {
-            read.file(&principal, o, &name, q.ref_name.as_deref(), &q.path)
+            read.file(&principal, o, &name, q.ref_name.as_deref(), &q.path, limits)
         })
     })
     .await;
@@ -190,7 +199,7 @@ async fn tree_handler(
         return error_response(&state, Failure::Invalid);
     };
     let principal = crate::principal::principal_from_request(&headers, &state).await;
-    let result = read_blocking(&state, move |read| {
+    let result = read_blocking(&state, move |read, limits| {
         try_both_owners(&owner, |o| {
             read.tree(
                 &principal,
@@ -198,6 +207,7 @@ async fn tree_handler(
                 &name,
                 q.ref_name.as_deref(),
                 q.prefix.as_deref(),
+                limits,
             )
         })
     })
@@ -224,15 +234,18 @@ async fn raw_handler(
         return error_response(&state, Failure::Invalid);
     };
     let principal = crate::principal::principal_from_request(&headers, &state).await;
-    let result = read_blocking(&state, move |read| {
+    let result = read_blocking(&state, move |read, limits| {
         try_both_owners(&owner, |o| {
             read.raw_file(
                 &principal,
                 o,
                 &name,
-                q.ref_name.as_deref(),
-                &q.path,
-                Some(RAW_MAX_BYTES),
+                RawTarget {
+                    point: q.ref_name.as_deref(),
+                    path: &q.path,
+                    max_bytes: Some(RAW_MAX_BYTES),
+                },
+                limits,
             )
         })
     })
@@ -253,8 +266,8 @@ async fn refs_handler(
         return error_response(&state, Failure::Invalid);
     };
     let principal = crate::principal::principal_from_request(&headers, &state).await;
-    let result = read_blocking(&state, move |read| {
-        try_both_owners(&owner, |o| read.refs(&principal, o, &name, q.all))
+    let result = read_blocking(&state, move |read, limits| {
+        try_both_owners(&owner, |o| read.refs(&principal, o, &name, q.all, limits))
     })
     .await;
     respond(&state, &headers, result)
@@ -266,8 +279,8 @@ async fn verify_handler(
     headers: HeaderMap,
 ) -> Response {
     let principal = crate::principal::principal_from_request(&headers, &state).await;
-    let result = read_blocking(&state, move |read| {
-        try_both_owners(&owner, |o| read.verify(&principal, o, &name))
+    let result = read_blocking(&state, move |read, limits| {
+        try_both_owners(&owner, |o| read.verify(&principal, o, &name, limits))
     })
     .await;
     respond(&state, &headers, result)
@@ -306,11 +319,15 @@ impl From<ReadError> for Failure {
 /// gets its slot or is refused as a whole, never half-rendered.
 pub(crate) async fn read_blocking<T, F>(state: &AppState, job: F) -> Result<T, Failure>
 where
-    F: FnOnce(&ReadService) -> Result<T, ReadError> + Send + 'static,
+    F: FnOnce(&ReadService, CallLimits) -> Result<T, ReadError> + Send + 'static,
     T: Send + 'static,
 {
     let read = Arc::clone(&state.read);
-    match state.gate.run(move || job(&read)).await {
+    // Per-call limits for every prikk call the job makes. `NONE` until admission (RFC 011 D-1, the next
+    // handoff) supplies a ceiling; the mechanism is in place and tested, the production value is "no
+    // ceiling" so default behaviour is unchanged.
+    let limits = CallLimits::NONE;
+    match state.gate.run(move || job(&read, limits)).await {
         Ok(result) => result.map_err(Failure::Read),
         Err(GateError::Busy) => Err(Failure::Busy),
         // A panicking job or a shutting-down runtime: an internal fault, not a missing repository.

@@ -2,7 +2,9 @@
 # binaries (staged under ctx/<arch>/planeter) — this file never compiles Rust. It bundles the two
 # runtime prerequisites a bare binary would otherwise need on the host: a pinned prikk release
 # (dependency-ledger PK-26), bubblewrap (the sandbox, RFC 001 T4) and curl (the confined outbound
-# HTTPS client behind the egress guard — OIDC discovery/JWKS/token exchange).
+# HTTPS client behind the egress guard — OIDC discovery/JWKS/token exchange). `prlimit` (the memory
+# ceiling, RFC 011 D-2) comes from util-linux, which the base image carries as an Essential package; the
+# build checks it below so an image without it cannot be produced.
 #
 # Running it: bubblewrap needs user namespaces. On most hosts that means `--security-opt
 # seccomp=unconfined` or a seccomp profile that permits unshare/clone with CLONE_NEWUSER, and
@@ -14,7 +16,8 @@ ARG PRIKK_VERSION=0.52.0
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends bubblewrap ca-certificates curl \
- && rm -rf /var/lib/apt/lists/*
+ && rm -rf /var/lib/apt/lists/* \
+ && prlimit --version
 
 # prikk: the exact release asset for this architecture, checksum-verified against the release's own
 # .sha256 file before extraction.

@@ -78,8 +78,8 @@ docker run --rm ghcr.io/prikk-vcs/planeter:X.Y.Z --version
 
 ## Deploying
 
-- **Binary:** needs `prikk` (≥ the floor in `build-info.txt`) and `bwrap` on `PATH`, plus `curl` if SSO
-  is enabled. Configure with
+- **Binary:** needs `prikk` (≥ the floor in `build-info.txt`), `bwrap` and **`prlimit`** (util-linux) on
+  `PATH`, plus `curl` if SSO is enabled. `timeout` (coreutils) is no longer used. Configure with
   `PLANETER_ADDR`, `PLANETER_REPOS_ROOT`, `PLANETER_DB`, `PLANETER_CONTENT_ORIGIN`, and
   **`PLANETER_TRUSTED_PROXIES`** (the TLS-terminating proxy's addresses/CIDRs, comma-separated).
   planeter speaks plain HTTP: it **refuses a non-loopback bind unless trusted proxies are set**, takes
@@ -112,6 +112,17 @@ docker run --rm ghcr.io/prikk-vcs/planeter:X.Y.Z --version
   proxy must therefore serve HTTPS for the whole host. A proxy that adds its own HSTS header should
   replace the app's value, not append a second one. API errors are JSON (`{code, message, hint}`); a proxy's own
   error pages are not.
+- **Memory ceiling and child lifetime (RFC 011 D-2, D-5):** every prikk call runs as `bwrap` (the
+  server's direct child, `--die-with-parent`); when a memory ceiling is set it is applied as
+  `prlimit --data=<N> --` in front of that command. **`prlimit` is a start-up prerequisite:** planeter
+  checks `prlimit --version` once and refuses to start with a message naming `prlimit` and util-linux
+  (it is `Essential` in Debian, so it is in the container image; a minimal distribution may need
+  `util-linux` installed). The wall-time bound (120 s) is enforced by the server, which `SIGKILL`s the
+  call at the deadline (no SIGTERM grace); a **killed server no longer leaves its children running**
+  (before, `timeout` → `bwrap` outlived it until the call ended). No ceiling is set in this release's
+  default configuration; admission supplies it later. A call that hits its ceiling is a `503`
+  (`unavailable`) and logs one line naming the verb and the ceiling; it is never reported as a
+  verification result.
 - **Sign-in concurrency (IS-24, IS-31):** password verification (Argon2id) runs off the async workers
   behind its own gate, separate from the prikk one. **`PLANETER_AUTH_CONCURRENCY`** is the most
   verifications at once (positive integer; default `min(CPUs, 4)`); **`PLANETER_AUTH_QUEUE_WAIT_SECS`**

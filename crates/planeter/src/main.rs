@@ -85,6 +85,19 @@ async fn main() {
         }
     }
 
+    // RFC 011 D-2: `prlimit` (util-linux) bounds the memory of every prikk call. Without it a read would
+    // fail later with a misleading "No such file or directory", so a missing one refuses to start here,
+    // in the same way a prikk below the floor does.
+    if let Err(detail) = planeter_prikk::sandbox::probe_prlimit(std::ffi::OsStr::new(
+        planeter_prikk::sandbox::PRLIMIT,
+    )) {
+        eprintln!(
+            "planeter: refusing to start: `prlimit` (part of util-linux) is required to bound the memory of prikk calls, \
+             but it could not be run ({detail}). Install util-linux (the package that provides `prlimit`) and start again."
+        );
+        std::process::exit(1);
+    }
+
     // One SQLite database for every store; production hashers.
     let db = match SqliteDb::open(&db_path) {
         Ok(db) => db,

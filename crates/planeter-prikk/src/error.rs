@@ -12,6 +12,11 @@ pub enum PrikkError {
     /// prikk ran but exited non-zero. `code` is the process exit code where known
     /// (prikk uses `2` for usage errors and `1` for failures); `stderr` is its captured error output.
     Command { code: Option<i32>, stderr: String },
+    /// The call hit its **memory ceiling** (RFC 011 D-2): prikk aborted on an allocation failure, or
+    /// stopped early with a partial verification report. This says nothing about the repository: it is
+    /// never a verification result and never "unverified". `verb` is the prikk subcommand; no path and no
+    /// tool output is carried.
+    CeilingExceeded { verb: String, ceiling_bytes: u64 },
     /// The prikk binary's version is outside planeter's supported range (RFC 001 D-3 / PK-22:
     /// transport requires prikk ≥ 0.43.0).
     UnsupportedVersion { found: String, required: String },
@@ -27,6 +32,13 @@ impl fmt::Display for PrikkError {
                 let code = code.map_or_else(|| "signal".to_owned(), |c| c.to_string());
                 write!(f, "prikk exited with status {code}: {}", stderr.trim())
             }
+            PrikkError::CeilingExceeded {
+                verb,
+                ceiling_bytes,
+            } => write!(
+                f,
+                "the prikk `{verb}` call exceeded its memory ceiling of {ceiling_bytes} bytes"
+            ),
             PrikkError::UnsupportedVersion { found, required } => {
                 write!(
                     f,

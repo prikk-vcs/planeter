@@ -38,7 +38,8 @@ pub use fetch::{CurlFetcher, FetchError, FetchLimits, FetchRequest, HttpsFetcher
 pub use hosting::{HostingError, HostingService};
 pub use layout::{DefaultRepoIdAllocator, RepoIdAllocator, RepoLayout};
 pub use permission::resolve_repo_role;
+pub use planeter_prikk::CallLimits;
 pub use read::{
-    Assurance, ChangeView, FileContentView, FileView, Freshness, HistoryView, RawFile, ReadError,
-    ReadService, RefsView, Served, TreeEntryView, TreeView, VerifyView,
+    Assurance, ChangeView, FileContentView, FileView, Freshness, HistoryView, RawFile, RawTarget,
+    ReadError, ReadService, RefsView, Served, TreeEntryView, TreeView, VerifyView,
 };

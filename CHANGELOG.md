@@ -5,6 +5,18 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **A killed server no longer leaves its children running; `prlimit` is a new runtime prerequisite and
+  `timeout` no longer is (RFC 011 D-2, D-5; IS-37).** Every prikk call now runs as `bwrap` directly under
+  the server (the `timeout` hop is gone), so `--die-with-parent` ties the whole sandbox to the server: a
+  `SIGKILL` of planeter removes `bwrap` and prikk within milliseconds, where before they ran to the end of
+  the call (up to the 120 s bound). The wall-time bound is now kept by the server (`SIGKILL` at the
+  deadline, same `503`; no SIGTERM grace). **New prerequisite:** `prlimit` (util-linux; in the container
+  image and on every mainstream distribution) is checked at start and a missing one **refuses to start**
+  with a message naming it. The mechanism for a per-call memory ceiling (`prlimit --data=<N> --`) and its
+  honest error — a call that hits it is a `503 unavailable` that logs one line naming the verb and the
+  ceiling, never a verification result — are in place; **no ceiling is set by default** in this change.
+  The image build now fails if `prlimit` is missing.
+
 ## [0.3.0] — 2026-10-17 — safe by default: non-blocking sign-in, a real API contract, isolated raw content
 
 **Upgrading from 0.2.0**

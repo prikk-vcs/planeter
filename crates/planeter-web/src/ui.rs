@@ -18,7 +18,7 @@ use axum::routing::{get, post};
 use planeter_auth::{
     OidcError, PENDING_TTL_SECS, SESSION_TTL_SECS, SessionId, random_token, tokens_match,
 };
-use planeter_core::{Assurance, Principal, ReadError, TreeEntryView};
+use planeter_core::{Assurance, Principal, RawTarget, ReadError, TreeEntryView};
 
 use crate::api::{
     AppState, Failure, read_blocking, retry_after_secs, try_both_owners, with_security_headers,
@@ -753,18 +753,28 @@ async fn repo_home(
         name.clone(),
         r.map(str::to_owned),
     );
-    let page = read_blocking(&state, move |read| {
+    let page = read_blocking(&state, move |read, limits| {
         let r = rr.as_deref();
-        let tree = try_both_owners(&o, |ow| read.tree(&principal, ow, &n, r, None))?;
-        let refs = try_both_owners(&o, |ow| read.refs(&principal, ow, &n, false)).ok();
-        let verify = try_both_owners(&o, |ow| read.verify(&principal, ow, &n));
+        let tree = try_both_owners(&o, |ow| read.tree(&principal, ow, &n, r, None, limits))?;
+        let refs = try_both_owners(&o, |ow| read.refs(&principal, ow, &n, false, limits)).ok();
+        let verify = try_both_owners(&o, |ow| read.verify(&principal, ow, &n, limits));
         let readme = tree
             .entries
             .iter()
             .find(|e| e.path.eq_ignore_ascii_case("README.md"))
             .and_then(|e| {
                 try_both_owners(&o, |ow| {
-                    read.raw_file(&principal, ow, &n, r, &e.path, Some(1 << 20))
+                    read.raw_file(
+                        &principal,
+                        ow,
+                        &n,
+                        RawTarget {
+                            point: r,
+                            path: &e.path,
+                            max_bytes: Some(1 << 20),
+                        },
+                        limits,
+                    )
                 })
                 .ok()
             });
@@ -818,9 +828,9 @@ async fn tree_page(
         r.map(str::to_owned),
         prefix.clone(),
     );
-    let tree = read_blocking(&state, move |read| {
+    let tree = read_blocking(&state, move |read, limits| {
         try_both_owners(&o, |ow| {
-            read.tree(&principal, ow, &n, rr.as_deref(), Some(pf.as_str()))
+            read.tree(&principal, ow, &n, rr.as_deref(), Some(pf.as_str()), limits)
         })
     })
     .await;
@@ -862,9 +872,19 @@ async fn file_page(
         r.map(str::to_owned),
         path.clone(),
     );
-    let raw = read_blocking(&state, move |read| {
+    let raw = read_blocking(&state, move |read, limits| {
         try_both_owners(&o, |ow| {
-            read.raw_file(&principal, ow, &n, rr.as_deref(), &p, Some(4 << 20))
+            read.raw_file(
+                &principal,
+                ow,
+                &n,
+                RawTarget {
+                    point: rr.as_deref(),
+                    path: &p,
+                    max_bytes: Some(4 << 20),
+                },
+                limits,
+            )
         })
     })
     .await;
@@ -924,11 +944,18 @@ async fn history_page(
         name.clone(),
         r.map(str::to_owned),
     );
-    let page = read_blocking(&state, move |read| {
+    let page = read_blocking(&state, move |read, limits| {
         let h = try_both_owners(&o, |ow| {
-            read.history(&principal, ow, &n, rr.as_deref(), Some(HISTORY_PAGE))
+            read.history(
+                &principal,
+                ow,
+                &n,
+                rr.as_deref(),
+                Some(HISTORY_PAGE),
+                limits,
+            )
         })?;
-        let verify = try_both_owners(&o, |ow| read.verify(&principal, ow, &n));
+        let verify = try_both_owners(&o, |ow| read.verify(&principal, ow, &n, limits));
         Ok((h, verify))
     })
     .await;
@@ -981,8 +1008,8 @@ async fn change_page(
         name.clone(),
         target.clone(),
     );
-    let ch = read_blocking(&state, move |read| {
-        try_both_owners(&o, |ow| read.change(&principal, ow, &n, &t))
+    let ch = read_blocking(&state, move |read, limits| {
+        try_both_owners(&o, |ow| read.change(&principal, ow, &n, &t, limits))
     })
     .await;
     let ch = match ch {
@@ -1031,8 +1058,8 @@ async fn refs_page(
 ) -> Response {
     let c = ctx(&headers, &state).await;
     let (principal, o, n) = (c.principal.clone(), owner.clone(), name.clone());
-    let v = read_blocking(&state, move |read| {
-        try_both_owners(&o, |ow| read.refs(&principal, ow, &n, true))
+    let v = read_blocking(&state, move |read, limits| {
+        try_both_owners(&o, |ow| read.refs(&principal, ow, &n, true, limits))
     })
     .await;
     let v = match v {
@@ -1077,8 +1104,8 @@ async fn verify_page(
 ) -> Response {
     let c = ctx(&headers, &state).await;
     let (principal, o, n) = (c.principal.clone(), owner.clone(), name.clone());
-    let v = read_blocking(&state, move |read| {
-        try_both_owners(&o, |ow| read.verify(&principal, ow, &n))
+    let v = read_blocking(&state, move |read, limits| {
+        try_both_owners(&o, |ow| read.verify(&principal, ow, &n, limits))
     })
     .await;
     let v = match v {

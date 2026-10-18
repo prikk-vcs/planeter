@@ -30,7 +30,8 @@ properties a report is measured against:
 - **The forge holds no history-signing key.** A compromised planeter can deny history but cannot forge
   prikk-verified history. The default build contains no forge-seal path; CI proves the symbol is absent.
 - **prikk runs in a sandbox** (bubblewrap: no network, repository-directory-only writes, cleared
-  environment, wall-time bound) and is the source of truth for every repository fact.
+  environment, wall-time bound, and it dies with the server) and is the source of truth for every
+  repository fact.
 - **One default-deny `authorize()`** on every read and write path; no existence leak for hidden
   repositories, in a response or in sign-in timing (an unknown account costs the same verification as a
   wrong password).
