@@ -40,7 +40,7 @@ PK-51 and PK-52; prikk 0.52.0; a shared, non-idle development host (so latencies
   the server holding another ≈ 3.1 × while it parses the JSON. 8 × `verify` on 1 GiB = 16.1 GB (50.6% of
   RAM); never above 80% in any run; the server's RSS stayed 3–5 MB.
 - **F3. `GET …/file` has no size bound** (200 MiB text file: 628 MB in prikk + 623 MB in the server per
-  request). The raw route is capped at 4 MiB; when it exceeds the cap it answers `Unavailable`, which the API
+  request). The raw route is capped (at 25 MiB on the API, 4 MiB on the UI file page; this line first said 4 MiB in error, see R-4); when it exceeds the cap it answers `Unavailable`, which the API
   reports as `unavailable` ("could not be read right now"): a wrong message, since retrying cannot help.
 - **F4. A per-process address-space limit reaches prikk through `bwrap`** (`prlimit --data|--as`, or a
   wrapper in `BwrapConfig.timeout`), with no measurable latency cost. Below a call's need prikk aborts
@@ -153,6 +153,25 @@ are folded into D-1, D-2 and D-5 below. U4 (the default) is decided by the owner
   count and bytes before paying for it; refuse past a limit, all-or-nothing and before writing; and state its
   memory need. Two questions about `cat`/`tree`: is the whole-repository cost inherent, and is the memory
   multiple a documented, stable property. Drafted as a letter for the owner to convey.
+
+## Refinements after the first implementation (2026-10-18)
+
+The first build (commit `7475a0d`) and its measurements led the architect to four decisions, implemented by
+`admission-refinements-handoff-v1`:
+
+- **R-1 — a reserved slice for light reads.** A single FIFO semaphore parked cheap reads behind a large waiter
+  (delayed up to the waiter's wait; 16 of 200 racing `log`s refused `busy` though they fit). The budget is split
+  into a light pool (one eighth, at least four floor-cost reads) for floor-class reads and a heavy pool for the
+  rest; a read is `too_large` against its own pool. Not configurable; no borrowing between pools in this version.
+- **R-2 — the ceiling margin is 1.5 × the cost** (never above the budget), not 1.25: the ceiling is an
+  address-space limit, and `verify` of a single-large-file repository needed 0.98 of the 1.25 margin. The ceiling
+  reserves no budget, so the wider margin costs enforcement tightness, not capacity.
+- **R-3 — `show` is not flat.** It follows the patch's content: costed at 3.6 × S with a 32 MiB floor, which
+  over-reserves up to ~420× on a many-small-binary-files repository (safe, not cheap). The remedy is a prikk-side
+  figure for a patch's size; it is a question for prikk, not designed around.
+- **R-4 — the raw route keeps its own cap (25 MiB, as released in 0.3.0).** This RFC's F3 and the first handoff
+  were wrong that raw was capped at 4 MiB. `CONTENT_MAX_BYTES` (4 MiB) bounds `file` and the UI file page only.
+  The `too_large` hint is true per cause: the raw download for `file`; "ask the operator" for raw above its cap.
 
 ## Alternatives considered
 
