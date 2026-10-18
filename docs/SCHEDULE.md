@@ -46,7 +46,7 @@ across tiers is fixed by the dependencies.
    4. **Architect, in parallel, no dev time:** RFC 005 v2 and RFC 004 v2 are **drafted** (proposed; not
       acceptable until T13's rows are confirmed); RFC 006 v2 after T13; the requirements note for prikk's
       0.54.0 read-only command design round (the owner conveys it).
-   5. **Candidate release 0.3.0** — defined in §5; authorized (D-11, content amended by D-12).
+   5. **Release 0.3.0** — **released 2026-10-18** (§5; D-11, content amended by D-12 to D-14; one failed tag attempt, D-17).
    Unblocks: a measured two-agent cadence; re-issuable RFCs 004–006; the owner's ruling on M2 (D-8).
 2. **When prikk next changes the repository format** (format 8 is unscheduled) — T1 again; T10's first
    real case (what the serving rule and the record mean for repositories already hosted in format 7);
@@ -138,7 +138,7 @@ C-11 (supply chain) is checked at every crate.               C-14 (owner availab
 | **Exit criteria (after the tag, the owner's act)** | `release.yml` green; tarball checksum and attestation verify; the image attestation verifies (the package must be public: pending owner action); **`planeter --version` from a tarball and from the image shows the tag's commit and `prikk-floor 0.52.0`**; the nine crates are published in order; `cargo install planeter --version 0.3.0 --locked` builds and runs. |
 | **Rollback / recovery** | No data migration and no schema change: redeploy the 0.2.0 binary (the floor is a minimum, so prikk 0.52.0 remains acceptable). A defect is corrected by 0.3.1. |
 | **Major risks** | The release workflow's first real run exercises new pins, toolchain input and image build (mitigated by the dry run); the exit-2 behaviour change surprises a wrapper script (release notes; CHANGELOG); a new advisory appears before the tag (the gate re-runs at tag time and a red one is fixed first). |
-| **Post-release evaluation** | The architect records deviations, the real dry-run and tag-run findings and any gate improvements (RFC 010 "improvement on finding"). |
+| **Post-release evaluation** | The architect records deviations, the real dry-run and tag-run findings and any gate improvements (RFC 010 "improvement on finding"). **Recorded 2026-10-18:** (1) the tag run caught RUSTSEC-2026-0373 that the pre-tag gates, run on a cached advisory database, did not: RELEASING step 1 now refreshes the database and runs `cargo deny` and `cargo audit` on the exact commit immediately before tagging; (2) the dry run cannot show the advisory state at tag time, only the workflow's shape; (3) the failed tag was removed (D-17, nothing published) and the corrected commit tagged, which worked because no release, image or crate existed; (4) `cargo install` builds report `commit unknown` by design; (5) **not verified:** the image's attestation and tags (package private), the aarch64 binary's execution; (6) `docs/RELEASING.md` still said `ubuntu-latest` in one sentence (fixed). |
 
 #### Steps to the tag (0.3.0), in order
 
@@ -154,8 +154,8 @@ approved scope, and the release-candidate work is done from `docs/RELEASING.md` 
 | R4 | Release-candidate commit: workspace version 0.3.0, CHANGELOG `[0.3.0]`, floors and pins checked, **a dry-run dispatch of `release.yml`** with nothing published; report with evidence | dev team (`rfcs/handoffs/010-upstream-and-supply-chain-maintenance/release-candidate-0-3-0-handoff-v1.md`) | **done, approved 2026-10-17** (commit 41538a0; dry run 39008059655) |
 | R5 | Release-readiness report and recommendation (workflow Phase 8) | architect | **done 2026-10-17: ready for R6; release on the current pins** |
 | R5b | After the ammonia lock update (IS-38) is reviewed: move its CHANGELOG entry into `[0.3.0]`, re-run both supply-chain gates with a fresh advisory database on the exact commit, CI, a new `release.yml` dry run, re-confirm readiness | architect (dev team for the lock update) | IS-38 handoff approved |
-| R6 | Make the `ghcr.io/prikk-vcs/planeter` package public (may follow the tag run, D-15); signed tag `0.3.0` on the verified commit `41538a0`; the workflow; publish crates in order | **owner** (release re-confirmed authorized 2026-10-17) | R5 |
-| R7 | Exit criteria verified (above); post-release evaluation; gate improvements recorded | architect, dev team | R6 |
+| R6 | Make the `ghcr.io/prikk-vcs/planeter` package public (may follow the tag run, D-15); signed tag `0.3.0` on the verified commit; the workflow; publish crates in order | **owner** (release re-confirmed authorized 2026-10-17; on 2026-10-18 the owner delegated the tag, the release and the publish to the architect: tag `0.3.0` on `1ffb337`, run 39088637876, nine crates published) | R5 — **done 2026-10-18**; the package visibility remains the owner's |
+| R7 | Exit criteria verified (above); post-release evaluation; gate improvements recorded | architect, dev team | R6 — **done 2026-10-18** (see the evaluation row above; the image attestation and the aarch64 run are the two criteria not yet verified) |
 
 If a new advisory appears or a gate turns red between R4 and R6, it is fixed first and R4's evidence is
 re-run; the version is not changed for that.

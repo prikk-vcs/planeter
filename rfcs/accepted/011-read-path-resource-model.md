@@ -59,16 +59,30 @@ PK-51 and PK-52; prikk 0.52.0; a shared, non-idle development host (so latencies
   code (PK-52). Rust cannot, in-process, enforce a hard per-call memory limit (an allocation failure aborts
   the process on stable), kill a stuck call, or catch an abort or stack overflow.
 
-## Unknowns (to be measured, not assumed)
+## Unknowns — resolved by the investigation (2026-10-18)
+
+The investigation handoff measured U1–U3 (private review `resource-model-investigation-review-v1`); the answers
+are folded into D-1, D-2 and D-5 below. U4 (the default) is decided by the owner. The original statements follow.
+
+## Unknowns (as posed before the investigation)
 
 - **U1. A cheap, trustworthy estimate of a repository's size** (the input to F2's multipliers). Candidates:
   a bounded directory walk of `.prikk` cached per repository with a short time-to-live; a stat-based
-  estimate. Not measured. The handoff's first task measures the cost and accuracy of the candidates.
-- **U2. How a ceiling is applied without a new unsafe block or a new prerequisite:** a wrapper command
+  estimate. **Resolved:** a fresh walk of `.prikk` costs ≈ 50–65 µs at any repository size and equals the true
+  size; a TTL cache saves ≤ 65 µs and adds a staleness window (a repository grew +50% in 0.6 s). Use the fresh
+  walk at each admission, no cache.
+- **U2. How a ceiling is applied without a new unsafe block or a new prerequisite** (**resolved:** a `prlimit --data=N --`
+  prefix ahead of the sandbox vector: safe code, reaches the process in 200 of 200 calls, ≈ +0.15 ms; the one
+  prerequisite, util-linux's `prlimit`, is in the pinned image and on Debian/Ubuntu/Arch, and a start-up probe
+  replaces the misleading spawn error when it is absent; setting it after spawn lost the limit in 90 of 200
+  calls under load, a systemd scope needs a user bus and costs 2.5 ms). Originally: a wrapper command
   named in `BwrapConfig.timeout` (`prlimit` is in util-linux, present on the supported hosts but a new
   runtime prerequisite) versus `setrlimit` in a pre-exec hook (needs `unsafe`, and `planeter-prikk` declares
   `#![forbid(unsafe_code)]`, as do the other library crates). To be settled in the handoff with the project's unsafe-code rule in view.
-- **U3. How to tie the child's lifetime to the server:** `PR_SET_PDEATHSIG` fires when the parent *thread*
+- **U3. How to tie the child's lifetime to the server** (**resolved:** drop `timeout`; `bwrap` is the server's direct
+  child and `--die-with-parent` removes the tree in 5–7 ms; the wall-time bound moves into the server, a SIGKILL
+  at the deadline, accepted for read verbs; spawn and wait must stay on one thread, pinned by a test, because a
+  pool thread that spawned and then expired after 10 s kills a healthy call at exactly 10.0 s). Originally: `PR_SET_PDEATHSIG` fires when the parent *thread*
   exits, and a tokio blocking-pool thread can exit while the process lives, which would kill healthy
   children early. A supervised process group, a dedicated spawner thread or a wall-time implementation inside
   planeter in place of `timeout` are candidates. The handoff must test with a real server kill.
@@ -78,13 +92,17 @@ PK-51 and PK-52; prikk 0.52.0; a shared, non-idle development host (so latencies
 ## Decisions
 
 - **D-1 — Memory-weighted admission.** Besides the process count, the gate holds a **byte budget**. Each read
-  is admitted with a **cost** derived from the verb and the repository size (F2, with a fixed floor for
-  `log`), waits at most the existing bounded wait for budget, and is refused with `busy` and `Retry-After`
+  is admitted with a **cost** derived from the verb and the repository's store size S (a fresh walk of `.prikk` at each
+  admission, no cache), using **worst-case multiples** — `tree`/`cat` 2.1 × S, `verify` 4.1 × S, `file` 3.1 × the file
+  (bounded by D-3), with a fixed floor for `log` — because peak memory follows S plus the largest object, which
+  no stat reveals (investigation I1: this never under-predicts and over-reserves 1.03–2.10×; F2's earlier
+  multiples hold only for many-small-file repositories), waits at most the existing bounded wait for budget, and is refused with `busy` and `Retry-After`
   when the wait ends. A request whose own cost exceeds the whole budget is refused at once with a distinct
   error (D-4), never queued. The budget defaults to **a quarter of the memory the process may use** (the
   cgroup limit if one is set, otherwise physical memory), **never less than 256 MiB and never more than 4 GiB**
-  (the cap is about twice the largest single call measured: a `verify` of a 1 GiB repository needs ≈ 2.05
-  GiB), and is set by one new variable,
+  (the cap was set at about twice the largest single call then measured, ≈ 2.05 GiB; **with the worst-case
+  multiples a `verify` of a 1 GiB repository costs up to ≈ 4.1 GiB and would exceed this default, so the cap is
+  to be raised or reconsidered: the owner's decision, and the owner is not tied to the figure**), and is set by one new variable,
   `PLANETER_PRIKK_MEMORY_BUDGET_MB`, validated like the existing gate variables. **An explicit value is not capped:** the cap bounds only the
   default, so a large host raises it deliberately. The start-up log states the budget, where it came from
   (default, capped default, or variable) and the variable to change it. The cost
@@ -94,8 +112,10 @@ PK-51 and PK-52; prikk 0.52.0; a shared, non-idle development host (so latencies
   measured on, and re-measuring it is an output of the re-baseline procedure (RFC 010 D-1). A cost estimate that
   is too high only makes admission conservative; one too low is caught by D-2's ceiling. In-process or
   subprocess, the same budget applies (the design does not depend on the process model).
-- **D-2 — Per-call ceiling.** Every sandboxed prikk call runs with an address-space or data limit of
-  **cost × 1.25** (never above the budget). The limit is the enforcement the admission estimate cannot give:
+- **D-2 — Per-call ceiling.** Every sandboxed prikk call runs with a data limit of
+  **cost × 1.25** (never above the budget), applied as a `prlimit --data=N --` prefix ahead of the sandbox
+  vector (investigation I2: safe code, reaches the process, ≈ +0.15 ms). `prlimit` (util-linux) becomes a
+  documented runtime prerequisite, and planeter probes for it at start and fails with a message that names it. The limit is the enforcement the admission estimate cannot give:
   a wrong estimate costs one failed call, not the host. **A call that hits its ceiling is never reported as a
   verification result:** an abort (exit 134) maps to `unavailable` with a log line naming the ceiling, and a
   partial `verify` report (exit 1, incomplete stages) maps to `unavailable`, not to "unverified". A test
@@ -110,8 +130,11 @@ PK-51 and PK-52; prikk 0.52.0; a shared, non-idle development host (so latencies
   large to serve here.", hint "Download it from the content origin, or ask the operator to raise the read
   memory budget." The over-cap raw route uses it too (replacing `unavailable`, which implied a retry could
   help). `busy` keeps its meaning (try again soon). The OpenAPI document and the drift guard gain the code.
-- **D-5 — A child never outlives the server by more than its call.** The mechanism is chosen in the handoff
-  (U3); the requirement is a test that kills the server during an in-flight call and observes that no
+- **D-5 — A child never outlives the server by more than its call.** Mechanism (investigation I3): `timeout` is
+  dropped, `bwrap` is the server's direct child and its `--die-with-parent` does the tying; the wall-time bound
+  is kept by the server, which kills at the deadline (SIGKILL; accepted for the read verbs, which write nothing —
+  the write path of RFC 004 decides its own); **spawning and waiting stay on one thread, pinned by a test**, since
+  a pool thread that spawned and then expired kills a healthy call at 10 s. The requirement is a test that kills the server during an in-flight call and observes that no
   `timeout`, `bwrap` or `prikk` process of that call remains after a bounded settling time (a few seconds),
   and that the wall-time bound and the 5 s kill-after still hold.
 - **D-6 — Visibility.** The gate counts admitted, waited, refused-busy, refused-too-large and the in-flight
