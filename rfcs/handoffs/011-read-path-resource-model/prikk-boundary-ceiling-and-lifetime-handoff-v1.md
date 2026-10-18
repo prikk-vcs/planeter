@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | Implements RFC 011 **D-2** (the per-call ceiling and the honest mapping of a ceiling hit) and **D-5** (a child never outlives the server), in the prikk boundary crate. It is the first of two implementation handoffs; the second (admission, `too_large`, size bounds: D-1, D-3, D-4) follows after the owner decides the budget cap and builds on the ceiling parameter this one adds. Issues IS-36 (part), IS-37. |
-| Status | **Assigned** (2026-10-18). Targets the line after 0.3.0 (0.4.0); nothing here changes the released 0.3.0. |
+| Status | **Done, reviewed Approved (2026-10-18; commit `06557d2`).** (Assigned 2026-10-18.) Targets the line after 0.3.0 (0.4.0); nothing here changes the released 0.3.0. |
 | Basis | [`../../accepted/011-read-path-resource-model.md`](../../accepted/011-read-path-resource-model.md) D-2, D-5 and the resolved unknowns; the private investigation report `resource-model-investigation-review-request.md` and its logs and harnesses (reuse them: they contain working versions of both mechanisms); `crates/planeter-prikk/src/sandbox.rs`; `crates/planeter-web/src/gate.rs`, `api.rs` (`read_blocking`). |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 
