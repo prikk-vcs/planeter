@@ -1,8 +1,9 @@
 # RFC 012 — Web UI foundations: language, plain words, accessibility and inclusion
 
-**Status.** Proposed (2026-10-20) by the architect, on the owner's philosophy ("APIs and UI/UX for users not to be
+**Status.** **Accepted (2026-10-20) by the owner** (O-1 accepted; O-2: English plus Japanese; O-3: no assistive-technology
+user is available now, so the pass is limited as D-5 states). Handoffs: [`../handoffs/012-web-ui-foundations/`](../handoffs/012-web-ui-foundations/). Proposed (2026-10-20) by the architect, on the owner's philosophy ("APIs and UI/UX for users not to be
 confused or misunderstand") and the owner's direction that **accessibility and social inclusiveness are important**
-(2026-10-20). Not acceptable until the owner rules on the decisions in §Owner decisions. Handoffs follow acceptance.
+(2026-10-20). 
 **Tracks.** Issue register IS-27 (no i18n), IS-30 (jargon as default vocabulary, no next steps, polish); SCHEDULE
 T14; project rule: *the GUI must support multiple languages*; the architect's UI/API audit (private
 `ui-api-audit-v1`); RFC 003 (the UI as shipped); RFC 005 (the review UI that will build on this).
@@ -38,9 +39,11 @@ every later page (the review UI first) is built on, with checks that fail the bu
 ## Unknowns (measured first, not assumed)
 
 - **U1. The real accessibility baseline:** automated checks (HTML validity, labels, landmarks, headings, contrast
-  of every colour pair in both themes, target sizes) *and* a keyboard-only pass *and* a screen-reader pass
-  (a free reader on the supported platforms) over every page and error state. Automated tools find only part of
-  the problems; the person's pass is required. An investigation handoff measures this first.
+  of every colour pair in both themes, target sizes), the accessibility tree of every page and error state, and
+  keyboard order, in both themes. **None of this replaces a person using assistive technology**, and no such
+  person is available to the project today (O-3): the baseline therefore measures what tools can, and the
+  accessibility statement says in plain words that the UI has **not** been tested with people who use assistive
+  technology and invites them to report problems. A human pass is scheduled the day one is available.
 - **U2. How many languages we can keep true.** A catalog is only as good as its translations; the cost of keeping
   each current is real (see D-3).
 - **U3. What users actually find confusing.** The vocabulary decisions (D-4) rest on the audit and on the owner's
@@ -92,9 +95,10 @@ every later page (the review UI first) is built on, with checks that fail the bu
 - **D-5 — Safe by construction.** The checks are tests, not advice: the build fails on a missing label, a skipped
   heading level, a second `<h1>`, a missing `alt`, a missing language key, a hard-coded colour pair below its
   contrast ratio (computed from the CSS tokens in a test), `margin-left`/`padding-right` and other physical
-  properties in the stylesheet, and an `aria-hidden` element that is focusable. A written **manual checklist**
-  (keyboard pass, screen-reader pass, 200%/400% zoom, forced-colors mode, one language other than English) is part
-  of each release's candidate step; the result is recorded in the review request.
+  properties in the stylesheet, and an `aria-hidden` element that is focusable. A written **checklist**
+  (keyboard order, accessibility-tree review, 200%/400% zoom, forced-colors mode, one language other than English;
+  and a screen-reader pass **by a person** when one is available) is part of each release's candidate step; the
+  result is recorded in the review request, and a step that was not done by a person is labelled as such.
 - **D-6 — Social inclusiveness, as rules.** (a) **Names:** a person's name is one free-text field in any script;
   never split into first and last, never truncated without a way to read it, wrapped not cut; the UI shows the
   display name the person gave and the account id, nothing inferred. (b) **No assumptions about people:** no
@@ -156,10 +160,8 @@ checklist result and the accessibility statement.
 ## Owner decisions
 
 - **O-1.** Accept the direction (D-1 to D-8) and place theme T14 before RFC 005's UI.
-- **O-2.** The languages to ship first, and who reviews each. Recommendation: English plus **one** other language
-  to prove the mechanism end to end; the project's maintainer environment appears to be Japanese (an inference
-  from the system locale seen in file listings, not stated), so Japanese would be a natural first; a second only
-  when a fluent reviewer is committed.
-- **O-3.** Whether to arrange outside readers for a short think-aloud pass (U3), and whether any person who uses
-  assistive technology daily is available to run the screen-reader pass (otherwise a documented pass with a free
-  screen reader by a team member, labelled as such in the statement).
+- **O-2 (settled 2026-10-20).** English plus Japanese. A language ships only when a fluent speaker has reviewed
+  it; the reviewer for Japanese is to be named by the owner before it ships.
+- **O-3 (settled 2026-10-20).** No outside readers and no assistive-technology user are available now. The
+  project proceeds with tool-based measurement and the labelled statement of D-1/D-5, and revisits when a person
+  is available (U3 stays open).

@@ -116,6 +116,62 @@ cadences for planning (the CI schedule in D-3 is a mechanism, not a plan).
   revised** (workflow Phases 1–2: limited investigation and small proofs of concept when requested), run in
   a scratch directory with no repository change, and their output is ledger rows.
 
+### Proposed amendment (2026-10-20): a release chain that is rehearsed and trusts few outside parties (IS-35)
+
+*Status: proposed by the architect on the owner's direction to take "a stable and secure approach" with a view
+to long-term investment; awaiting the owner's decisions O-4 and O-5 below. It amends D-5 and adds D-9 to D-11.*
+
+**Evidence.** Five third-party actions (`docker/setup-qemu`, `setup-buildx`, `login`, `build-push`; GitHub's own
+`attest-build-provenance`) lag upstream by one or two majors, and `dtolnay/rust-toolchain` is a sixth outside
+dependency maintained by one person. None has a published advisory. The release steps they serve (registry
+login and push, attestations, `gh release create`) are the ones a dry run cannot exercise; the first time they run
+is a real tag. We know the failure mode is survivable (0.3.0's first tag failed before publishing anything) but
+a failure after the registry push would leave a half-published release. Measured fact: the arm64 image is built
+under QEMU emulation, although a native arm runner already builds the arm64 binary.
+
+- **D-9 — A pin is updated by a procedure with outputs.** Triggers are the project events of D-3 (a release
+  candidate, an advisory or deprecation notice that names a pin, the owner's request). For each pin changed the
+  review records: old and new tag and **full SHA**; that the SHA is the tagged commit **in the upstream
+  repository** (not a fork or an unreachable commit) and whether the tag's commit is marked verified; the
+  upstream release notes or diff read and summarized (renamed inputs, runtime changes, new permissions); and one
+  action changed per change. `pin-check` stays green, and D-10's rehearsal is green before the change lands.
+- **D-10 — A release rehearsal exercises what a dry run cannot.** A `workflow_dispatch` mode `rehearsal` of
+  `release.yml` builds both tarballs and the image, **logs in, pushes and attests**, but only to a throwaway
+  package `ghcr.io/prikk-vcs/planeter-rehearsal` (one tag, overwritten each time), and never creates a GitHub
+  release or tag, never touches `ghcr.io/prikk-vcs/planeter` or `latest`, and never touches crates.io. It is
+  refused off `main`. `pin-check` fails if any push target in the rehearsal path is not the rehearsal package. It
+  is run (and its run id recorded) before any change to the actions or the Dockerfile of the release chain and
+  before each release candidate whose chain changed. The dry run (publishes nothing at all) stays.
+  *Footprint, stated:* one additional private package; attestation records for the rehearsal artifacts, which
+  for a public repository live in the public transparency log permanently and are labelled `rehearsal` in their
+  subject name.
+- **D-11 — The release chain trusts as few outside parties as possible.** Target state: the toolchain is
+  installed by the runner's own `rustup` at the pinned version (`pin-check` checks the version in that command as
+  it checks `toolchain:` today); each image architecture is built **natively** (the existing arm runner builds
+  arm64) and a multi-arch manifest is pushed with the runner's `docker`/`buildx` commands; login is `docker login`
+  with the job token on standard input; QEMU is gone. The only actions left are GitHub's own (`checkout`,
+  `upload-artifact`, `download-artifact`, and the attestation action, moved to its current form). `pin-check`
+  fails on any `uses:` outside the `actions/` owner. Result: the five lagging pins and the toolchain action
+  disappear instead of being maintained, the build is faster and no longer emulated, and the remaining pins are
+  GitHub's. The change is made behind D-10: rehearsal first on the current chain (a baseline), then each change.
+  *Unknown, to be measured in the first handoff:* that the arm runner has `docker`/`buildx`, that the job token may
+  create the rehearsal package, and the exact current form of the attestation action.
+
+**Alternatives.** (A) Update the five pins one by one and keep the structure: smaller change now, five outside
+parties maintained forever, QEMU kept. (B) Do nothing: the pins age and the first test of a newer action is a real
+tag. (C) A scheduled bot (Dependabot) opening update PRs: rejected, the project has no calendar cadence (D-3).
+(D) Rehearse in a personal fork: a public fork gives public attestation records under another owner's name; a
+private fork may not support attestations; rejected in favour of the same repository with a separate package.
+
+**Risks.** Shell in a workflow is new code to review (small, in the repository, exercised by D-10); a rehearsal
+leaves permanent attestation records (labelled, accepted by the owner or the rehearsal does not attest); the
+native build depends on the arm runner staying available (the binary build already does).
+
+**Owner decisions.** **O-4:** accept D-9 to D-11 (the architect recommends this over alternative A, as the stable
+long-term position). **O-5:** accept the rehearsal's footprint (one private package, labelled attestation
+records). Handoffs follow acceptance: first the rehearsal mode on the current chain (a baseline), then the chain
+simplification, each rehearsed.
+
 **Improvement on finding (owner, 2026-10-15).** The gates and their timing are improved whenever an issue
 exposes a gap in them: the finding, the gap and the change are recorded in the dependency-policy ledger and
 this RFC is amended, as D-3 was on the day it was accepted.
