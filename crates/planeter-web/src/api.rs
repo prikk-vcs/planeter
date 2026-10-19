@@ -23,17 +23,21 @@ use axum::routing::get;
 use serde::Serialize;
 
 use planeter_auth::Authenticator;
-use planeter_core::admission::{CONTENT_MAX_BYTES, ReadVerb, ceiling_for};
+use planeter_core::admission::{ReadVerb, ceiling_for};
 use planeter_core::{CallLimits, Principal, RawFile, RawTarget, ReadError, ReadService};
 use planeter_store::Owner;
 
-use crate::errors::ErrorCode;
+use crate::errors::{ErrorCode, TOO_LARGE_RAW_HINT};
 use crate::gate::{AdmitError, PrikkGate, offload};
 use crate::security::{ContentOrigin, app_security_headers, raw_content_headers};
 
 /// Default and maximum history page size (bounded — `STD-3`).
 const DEFAULT_LIMIT: usize = 50;
 const MAX_LIMIT: usize = 200;
+/// The cap on raw file bytes served in one response (`cat --max-bytes`). Bounds the *response*; hostile
+/// input is bounded upstream, at the accept edge (PK-24). Unchanged since before 0.3.0: the raw route is
+/// not reduced to [`CONTENT_MAX_BYTES`], which bounds the `file` view (RFC 011 refinement R-3).
+const RAW_MAX_BYTES: u64 = 25 * 1024 * 1024;
 
 /// Shared application state (cheap to clone — all `Arc`).
 #[derive(Clone)]
@@ -253,7 +257,7 @@ async fn raw_handler(
                 RawTarget {
                     point: q.ref_name.as_deref(),
                     path: &q.path,
-                    max_bytes: Some(CONTENT_MAX_BYTES),
+                    max_bytes: Some(RAW_MAX_BYTES),
                 },
                 adm.limits(ReadVerb::Cat),
             )
@@ -262,6 +266,9 @@ async fn raw_handler(
     .await;
     match result {
         Ok(raw) => build_raw(&state, &raw),
+        // A file above the raw cap: `too_large` with the hint that is true for this route (the content
+        // origin is where the bytes would be served from, so "download it there" cannot help).
+        Err(Failure::Read(ReadError::TooLarge)) => error_response(&state, Failure::RawTooLarge),
         Err(e) => error_response(&state, e),
     }
 }
@@ -320,6 +327,12 @@ pub(crate) enum Failure {
     Invalid,
     /// A view that could not be serialized: `500`, `internal`.
     Internal,
+    /// The repository's estimated read memory is above its pool of the budget (RFC 011 D-1): `422`,
+    /// `too_large`, with the hint "raise the budget". Distinct from `Read(TooLarge)`, which is a *file*
+    /// above a bound.
+    OverBudget,
+    /// A raw file above the raw cap: `422`, `too_large`, with the raw route's own hint.
+    RawTooLarge,
 }
 
 impl From<ReadError> for Failure {
@@ -355,7 +368,7 @@ impl Subject {
 }
 
 /// What the gate admitted: the repository's store size and the budget, from which each call's memory
-/// ceiling follows (`cost × 1.25`, never above the budget — RFC 011 D-2).
+/// ceiling follows (`cost × 1.5`, never above the budget — RFC 011 D-2).
 pub(crate) struct Admitted {
     store_bytes: u64,
     budget: Option<u64>,
@@ -378,7 +391,7 @@ impl Admitted {
 ///    the repository's store. A repository the principal may not read, or that does not exist, is
 ///    `NotFound` here — before any budget is looked at;
 /// 2. **admit** by estimated memory ([`PrikkGate::run_weighted`]): the budget and a slot within one
-///    bounded wait; a cost above the whole budget is `too_large` at once.
+///    bounded wait; a cost above its own pool of the budget is `too_large` at once.
 ///
 /// A page that needs several prikk calls does them all inside one job, under one admission: it either
 /// gets its budget and slot or is refused as a whole, never half-rendered.
@@ -435,7 +448,7 @@ where
     {
         Ok(result) => result.map_err(Failure::Read),
         Err(AdmitError::Busy) => Err(Failure::Busy),
-        Err(AdmitError::TooLarge { .. }) => Err(Failure::Read(ReadError::TooLarge)),
+        Err(AdmitError::TooLarge { .. }) => Err(Failure::OverBudget),
         // A panicking job or a shutting-down runtime: an internal fault, not a missing repository.
         Err(AdmitError::Aborted) => Err(Failure::Read(ReadError::Backend(
             "the read task did not complete".to_owned(),
@@ -534,7 +547,10 @@ pub(crate) fn error_response(state: &AppState, e: Failure) -> Response {
         Failure::Internal => ErrorCode::Internal,
         Failure::Read(ReadError::NotFound) => ErrorCode::NotFound,
         Failure::Read(ReadError::Unavailable(_)) => ErrorCode::Unavailable,
-        Failure::Read(ReadError::TooLarge) => ErrorCode::TooLarge,
+        Failure::Read(ReadError::TooLarge) | Failure::OverBudget => ErrorCode::TooLarge,
+        Failure::RawTooLarge => {
+            return code_response_with_hint(state, ErrorCode::TooLarge, TOO_LARGE_RAW_HINT);
+        }
         // Backend and any future variant: an internal fault (existence-neutral).
         Failure::Read(_) => ErrorCode::Internal,
     };
@@ -543,6 +559,11 @@ pub(crate) fn error_response(state: &AppState, e: Failure) -> Response {
 
 /// A response for an [`ErrorCode`] (used by the router fallbacks too).
 pub(crate) fn code_response(state: &AppState, code: ErrorCode) -> Response {
+    code_response_with_hint(state, code, code.hint())
+}
+
+/// [`code_response`] with a hint chosen for the cause (see [`ErrorCode::body_with_hint`]).
+pub(crate) fn code_response_with_hint(state: &AppState, code: ErrorCode, hint: &str) -> Response {
     let mut builder = with_security_headers(state, Response::builder().status(code.status()))
         .header(header::CONTENT_TYPE, "application/json");
     if code == ErrorCode::Busy {
@@ -552,7 +573,7 @@ pub(crate) fn code_response(state: &AppState, code: ErrorCode) -> Response {
         builder = builder.header(header::ALLOW, "GET");
     }
     builder
-        .body(Body::from(code.body()))
+        .body(Body::from(code.body_with_hint(hint)))
         .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response_fallback())
 }
 

@@ -160,16 +160,20 @@ async fn main() {
                 std::process::exit(1);
             }
         };
-    eprintln!(
-        "planeter: read memory budget {} MiB ({}); change it with {}",
-        budget_bytes / planeter_web::budget::MIB,
-        budget_source.label(),
-        planeter_web::budget::VAR
-    );
     let gate = Arc::new(
         Arc::try_unwrap(gate)
             .expect("the gate is not shared yet")
             .with_budget(budget_bytes),
+    );
+    // The budget is split in a light pool (small reads) and a heavy pool (the rest) — RFC 011 R-1.
+    let (light_bytes, heavy_bytes) = gate.pool_bytes().unwrap_or((0, budget_bytes));
+    eprintln!(
+        "planeter: read memory budget {} MiB ({}): light pool {} MiB, heavy pool {} MiB; change it with {}",
+        (light_bytes + heavy_bytes) / planeter_web::budget::MIB,
+        budget_source.label(),
+        light_bytes / planeter_web::budget::MIB,
+        heavy_bytes / planeter_web::budget::MIB,
+        planeter_web::budget::VAR
     );
 
     // The separate, small bound on password verification (IS-24). Logged once.

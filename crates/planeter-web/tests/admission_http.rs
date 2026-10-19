@@ -24,7 +24,7 @@ use planeter_store::{
     RepositoryRecord, RepositoryStore, Visibility,
 };
 use planeter_web::budget::MIB;
-use planeter_web::errors::ErrorCode;
+use planeter_web::errors::{ErrorCode, TOO_LARGE_RAW_HINT};
 use planeter_web::{AppState, BlockingGate, ContentOrigin, PrikkGate, TrustedProxies, router};
 
 fn scratch(name: &str) -> PathBuf {
@@ -162,7 +162,7 @@ async fn a_repository_above_the_budget_is_422_too_large_for_a_reader_and_404_for
             path: stand_in(&root, "secret", 40),
         },
     ];
-    // 32 MiB budget; a `tree` of a 40 MiB store costs 84 MiB.
+    // 32 MiB budget (a 16 MiB light and a 16 MiB heavy pool); a `tree` of a 40 MiB store costs 84 MiB.
     let gate = Arc::new(PrikkGate::new(8, Duration::from_secs(5)).with_budget(32 * MIB));
     let (r, state) = app(repos, gate, Prikk::Missing);
 
@@ -175,6 +175,14 @@ async fn a_repository_above_the_budget_is_422_too_large_for_a_reader_and_404_for
     assert_eq!(body, ErrorCode::TooLarge.body());
     assert!(body.contains("\"code\":\"too_large\""));
     assert!(body.contains("This is too large to serve here."));
+    assert!(body.contains("raise the read memory budget"), "{body}");
+
+    // A raw file of the same repository above the budget is `too_large` for the *budget's* reason, so it
+    // keeps the budget's hint (the raw route's own hint is for a file above the raw cap).
+    let (status, _, body) = get(&r, "/api/v1/repos/alice/open/raw?path=x", RAW).await;
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+    assert_eq!(body, ErrorCode::TooLarge.body());
+    assert!(!body.contains(TOO_LARGE_RAW_HINT), "{body}");
 
     // The same request for a repository the caller may not read — and for one that does not exist — is the
     // one `not_found`, byte for byte: `too_large` cannot reveal a hidden repository.
@@ -194,7 +202,7 @@ async fn a_repository_above_the_budget_is_422_too_large_for_a_reader_and_404_for
     assert!(body.contains("\"unavailable\""));
 
     let s = state.gate.stats();
-    assert_eq!(s.refused_too_large, 1, "{s:?}");
+    assert_eq!(s.refused_too_large, 2, "{s:?}");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -212,19 +220,22 @@ async fn a_busy_budget_is_503_with_retry_after_and_never_for_a_hidden_repository
             path: stand_in(&root, "secret", 1),
         },
     ];
+    // 64 MiB: a 32 MiB light pool and a 32 MiB heavy pool. `history` is a floor-class (light) read.
     let gate = Arc::new(PrikkGate::new(8, Duration::from_millis(250)).with_budget(64 * MIB));
     let (r, state) = app(repos, Arc::clone(&gate), Prikk::Missing);
 
-    // Something else holds the whole budget for a while.
-    let hold = {
-        let g = Arc::clone(&gate);
-        tokio::spawn(async move {
-            g.run_weighted(64 * MIB, "verify", || {
-                std::thread::sleep(Duration::from_millis(900))
+    // Other reads hold the whole light pool for a while (two floor reads of 16 MiB).
+    let hold: Vec<_> = (0..2)
+        .map(|_| {
+            let g = Arc::clone(&gate);
+            tokio::spawn(async move {
+                g.run_weighted(16 * MIB, "log", || {
+                    std::thread::sleep(Duration::from_millis(900))
+                })
+                .await
             })
-            .await
         })
-    };
+        .collect();
     tokio::time::sleep(Duration::from_millis(50)).await;
 
     let (status, headers, body) = get(&r, "/api/v1/repos/alice/open/history", APP).await;
@@ -238,7 +249,9 @@ async fn a_busy_budget_is_503_with_retry_after_and_never_for_a_hidden_repository
     let absent = get(&r, "/api/v1/repos/alice/nope/history", APP).await;
     assert_eq!((hidden.0, &hidden.2), (StatusCode::NOT_FOUND, &absent.2));
 
-    hold.await.unwrap().unwrap();
+    for h in hold {
+        h.await.unwrap().unwrap();
+    }
     assert_eq!(state.gate.stats().refused_busy, 1);
 }
 
@@ -267,8 +280,8 @@ async fn the_repository_page_renders_a_plain_too_large_page() {
 
 // ---------------------------------------------------------------- with real prikk
 
-/// A sealed repository holding a 1 MiB file and a 5 MiB file (above the 4 MiB content bound).
-fn sealed(name: &str, big_mib: usize) -> PathBuf {
+/// A sealed repository holding a 1 MiB file, a `big_mib` MiB file and, if `huge_mib > 0`, a `huge_mib` MiB one.
+fn sealed(name: &str, big_mib: usize, huge_mib: usize) -> PathBuf {
     let base = scratch(name);
     let repo = base.join("repo");
     let keys = base.join("keys");
@@ -298,6 +311,9 @@ fn sealed(name: &str, big_mib: usize) -> PathBuf {
     };
     std::fs::write(repo.join("small.bin"), bytes(1 << 20)).unwrap();
     std::fs::write(repo.join("big.bin"), bytes(big_mib << 20)).unwrap();
+    if huge_mib > 0 {
+        std::fs::write(repo.join("huge.bin"), bytes(huge_mib << 20)).unwrap();
+    }
     std::fs::write(repo.join("README.md"), b"# hello\n").unwrap();
     prikk(&["commit", "--from-worktree", "-m", "init"]);
     prikk(&["seal", "--allow-no-audit"]);
@@ -305,23 +321,26 @@ fn sealed(name: &str, big_mib: usize) -> PathBuf {
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn file_and_raw_refuse_above_the_shared_constant_with_422_and_serve_below_it() {
+async fn file_is_bounded_at_4_mib_and_raw_keeps_its_25_mib_cap_each_with_its_own_hint() {
     if !have("prikk") || !have("prlimit") {
         eprintln!("skipping: needs prikk and prlimit on PATH");
         return;
     }
+    // small.bin 1 MiB, big.bin 5 MiB (above the 4 MiB `file` bound, below the 25 MiB raw cap), huge.bin
+    // 26 MiB (above both).
     let repos = vec![Repo {
         name: "open",
         visibility: Visibility::Public,
-        path: sealed("content", 5),
+        path: sealed("content", 5, 26),
     }];
     let (r, _) = app(
         repos,
         Arc::new(PrikkGate::default().with_budget(2048 * MIB)),
         Prikk::Real,
     );
+    let raw_hint_body = ErrorCode::TooLarge.body_with_hint(TOO_LARGE_RAW_HINT);
 
-    // Below the bound: `file` is 200 with a kind-tagged content; raw is 200 on the content host.
+    // Below both bounds: `file` is 200 with a kind-tagged content; raw is 200 on the content host.
     let (status, _, body) = get(&r, "/api/v1/repos/alice/open/file?path=small.bin", APP).await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert!(body.contains("\"kind\":\"binary\""), "{body}");
@@ -329,7 +348,8 @@ async fn file_and_raw_refuse_above_the_shared_constant_with_422_and_serve_below_
     assert_eq!(status, StatusCode::OK);
     assert!(headers.get(header::CONTENT_DISPOSITION).is_some());
 
-    // Above it (5 MiB > 4 MiB): both are 422 `too_large`.
+    // 5 MiB: `file` refuses (422, the default hint: the file can be downloaded), raw still serves it —
+    // the raw route was not reduced to the `file` bound (0.3.0 served up to 25 MiB).
     let (status, _, body) = get(&r, "/api/v1/repos/alice/open/file?path=big.bin", APP).await;
     assert_eq!(
         (status, body.as_str()),
@@ -338,13 +358,40 @@ async fn file_and_raw_refuse_above_the_shared_constant_with_422_and_serve_below_
             ErrorCode::TooLarge.body().as_str()
         )
     );
-    let (status, _, body) = get(&r, "/api/v1/repos/alice/open/raw?path=big.bin", RAW).await;
+    let (status, headers, _) = get(&r, "/api/v1/repos/alice/open/raw?path=big.bin", RAW).await;
+    assert_eq!(status, StatusCode::OK, "raw must serve a 5 MiB file");
+    assert!(headers.get(header::CONTENT_DISPOSITION).is_some());
+
+    // 26 MiB: both refuse; the hint is true for the route. `file` says "download it" (raw is where),
+    // raw says that this server does not serve a file that large.
+    let (status, _, body) = get(&r, "/api/v1/repos/alice/open/file?path=huge.bin", APP).await;
     assert_eq!(
         (status, body.as_str()),
         (
             StatusCode::UNPROCESSABLE_ENTITY,
             ErrorCode::TooLarge.body().as_str()
         )
+    );
+    let (status, headers, body) = get(&r, "/api/v1/repos/alice/open/raw?path=huge.bin", RAW).await;
+    assert_eq!(
+        (status, body.as_str()),
+        (StatusCode::UNPROCESSABLE_ENTITY, raw_hint_body.as_str())
+    );
+    assert_eq!(
+        headers.get(header::CONTENT_TYPE).unwrap(),
+        "application/json"
+    );
+    // One code, one message, one status: only the hint differs between the two causes.
+    let (file_v, raw_v): (serde_json::Value, serde_json::Value) = (
+        serde_json::from_str(&ErrorCode::TooLarge.body()).unwrap(),
+        serde_json::from_str(&raw_hint_body).unwrap(),
+    );
+    assert_eq!(file_v["code"], raw_v["code"]);
+    assert_eq!(file_v["message"], raw_v["message"]);
+    assert_ne!(file_v["hint"], raw_v["hint"]);
+    assert_eq!(
+        raw_v["hint"],
+        "This server does not serve files that large; ask the operator."
     );
 
     // A path that is not there is still a plain 404.
@@ -353,10 +400,11 @@ async fn file_and_raw_refuse_above_the_shared_constant_with_422_and_serve_below_
     let (status, _, _) = get(&r, "/api/v1/repos/alice/open/raw?path=nope", RAW).await;
     assert_eq!(status, StatusCode::NOT_FOUND);
 
-    // The UI file page for the big file says it plainly too.
+    // The UI file page keeps the 4 MiB bound (as in 0.3.0) and its default hint.
     let (status, _, html) = get(&r, "/alice/open/blob/big.bin", APP).await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     assert!(html.contains("This is too large to serve here."), "{html}");
+    assert!(html.contains("raise the read memory budget"), "{html}");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -365,14 +413,14 @@ async fn a_repository_whose_verify_does_not_fit_still_gets_its_page() {
         eprintln!("skipping: needs prikk and prlimit on PATH");
         return;
     }
-    // Store ≈ 8.4 MiB: `tree` costs ≈ 17.6 MiB, `verify` ≈ 34.5 MiB. A 24 MiB budget admits the first, not
-    // the second — and the page must not be refused for the sake of its optional badge.
+    // Store ≈ 8.4 MiB: `tree` costs ≈ 17.6 MiB (a light read), `verify` ≈ 34.5 MiB (heavy). A 64 MiB budget
+    // (32 MiB light, 32 MiB heavy) admits the first, not the second — and the page must not be refused for the sake of its optional badge.
     let repos = vec![Repo {
         name: "open",
         visibility: Visibility::Public,
-        path: sealed("badge", 7),
+        path: sealed("badge", 7, 0),
     }];
-    let gate = Arc::new(PrikkGate::new(8, Duration::from_secs(5)).with_budget(24 * MIB));
+    let gate = Arc::new(PrikkGate::new(8, Duration::from_secs(5)).with_budget(64 * MIB));
     let (r, state) = app(repos, gate, Prikk::Real);
     let (status, _, html) = get(&r, "/alice/open", APP).await;
     assert_eq!(status, StatusCode::OK, "{html}");
@@ -445,13 +493,13 @@ async fn each_call_runs_under_the_documented_ceiling() {
             "{verb:?}: the call ran under {seen}, the documented ceiling is {want}"
         );
     }
-    // Spot values: log is the 16 MiB floor × 1.25; verify is 4.1 × 40 MiB × 1.25.
+    // Spot values: log is the 16 MiB floor × 1.5; verify is 4.1 × 40 MiB × 1.5.
     assert_eq!(
         ceiling_for(ReadVerb::Log.cost(store), Some(budget)),
-        20 * MIB
+        24 * MIB
     );
     assert_eq!(
         ceiling_for(ReadVerb::Verify.cost(store), Some(budget)),
-        205 * MIB
+        246 * MIB
     );
 }

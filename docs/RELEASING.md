@@ -148,18 +148,30 @@ docker run --rm ghcr.io/prikk-vcs/planeter:X.Y.Z --version
   when set, otherwise physical memory), **at least 256 MiB and at most 8 GiB**. A value you set is never
   capped. The start-up log states the budget, where it came from and the variable to change it.
   **Sizing rule: budget ≥ 4.1 × the largest repository you expect to `verify`** (a 1 GiB repository
-  needs ≈ 4.2 GiB). Answers: a read that does not fit the *whole* budget is refused at once with
-  `422 too_large` (never queued; "ask the operator to raise the read memory budget" — this variable); a
+  needs ≈ 4.2 GiB) — **more exactly, the heavy pool is what a `verify` is judged against** (see the next
+  paragraph), so: **budget × 7/8 ≥ 4.1 × the largest repository you `verify`**. Answers: a read that does
+  not fit **its own pool** is refused at once with `422 too_large` (never queued; "ask the operator to
+  raise the read memory budget" — this variable); a
   wait that ends is `503 busy` + `Retry-After`. Each prikk call also runs under a memory **ceiling** of
-  1.25 × its cost (never above the budget), so a wrong estimate costs one failed call (`503
+  1.5 × its cost (never above the budget), so a wrong estimate costs one failed call (`503
   unavailable`, one log line naming the verb and the ceiling), not the host. Every refusal logs one
   line (verb, cost, budget; no path, no repository name). The repository page shows its `verify` badge
   from a separate admission: a repository whose `verify` does not fit still gets its page, with
   "verify unavailable". The costs are measured on a prikk release (0.52.0) and are re-measured at every
   floor change (`docs/UPSTREAM.md`).
-- **Bounded content (RFC 011 D-3, D-4):** the API's `file` view and the raw route share one bound,
-  4 MiB; a larger file is `422 too_large` (the raw route used to allow 25 MiB on the API; it answered
-  `503 unavailable` when over its cap). The UI's file page uses the same bound.
+- **Two pools (RFC 011 refinement R-1):** the budget is split so that a cheap read is never queued behind
+  a large one that waits for memory (one FIFO would park a `log` behind a waiting `verify`, and refuse it
+  `busy` in a race though it fits). The **light pool** is `max(budget / 8, 64 MiB)` (never more than half
+  the budget) and serves only the floor class of reads — those costed at most 32 MiB: `log`, refs, a
+  `show` of a small patch, the `tree` of a tiny repository; the **heavy pool** is the rest and serves every
+  other read. The slice is derived, not configurable, and there is no borrowing between pools: a floor
+  read does not use heavy memory, and a heavy read does not use light memory. A read is judged against
+  **its own pool**, so the heavy pool is the effective whole-budget bound for heavy reads (a 4 GiB budget:
+  512 MiB light, 3.5 GiB heavy). The start-up log states both sizes; process slots stay shared.
+- **Bounded content (RFC 011 D-3, D-4):** the API's `file` view is bounded at 4 MiB (a larger file is
+  `422 too_large`), as is the UI's file page; **the raw route keeps its 25 MiB cap** (unchanged since before
+  0.3.0; above it `422 too_large` with its own hint instead of the former `503 unavailable`). The
+  repository page's README preview stays at 1 MiB.
 - **SSO (OIDC):** set `PLANETER_OIDC_ISSUER`, `PLANETER_OIDC_CLIENT_ID`, `PLANETER_OIDC_REDIRECT_URI`
   (and `PLANETER_OIDC_CLIENT_SECRET` for a confidential client). The provider is reached only through
   the egress guard and a bubblewrap-confined **`curl`** (add `curl` to the runtime prerequisites; it is

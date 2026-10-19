@@ -12,13 +12,21 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
   `PLANETER_PRIKK_MEMORY_BUDGET_MB` (MiB; default a quarter of the memory the process may use — its cgroup
   limit or physical memory — **at least 256 MiB and at most 8 GiB**; a value you set is never capped; the
   start-up log states the budget and its source). Each read is costed from the repository's store size and
-  the verb, must fit the budget and a slot within the existing bounded wait, and runs under a memory
-  ceiling of 1.25 × its cost. **Answers:** a read that cannot fit the whole budget is **`422 too_large`**
+  the verb, must fit **its pool of the budget** and a slot within the existing bounded wait, and runs under
+  a memory ceiling of 1.5 × its cost (never above the budget). **The budget is split in two pools:** a
+  small **light pool** (an eighth of the budget, at least 64 MiB, at most half of it) that only the
+  cheapest reads draw from (`log`, refs, a small `show`; costs up to 32 MiB), and a **heavy pool** (the
+  rest) for every other read — so a cheap read is never queued behind a large one that is waiting for
+  memory; the start-up log states both sizes. **Answers:** a read that cannot fit its own pool (for a heavy
+  read, the heavy pool: 7/8 of the budget) is **`422 too_large`**
   (new code: message "This is too large to serve here."; the UI shows the same, plainly); a wait that ends
   is `503 busy` as before; a call that hits its ceiling is `503 unavailable` and logs one line. Size your
-  budget at ≥ 4.1 × the largest repository you expect to `verify`. **The API's `file` view and the raw route
-  now share one bound of 4 MiB** and refuse a larger file with `422 too_large`: the raw route used to allow
-  25 MiB on the API (and answered `503 unavailable` when over its cap). `raw` and the repository's page no
+  budget so that 7/8 of it is at least 4.1 × the largest repository you expect to `verify`. **The API's
+  `file` view is now bounded at 4 MiB** and refuses a larger file with `422 too_large` (it had no bound
+  before); **the raw route keeps its 25 MiB cap** (above it: `422 too_large` instead of `503
+  unavailable`, with the hint "This server does not serve files that large; ask the operator."; the
+  `file` and budget refusals keep "Download it from the content origin, or ask the operator to raise the
+  read memory budget."). `raw` and the repository's page no
   longer report a **timeout as "not found"**: only a missing path is `404`. The repository page's `verify`
   badge is admitted separately, so a repository whose `verify` does not fit the budget still gets its page
   ("verify unavailable"). A repository whose store cannot be measured is `503` with a log line.

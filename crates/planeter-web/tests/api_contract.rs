@@ -30,7 +30,7 @@ use planeter_store::{
     InMemoryMembershipStore, InMemoryRepositoryStore, MembershipStore, Owner, RepoId,
     RepositoryRecord, RepositoryStore, UserId, Visibility,
 };
-use planeter_web::errors::ErrorCode;
+use planeter_web::errors::{ErrorCode, TOO_LARGE_RAW_HINT};
 use planeter_web::{AppState, BlockingGate, ContentOrigin, PrikkGate, TrustedProxies, router};
 
 /// The routes the API is meant to have, written down independently of `api::paths`.
@@ -228,6 +228,31 @@ fn every_code_has_one_plain_sentence_and_the_shape_is_stable() {
         }
     }
     assert_eq!(seen.len(), 8);
+}
+
+#[test]
+fn too_large_has_one_code_and_a_hint_per_cause() {
+    // The raw route's hint is one plain sentence, like the others, and differs from the default one.
+    let raw = TOO_LARGE_RAW_HINT;
+    assert!(
+        raw.ends_with('.') && raw.matches(". ").count() == 0,
+        "{raw:?}"
+    );
+    assert_ne!(raw, ErrorCode::TooLarge.hint());
+    let default: Value = serde_json::from_str(&ErrorCode::TooLarge.body()).unwrap();
+    let on_raw: Value = serde_json::from_str(&ErrorCode::TooLarge.body_with_hint(raw)).unwrap();
+    for v in [&default, &on_raw] {
+        assert_eq!(v["code"], "too_large");
+        assert_eq!(v["message"], ErrorCode::TooLarge.message());
+        assert_eq!(v.as_object().unwrap().len(), 3);
+    }
+    assert_eq!(default["hint"], ErrorCode::TooLarge.hint());
+    assert_eq!(on_raw["hint"], raw);
+    // No other code is given a second hint: the plain body is the code's own.
+    for c in ErrorCode::ALL {
+        let v: Value = serde_json::from_str(&c.body()).unwrap();
+        assert_eq!(v["hint"], c.hint());
+    }
 }
 
 // ---------------------------------------------------------------- T2: the OpenAPI document

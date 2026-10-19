@@ -23,15 +23,25 @@
 //! pre-check plus ≈ 3.1 × the file, and the file is bounded by [`CONTENT_MAX_BYTES`].
 //!
 //! Every cost has a floor of [`COST_FLOOR`]: prikk's own working set, and the reason a ceiling of
-//! `cost × 1.25` cannot be smaller than a process needs to start.
+//! `cost × 1.5` cannot be smaller than a process needs to start.
 
 use std::path::Path;
 
 /// One mebibyte.
 pub const MIB: u64 = 1 << 20;
 
-/// The smallest cost any read is admitted with (and so the smallest ceiling is `COST_FLOOR × 1.25`).
+/// The smallest cost any read is admitted with (and so the smallest ceiling is `COST_FLOOR × 1.5`).
 pub const COST_FLOOR: u64 = 16 * MIB;
+
+/// The most a read may cost to be in the **light class** (RFC 011 R-1): reads at the floor (`log`, refs, a
+/// `show` of a small patch, a tiny repository's `tree`) draw from the light pool of the budget, everything
+/// above from the heavy pool, so a cheap read never queues behind a large one.
+pub const LIGHT_CLASS_MAX_COST: u64 = 2 * COST_FLOOR;
+
+/// The ceiling is this many tenths of the cost (15 = 1.5 ×; was 1.25 ×). The ceiling is an address-space
+/// limit (`RLIMIT_DATA`), and `verify` of a single-large-file repository needs 0.98 of a 1.25 × ceiling
+/// (T5 of the first build); it reserves no budget, so a wider margin costs enforcement tightness only.
+pub const CEILING_TENTHS: u64 = 15;
 
 /// The floor for `show`: a 10,000-file patch of small files already needs ≈ 18.8 MB (prikk 0.52.0), above
 /// [`COST_FLOOR`], and a store walk cannot see the size of a patch.
@@ -137,10 +147,11 @@ impl ReadVerb {
     }
 }
 
-/// The memory ceiling for one call: `cost × 1.25`, never above `budget` (when there is one) — and never
-/// below the cost itself, which the budget check already guarantees fits.
+/// The memory ceiling for one call: `cost × 1.5` ([`CEILING_TENTHS`]), never above `budget` (when there is
+/// one) — and never below the cost itself, which the budget check already guarantees fits.
 pub fn ceiling_for(cost: u64, budget: Option<u64>) -> u64 {
-    let ceiling = u64::try_from(u128::from(cost) * 5 / 4).unwrap_or(u64::MAX);
+    let ceiling =
+        u64::try_from(u128::from(cost) * u128::from(CEILING_TENTHS) / 10).unwrap_or(u64::MAX);
     match budget {
         Some(b) => ceiling.min(b).max(cost.min(b)),
         None => ceiling,

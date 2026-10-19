@@ -17,14 +17,18 @@
 //!
 //! The prikk gate also holds a **byte budget**, kept as a second semaphore in MiB units. A read declares
 //! its estimated memory ([`BlockingGate::run_weighted`]); it acquires its byte permits **and** a process
-//! slot within **one** bounded wait, and releases both when its job ends. A cost above the *whole*
-//! budget is refused at once ([`AdmitError::TooLarge`]) and never queued; a wait that ends is
+//! slot within **one** bounded wait, and releases both when its job ends. A cost above its own
+//! pool of the budget (below) is refused at once ([`AdmitError::TooLarge`]) and never queued; a wait that ends is
 //! [`AdmitError::Busy`]. The auth gate has no budget and keeps using [`BlockingGate::run`].
 //!
-//! The semaphore is fair (FIFO, and a waiting request accumulates released permits), so a cheap read
-//! queued behind one large waiter is delayed until that waiter is served or gives up — at most its own
-//! bounded wait, because the larger waiter arrived first and so times out first. `tests/admission.rs`
-//! measures it.
+//! # Two pools (RFC 011 refinement R-1)
+//!
+//! A fair (FIFO) semaphore parks a cheap read behind one large waiter: measured, a `log` waited as long as
+//! the `verify` ahead of it and was refused `busy` in 16 of 200 races though it fit. So the budget is split
+//! in two **pools**: a **light pool** (`max(budget / 8, 4 × the floor)`, at most half the budget) that only
+//! floor-class reads (`cost ≤` [`LIGHT_CLASS_MAX_COST`]) draw from, and a **heavy pool** (the rest) for every
+//! other read. Each pool is its own FIFO, a cost above its **own** pool is `too_large` at once, and process
+//! slots stay shared. No borrowing between pools, and the slice is derived, not configurable.
 //!
 //! The semaphore, **not** the blocking pool, is the limiter. The permit travels *into* the blocking job
 //! and is released when the job ends: a request dropped while its prikk is running does not free a
@@ -35,6 +39,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use tokio::sync::{OwnedSemaphorePermit, Semaphore};
+
+use planeter_core::admission::{COST_FLOOR, LIGHT_CLASS_MAX_COST};
 
 use crate::budget::MIB;
 
@@ -88,13 +94,51 @@ pub enum GateError {
 /// Why a weighted job was not admitted (RFC 011 D-1, D-4).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AdmitError {
-    /// The job's estimated memory exceeds the **whole** budget: it can never fit, so it is refused at
-    /// once (`too_large`) and never queued.
-    TooLarge { cost: u64, budget: u64 },
+    /// The job's estimated memory exceeds its **own pool** (the light pool for a floor-class read, the
+    /// heavy pool otherwise): it can never fit, so it is refused at once (`too_large`) and never queued.
+    /// `budget` is that pool's size in bytes.
+    TooLarge { cost: u64, budget: u64, pool: Pool },
     /// No budget and slot became available within the bounded wait: `503` with `Retry-After`.
     Busy,
     /// The blocking job panicked or the runtime is shutting down.
     Aborted,
+}
+
+/// Which pool of the byte budget a read draws from (see the module docs).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Pool {
+    /// Floor-class reads (`cost ≤` [`LIGHT_CLASS_MAX_COST`]).
+    Light,
+    /// Every other read.
+    Heavy,
+}
+
+impl Pool {
+    fn of(cost_bytes: u64) -> Pool {
+        if cost_bytes <= LIGHT_CLASS_MAX_COST {
+            Pool::Light
+        } else {
+            Pool::Heavy
+        }
+    }
+
+    fn name(self) -> &'static str {
+        match self {
+            Pool::Light => "light",
+            Pool::Heavy => "heavy",
+        }
+    }
+}
+
+/// One pool's counters.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub struct PoolStats {
+    /// The pool's size in bytes (0 when the gate has no budget).
+    pub size_bytes: u64,
+    /// Bytes held by running jobs of this pool right now.
+    pub in_flight_bytes: u64,
+    /// The most bytes this pool held at once since start.
+    pub high_water_bytes: u64,
 }
 
 /// The gate's counters (RFC 011 D-6), readable by tests and, later, by metrics.
@@ -106,12 +150,22 @@ pub struct GateStats {
     pub waited: u64,
     /// Jobs refused `busy` (the bounded wait ended).
     pub refused_busy: u64,
-    /// Jobs refused `too_large` (above the whole budget).
+    /// Jobs refused `too_large` (above their own pool).
     pub refused_too_large: u64,
-    /// Bytes held by running jobs right now.
+    /// Bytes held by running jobs right now, both pools together.
     pub in_flight_bytes: u64,
-    /// The most bytes held at once since start.
+    /// The most bytes held at once since start, both pools together.
     pub high_water_bytes: u64,
+    /// The light pool.
+    pub light: PoolStats,
+    /// The heavy pool.
+    pub heavy: PoolStats,
+}
+
+#[derive(Debug, Default)]
+struct PoolCounters {
+    in_flight_bytes: AtomicU64,
+    high_water_bytes: AtomicU64,
 }
 
 #[derive(Debug, Default)]
@@ -122,26 +176,82 @@ struct Counters {
     refused_too_large: AtomicU64,
     in_flight_bytes: AtomicU64,
     high_water_bytes: AtomicU64,
+    light: PoolCounters,
+    heavy: PoolCounters,
+}
+
+impl Counters {
+    fn pool(&self, pool: Pool) -> &PoolCounters {
+        match pool {
+            Pool::Light => &self.light,
+            Pool::Heavy => &self.heavy,
+        }
+    }
 }
 
 #[derive(Debug)]
-struct ByteBudget {
+struct BytePool {
     permits: Arc<Semaphore>,
     /// Whole MiB; the semaphore holds this many permits.
     units: u32,
 }
 
-/// What a running weighted job holds; released (permits and counter) when the job ends.
+impl BytePool {
+    fn new(units: u32) -> Self {
+        Self {
+            permits: Arc::new(Semaphore::new(units as usize)),
+            units,
+        }
+    }
+
+    fn bytes(&self) -> u64 {
+        u64::from(self.units) * MIB
+    }
+}
+
+#[derive(Debug)]
+struct Pools {
+    light: BytePool,
+    heavy: BytePool,
+}
+
+impl Pools {
+    /// Split `total_bytes`: light = `max(total / 8, 4 × floor)`, at most half the total (so a small explicit
+    /// budget still leaves a heavy pool); heavy = the rest. Whole MiB, each at least 1.
+    fn split(total_bytes: u64) -> Self {
+        let total = u32::try_from((total_bytes / MIB).max(2)).unwrap_or(u32::MAX);
+        let floor_units = u32::try_from(COST_FLOOR / MIB).unwrap_or(16);
+        let light = (total / 8).max(4 * floor_units).min(total / 2).max(1);
+        Self {
+            light: BytePool::new(light),
+            heavy: BytePool::new((total - light).max(1)),
+        }
+    }
+
+    fn get(&self, pool: Pool) -> &BytePool {
+        match pool {
+            Pool::Light => &self.light,
+            Pool::Heavy => &self.heavy,
+        }
+    }
+}
+
+/// What a running weighted job holds; released (permits and counters) when the job ends.
 struct Held {
     _bytes: Option<OwnedSemaphorePermit>,
     _slot: OwnedSemaphorePermit,
     counters: Arc<Counters>,
+    pool: Pool,
     bytes: u64,
 }
 
 impl Drop for Held {
     fn drop(&mut self) {
         self.counters
+            .in_flight_bytes
+            .fetch_sub(self.bytes, Ordering::Relaxed);
+        self.counters
+            .pool(self.pool)
             .in_flight_bytes
             .fetch_sub(self.bytes, Ordering::Relaxed);
     }
@@ -154,7 +264,7 @@ pub struct BlockingGate {
     concurrency: usize,
     wait: Duration,
     rejected: AtomicU64,
-    budget: Option<ByteBudget>,
+    pools: Option<Pools>,
     counters: Arc<Counters>,
 }
 
@@ -176,31 +286,43 @@ impl BlockingGate {
             concurrency,
             wait,
             rejected: AtomicU64::new(0),
-            budget: None,
+            pools: None,
             counters: Arc::new(Counters::default()),
         }
     }
 
-    /// Give the gate a byte budget of `bytes` (in whole MiB, at least 1). Without one, weighted jobs are
-    /// counted but never refused for size (tests and the auth gate); the server always sets one.
+    /// Give the gate a byte budget of `bytes`, split into the light and the heavy pool (see the module
+    /// docs). Without one, weighted jobs are counted but never refused for size (tests and the auth gate);
+    /// the server always sets one.
     #[must_use]
     pub fn with_budget(mut self, bytes: u64) -> Self {
-        let units = u32::try_from((bytes / MIB).max(1)).unwrap_or(u32::MAX);
-        self.budget = Some(ByteBudget {
-            permits: Arc::new(Semaphore::new(units as usize)),
-            units,
-        });
+        self.pools = Some(Pools::split(bytes));
         self
     }
 
-    /// The whole budget in bytes, if one is set.
+    /// The whole budget in bytes (both pools), if one is set.
     pub fn budget_bytes(&self) -> Option<u64> {
-        self.budget.as_ref().map(|b| u64::from(b.units) * MIB)
+        self.pools
+            .as_ref()
+            .map(|p| p.light.bytes() + p.heavy.bytes())
+    }
+
+    /// The two pool sizes in bytes, `(light, heavy)`, if a budget is set.
+    pub fn pool_bytes(&self) -> Option<(u64, u64)> {
+        self.pools
+            .as_ref()
+            .map(|p| (p.light.bytes(), p.heavy.bytes()))
     }
 
     /// A snapshot of the counters.
     pub fn stats(&self) -> GateStats {
         let c = &self.counters;
+        let (light_size, heavy_size) = self.pool_bytes().unwrap_or((0, 0));
+        let pool = |size: u64, pc: &PoolCounters| PoolStats {
+            size_bytes: size,
+            in_flight_bytes: pc.in_flight_bytes.load(Ordering::Relaxed),
+            high_water_bytes: pc.high_water_bytes.load(Ordering::Relaxed),
+        };
         GateStats {
             admitted: c.admitted.load(Ordering::Relaxed),
             waited: c.waited.load(Ordering::Relaxed),
@@ -208,6 +330,8 @@ impl BlockingGate {
             refused_too_large: c.refused_too_large.load(Ordering::Relaxed),
             in_flight_bytes: c.in_flight_bytes.load(Ordering::Relaxed),
             high_water_bytes: c.high_water_bytes.load(Ordering::Relaxed),
+            light: pool(light_size, &c.light),
+            heavy: pool(heavy_size, &c.heavy),
         }
     }
 
@@ -323,21 +447,26 @@ impl BlockingGate {
         .map_err(|_| GateError::Aborted)
     }
 
-    /// Take the byte permits and a slot without waiting; `None` if either is not free right now.
-    fn try_hold(&self, units: u32, bytes: u64) -> Option<Held> {
-        let byte_permit = match &self.budget {
-            Some(b) => Some(Arc::clone(&b.permits).try_acquire_many_owned(units).ok()?),
+    /// Take the pool's byte permits and a slot without waiting; `None` if either is not free right now.
+    fn try_hold(&self, pool: Pool, units: u32, bytes: u64) -> Option<Held> {
+        let byte_permit = match &self.pools {
+            Some(p) => Some(
+                Arc::clone(&p.get(pool).permits)
+                    .try_acquire_many_owned(units)
+                    .ok()?,
+            ),
             None => None,
         };
         let slot = Arc::clone(&self.permits).try_acquire_owned().ok()?;
-        Some(self.held(byte_permit, slot, bytes))
+        Some(self.held(pool, byte_permit, slot, bytes))
     }
 
-    /// Wait for the byte permits, then a slot (always in that order, so two waiters cannot deadlock).
-    async fn hold(&self, units: u32, bytes: u64) -> Option<Held> {
-        let byte_permit = match &self.budget {
-            Some(b) => Some(
-                Arc::clone(&b.permits)
+    /// Wait for the pool's byte permits, then a slot (always in that order, so two waiters cannot
+    /// deadlock).
+    async fn hold(&self, pool: Pool, units: u32, bytes: u64) -> Option<Held> {
+        let byte_permit = match &self.pools {
+            Some(p) => Some(
+                Arc::clone(&p.get(pool).permits)
                     .acquire_many_owned(units)
                     .await
                     .ok()?,
@@ -345,11 +474,12 @@ impl BlockingGate {
             None => None,
         };
         let slot = Arc::clone(&self.permits).acquire_owned().await.ok()?;
-        Some(self.held(byte_permit, slot, bytes))
+        Some(self.held(pool, byte_permit, slot, bytes))
     }
 
     fn held(
         &self,
+        pool: Pool,
         byte_permit: Option<OwnedSemaphorePermit>,
         slot: OwnedSemaphorePermit,
         bytes: u64,
@@ -357,19 +487,23 @@ impl BlockingGate {
         let c = &self.counters;
         let now = c.in_flight_bytes.fetch_add(bytes, Ordering::Relaxed) + bytes;
         c.high_water_bytes.fetch_max(now, Ordering::Relaxed);
+        let pc = c.pool(pool);
+        let in_pool = pc.in_flight_bytes.fetch_add(bytes, Ordering::Relaxed) + bytes;
+        pc.high_water_bytes.fetch_max(in_pool, Ordering::Relaxed);
         Held {
             _bytes: byte_permit,
             _slot: slot,
             counters: Arc::clone(c),
+            pool,
             bytes,
         }
     }
 
-    /// Run `job` on the blocking pool once its estimated memory (`cost_bytes`) fits the budget **and** a
-    /// slot is free — both within the one bounded wait. `what` names the read for the refusal log line (a
-    /// verb; never a path or a repository name).
+    /// Run `job` on the blocking pool once its estimated memory (`cost_bytes`) fits **its pool** of the
+    /// budget and a slot is free — both within the one bounded wait. `what` names the read for the
+    /// refusal log line (a verb; never a path or a repository name).
     ///
-    /// * a cost above the whole budget → [`AdmitError::TooLarge`] at once, never queued;
+    /// * a cost above its own pool → [`AdmitError::TooLarge`] at once, never queued;
     /// * the wait ends → [`AdmitError::Busy`];
     /// * both permits move into the blocking job and are released when it ends, so a request dropped
     ///   while its prikk is running does not free budget early (the subprocess still holds the memory).
@@ -385,35 +519,39 @@ impl BlockingGate {
     {
         let units64 = cost_bytes.div_ceil(MIB).max(1);
         let bytes = units64.saturating_mul(MIB);
-        let budget = self.budget_bytes();
-        if let Some(total) = budget
-            && bytes > total
+        let pool = Pool::of(cost_bytes);
+        let pool_size = self.pools.as_ref().map(|p| p.get(pool).bytes());
+        if let Some(size) = pool_size
+            && bytes > size
         {
             self.counters
                 .refused_too_large
                 .fetch_add(1, Ordering::Relaxed);
             eprintln!(
-                "planeter: a read was refused (too_large): verb={what} cost={cost_bytes} budget={total} bytes"
+                "planeter: a read was refused (too_large): verb={what} cost={cost_bytes} pool={} budget={size} bytes",
+                pool.name()
             );
             return Err(AdmitError::TooLarge {
                 cost: cost_bytes,
-                budget: total,
+                budget: size,
+                pool,
             });
         }
         let units = u32::try_from(units64).unwrap_or(u32::MAX);
-        let held = match self.try_hold(units, bytes) {
+        let held = match self.try_hold(pool, units, bytes) {
             Some(h) => h,
             None => {
                 self.counters.waited.fetch_add(1, Ordering::Relaxed);
-                match tokio::time::timeout(self.wait, self.hold(units, bytes)).await {
+                match tokio::time::timeout(self.wait, self.hold(pool, units, bytes)).await {
                     Ok(Some(h)) => h,
                     Ok(None) => return Err(AdmitError::Aborted),
                     Err(_elapsed) => {
                         self.counters.refused_busy.fetch_add(1, Ordering::Relaxed);
                         self.rejected.fetch_add(1, Ordering::Relaxed);
                         eprintln!(
-                            "planeter: a read was refused (busy): verb={what} cost={cost_bytes} budget={} bytes",
-                            budget.map_or_else(|| "none".to_owned(), |b| b.to_string())
+                            "planeter: a read was refused (busy): verb={what} cost={cost_bytes} pool={} budget={} bytes",
+                            pool.name(),
+                            pool_size.map_or_else(|| "none".to_owned(), |b| b.to_string())
                         );
                         return Err(AdmitError::Busy);
                     }

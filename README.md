@@ -42,8 +42,9 @@ accounts, authorization), and builds it all on prikk's stable command surface, n
 without `prlimit`. The container image bundles all of them.
 
 Reads are admitted by estimated memory: set `PLANETER_PRIKK_MEMORY_BUDGET_MB` for the host (default a
-quarter of its memory, between 256 MiB and 8 GiB; it should be at least 4.1 × the largest repository you
-will `verify`). A read that cannot fit the budget is answered `422 too_large`; see
+quarter of its memory, between 256 MiB and 8 GiB; 7/8 of it — the heavy pool, beside a small light pool for
+cheap reads — should be at least 4.1 × the largest repository you will `verify`). A read that cannot fit
+its pool is answered `422 too_large`; see
 [`docs/RELEASING.md`](docs/RELEASING.md).
 
 Install one of:

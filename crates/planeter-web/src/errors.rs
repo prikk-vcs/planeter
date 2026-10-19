@@ -7,6 +7,11 @@
 
 use axum::http::StatusCode;
 
+/// The hint of a `too_large` from the raw route (a file above the raw cap): the content origin serves
+/// no more than the cap, so "download it from there" would be untrue; only the operator can help.
+pub const TOO_LARGE_RAW_HINT: &str =
+    "This server does not serve files that large; ask the operator.";
+
 /// A stable, machine-readable error code of the API.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorCode {
@@ -21,7 +26,8 @@ pub enum ErrorCode {
     /// 405: the method is not supported on this route; carries `Allow: GET`.
     MethodNotAllowed,
     /// 422: the response would exceed what this server serves, or the repository needs more memory than
-    /// the read budget permits (RFC 011 D-4). Not retryable as is, unlike `busy`.
+    /// the read budget permits (RFC 011 D-4). Not retryable as is, unlike `busy`. The hint depends on the
+    /// cause ([`ErrorCode::hint`] for a file or the budget, [`TOO_LARGE_RAW_HINT`] for the raw route).
     TooLarge,
     /// 404 from the raw route on any host but the content origin's. Decided from the request's host
     /// alone, before any lookup, so it says nothing about any repository.
@@ -119,7 +125,7 @@ impl ErrorCode {
                 "the raw route, asked on a host other than the content origin's (raw bytes are served only there)"
             }
             ErrorCode::TooLarge => {
-                "the response would exceed what this server serves, or the repository needs more memory than the read budget permits (not retryable as is)"
+                "the response would exceed what this server serves (a file above the file or raw bound), or the repository needs more memory than the read budget permits (not retryable as is; the hint names the remedy for the cause)"
             }
             ErrorCode::Internal => "an internal fault",
         }
@@ -127,10 +133,16 @@ impl ErrorCode {
 
     /// The JSON body: `{ "code", "message", "hint" }`.
     pub fn body(self) -> String {
+        self.body_with_hint(self.hint())
+    }
+
+    /// The JSON body with a hint chosen at the call site, for a code whose remedy depends on the cause
+    /// (only `too_large` today). One code, one message, one status; the hint is the one varying field.
+    pub fn body_with_hint(self, hint: &str) -> String {
         serde_json::json!({
             "code": self.code(),
             "message": self.message(),
-            "hint": self.hint(),
+            "hint": hint,
         })
         .to_string()
     }

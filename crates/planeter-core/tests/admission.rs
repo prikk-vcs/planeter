@@ -7,8 +7,9 @@ use std::path::{Path, PathBuf};
 use std::process::Command;
 
 use planeter_core::admission::{
-    CONTENT_MAX_BYTES, COST_FLOOR, MAX_STORE_ENTRIES, MEASURED_ON, MIB, ReadVerb, SHOW_FLOOR,
-    StoreSizeError, ceiling_for, store_size, store_size_limited,
+    CEILING_TENTHS, CONTENT_MAX_BYTES, COST_FLOOR, LIGHT_CLASS_MAX_COST, MAX_STORE_ENTRIES,
+    MEASURED_ON, MIB, ReadVerb, SHOW_FLOOR, StoreSizeError, ceiling_for, store_size,
+    store_size_limited,
 };
 
 fn scratch(name: &str) -> PathBuf {
@@ -155,7 +156,7 @@ fn the_table_never_under_predicts_a_measured_case() {
         if ratio > worst.0 {
             worst = (ratio, fx);
         }
-        // And the ceiling (1.25 x the cost) leaves the call headroom over its own measured peak.
+        // And the ceiling (1.5 x the cost) leaves the call headroom over its own measured peak.
         assert!(ceiling_for(cost, None) >= *peak);
     }
     over.sort_by(|a, b| a.partial_cmp(b).unwrap());
@@ -170,12 +171,17 @@ fn the_table_never_under_predicts_a_measured_case() {
 }
 
 #[test]
-fn the_ceiling_is_one_and_a_quarter_times_the_cost_and_never_above_the_budget() {
-    assert_eq!(ceiling_for(400 * MIB, None), 500 * MIB);
-    assert_eq!(ceiling_for(400 * MIB, Some(4096 * MIB)), 500 * MIB);
+fn the_ceiling_is_one_and_a_half_times_the_cost_and_never_above_the_budget() {
+    assert_eq!(ceiling_for(400 * MIB, None), 600 * MIB);
+    assert_eq!(ceiling_for(400 * MIB, Some(4096 * MIB)), 600 * MIB);
     // Near the budget: capped at it, but never below the cost (which the budget check guarantees fits).
     assert_eq!(ceiling_for(400 * MIB, Some(450 * MIB)), 450 * MIB);
     assert_eq!(ceiling_for(400 * MIB, Some(400 * MIB)), 400 * MIB);
+    // The floor read: 16 MiB costs 24 MiB of ceiling.
+    assert_eq!(ceiling_for(16 * MIB, None), 24 * MIB);
+    assert_eq!(CEILING_TENTHS, 15);
+    // The light class is the floor class: twice the floor, no more.
+    assert_eq!(LIGHT_CLASS_MAX_COST, 2 * COST_FLOOR);
 }
 
 // ---------------------------------------------------------------- the estimate
@@ -378,5 +384,12 @@ fn the_ceiling_clears_the_smallest_rlimit_data_a_legitimate_call_needs() {
     eprintln!(
         "tightest: need/ceiling = {:.2} ({} {:?})",
         tightest.0, tightest.1, tightest.2
+    );
+    // With the 1.5 margin the tightest call (verify of a single large file) uses 0.82 of its ceiling; it
+    // was 0.98 at 1.25. A margin that shrinks back would pass the `>=` above long before it worked.
+    assert!(
+        tightest.0 < 0.86,
+        "the margin is thin again: {:.2}",
+        tightest.0
     );
 }

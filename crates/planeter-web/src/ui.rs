@@ -140,7 +140,7 @@ fn error_page(state: &AppState, c: &Ctx, e: Failure) -> Response {
         // `Retry-After`.
         Failure::Busy => busy_page(state, c, retry_after_secs(state)),
         // RFC 011 D-4: the plain page for "too large" (the same message as the API's `too_large`).
-        Failure::Read(ReadError::TooLarge) => render(
+        Failure::Read(ReadError::TooLarge) | Failure::OverBudget => render(
             state,
             StatusCode::UNPROCESSABLE_ENTITY,
             &TooLargeTpl {
