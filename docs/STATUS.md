@@ -3,11 +3,16 @@
 | | |
 |---|---|
 | Document | The dated brief a new session reads **first**: where the project is, what is held and why, what is pending on whom, and the issue register. Updated at every release, RFC disposition and owner ruling. |
-| As of | 2026-10-18 — planeter **0.3.0 released** (tag on `1ffb337`, GitHub release 2026-10-18, nine crates on crates.io); 0.2.0 was released 2026-09-24; prikk is at **0.52.0**; upstream facts folded into ledger v1.5 |
+| As of | 2026-10-19 — planeter **0.3.0 released** (tag on `1ffb337`, GitHub release 2026-10-18, nine crates on crates.io); **0.4.0 release candidate ready** (not released); 0.2.0 was released 2026-09-24; prikk is at **0.52.0**; upstream facts folded into ledger v1.5 |
 | Read next | [`src/planeter-00-project-charter.md`](src/planeter-00-project-charter.md) (background, goals, governance) → [`../ROADMAP.md`](../ROADMAP.md) → [`SCHEDULE.md`](SCHEDULE.md) (themes, plans, concerns) → [`../rfcs/README.md`](../rfcs/README.md) → [`../rfcs/handoffs/README.md`](../rfcs/handoffs/README.md) and the active handoff → [`src/planeter-prikk-dependency-ledger.md`](src/planeter-prikk-dependency-ledger.md) → [`src/planeter-03-threat-model-v0.1.md`](src/planeter-03-threat-model-v0.1.md) (v0.3) → [`UPSTREAM.md`](UPSTREAM.md) → [`dependency-policy.md`](dependency-policy.md) |
 
 ## Where we are
 
+- **0.4.0 release candidate ready (2026-10-19; not released; decision D-18).** Workspace version 0.4.0, CHANGELOG
+  `[0.4.0]` with an "Upgrading from 0.3.0" list first; the content is RFC 011 in full (admission by estimated
+  memory in two pools, the per-call ceiling, `prlimit` as a required program, `422 too_large`, children that die with
+  the server). Gates and the `release.yml` dry run are in the dev team's review request; tagging, the release and
+  the crates are the architect's/owner's steps (SCHEDULE §5, R5–R7).
 - **0.3.0 released (2026-10-18).** Signed tag `0.3.0` on `1ffb337`; Release run 39088637876 green; GitHub release
   with both tarballs, checksums and build-info; the nine crates published in order. The first tag attempt (on
   `41538a0`) failed its `cargo-deny` gate on RUSTSEC-2026-0373 (ammonia, IS-38) and published nothing; that tag was

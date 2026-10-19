@@ -5,7 +5,29 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
-- **Reads are admitted by estimated memory; `too_large`; files above 4 MiB are refused (RFC 011 D-1…D-4,
+## [0.4.0] — 2026-10-19 — the read-path resource model: memory-weighted admission, a per-call ceiling, children that die with the server
+
+### Upgrading from 0.3.0
+
+1. **`prlimit` (util-linux) is now a required program**, and planeter **refuses to start** without it (the
+   container image has it). `timeout` (coreutils) is **no longer used**.
+2. **New variable `PLANETER_PRIKK_MEMORY_BUDGET_MB`** (MiB): the memory budget of reads. Unset, it is a
+   quarter of the memory the process may use (its cgroup limit, else physical memory), **at least 256 MiB and
+   at most 8 GiB**; a value you set is never capped. The budget is split in a small light pool and a heavy
+   pool; size it so that 7/8 of it is at least 4.1 × the largest repository you expect to `verify`
+   (`docs/RELEASING.md`). The start-up log states the budget, its source and both pool sizes.
+3. **Reads can now be answered `503 busy`** (no budget or slot within the bounded wait) **or `422 too_large`**
+   (new error code: the read can never fit its pool of the budget, or the file is above its bound).
+4. **`GET …/file` refuses files above 4 MiB** with `422 too_large`; **the raw route keeps its 25 MiB cap**
+   (above it, `422 too_large` instead of `503 unavailable`).
+5. **A killed server no longer leaves its prikk processes running** (`bwrap` is the server's direct child and
+   dies with it).
+6. **The sandbox wall-time bound is now a `SIGKILL` at the deadline** (no SIGTERM grace); the answer is the
+   same `503`.
+
+### Changes
+
+- **Reads are admitted by estimated memory; `too_large`; `file` above 4 MiB is refused (RFC 011 D-1…D-4,
   D-6; IS-36). New variable, new error code, behaviour changes.** The prikk gate used to bound only the
   *number* of prikk processes, while a read's memory follows the repository's size (eight concurrent
   `verify` calls on a 1 GiB repository held 16 GB). It now also holds a **memory budget**:
@@ -26,8 +48,7 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
   before); **the raw route keeps its 25 MiB cap** (above it: `422 too_large` instead of `503
   unavailable`, with the hint "This server does not serve files that large; ask the operator."; the
   `file` and budget refusals keep "Download it from the content origin, or ask the operator to raise the
-  read memory budget."). `raw` and the repository's page no
-  longer report a **timeout as "not found"**: only a missing path is `404`. The repository page's `verify`
+  read memory budget."). `raw` and the repository's page no longer report a **timeout as "not found"**: only a missing path is `404`. The repository page's `verify`
   badge is admitted separately, so a repository whose `verify` does not fit the budget still gets its page
   ("verify unavailable"). A repository whose store cannot be measured is `503` with a log line.
   The OpenAPI document gains the `422` response on every read operation.
@@ -41,8 +62,8 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
   image and on every mainstream distribution) is checked at start and a missing one **refuses to start**
   with a message naming it. The mechanism for a per-call memory ceiling (`prlimit --data=<N> --`) and its
   honest error — a call that hits it is a `503 unavailable` that logs one line naming the verb and the
-  ceiling, never a verification result — are in place; **no ceiling is set by default** in this change.
-  The image build now fails if `prlimit` is missing.
+  ceiling, never a verification result — are the basis of the per-read ceiling described in the entry
+  above. The image build now fails if `prlimit` is missing.
 
 ## [0.3.0] — 2026-10-17 — safe by default: non-blocking sign-in, a real API contract, isolated raw content
 

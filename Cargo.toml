@@ -18,7 +18,7 @@ members = [
 
 # Shared metadata every crate inherits (RFC 001; ROADMAP: v0.x, MSRV 1.85, Rust 2024).
 [workspace.package]
-version = "0.3.0"
+version = "0.4.0"
 edition = "2024"
 rust-version = "1.88.0"
 license = "Apache-2.0"
