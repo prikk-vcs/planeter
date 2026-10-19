@@ -50,6 +50,7 @@ artifact) are accepted by the prikk owner, so 008 is gated on RFC 154 shipping; 
 | 009 | [Hosted-format durability: hosting prikk repos across an unstable format](proposed/009-hosted-format-durability.md) | B2 | **proposed** (re-opened 2026-10-15; v2 pending) |
 | 010 | [Upstream tracking and supply-chain maintenance](accepted/010-upstream-and-supply-chain-maintenance.md) | all (maintenance) | **accepted** (2026-10-15) |
 | 011 | [The read-path resource model](accepted/011-read-path-resource-model.md) | before RFC 004's first write path | **accepted** (2026-10-18) |
+| 012 | [Web UI foundations: language, plain words, accessibility and inclusion](proposed/012-web-ui-foundations.md) | T14, before RFC 005's UI | **proposed** (2026-10-20) |
 
 ## Current state
 
