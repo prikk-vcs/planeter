@@ -163,6 +163,8 @@ The first build (commit `7475a0d`) and its measurements led the architect to fou
   (delayed up to the waiter's wait; 16 of 200 racing `log`s refused `busy` though they fit). The budget is split
   into a light pool (one eighth, at least four floor-cost reads) for floor-class reads and a heavy pool for the
   rest; a read is `too_large` against its own pool. Not configurable; no borrowing between pools in this version.
+  As built, the light pool is also at most half the budget and each pool at least 1 MiB (an edge rule for budgets
+  below 128 MiB; the default floor of 256 MiB gives 64 / 192 MiB).
 - **R-2 — the ceiling margin is 1.5 × the cost** (never above the budget), not 1.25: the ceiling is an
   address-space limit, and `verify` of a single-large-file repository needed 0.98 of the 1.25 margin. The ceiling
   reserves no budget, so the wider margin costs enforcement tightness, not capacity.

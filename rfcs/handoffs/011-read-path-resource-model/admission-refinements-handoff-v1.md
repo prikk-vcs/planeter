@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | Implements the four decisions the architect took on review of `7475a0d` (private review `admission-and-size-bounds-review-v1`): a reserved slice of the budget for light reads, a ceiling margin of 1.5, the raw route keeping its own 25 MiB cap, and per-route hints. A small follow-up of [`admission-and-size-bounds-handoff-v1.md`](admission-and-size-bounds-handoff-v1.md). Issue IS-36. |
-| Status | **Assigned** (2026-10-18). Closes IS-36 on review. |
+| Status | **Done, reviewed Approved (2026-10-19; commit `f967fae`).** IS-36 closed. |
 | Basis | RFC 011 "Refinements after the first implementation" (added with this handoff) and D-1…D-4; the dev team's review request for `7475a0d` (measurements for decisions 1 and 2, the starvation test); `crates/planeter-web/src/{gate,api,errors,ui}.rs`, `crates/planeter-core/src/{admission,read}.rs`. |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 

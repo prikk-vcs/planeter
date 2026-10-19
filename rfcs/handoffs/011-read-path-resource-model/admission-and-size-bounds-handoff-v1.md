@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | Implements RFC 011 **D-1** (memory-weighted admission), **D-2** (supplying the ceiling to the boundary built in handoff 1), **D-3** (a size bound on `file`), **D-4** (the `too_large` error), **D-6** (counters). The second and last implementation handoff of RFC 011. Issue IS-36. |
-| Status | **Assigned** (2026-10-18), after the owner's decision on the default budget cap (8 GiB). Targets the 0.4.0 line. |
+| Status | **Done, reviewed Approved (2026-10-18, commit `7475a0d`), with refinements in `admission-refinements-handoff-v1.md` (done, approved 2026-10-19).** Targets the 0.4.0 line. |
 | Basis | [`../../accepted/011-read-path-resource-model.md`](../../accepted/011-read-path-resource-model.md) (D-1…D-6 and the resolved unknowns); [`prikk-boundary-ceiling-and-lifetime-handoff-v1.md`](prikk-boundary-ceiling-and-lifetime-handoff-v1.md) (done: `CallLimits`, `prlimit`); the private investigation report `resource-model-investigation-review-request.md` (its I1 tables are your calibration data and fixtures); ledger PK-51 (as corrected), PK-53; `crates/planeter-web/src/{gate,api,errors,openapi,ui}.rs`, `crates/planeter-core/src/read.rs`, `crates/planeter/src/{main,args}.rs`. |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 

@@ -279,6 +279,17 @@ verification result. The ceiling is not yet set by anything: memory-weighted adm
 the next handoff, so the open exposure of IS-36 (memory not bounded by the gate; `file` unbounded) remains until
 then.
 
+**Status (main after 0.3.0, 2026-10-19; RFC 011 complete, in the next release).** C-9b is now **enforced by memory,
+not only by count**: each read is admitted by an estimated cost (a worst-case multiple of the repository's store
+size, per verb, measured on the prikk floor) against a byte budget (`PLANETER_PRIKK_MEMORY_BUDGET_MB`; default a
+quarter of usable memory, between 256 MiB and 8 GiB), split into a small pool for cheap reads and a large pool
+for the rest so cheap reads are never queued behind expensive ones; a read that can never fit is `422 too_large`
+at once, one that has to wait too long is `503 busy`; every call also runs under a data ceiling of 1.5 × its
+estimate, and a call that hits it is `unavailable`, never a verification result. `file` is bounded (4 MiB) and
+raw keeps its cap (25 MiB). Counters record admissions and refusals. *Limits, stated:* estimates are
+worst-case multiples that over-reserve (up to ~2× for most verbs, far more for `show`), the cost table must be
+re-measured at each prikk re-baseline, and per-tenant fairness and metering (IS-25, C-9c) remain open.
+
 ### T-10 (Tampering) — the forge metadata store as a false source of truth
 An attacker who corrupts planeter's database or cache makes the *web view* show false history, or tries
 to make the forge itself the authority for what history *is* (A-HISTORY).
