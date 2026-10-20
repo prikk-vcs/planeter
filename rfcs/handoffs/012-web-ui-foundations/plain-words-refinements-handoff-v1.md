@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | Implements the architect's answers to the dev team's questions Q1–Q9 in the review request for [`plain-words-handoff-v1.md`](plain-words-handoff-v1.md), and fixes **IS-44**, a trust-label finding made while answering Q3: the change page labels a sealed patch **Verified**, although no verification runs on that page. A follow-on of the done RFC 003 (T5 honesty, `Assurance`) and of RFC 012 D-4. |
-| Status | **Assigned** (2026-10-21). |
+| Status | **Done, reviewed Approved (2026-10-21; commits `57df99e`, `61cc153`, `cb43b09`).** IS-44 closed. |
 | Basis | The plain-words review request (private), Q1–Q9; `crates/planeter-core/src/read.rs` (`Assurance`, `ChangeView::from_show`, `StageView`), `crates/planeter-web/src/ui.rs` (`assurance_label`), `catalog/en.rs`, `templates/explain.html`; RFC 003 T5 and the RFC 005 D-10 honesty type; `docs/glossary.md`; ledger (what `show` reports). |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 

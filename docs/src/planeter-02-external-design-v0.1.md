@@ -27,7 +27,11 @@
   `cat`); WEB-05 shipped (CSP, sanitizer, isolated content origin, `HttpOnly`/`SameSite=Strict`/
   `Secure` cookies, CSRF double-submit); WEB-06 shipped for the distinction that exists today —
   **prikk-verified vs. approved-but-unsealed** (the `Assurance` view-model; an unsealed change is never
-  shown as verified). WEB-02/03/04 not yet (M3+). New: sign-in pages, local or **SSO** (OIDC
+  shown as verified). *Corrected 2026-10-21 (IS-44):* the view-model has **four** values — `prikk-verified` (only where a
+  verification ran and passed: the repository, history and verification pages), `sealed` (a patch `show` reports as
+  signed into the history; the change page, where no verification runs; label "Signed into the history"),
+  `forge-approved-unsealed` and `unverified` — because the change page had labelled sealed patches "Verified"
+  without a check. WEB-02/03/04 not yet (M3+). New: sign-in pages, local or **SSO** (OIDC
   begin/callback).
 - **API:** API-01 shipped as the GET read surface with an OpenAPI document; API-02 partial — bounded
   page size and `ETag`/`304` are enforced, `Link` pagination and rate-limit headers are **deferred
