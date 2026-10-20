@@ -1,4 +1,8 @@
 <table>
-{% for d in dirs %}<tr><td>📁 <a href="/{{ owner }}/{{ name }}/tree/{{ d.path }}{{ ref_query }}">{{ d.name }}/</a></td><td class="muted"></td></tr>{% endfor %}
-{% for f in files %}<tr><td>📄 <a href="/{{ owner }}/{{ name }}/blob/{{ f.path }}{{ ref_query }}">{{ f.name }}</a></td><td class="muted">{{ t.msg(Key::SizeAndEncoding).with("size", t.size(*f.size)).with("encoding", f.encoding) }}</td></tr>{% endfor %}
+<caption>{{ t.get(Key::ListingCaption) }}</caption>
+<thead><tr><th scope="col">{{ t.get(Key::ListingName) }}</th><th scope="col">{{ t.get(Key::ListingDetails) }}</th></tr></thead>
+<tbody>
+{% for d in dirs %}<tr><th scope="row"><a href="/{{ owner }}/{{ name }}/tree/{{ d.path }}{{ ref_query }}">{{ d.name }}/</a></th><td class="muted">{{ t.get(Key::ListingFolder) }}</td></tr>{% endfor %}
+{% for f in files %}<tr><th scope="row"><a href="/{{ owner }}/{{ name }}/blob/{{ f.path }}{{ ref_query }}">{{ f.name }}</a></th><td class="muted">{{ t.msg(Key::SizeAndEncoding).with("size", t.size(*f.size)).with("encoding", f.encoding) }}</td></tr>{% endfor %}
+</tbody>
 </table>

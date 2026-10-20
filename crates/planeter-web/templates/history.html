@@ -1,10 +1,17 @@
 {% extends "base.html" %}
-{% block title %}{{ t.msg(Key::TitleHistory).with("repo", repo) }}{% endblock %}
+{% block title %}{{ t.msg(Key::TitleHistory).with("repo", repo).product() }}{% endblock %}
 {% block nav %}{% include "repo_nav.html" %}{% endblock %}
 {% block body %}
 <h1>{{ t.msg(Key::HistoryHeading).muted("ref", ref_name).html() }} <span class="badge {{ assurance_class }}">{{ t.get(*assurance_label) }}</span></h1>
+{% if entries.is_empty() %}
+<p class="muted">{{ t.get(Key::HistoryEmpty) }}</p>
+{% else %}
 <table>
-{% for e in entries %}<tr><td><a href="/{{ owner }}/{{ name }}/change/{{ e.block_id }}"><code>{{ e.short_id }}</code></a></td><td>{{ e.kind }}{% if e.rollback_block %} <span class="badge warn">{{ t.get(Key::HistoryRollback) }}</span>{% endif %}</td><td>{% for m in e.messages %}{{ m }}<br>{% endfor %}</td><td class="muted">{{ t.msg(Key::HistoryPatchCount).n(*e.patch_count) }}</td></tr>{% endfor %}
+<caption class="visually-hidden">{{ t.msg(Key::HistoryHeading).with("ref", ref_name) }}</caption>
+<thead><tr><th scope="col">{{ t.get(Key::HistoryColChange) }}</th><th scope="col">{{ t.get(Key::HistoryColKind) }}</th><th scope="col">{{ t.get(Key::HistoryColPatches) }}</th></tr></thead>
+<tbody>
+{% for e in entries %}<tr><th scope="row"><a href="/{{ owner }}/{{ name }}/change/{{ e.block_id }}">{{ e.summary }}</a>{% for m in e.more %}<br>{{ m }}{% endfor %}<br><code class="muted">{{ e.short_id }}</code></th><td>{{ e.kind }}{% if e.rollback_block %} <span class="badge warn">{{ t.get(Key::HistoryRollback) }}</span>{% endif %}</td><td class="muted">{{ t.msg(Key::HistoryPatchCount).n(*e.patch_count) }}</td></tr>{% endfor %}
+</tbody>
 </table>
-{% if entries.is_empty() %}<p class="muted">{{ t.get(Key::HistoryEmpty) }}</p>{% endif %}
+{% endif %}
 {% endblock %}

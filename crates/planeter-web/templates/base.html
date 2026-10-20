@@ -7,13 +7,15 @@
 <link rel="stylesheet" href="/static/app.css">
 </head>
 <body>
+<a class="skip-link" href="#main">{{ t.get(Key::LayoutSkip) }}</a>
 <header>
   <a href="/">{{ t.product() }}</a>
   {% block nav %}{% endblock %}
-  <span class="who">{% if let Some(u) = user %}{{ u }} · <form class="inline" method="post" action="/logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit">{{ t.get(Key::LayoutSignOut) }}</button></form>{% else %}<a href="/login">{{ t.get(Key::LayoutSignIn) }}</a>{% endif %}</span>
+  <div class="who">{% if let Some(u) = user %}<span class="account">{% if let Some(n) = u.name %}<bdi class="name">{{ n }}</bdi> <bdi class="muted">{{ u.id }}</bdi>{% else %}<bdi class="name">{{ u.id }}</bdi>{% endif %}</span> <form class="inline" method="post" action="/logout"><input type="hidden" name="csrf" value="{{ csrf }}"><button type="submit">{{ t.get(Key::LayoutSignOut) }}</button></form>{% else %}<a href="/login">{{ t.get(Key::LayoutSignIn) }}</a>{% endif %}</div>
 </header>
-<main>
+<main id="main">
 {% block body %}{% endblock %}
 </main>
+<footer>{{ t.msg(Key::LayoutFooter).product().with("version", t.version()) }}</footer>
 </body>
 </html>

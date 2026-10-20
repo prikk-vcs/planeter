@@ -202,39 +202,45 @@ async fn every_repository_page_fills_every_placeholder_and_takes_every_word_from
         (
             "/alice/app/tree/src",
             &[
-                "<code>src</code> <span class=\"muted\">at heads/main</span>",
+                "<h1><code>src</code></h1>",
+                "<span class=\"muted\">at heads/main</span>",
                 "13 B · text",
-                "<title>src · alice/app</title>",
+                "<title>src · alice/app · planeter</title>",
             ],
         ),
         (
             "/alice/app/blob/data.bin",
             &[
                 "<span class=\"muted\">2.9 KiB · binary</span>",
-                "Binary content — <a href=\"https://raw.planeter.example/api/v1/repos/alice/app/raw?path=data.bin\">download</a>.",
-                ">raw</a>",
+                "Binary content — <a href=\"https://raw.planeter.example/api/v1/repos/alice/app/raw?path=data.bin\">Download data.bin</a>.",
+                ">Download data.bin</a>",
             ],
         ),
         (
             "/alice/app/blob/src/main.rs",
-            &["13 B · text", "<title>src/main.rs · alice/app</title>"],
+            &[
+                "13 B · text",
+                "<title>src/main.rs · alice/app · planeter</title>",
+            ],
         ),
         (
             "/alice/app/history",
             &[
                 "History <span class=\"muted\">heads/main</span>",
                 "1 patch</td>",
-                "<title>history · alice/app</title>",
+                "<title>history · alice/app · planeter</title>",
+                ">init</a>",
             ],
         ),
         (
             "/alice/app/refs",
             &[
-                "<h1>Branches</h1>",
+                "<h1>Branches and tags</h1>",
+                "<h2>Branches</h2>",
                 "<span class=\"badge\">current</span>",
                 "<span class=\"badge warn\">closed</span>",
-                "<h1>Tags</h1>",
-                "<title>refs · alice/app</title>",
+                "<h2>Tags</h2>",
+                "<title>refs · alice/app · planeter</title>",
             ],
         ),
         (
@@ -243,12 +249,15 @@ async fn every_repository_page_fills_every_placeholder_and_takes_every_word_from
                 "<h1>Verification <span class=\"badge ok\">prikk-verified</span></h1>",
                 "Re-derived from <code>prikk verify</code> on this request — never served from a cache. 1 of 1 session verified.",
                 "<td>evaluated</td>",
-                "<title>verify · alice/app</title>",
+                "<title>verify · alice/app · planeter</title>",
             ],
         ),
         (
             "/alice/app/blob/README.md",
-            &["<section class=\"readme\"><h1>Hello</h1>"],
+            &[
+                "<h1><code>README.md</code></h1>",
+                "<section class=\"readme\"><h2>Hello</h2>",
+            ],
         ),
     ];
     for (uri, phrases) in pages {

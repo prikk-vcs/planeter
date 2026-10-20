@@ -60,9 +60,17 @@ pub fn router(state: AppState) -> Router {
 
 // -- request context: principal + CSRF token (minted on first sight, carried in a cookie) --
 
+/// The signed-in person as the page header shows them: the account id, and the display name when there is
+/// one (RFC 012 D-6a).
+#[derive(Clone, Debug)]
+pub(crate) struct Who {
+    id: String,
+    name: Option<String>,
+}
+
 struct Ctx {
     principal: Principal,
-    user: Option<String>,
+    user: Option<Who>,
     csrf: String,
     /// The page language and its messages (RFC 012 D-3).
     t: T,
@@ -72,7 +80,19 @@ struct Ctx {
 
 async fn ctx(headers: &HeaderMap, state: &AppState) -> Ctx {
     let principal = principal_from_request(headers, state).await;
-    let user = principal.user().map(|u| u.as_str().to_owned());
+    let user = match principal.user() {
+        Some(u) => {
+            let id = u.as_str().to_owned();
+            let account = u.clone();
+            // The name is looked up for the header only; a lookup that fails shows the id alone.
+            let name = authn::blocking(state, move |s| s.auth.display_name(&account))
+                .await
+                .ok()
+                .flatten();
+            Some(Who { id, name })
+        }
+        None => None,
+    };
     let (csrf, set_csrf) = match get_cookie(headers, CSRF_COOKIE) {
         Some(t) if !t.is_empty() => (t, None),
         _ => {
@@ -140,11 +160,11 @@ fn render<T: Template>(state: &AppState, status: StatusCode, tpl: &T, c: &Ctx) -
     }
 }
 
-fn error_page(state: &AppState, c: &Ctx, e: Failure) -> Response {
+fn error_page(state: &AppState, c: &Ctx, at: &str, e: Failure) -> Response {
     match e {
         // No prikk slot within the bounded wait (IS-4): the same existence-neutral page, plus
         // `Retry-After`.
-        Failure::Busy => busy_page(state, c, retry_after_secs(state)),
+        Failure::Busy => busy_page(state, c, at, retry_after_secs(state)),
         // RFC 011 D-4: the plain page for "too large" (the same message as the API's `too_large`).
         Failure::Read(ReadError::TooLarge) | Failure::OverBudget => render(
             state,
@@ -153,6 +173,7 @@ fn error_page(state: &AppState, c: &Ctx, e: Failure) -> Response {
                 user: c.user.clone(),
                 csrf: c.csrf.clone(),
                 t: c.t,
+                at: at.to_owned(),
             },
             c,
         ),
@@ -163,6 +184,7 @@ fn error_page(state: &AppState, c: &Ctx, e: Failure) -> Response {
                 user: c.user.clone(),
                 csrf: c.csrf.clone(),
                 t: c.t,
+                at: at.to_owned(),
             },
             c,
         ),
@@ -173,21 +195,24 @@ fn error_page(state: &AppState, c: &Ctx, e: Failure) -> Response {
                 user: c.user.clone(),
                 csrf: c.csrf.clone(),
                 t: c.t,
+                at: at.to_owned(),
             },
             c,
         ),
     }
 }
 
-/// The existence-neutral "unavailable" page with `Retry-After` (a refused request, IS-4 / IS-24).
-fn busy_page(state: &AppState, c: &Ctx, retry_after: u64) -> Response {
+/// The "busy" page with `Retry-After` (a refused request, IS-4 / IS-24): the same page whether or not the
+/// repository or account exists.
+fn busy_page(state: &AppState, c: &Ctx, at: &str, retry_after: u64) -> Response {
     let mut resp = render(
         state,
         StatusCode::SERVICE_UNAVAILABLE,
-        &UnavailableTpl {
+        &BusyTpl {
             user: c.user.clone(),
             csrf: c.csrf.clone(),
             t: c.t,
+            at: at.to_owned(),
         },
         c,
     );
@@ -203,7 +228,6 @@ fn busy_page(state: &AppState, c: &Ctx, retry_after: u64) -> Response {
 enum Notice {
     CsrfFailed,
     FormIncomplete,
-    BadAddress,
     SsoOff,
     SsoDown,
     SsoIncomplete,
@@ -220,11 +244,6 @@ impl Notice {
         match self {
             Notice::CsrfFailed => (Key::PageCsrfTitle, Key::PageCsrfHeading, Key::PageCsrfBody),
             Notice::FormIncomplete => (Key::PageFormTitle, Key::PageFormHeading, Key::PageFormBody),
-            Notice::BadAddress => (
-                Key::PageBadAddressTitle,
-                Key::PageBadAddressHeading,
-                Key::PageBadAddressBody,
-            ),
             Notice::SsoOff => (
                 Key::PageSsoOffTitle,
                 Key::PageSsoOffHeading,
@@ -393,44 +412,64 @@ fn listing(entries: &[TreeEntryView], prefix: &str) -> (Vec<DirRow>, Vec<FileRow
 #[derive(Template)]
 #[template(path = "home.html")]
 struct HomeTpl {
-    user: Option<String>,
+    user: Option<Who>,
     csrf: String,
     t: T,
+    /// What was typed, shown again beside the error.
+    value: String,
+    error: bool,
 }
 #[derive(Template)]
 #[template(path = "login.html")]
 struct LoginTpl {
-    user: Option<String>,
+    user: Option<Who>,
     csrf: String,
     t: T,
-    failed: bool,
+    /// Why the form is shown again: the one message for wrong credentials, or the lock-out's own.
+    error: Option<Key>,
+    /// The page title for this state.
+    title: Key,
     sso: bool,
 }
 #[derive(Template)]
 #[template(path = "notfound.html")]
 struct NotFoundTpl {
-    user: Option<String>,
+    user: Option<Who>,
     csrf: String,
     t: T,
+    /// The path that was asked for: the title's context.
+    at: String,
 }
 #[derive(Template)]
 #[template(path = "unavailable.html")]
 struct UnavailableTpl {
-    user: Option<String>,
+    user: Option<Who>,
     csrf: String,
     t: T,
+    /// The path that was asked for: the title's context.
+    at: String,
+}
+#[derive(Template)]
+#[template(path = "busy.html")]
+struct BusyTpl {
+    user: Option<Who>,
+    csrf: String,
+    t: T,
+    at: String,
 }
 #[derive(Template)]
 #[template(path = "toolarge.html")]
 struct TooLargeTpl {
-    user: Option<String>,
+    user: Option<Who>,
     csrf: String,
     t: T,
+    /// The path that was asked for: the title's context.
+    at: String,
 }
 #[derive(Template)]
 #[template(path = "message.html")]
 struct MessageTpl {
-    user: Option<String>,
+    user: Option<Who>,
     csrf: String,
     t: T,
     title: String,
@@ -442,7 +481,7 @@ struct MessageTpl {
 #[derive(Template)]
 #[template(path = "repo.html")]
 struct RepoTpl {
-    user: Option<String>,
+    user: Option<Who>,
     csrf: String,
     t: T,
     owner: String,
@@ -461,7 +500,7 @@ struct RepoTpl {
 #[derive(Template)]
 #[template(path = "tree.html")]
 struct TreeTpl {
-    user: Option<String>,
+    user: Option<Who>,
     csrf: String,
     t: T,
     owner: String,
@@ -476,7 +515,7 @@ struct TreeTpl {
 #[derive(Template)]
 #[template(path = "file.html")]
 struct FileTpl {
-    user: Option<String>,
+    user: Option<Who>,
     csrf: String,
     t: T,
     owner: String,
@@ -486,6 +525,8 @@ struct FileTpl {
     size: u64,
     encoding: String,
     raw_url: String,
+    /// The last path segment: what the download link names.
+    file_name: String,
     rendered_html: Option<String>,
     text: Option<String>,
 }
@@ -495,12 +536,15 @@ struct HistoryRow {
     kind: String,
     rollback_block: bool,
     patch_count: u64,
-    messages: Vec<String>,
+    /// The link text: the change's first message line, or "Change {id}" when it has none.
+    summary: String,
+    /// The rest of the messages (and the rest of the first one), shown under the summary.
+    more: Vec<String>,
 }
 #[derive(Template)]
 #[template(path = "history.html")]
 struct HistoryTpl {
-    user: Option<String>,
+    user: Option<Who>,
     csrf: String,
     t: T,
     owner: String,
@@ -524,13 +568,15 @@ struct PatchRow {
 #[derive(Template)]
 #[template(path = "change.html")]
 struct ChangeTpl {
-    user: Option<String>,
+    user: Option<Who>,
     csrf: String,
     t: T,
     owner: String,
     name: String,
     repo: String,
     target: String,
+    /// The target shortened for the title.
+    target_short: String,
     patches: Vec<PatchRow>,
 }
 struct BranchRow {
@@ -546,7 +592,7 @@ struct TagRow {
 #[derive(Template)]
 #[template(path = "refs.html")]
 struct RefsTpl {
-    user: Option<String>,
+    user: Option<Who>,
     csrf: String,
     t: T,
     owner: String,
@@ -564,7 +610,7 @@ struct StageRow {
 #[derive(Template)]
 #[template(path = "verify.html")]
 struct VerifyTpl {
-    user: Option<String>,
+    user: Option<Who>,
     csrf: String,
     t: T,
     owner: String,
@@ -576,6 +622,47 @@ struct VerifyTpl {
     total_sessions: u64,
     failed: Vec<String>,
     stages: Vec<StageRow>,
+}
+
+/// A history row: the link text is the change's first message line (data from prikk, escaped by the template),
+/// with the short id as plain secondary text; a change with no message is "Change {id}".
+fn history_row(t: &T, e: &planeter_core::read::HistoryEntry) -> HistoryRow {
+    let short_id = short(&e.block_id);
+    let mut messages = e
+        .messages
+        .iter()
+        .map(|m| m.message.trim())
+        .filter(|m| !m.is_empty());
+    let (summary, mut more) = match messages.next() {
+        Some(first) => {
+            let (line, rest) = first.split_once('\n').unwrap_or((first, ""));
+            let rest = rest.trim();
+            (
+                line.trim().to_owned(),
+                if rest.is_empty() {
+                    vec![]
+                } else {
+                    vec![rest.to_owned()]
+                },
+            )
+        }
+        None => (
+            t.msg(Key::HistoryChangeFallback)
+                .with("id", &short_id)
+                .text(),
+            vec![],
+        ),
+    };
+    more.extend(messages.map(str::to_owned));
+    HistoryRow {
+        block_id: e.block_id.clone(),
+        short_id,
+        kind: e.kind.clone(),
+        rollback_block: e.rollback_block,
+        patch_count: e.patch_count,
+        summary,
+        more,
+    }
 }
 
 /// The catalog label of a verify stage status token (`evaluated`, `failed`, `not_evaluated`, `halted`).
@@ -622,8 +709,27 @@ async fn home(State(state): State<AppState>, headers: HeaderMap) -> Response {
             user: c.user.clone(),
             csrf: c.csrf.clone(),
             t: c.t,
+            value: String::new(),
+            error: false,
         },
         &c,
+    )
+}
+
+/// The home page again with the address field in error (RFC 012 D-2): the message sits beside the field,
+/// which is marked invalid, and the status is 400.
+fn address_error(state: &AppState, c: &Ctx, value: &str) -> Response {
+    render(
+        state,
+        StatusCode::BAD_REQUEST,
+        &HomeTpl {
+            user: c.user.clone(),
+            csrf: c.csrf.clone(),
+            t: c.t,
+            value: value.to_owned(),
+            error: true,
+        },
+        c,
     )
 }
 
@@ -634,14 +740,7 @@ async fn go(
 ) -> Response {
     let Ok(Query(q)) = q else {
         let c = ctx(&headers, &state).await;
-        return notice(
-            &state,
-            &c,
-            StatusCode::BAD_REQUEST,
-            Notice::BadAddress,
-            Next::Home,
-            vec![],
-        );
+        return address_error(&state, &c, "");
     };
     let ok = q
         .repo
@@ -650,7 +749,8 @@ async fn go(
     if ok {
         redirect(&state, &format!("/{}", pct(&q.repo)), vec![])
     } else {
-        redirect(&state, "/", vec![])
+        let c = ctx(&headers, &state).await;
+        address_error(&state, &c, &q.repo)
     }
 }
 
@@ -680,7 +780,8 @@ async fn login_form(State(state): State<AppState>, headers: HeaderMap) -> Respon
             user: c.user.clone(),
             csrf: c.csrf.clone(),
             t: c.t,
-            failed: false,
+            error: None,
+            title: Key::TitleLogin,
             sso: state.oidc.is_some(),
         },
         &c,
@@ -730,7 +831,8 @@ async fn login_submit(
                 user: None,
                 csrf: c.csrf.clone(),
                 t: c.t,
-                failed: true,
+                error: Some(Key::LoginLocked),
+                title: Key::TitleLoginLocked,
                 sso: state.oidc.is_some(),
             },
             &c,
@@ -748,7 +850,7 @@ async fn login_submit(
         Ok(v) => v,
         Err(GateError::Busy) => {
             let wait = state.auth_gate.wait().as_secs().max(1);
-            return busy_page(&state, &c, wait);
+            return busy_page(&state, &c, "/login", wait);
         }
         Err(GateError::Aborted) => {
             return notice(
@@ -799,7 +901,8 @@ async fn login_submit(
                     user: None,
                     csrf: c.csrf.clone(),
                     t: c.t,
-                    failed: true,
+                    error: Some(Key::LoginFailed),
+                    title: Key::TitleLoginFailed,
                     sso: state.oidc.is_some(),
                 },
                 &c,
@@ -1076,7 +1179,7 @@ async fn repo_home(
     .await;
     let (tree, refs, readme) = match page {
         Ok(p) => p,
-        Err(e) => return error_page(&state, &c, e),
+        Err(e) => return error_page(&state, &c, &format!("/{owner}/{name}"), e),
     };
     let verify = badge_verify(&state, &c.principal, &owner, &name).await;
     let (ac, al) = match &verify {
@@ -1140,7 +1243,7 @@ async fn tree_page(
     .await;
     let tree = match tree {
         Ok(t) => t,
-        Err(e) => return error_page(&state, &c, e),
+        Err(e) => return error_page(&state, &c, &format!("/{owner}/{name}/tree/{prefix}"), e),
     };
     let (dirs, files) = listing(&tree.entries, &format!("{prefix}/"));
     render(
@@ -1197,7 +1300,7 @@ async fn file_page(
     .await;
     let raw = match raw {
         Ok(f) => f,
-        Err(e) => return error_page(&state, &c, e),
+        Err(e) => return error_page(&state, &c, &format!("/{owner}/{name}/blob/{path}"), e),
     };
     let raw_url = format!(
         "{}/api/v1/repos/{}/{}/raw?path={}{}",
@@ -1207,6 +1310,7 @@ async fn file_page(
         pct(&path),
         r.map(|r| format!("&ref={}", pct(r))).unwrap_or_default()
     );
+    let file_name = path.rsplit('/').next().unwrap_or(&path).to_owned();
     let is_text = raw.encoding.as_deref() == Some("text");
     let (rendered_html, text) = if is_text {
         let t = String::from_utf8_lossy(&raw.bytes).into_owned();
@@ -1232,6 +1336,7 @@ async fn file_page(
             size: raw.size,
             encoding: raw.encoding.unwrap_or_default(),
             raw_url,
+            file_name,
             rendered_html,
             text,
         },
@@ -1269,25 +1374,14 @@ async fn history_page(
     .await;
     let h = match page {
         Ok(h) => h,
-        Err(e) => return error_page(&state, &c, e),
+        Err(e) => return error_page(&state, &c, &format!("/{owner}/{name}/history"), e),
     };
     let verify = badge_verify(&state, &c.principal, &owner, &name).await;
     let (ac, al) = match &verify {
         Ok(v) => assurance(v.assurance()),
         Err(_) => ("bad", Key::AssuranceVerifyUnavailable),
     };
-    let entries = h
-        .entries
-        .iter()
-        .map(|e| HistoryRow {
-            block_id: e.block_id.clone(),
-            short_id: short(&e.block_id),
-            kind: e.kind.clone(),
-            rollback_block: e.rollback_block,
-            patch_count: e.patch_count,
-            messages: e.messages.iter().map(|m| m.message.clone()).collect(),
-        })
-        .collect();
+    let entries = h.entries.iter().map(|e| history_row(&c.t, e)).collect();
     render(
         &state,
         StatusCode::OK,
@@ -1328,7 +1422,14 @@ async fn change_page(
     .await;
     let ch = match ch {
         Ok(v) => v,
-        Err(e) => return error_page(&state, &c, e),
+        Err(e) => {
+            return error_page(
+                &state,
+                &c,
+                &format!("/{owner}/{name}/change/{}", short(&target)),
+                e,
+            );
+        }
     };
     let patches = ch
         .patches
@@ -1360,6 +1461,7 @@ async fn change_page(
             repo: format!("{owner}/{name}"),
             owner,
             name,
+            target_short: short(&target),
             target,
             patches,
         },
@@ -1383,7 +1485,7 @@ async fn refs_page(
     .await;
     let v = match v {
         Ok(v) => v,
-        Err(e) => return error_page(&state, &c, e),
+        Err(e) => return error_page(&state, &c, &format!("/{owner}/{name}/refs"), e),
     };
     render(
         &state,
@@ -1434,7 +1536,7 @@ async fn verify_page(
     .await;
     let v = match v {
         Ok(v) => v,
-        Err(e) => return error_page(&state, &c, e),
+        Err(e) => return error_page(&state, &c, &format!("/{owner}/{name}/verify"), e),
     };
     let (ac, al) = assurance(v.assurance());
     render(

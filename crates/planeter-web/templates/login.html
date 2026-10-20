@@ -1,10 +1,10 @@
 {% extends "base.html" %}
-{% block title %}{{ t.msg(Key::TitleLogin).product() }}{% endblock %}
+{% block title %}{{ t.msg(*title).product() }}{% endblock %}
 {% block body %}
 <h1>{{ t.get(Key::LoginHeading) }}</h1>
-{% if failed %}<p class="badge bad">{{ t.get(Key::LoginFailed) }}</p>{% endif %}
+{% if let Some(k) = error %}<p id="login-error" class="badge bad" role="alert">{{ t.get(**k) }}</p>{% endif %}
 {% if sso %}<p><a href="/login/oidc">{{ t.get(Key::LoginSso) }}</a></p>{% endif %}
-<form method="post" action="/login">
+<form method="post" action="/login"{% if error.is_some() %} aria-describedby="login-error"{% endif %}>
   <input type="hidden" name="csrf" value="{{ csrf }}">
   <p><label>{{ t.get(Key::LoginUser) }} <input name="username" autocomplete="username" required></label></p>
   <p><label>{{ t.get(Key::LoginPassword) }} <input name="password" type="password" autocomplete="current-password" required></label></p>

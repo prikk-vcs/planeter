@@ -8,28 +8,47 @@ pub const CATALOG: &[Entry] = &[
     // layout and navigation
     msg("layout.sign_in", "sign in"),
     msg("layout.sign_out", "sign out"),
+    msg("layout.skip", "Skip to content"),
+    msg("layout.nav_repository", "Repository"),
+    msg("layout.footer", "{product} {version}"),
     msg("nav.code", "code"),
     msg("nav.history", "history"),
     msg("nav.refs", "refs"),
     msg("nav.verify", "verify"),
-    // page titles
+    // page titles (one pattern: page · context · product)
+    msg("title.home", "Find a repository · {product}"),
+    msg(
+        "title.home_error",
+        "Find a repository · address not recognised · {product}",
+    ),
+    msg("title.busy", "Busy · {path} · {product}"),
+    msg("title.login_failed", "Sign in · not accepted · {product}"),
+    msg(
+        "title.login_locked",
+        "Sign in · too many attempts · {product}",
+    ),
     msg("title.login", "Sign in · {product}"),
-    msg("title.not_found", "Not found · {product}"),
-    msg("title.unavailable", "Unavailable · {product}"),
-    msg("title.too_large", "Too large · {product}"),
+    msg("title.not_found", "Not found · {path} · {product}"),
+    msg("title.unavailable", "Unavailable · {path} · {product}"),
+    msg("title.too_large", "Too large · {path} · {product}"),
     msg("title.repo", "{repo} · {product}"),
-    msg("title.tree", "{prefix} · {repo}"),
-    msg("title.file", "{path} · {repo}"),
-    msg("title.history", "history · {repo}"),
-    msg("title.change", "change {target} · {repo}"),
-    msg("title.refs", "refs · {repo}"),
-    msg("title.verify", "verify · {repo}"),
+    msg("title.tree", "{prefix} · {repo} · {product}"),
+    msg("title.file", "{path} · {repo} · {product}"),
+    msg("title.history", "history · {repo} · {product}"),
+    msg("title.change", "change {target} · {repo} · {product}"),
+    msg("title.refs", "refs · {repo} · {product}"),
+    msg("title.verify", "verify · {repo} · {product}"),
     // home
     msg(
         "home.intro",
         "A forge for prikk repositories. Browse a repository by its {address}.",
     ),
     msg("home.address_example", "owner/name"),
+    msg("home.address_label", "Repository address"),
+    msg(
+        "home.address_error",
+        "That is not a repository address. Write it as {address}.",
+    ),
     msg("home.open", "Open"),
     // sign-in
     msg("login.heading", "Sign in"),
@@ -38,7 +57,11 @@ pub const CATALOG: &[Entry] = &[
     msg("login.user", "User"),
     msg("login.password", "Password"),
     msg("login.submit", "Sign in"),
-    // the three plain pages
+    msg(
+        "login.locked",
+        "Too many sign-in attempts. Wait a few minutes and try again.",
+    ),
+    // the plain pages
     msg("not_found.heading", "Not found"),
     msg(
         "not_found.body",
@@ -49,15 +72,23 @@ pub const CATALOG: &[Entry] = &[
         "unavailable.body",
         "The repository could not be read right now. Nothing is shown rather than something stale or invented.",
     ),
+    msg("busy.heading", "The server is busy"),
+    msg(
+        "busy.body",
+        "Too many requests are being handled right now. Try again in a little while.",
+    ),
     msg("too_large.heading", "Too large"),
     // repository, tree, file
     msg("repo.location", "at {point}"),
     msg("repo.location_branch", "at {point} · branch {branch}"),
     msg("tree.at", "at {point}"),
     msg("listing.size_and_encoding", "{size} · {encoding}"),
-    msg("file.raw", "raw"),
+    msg("listing.caption", "Files and folders"),
+    msg("listing.name", "Name"),
+    msg("listing.details", "Size and type"),
+    msg("listing.folder", "folder"),
     msg("file.binary", "Binary content — {download}."),
-    msg("file.download", "download"),
+    msg("file.download_named", "Download {name}"),
     // sizes
     msg("size.bytes", "{value} B"),
     msg("size.kib", "{value} KiB"),
@@ -73,13 +104,24 @@ pub const CATALOG: &[Entry] = &[
     msg("history.rollback", "rollback"),
     plural_msg("history.patch_count", "{count} patch", "{count} patches"),
     msg("history.empty", "No sealed history on this ref yet."),
+    msg("history.col.change", "Change"),
+    msg("history.col.kind", "Kind"),
+    msg("history.col.patches", "Patches"),
+    msg("history.change_fallback", "Change {id}"),
     msg("change.heading", "Change {target}"),
     msg("change.patch", "patch {id}"),
+    msg("change.col.operation", "Operation"),
+    msg("change.col.paths", "Paths"),
     msg("refs.branches", "Branches"),
     msg("refs.tags", "Tags"),
     msg("refs.current", "current"),
     msg("refs.closed", "closed"),
     msg("refs.no_tags", "No tags."),
+    msg("refs.heading", "Branches and tags"),
+    msg("refs.col.branch", "Branch"),
+    msg("refs.col.tag", "Tag"),
+    msg("refs.col.state", "State"),
+    msg("refs.col.target", "Target"),
     msg("verify.heading", "Verification"),
     msg(
         "verify.intro",
@@ -94,6 +136,9 @@ pub const CATALOG: &[Entry] = &[
     msg("verify.status.failed", "failed"),
     msg("verify.status.not_evaluated", "not_evaluated"),
     msg("verify.status.halted", "halted"),
+    msg("verify.col.stage", "Stage"),
+    msg("verify.col.status", "Status"),
+    msg("verify.col.detail", "Detail"),
     // the API's error messages and hints
     msg("error.not_found.message", "No such resource."),
     msg(
@@ -169,15 +214,6 @@ pub const CATALOG: &[Entry] = &[
     msg(
         "page.form_incomplete.body",
         "Some required fields were missing, so nothing was done.",
-    ),
-    msg(
-        "page.bad_address.title",
-        "That address could not be read · {product}",
-    ),
-    msg("page.bad_address.heading", "That address could not be read"),
-    msg(
-        "page.bad_address.body",
-        "The address of the repository was missing.",
     ),
     msg(
         "page.sso_off.title",

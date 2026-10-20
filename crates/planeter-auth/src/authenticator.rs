@@ -63,6 +63,15 @@ impl Authenticator {
         self
     }
 
+    /// The name a signed-in person is shown under (their own page header). `None` when the account has
+    /// none to show (no such account, an empty name, or a store that cannot answer); callers then show the
+    /// account id. It reveals nothing a signed-in person does not already know about themself.
+    pub fn display_name(&self, user: &UserId) -> Option<String> {
+        let account = self.accounts.get(user).ok().flatten()?;
+        let name = account.display_name.trim();
+        (!name.is_empty()).then(|| name.to_owned())
+    }
+
     /// The unauthenticated principal.
     pub fn anonymous(&self) -> Principal {
         Principal::Anonymous
@@ -178,6 +187,32 @@ mod tests {
         )
         .with_clock(|| 1000);
         (auth, accounts, creds)
+    }
+
+    #[test]
+    fn the_display_name_is_the_account_s_trimmed_name_or_nothing() {
+        let (auth, accounts, _) = fixture();
+        for (id, name) in [("a", "Alice  "), ("b", ""), ("c", " \t ")] {
+            accounts
+                .upsert(Account {
+                    user: UserId::new(id),
+                    display_name: name.into(),
+                    email: None,
+                    password: None,
+                })
+                .unwrap();
+        }
+        assert_eq!(
+            auth.display_name(&UserId::new("a")).as_deref(),
+            Some("Alice")
+        );
+        assert_eq!(auth.display_name(&UserId::new("b")), None, "an empty name");
+        assert_eq!(auth.display_name(&UserId::new("c")), None, "a blank name");
+        assert_eq!(
+            auth.display_name(&UserId::new("ghost")),
+            None,
+            "no such account"
+        );
     }
 
     #[test]

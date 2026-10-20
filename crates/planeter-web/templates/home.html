@@ -1,9 +1,11 @@
 {% extends "base.html" %}
+{% block title %}{% if error %}{{ t.msg(Key::TitleHomeError).product() }}{% else %}{{ t.msg(Key::TitleHome).product() }}{% endif %}{% endblock %}
 {% block body %}
 <h1>{{ t.product() }}</h1>
 <p class="muted">{{ t.msg(Key::HomeIntro).code("address", t.get(Key::HomeAddressExample)).html() }}</p>
 <form method="get" action="/go">
-  <input name="repo" placeholder="{{ t.get(Key::HomeAddressExample) }}" required>
-  <button type="submit">{{ t.get(Key::HomeOpen) }}</button>
+  <p><label for="repo">{{ t.get(Key::HomeAddressLabel) }}</label></p>
+  <p><input id="repo" name="repo" value="{{ value }}" placeholder="{{ t.get(Key::HomeAddressExample) }}" autocomplete="off" spellcheck="false" required{% if error %} aria-invalid="true" aria-describedby="repo-error"{% endif %}> <button type="submit">{{ t.get(Key::HomeOpen) }}</button></p>
+  {% if error %}<p id="repo-error" class="badge bad">{{ t.msg(Key::HomeAddressError).code("address", t.get(Key::HomeAddressExample)).html() }}</p>{% endif %}
 </form>
 {% endblock %}

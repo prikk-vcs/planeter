@@ -1,10 +1,22 @@
 {% extends "base.html" %}
-{% block title %}{{ t.msg(Key::TitleRefs).with("repo", repo) }}{% endblock %}
+{% block title %}{{ t.msg(Key::TitleRefs).with("repo", repo).product() }}{% endblock %}
 {% block nav %}{% include "repo_nav.html" %}{% endblock %}
 {% block body %}
-<h1>{{ t.get(Key::RefsBranches) }}</h1>
-<table>{% for b in branches %}<tr><td><a href="/{{ owner }}/{{ name }}/history?ref={{ b.ref_name }}"><code>{{ b.ref_name }}</code></a>{% if b.current %} <span class="badge">{{ t.get(Key::RefsCurrent) }}</span>{% endif %}{% if b.closed %} <span class="badge warn">{{ t.get(Key::RefsClosed) }}</span>{% endif %}</td><td class="muted"><code>{{ b.short_state }}</code></td></tr>{% endfor %}</table>
-<h1>{{ t.get(Key::RefsTags) }}</h1>
-<table>{% for tag in tags %}<tr><td><code>{{ tag.ref_name }}</code></td><td class="muted"><code>{{ tag.short_target }}</code></td></tr>{% endfor %}</table>
-{% if tags.is_empty() %}<p class="muted">{{ t.get(Key::RefsNoTags) }}</p>{% endif %}
+<h1>{{ t.get(Key::RefsHeading) }}</h1>
+<h2>{{ t.get(Key::RefsBranches) }}</h2>
+<table>
+<caption class="visually-hidden">{{ t.get(Key::RefsBranches) }}</caption>
+<thead><tr><th scope="col">{{ t.get(Key::RefsColBranch) }}</th><th scope="col">{{ t.get(Key::RefsColState) }}</th></tr></thead>
+<tbody>{% for b in branches %}<tr><th scope="row"><a href="/{{ owner }}/{{ name }}/history?ref={{ b.ref_name }}"><code>{{ b.ref_name }}</code></a>{% if b.current %} <span class="badge">{{ t.get(Key::RefsCurrent) }}</span>{% endif %}{% if b.closed %} <span class="badge warn">{{ t.get(Key::RefsClosed) }}</span>{% endif %}</th><td class="muted"><code>{{ b.short_state }}</code></td></tr>{% endfor %}</tbody>
+</table>
+<h2>{{ t.get(Key::RefsTags) }}</h2>
+{% if tags.is_empty() %}
+<p class="muted">{{ t.get(Key::RefsNoTags) }}</p>
+{% else %}
+<table>
+<caption class="visually-hidden">{{ t.get(Key::RefsTags) }}</caption>
+<thead><tr><th scope="col">{{ t.get(Key::RefsColTag) }}</th><th scope="col">{{ t.get(Key::RefsColTarget) }}</th></tr></thead>
+<tbody>{% for tag in tags %}<tr><th scope="row"><code>{{ tag.ref_name }}</code></th><td class="muted"><code>{{ tag.short_target }}</code></td></tr>{% endfor %}</tbody>
+</table>
+{% endif %}
 {% endblock %}

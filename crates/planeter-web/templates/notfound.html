@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ t.msg(Key::TitleNotFound).product() }}{% endblock %}
+{% block title %}{{ t.msg(Key::TitleNotFound).with("path", at).product() }}{% endblock %}
 {% block body %}
 <h1>{{ t.get(Key::NotFoundHeading) }}</h1>
 <p class="muted">{{ t.get(Key::NotFoundBody) }}</p>

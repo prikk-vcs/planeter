@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ t.msg(Key::TitleTooLarge).product() }}{% endblock %}
+{% block title %}{{ t.msg(Key::TitleTooLarge).with("path", at).product() }}{% endblock %}
 {% block body %}
 <h1>{{ t.get(Key::TooLargeHeading) }}</h1>
 <p class="muted">{{ t.get(Key::ErrTooLargeMessage) }} {{ t.get(Key::ErrTooLargeHint) }}</p>

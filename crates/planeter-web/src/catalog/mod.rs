@@ -233,12 +233,20 @@ keys! {
     // layout and navigation
     LayoutSignIn => "layout.sign_in",
     LayoutSignOut => "layout.sign_out",
+    LayoutSkip => "layout.skip",
+    LayoutNavRepository => "layout.nav_repository",
+    LayoutFooter => "layout.footer",
     NavCode => "nav.code",
     NavHistory => "nav.history",
     NavRefs => "nav.refs",
     NavVerify => "nav.verify",
-    // page titles
+    // page titles (one pattern: page · context · product)
+    TitleHome => "title.home",
+    TitleHomeError => "title.home_error",
+    TitleBusy => "title.busy",
     TitleLogin => "title.login",
+    TitleLoginFailed => "title.login_failed",
+    TitleLoginLocked => "title.login_locked",
     TitleNotFound => "title.not_found",
     TitleUnavailable => "title.unavailable",
     TitleTooLarge => "title.too_large",
@@ -252,6 +260,8 @@ keys! {
     // home
     HomeIntro => "home.intro",
     HomeAddressExample => "home.address_example",
+    HomeAddressLabel => "home.address_label",
+    HomeAddressError => "home.address_error",
     HomeOpen => "home.open",
     // sign-in
     LoginHeading => "login.heading",
@@ -260,20 +270,26 @@ keys! {
     LoginUser => "login.user",
     LoginPassword => "login.password",
     LoginSubmit => "login.submit",
-    // the three plain pages
+    LoginLocked => "login.locked",
+    // the plain pages
     NotFoundHeading => "not_found.heading",
     NotFoundBody => "not_found.body",
     UnavailableHeading => "unavailable.heading",
     UnavailableBody => "unavailable.body",
+    BusyHeading => "busy.heading",
+    BusyBody => "busy.body",
     TooLargeHeading => "too_large.heading",
     // repository, tree, file
     RepoLocation => "repo.location",
     RepoLocationBranch => "repo.location_branch",
     TreeAt => "tree.at",
     SizeAndEncoding => "listing.size_and_encoding",
-    FileRaw => "file.raw",
+    ListingCaption => "listing.caption",
+    ListingName => "listing.name",
+    ListingDetails => "listing.details",
+    ListingFolder => "listing.folder",
     FileBinary => "file.binary",
-    FileDownload => "file.download",
+    FileDownloadNamed => "file.download_named",
     // sizes
     SizeBytes => "size.bytes",
     SizeKib => "size.kib",
@@ -289,13 +305,24 @@ keys! {
     HistoryRollback => "history.rollback",
     HistoryPatchCount => "history.patch_count",
     HistoryEmpty => "history.empty",
+    HistoryColChange => "history.col.change",
+    HistoryColKind => "history.col.kind",
+    HistoryColPatches => "history.col.patches",
+    HistoryChangeFallback => "history.change_fallback",
     ChangeHeading => "change.heading",
     ChangePatch => "change.patch",
+    ChangeColOperation => "change.col.operation",
+    ChangeColPaths => "change.col.paths",
     RefsBranches => "refs.branches",
     RefsTags => "refs.tags",
     RefsCurrent => "refs.current",
     RefsClosed => "refs.closed",
     RefsNoTags => "refs.no_tags",
+    RefsHeading => "refs.heading",
+    RefsColBranch => "refs.col.branch",
+    RefsColTag => "refs.col.tag",
+    RefsColState => "refs.col.state",
+    RefsColTarget => "refs.col.target",
     VerifyHeading => "verify.heading",
     VerifyIntro => "verify.intro",
     VerifySessions => "verify.sessions",
@@ -303,6 +330,9 @@ keys! {
     VerifyStatusFailed => "verify.status.failed",
     VerifyStatusNotEvaluated => "verify.status.not_evaluated",
     VerifyStatusHalted => "verify.status.halted",
+    VerifyColStage => "verify.col.stage",
+    VerifyColStatus => "verify.col.status",
+    VerifyColDetail => "verify.col.detail",
     // the API's error messages and hints (one message and one hint per code; the raw route's own hint)
     ErrNotFoundMessage => "error.not_found.message",
     ErrNotFoundHint => "error.not_found.hint",
@@ -331,9 +361,6 @@ keys! {
     PageFormTitle => "page.form_incomplete.title",
     PageFormHeading => "page.form_incomplete.heading",
     PageFormBody => "page.form_incomplete.body",
-    PageBadAddressTitle => "page.bad_address.title",
-    PageBadAddressHeading => "page.bad_address.heading",
-    PageBadAddressBody => "page.bad_address.body",
     PageSsoOffTitle => "page.sso_off.title",
     PageSsoOffHeading => "page.sso_off.heading",
     PageSsoOffBody => "page.sso_off.body",
@@ -620,6 +647,10 @@ impl T {
     }
     pub fn product(&self) -> &'static str {
         PRODUCT
+    }
+    /// The running version, for the page footer: a number, not a translatable word.
+    pub fn version(&self) -> &'static str {
+        env!("CARGO_PKG_VERSION")
     }
     /// The command the verify page names (`prikk verify`): a program's name, not a translatable word.
     pub fn verify_command(&self) -> &'static str {

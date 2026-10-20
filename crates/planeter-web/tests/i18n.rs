@@ -164,7 +164,7 @@ async fn accept_language_selects_a_language_by_q_value_and_unknown_ones_fall_bac
     assert!(page.contains("<html lang=\"qaa\" dir=\"rtl\">"), "{page}");
     assert!(page.contains(">‹Open›</button>"), "{page}");
     assert!(
-        page.contains("<title>planeter</title>"),
+        page.contains("<title>‹Find a repository · planeter›</title>"),
         "the product name is not translated: {page}"
     );
     assert_eq!(h(&headers, "content-language"), "qaa");
@@ -432,7 +432,7 @@ async fn the_former_bare_strings_are_pages_in_the_callers_language_with_their_st
             && page.contains("lang=\"qaa\" dir=\"rtl\""),
         "{page}"
     );
-    // An incomplete form is 422 (it was axum's text), a missing address is 400.
+    // An incomplete form is 422 (it was axum's text), a missing address is 400 (the home page again, with the error).
     let (s, _, page) = send(
         &r,
         post("/login", Some("planeter_csrf=aaa"), None, "csrf=aaa"),
@@ -446,8 +446,14 @@ async fn the_former_bare_strings_are_pages_in_the_callers_language_with_their_st
     );
     let (s, _, page) = send(&r, get("/go", None, None)).await;
     assert_eq!(s, StatusCode::BAD_REQUEST);
+    // …shown again beside the field, which is marked invalid and tied to the message.
     assert!(
-        page.contains("<h1>That address could not be read</h1>") && !page.contains("missing field"),
+        page.contains("<h1>planeter</h1>")
+            && page.contains("aria-invalid=\"true\" aria-describedby=\"repo-error\"")
+            && page.contains(
+                "<p id=\"repo-error\" class=\"badge bad\">That is not a repository address."
+            )
+            && !page.contains("missing field"),
         "{page}"
     );
     // SSO is not configured in this app: 404 pages, no internal text.
@@ -529,16 +535,20 @@ fn a_hostile_value_in_a_text_code_muted_or_link_slot_cannot_inject_markup_or_an_
     }
     // A value that looks like a placeholder is shown as it is: values are never scanned for placeholders.
     assert_eq!(
-        t.msg(Key::TitleRefs).with("repo", "{repo}").text(),
-        "refs · {repo}"
+        t.msg(Key::TitleRefs)
+            .with("repo", "{repo}")
+            .product()
+            .text(),
+        "refs · {repo} · planeter"
     );
     // The plain-text rendering is not HTML and is escaped by whoever prints it (askama, JSON).
     assert_eq!(
         t.msg(Key::TitleChange)
             .with("target", "<b>")
             .with("repo", "r")
+            .product()
             .text(),
-        "change <b> · r"
+        "change <b> · r · planeter"
     );
 }
 

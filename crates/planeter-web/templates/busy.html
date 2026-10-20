@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block title %}{{ t.msg(Key::TitleBusy).with("path", at).product() }}{% endblock %}
+{% block body %}
+<h1>{{ t.get(Key::BusyHeading) }}</h1>
+<p class="muted">{{ t.get(Key::BusyBody) }}</p>
+{% endblock %}
