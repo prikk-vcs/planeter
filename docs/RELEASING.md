@@ -25,7 +25,9 @@ published until M4. **Tagging and publishing are owner-authorized.**
 5. **Review the pins against upstream releases and advisories before tagging** (RFC 010 R-1): every
    `uses:` SHA and the base-image digest are immutable and do not refresh themselves. For each, compare the
    pinned tag with the upstream's latest and read the advisories; an update is a reviewed change that names
-   the upstream diff, and `pin-check` must stay green.
+   the upstream diff, and `pin-check` must stay green. If the release chain (an action, the `Dockerfile`)
+   changed since the last one, run a **rehearsal** on the candidate commit and record its run id (RFC 010
+   D-10; "Rehearsal" below).
 
 ## The tag (owner)
 
@@ -40,14 +42,51 @@ A signed tag, bare version (no `v`), matching the ecosystem convention. The push
 ## Dry run (before a real tag, and after any change to a workflow or the Dockerfile)
 
 `release.yml` can be dispatched by hand: **Actions → Release → Run workflow** on `main`, or
-`gh workflow run release.yml --ref main -f dry_run=true`. A dispatch is **always a dry run**
-(`dry_run` defaults to true; `dry_run: false` is refused): it runs the gates, builds both binaries with
-`PLANETER_GIT_COMMIT` set, writes `build-info.txt`, and **builds** the `linux/amd64` + `linux/arm64`
-image. It does **not** log in to the registry, push or attest an image, attest the tarballs, create a
-GitHub release or touch crates.io (the workflow never does; see "crates.io" below). The tag-vs-version
-check is skipped (there is no tag). Download the run's `planeter-*` artifacts to read
-`build-info.txt` and run the binary's `--version`. What a dry run cannot show: registry authentication,
-the attestations, and the notes assembled from a tag's CHANGELOG section.
+`gh workflow run release.yml --ref main -f mode=dry-run`. A dispatch **never releases** — a release is made
+only by a tag push — and is refused unless it runs from `main`. `mode` is `dry-run` (the default) or
+`rehearsal` (next section). A dry run runs the gates, builds both binaries with `PLANETER_GIT_COMMIT` set,
+writes `build-info.txt`, and **builds** the `linux/amd64` + `linux/arm64` image. It publishes **nothing at
+all**: it does not log in to the registry, push or attest an image, attest the tarballs, create a GitHub
+release or touch crates.io (the workflow never does; see "crates.io" below). The tag-vs-version check is
+skipped (there is no tag). Download the run's `planeter-*` artifacts (`gh run download <id> -n
+planeter-x86_64-unknown-linux-gnu`; an unfiltered download fails on the `*.dockerbuild` record) to read
+`build-info.txt` and run the binary's `--version`. What a dry run cannot show: registry authentication, the
+attestations, and the notes assembled from a tag's CHANGELOG section — that is what a rehearsal is for.
+
+## Rehearsal (RFC 010 D-10)
+
+`gh workflow run release.yml --ref main -f mode=rehearsal` runs everything the dry run does, **and then
+exercises the steps a dry run cannot**: it logs in to ghcr, pushes the image and attests it, and attests the
+tarballs. It does so against a throwaway target only:
+
+| it writes | where |
+|---|---|
+| the image (`linux/amd64` + `linux/arm64`), one tag, overwritten each run | `ghcr.io/prikk-vcs/planeter-rehearsal:rehearsal` |
+| the image's attestation (subject name `ghcr.io/prikk-vcs/planeter-rehearsal`, pushed to the registry) | the rehearsal package and the attestation records |
+| attestations of **copies** of the two tarballs named `rehearsal-<tarball name>` (the copies are not uploaded as release assets) | the attestation records |
+
+It never creates a GitHub release or a tag, never runs the `publish` job, never writes
+`ghcr.io/prikk-vcs/planeter` (any tag, `latest` included) and never touches crates.io. This is structural, not
+a matter of care: the real publish steps are conditioned on `github.event_name == 'push'`, the rehearsal steps
+on `inputs.mode == 'rehearsal'`, and `planeter-pin-check` fails the build if a step could cross over (see
+`docs/dependency-policy.md`). The rehearsal prints what the runners' `docker`/`buildx` offer and what the
+package looks like (visibility, link to the repository); read those lines in the run's log.
+
+**When to run it** (RFC 010 D-10): before any change to an action or to the `Dockerfile` of the release chain
+(and record its run id in the change's review), and before each release candidate whose chain changed since
+the last rehearsal. Verify the image attestation with `gh attestation verify
+oci://ghcr.io/prikk-vcs/planeter-rehearsal:rehearsal --repo prikk-vcs/planeter` (needs a token that may read
+packages).
+
+**Footprint** (accepted by the owner, O-5): one additional private package, and attestation records for the
+rehearsal artifacts, which for a public repository live in the public transparency log **permanently** and
+are labelled `rehearsal` in their subject name. A rehearsal is therefore not free; do not run it for
+reassurance alone.
+
+**Deleting the rehearsal package (a manual owner step, when it is no longer wanted):** GitHub → the
+organisation's **Packages** → `planeter-rehearsal` → **Package settings** → *Delete this package* (or delete a
+single version there). Nothing in the workflow deletes anything, and nothing here touches the real package
+`planeter`.
 
 ## What the workflow does
 

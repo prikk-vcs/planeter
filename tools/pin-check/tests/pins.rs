@@ -322,3 +322,194 @@ fn a_channel_in_the_msrv_job_is_still_refused() {
         &["toolchain \"stable\" is not an explicit X.Y.Z version"],
     );
 }
+
+// ---------------------------------------------------------------- the rehearsal cannot reach the real package (RFC 010 D-10)
+
+/// A release-shaped workflow: the real publish steps are push-only (one by its job's `if`), the rehearsal
+/// steps are rehearsal-only and name only the rehearsal package.
+fn release_shaped(extra_rehearsal_step: &str) -> String {
+    format!(
+        r#"name: r
+on:
+  push:
+    tags: ["[0-9]+.[0-9]+.[0-9]+"]
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options: [dry-run, rehearsal]
+jobs:
+  container:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: docker/login-action@{SHA} # v3
+        if: github.event_name == 'push'
+      - name: Build image (dry run)
+        if: inputs.mode == 'dry-run'
+        uses: docker/build-push-action@{SHA}
+        with:
+          push: false
+      - name: Build and push (rehearsal)
+        id: rehearsal_push
+        if: inputs.mode == 'rehearsal'
+        uses: docker/build-push-action@{SHA}
+        with:
+          push: true
+          tags: ghcr.io/prikk-vcs/planeter-rehearsal:rehearsal
+      - name: Attest rehearsal image
+        if: inputs.mode == 'rehearsal'
+        uses: actions/attest-build-provenance@{SHA}
+        with:
+          subject-name: ghcr.io/prikk-vcs/planeter-rehearsal
+          push-to-registry: true
+      - name: Build and push
+        if: github.event_name == 'push'
+        uses: docker/build-push-action@{SHA}
+        with:
+          push: ${{{{ github.event_name == 'push' }}}}
+          tags: |
+            ghcr.io/prikk-vcs/planeter:${{{{ github.ref_name }}}}
+            ghcr.io/prikk-vcs/planeter:latest
+{extra_rehearsal_step}  publish:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Notes
+        run: echo "use ghcr.io/prikk-vcs/planeter:$TAG"
+      - name: Publish
+        run: gh release create "$TAG" --repo prikk-vcs/planeter
+"#
+    )
+}
+
+#[test]
+fn a_release_shaped_workflow_with_a_confined_rehearsal_passes() {
+    let (code, text) = run(&fixture(
+        "rehearsal-ok",
+        &[(".github/workflows/release.yml", &release_shaped(""))],
+    ));
+    assert_eq!(code, 0, "{text}");
+}
+
+#[test]
+fn a_step_naming_the_real_image_without_the_push_condition_fails() {
+    // The real image named by a step that also runs in a dispatch…
+    let wf = release_shaped("").replace(
+        "      - name: Build and push\n        if: github.event_name == 'push'\n",
+        "      - name: Build and push\n",
+    );
+    expect_fail(
+        "real-no-push",
+        &[(".github/workflows/release.yml", &wf)],
+        &[
+            "a step naming the real image",
+            "github.event_name == 'push'",
+        ],
+    );
+    // …or by a step whose condition names a dispatch mode instead.
+    let wf = release_shaped("").replace(
+        "      - name: Build and push\n        if: github.event_name == 'push'\n",
+        "      - name: Build and push\n        if: inputs.mode == 'dry-run'\n",
+    );
+    expect_fail(
+        "real-in-dry-run",
+        &[(".github/workflows/release.yml", &wf)],
+        &["a step naming the real image"],
+    );
+    // The job-level `if` counts: removing the publish job's makes its note step fail.
+    let wf = release_shaped("").replace(
+        "  publish:\n    if: github.event_name == 'push'\n",
+        "  publish:\n",
+    );
+    expect_fail(
+        "job-no-push",
+        &[(".github/workflows/release.yml", &wf)],
+        &["a step naming the real image"],
+    );
+}
+
+#[test]
+fn a_step_naming_both_the_real_image_and_the_rehearsal_package_fails() {
+    let wf = release_shaped("").replace(
+        "          tags: ghcr.io/prikk-vcs/planeter-rehearsal:rehearsal\n",
+        "          tags: |\n            ghcr.io/prikk-vcs/planeter-rehearsal:rehearsal\n            ghcr.io/prikk-vcs/planeter:latest\n",
+    );
+    expect_fail(
+        "both",
+        &[(".github/workflows/release.yml", &wf)],
+        &["names both the real image"],
+    );
+}
+
+#[test]
+fn a_rehearsal_step_that_can_also_run_on_a_tag_push_fails() {
+    for (name, cond) in [
+        (
+            "or-push",
+            "inputs.mode == 'rehearsal' || github.event_name == 'push'",
+        ),
+        (
+            "and-push",
+            "inputs.mode == 'rehearsal' && github.event_name == 'push'",
+        ),
+    ] {
+        let wf = release_shaped("").replace(
+            "        id: rehearsal_push\n        if: inputs.mode == 'rehearsal'\n",
+            &format!("        id: rehearsal_push\n        if: {cond}\n"),
+        );
+        expect_fail(
+            name,
+            &[(".github/workflows/release.yml", &wf)],
+            &["a rehearsal step can also run on a tag push"],
+        );
+    }
+}
+
+#[test]
+fn a_step_naming_the_rehearsal_package_without_the_rehearsal_condition_fails() {
+    let wf = release_shaped("").replace(
+        "        id: rehearsal_push\n        if: inputs.mode == 'rehearsal'\n",
+        "        id: rehearsal_push\n",
+    );
+    expect_fail(
+        "rehearsal-unconditioned",
+        &[(".github/workflows/release.yml", &wf)],
+        &["a step in the rehearsal path must have inputs.mode == 'rehearsal'"],
+    );
+}
+
+#[test]
+fn a_rehearsal_step_that_pushes_somewhere_else_fails() {
+    let step = "      - name: Push elsewhere\n        if: inputs.mode == 'rehearsal'\n        uses: docker/build-push-action@3d3c42e5aac5ba805825da76410c181273ba90b1\n        with:\n          push: true\n          tags: ghcr.io/someone/else:x\n";
+    expect_fail(
+        "push-elsewhere",
+        &[(".github/workflows/release.yml", &release_shaped(step))],
+        &["pushes to something other than ghcr.io/prikk-vcs/planeter-rehearsal"],
+    );
+    let step = "      - name: Push by hand\n        if: inputs.mode == 'rehearsal'\n        run: docker push ghcr.io/someone/else:x\n";
+    expect_fail(
+        "docker-push",
+        &[(".github/workflows/release.yml", &release_shaped(step))],
+        &["pushes to something other than"],
+    );
+}
+
+#[test]
+fn a_rehearsal_step_that_names_a_release_a_tag_or_crates_io_fails() {
+    for (name, cmd) in [
+        ("gh-release", "gh release create x"),
+        ("git-tag", "git tag -s x"),
+        ("git-push", "git push origin x"),
+        ("cargo-publish", "cargo publish -p planeter"),
+        ("crates", "curl https://crates.io/api/v1/crates"),
+    ] {
+        let step = format!(
+            "      - name: Oops\n        if: inputs.mode == 'rehearsal'\n        run: {cmd}\n"
+        );
+        expect_fail(
+            name,
+            &[(".github/workflows/release.yml", &release_shaped(&step))],
+            &["a rehearsal step names a release, tag or crates.io"],
+        );
+    }
+}

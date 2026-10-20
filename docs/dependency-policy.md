@@ -61,9 +61,23 @@ fails unless its `toolchain:` equals `rust-version`, and fails if a declared min
 Raising the minimum is a reviewed change to `rust-version` and the job together; nothing is rewritten to
 make an older compiler work. Both gates run in `ci.yml` and in the release `gates` job. **A pin is changed only by
 a reviewed change that names the upstream diff**; `docs/RELEASING.md` has the pre-tag review step and the
-release dry run. Deliberately out of the gate's scope: the version of `cargo-deny`/`cargo-audit` installed
+release dry run and the rehearsal. Deliberately out of the gate's scope: the version of `cargo-deny`/`cargo-audit` installed
 by the workflows (current on purpose, so they can read the advisory database) and the content of a named
 runner image, which GitHub updates in place.
+
+### The rehearsal cannot reach the real package (RFC 010 D-10)
+
+`release.yml` has a `rehearsal` dispatch mode that logs in to ghcr, pushes and attests, but only to
+`ghcr.io/prikk-vcs/planeter-rehearsal:rehearsal` (and, for the tarballs, attests copies named
+`rehearsal-<name>`). `pin-check` makes that structural by failing when: a step naming the real image
+`ghcr.io/prikk-vcs/planeter` lacks `github.event_name == 'push'` in its (or its job's) `if`; a step names both
+the real image and the rehearsal package; a step naming the rehearsal package, or conditioned on
+`rehearsal`, lacks `inputs.mode == 'rehearsal'` or can also run on a tag push (`github.event_name == 'push'`
+or `||` in its `if`); a rehearsal step pushes anywhere but the rehearsal package; or a rehearsal step names
+a `gh release`, `git tag`/`git push`, `cargo publish`/`login` or crates.io command or action. Each rule has a
+planted-failure test. **Footprint of a rehearsal (owner-accepted, O-5):** one additional private package,
+and attestation records for the rehearsal artifacts that live in the public transparency log permanently,
+labelled `rehearsal` in their subject name. Its run id is recorded with any change to the release chain.
 
 ## Ledger — accepted
 

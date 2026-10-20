@@ -13,16 +13,29 @@ on:
   push:
     tags:
       - "[0-9]+.[0-9]+.[0-9]+"
-  # A DRY RUN (RFC 010, release implications): the gates, both builds, `build-info.txt` and a no-push
-  # image build, so the workflow is exercised before a real tag. It publishes nothing: no registry
-  # login, no push, no attestation, no GitHub release, and the workflow never touches crates.io.
-  # A dispatch with `dry_run: false` is refused: a release is made only by a tag push.
+  # A DISPATCH never releases (RFC 010 D-10): a release is made only by a tag push, and a dispatch is
+  # refused unless it runs from `main`. It has two modes:
+  #
+  # * `dry-run` (the default): the gates, both builds, `build-info.txt` and a no-push image build. It
+  #   publishes nothing at all: no registry login, no push, no attestation, no GitHub release.
+  # * `rehearsal`: the same, and then what a dry run cannot exercise — login to ghcr, push and attestation —
+  #   but ONLY to the throwaway package `ghcr.io/prikk-vcs/planeter-rehearsal:rehearsal` (one tag,
+  #   overwritten each run) and, for the tarballs, attestations of copies named `rehearsal-<name>`. It
+  #   never creates a GitHub release or a tag, never writes `ghcr.io/prikk-vcs/planeter` (any tag), never
+  #   runs the `publish` job and never touches crates.io. `planeter-pin-check` fails if a step could break
+  #   any of that. The footprint is accepted (O-5): one private package and permanent, labelled
+  #   attestation records.
+  #
+  # The workflow never touches crates.io in any mode.
   workflow_dispatch:
     inputs:
-      dry_run:
-        description: "Build everything, publish nothing (the only mode a dispatch runs in)"
-        type: boolean
-        default: true
+      mode:
+        description: "dry-run: publish nothing at all · rehearsal: push and attest to the throwaway rehearsal package only"
+        type: choice
+        options:
+          - dry-run
+          - rehearsal
+        default: dry-run
 
 permissions:
   contents: read
@@ -36,10 +49,10 @@ jobs:
     name: gates (tag == Cargo version · floor · pins · fmt · clippy · test · deny · audit · ENF-2 · layering)
     runs-on: ubuntu-24.04
     steps:
-      - name: Refuse a non-dry-run dispatch
-        if: github.event_name == 'workflow_dispatch' && !inputs.dry_run
+      - name: Refuse a dispatch that is not on main
+        if: github.event_name == 'workflow_dispatch' && github.ref != 'refs/heads/main'
         run: |
-          echo "A release is made only by pushing a version tag; dispatch runs are dry runs." >&2
+          echo "A dispatch (dry-run or rehearsal) runs from main only; a release is made only by pushing a version tag." >&2
           exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable branch head, 2026-10-15; toolchain pinned by input
@@ -147,6 +160,32 @@ jobs:
         with:
           subject-path: dist/*.tar.gz
 
+      # REHEARSAL ONLY (RFC 010 D-10): attest byte-identical COPIES named `rehearsal-<name>`, so the
+      # permanent attestation records are labelled and cannot be mistaken for a release's. The copies are
+      # outside `dist/`, so they are neither uploaded nor published.
+      - name: Copy tarballs for the rehearsal attestation
+        if: inputs.mode == 'rehearsal'
+        run: |
+          mkdir -p rehearsal
+          for f in dist/*.tar.gz; do cp "$f" "rehearsal/rehearsal-$(basename "$f")"; done
+          ls -l rehearsal
+      - name: Attest rehearsal build provenance
+        if: inputs.mode == 'rehearsal'
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-path: rehearsal/*.tar.gz
+      # REHEARSAL ONLY: what the runner's docker offers natively (RFC 010 D-11 asks whether the arm runner
+      # can build its own architecture without QEMU). Read-only; prints, builds nothing that is kept.
+      - name: Measure docker on this runner (rehearsal)
+        if: inputs.mode == 'rehearsal'
+        run: |
+          uname -m
+          docker version
+          docker buildx version
+          docker buildx ls
+          arch="$(dpkg --print-architecture)"
+          printf 'FROM scratch\nLABEL measured=native\n' | docker buildx build --platform "linux/${arch}" -f - . && echo "native buildx build for linux/${arch}: OK"
+
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: planeter-${{ matrix.target }}
@@ -185,10 +224,56 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      # On a dry run the image is built for both platforms and discarded: `push` is false and the login
-      # above did not run.
+      # A dry run builds the image for both platforms and discards it: no login, no push, no tag.
+      - name: Build image (dry run)
+        if: inputs.mode == 'dry-run'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: false
+          build-args: PRIKK_VERSION=${{ env.PRIKK_VERSION }}
+      # REHEARSAL ONLY (RFC 010 D-10): the same build, logged in and pushed to the throwaway package and
+      # nowhere else. One tag, overwritten each run. These steps name the rehearsal package only; the real
+      # image is named by the push-only steps below (`planeter-pin-check` enforces both).
+      - name: Log in to ghcr (rehearsal)
+        if: inputs.mode == 'rehearsal'
+        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build and push (rehearsal)
+        id: rehearsal_push
+        if: inputs.mode == 'rehearsal'
+        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
+        with:
+          context: .
+          file: Dockerfile
+          platforms: linux/amd64,linux/arm64
+          push: true
+          build-args: PRIKK_VERSION=${{ env.PRIKK_VERSION }}
+          tags: ghcr.io/prikk-vcs/planeter-rehearsal:rehearsal
+      - name: Attest rehearsal image provenance
+        if: inputs.mode == 'rehearsal'
+        uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2.4.0
+        with:
+          subject-name: ghcr.io/prikk-vcs/planeter-rehearsal
+          subject-digest: ${{ steps.rehearsal_push.outputs.digest }}
+          push-to-registry: true
+      # Measured, not designed: did the job token create the package, and what are its visibility and its
+      # link to the repository. A failure of this step is a finding, not a failure of the rehearsal.
+      - name: Read the rehearsal package (rehearsal)
+        if: inputs.mode == 'rehearsal'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api /orgs/prikk-vcs/packages/container/planeter-rehearsal --jq '{name, visibility, html_url, repository: .repository.full_name, created_at, updated_at}' || echo "package read failed: $?"
+      # The real publish: only a tag push.
       - name: Build and push
         id: push
+        if: github.event_name == 'push'
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .

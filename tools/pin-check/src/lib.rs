@@ -14,7 +14,15 @@
 //! - the one named exception to "one compiler": a job whose id is `msrv` builds with the workspace's
 //!   declared minimum, so its `toolchain:` must equal `rust-version` in the root `Cargo.toml` (as
 //!   `X.Y.Z`; `1.88` means `1.88.0`), and that job must exist whenever `rust-version` is declared (IS-32);
-//! - a runner image named by a moving label: any `runs-on` or matrix `os` value ending in `-latest`.
+//! - a runner image named by a moving label: any `runs-on` or matrix `os` value ending in `-latest`;
+//! - a release path that can reach the real image from a rehearsal (RFC 010 D-10, "the rehearsal cannot
+//!   reach the real package, structurally"): a workflow step that names the real image
+//!   `ghcr.io/prikk-vcs/planeter` (not `-rehearsal`) without `github.event_name == 'push'` in its (or its
+//!   job's) `if`; a step that names both the real image and the rehearsal package; a step that names the
+//!   rehearsal package without `inputs.mode == 'rehearsal'`, or a rehearsal-conditioned step that can also
+//!   run on a tag push (`github.event_name == 'push'` or `||` in its condition); a rehearsal-conditioned
+//!   step that pushes to anything but the rehearsal package; and a rehearsal-conditioned step that names a
+//!   release, tag or crates.io command.
 //!
 //! It has no allow-list. It reads text only, so it understands the shapes this repository uses, and
 //! says so: `cargo install` of tools is deliberately current and is out of scope.
@@ -101,7 +109,9 @@ pub fn check(root: &Path) -> io::Result<Report> {
             workflows.push(rel.clone());
         }
         let found = if is_workflow {
-            scan_workflow(&text)
+            let mut hits = scan_workflow(&text);
+            hits.extend(scan_release_paths(&text));
+            hits
         } else if is_docker {
             scan_dockerfile(&text)
         } else {
@@ -422,6 +432,197 @@ fn scan_toolchain_file(text: &str) -> Hits {
                     format!("channel {v:?} is not an explicit X.Y.Z version"),
                 ));
             }
+        }
+    }
+    hits
+}
+
+/// The real image: a step that names it may run only on a tag push.
+const REAL_IMAGE: &str = "ghcr.io/prikk-vcs/planeter";
+/// The throwaway package of a rehearsal (RFC 010 D-10).
+const REHEARSAL_IMAGE: &str = "ghcr.io/prikk-vcs/planeter-rehearsal";
+/// The condition that makes a step run in a rehearsal and only there.
+const REHEARSAL_COND: &str = "inputs.mode == 'rehearsal'";
+const PUSH_COND: &str = "github.event_name == 'push'";
+/// Commands and actions of a release, a tag or crates.io: never in a rehearsal.
+const RELEASE_WORDS: [&str; 10] = [
+    "gh release",
+    "git tag",
+    "git push",
+    "cargo publish",
+    "cargo login",
+    "crates.io",
+    "action-gh-release",
+    "create-release",
+    "softprops/",
+    "ncipollo/",
+];
+
+/// `true` when `text` names the real image (`…/planeter` followed by anything but `-`, so the
+/// rehearsal package `…/planeter-rehearsal` does not count).
+fn names_real_image(text: &str) -> bool {
+    text.match_indices(REAL_IMAGE).any(|(i, _)| {
+        !text[i + REAL_IMAGE.len()..]
+            .starts_with(|c: char| c == '-' || c == '_' || c.is_ascii_alphanumeric())
+    })
+}
+
+/// The expression of an `if:` line, whole: a quoted YAML scalar loses its quotes, an expression that
+/// ends in a string literal (`… == 'push'`) keeps its own.
+fn if_expr(line: &str) -> Option<String> {
+    let t = strip_comment(line).trim();
+    let t = t.strip_prefix("- ").map_or(t, str::trim_start);
+    let v = t.strip_prefix("if:")?.trim();
+    for q in ['"', '\''] {
+        if let Some(inner) = v.strip_prefix(q).and_then(|x| x.strip_suffix(q)) {
+            return Some(inner.to_owned());
+        }
+    }
+    Some(v.to_owned())
+}
+
+fn indent_of(line: &str) -> usize {
+    line.len() - line.trim_start().len()
+}
+
+/// One workflow step: where it starts, its own `if`, its job's `if`, and its text without comments.
+struct Step {
+    line: usize,
+    condition: String,
+    text: String,
+}
+
+/// The steps of every job of a workflow (the repository's shape: jobs at two spaces, `steps:` at four,
+/// items at six). A step's condition is its own `if` joined with its job's `if`.
+fn steps_of(text: &str) -> Vec<Step> {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut jobs: Vec<(usize, usize, String)> = Vec::new(); // (first line, end, job-level if)
+    let mut in_jobs = false;
+    for (i, line) in lines.iter().enumerate() {
+        if strip_comment(line).trim_end() == "jobs:" {
+            in_jobs = true;
+            continue;
+        }
+        if in_jobs && job_id(line).is_some() {
+            if let Some(last) = jobs.last_mut() {
+                last.1 = i;
+            }
+            jobs.push((i, lines.len(), String::new()));
+        } else if in_jobs
+            && indent_of(line) == 4
+            && let Some(v) = if_expr(line)
+            && let Some(last) = jobs.last_mut()
+        {
+            last.2 = v;
+        }
+    }
+    let mut steps = Vec::new();
+    for (start, end, job_if) in jobs {
+        let mut in_steps = false;
+        let mut current: Option<Step> = None;
+        for (i, line) in lines.iter().enumerate().take(end).skip(start) {
+            let code = strip_comment(line);
+            if code.trim().is_empty() {
+                continue;
+            }
+            let ind = indent_of(code);
+            if ind == 4 && code.trim() == "steps:" {
+                in_steps = true;
+                continue;
+            }
+            if in_steps && ind <= 4 {
+                in_steps = false;
+            }
+            if !in_steps {
+                continue;
+            }
+            if ind == 6 && code.trim_start().starts_with("- ") {
+                steps.extend(current.take());
+                current = Some(Step {
+                    line: i + 1,
+                    condition: job_if.clone(),
+                    text: String::new(),
+                });
+            }
+            if let Some(step) = current.as_mut() {
+                if (ind == 6 || ind == 8)
+                    && let Some(v) = if_expr(code)
+                {
+                    step.condition = format!("{} {}", step.condition, v);
+                }
+                step.text.push_str(code);
+                step.text.push('\n');
+            }
+        }
+        steps.extend(current.take());
+    }
+    steps
+}
+
+/// A step that pushes: `push:` / `push-to-registry:` with any value but `false`, `docker push`, or a
+/// manifest push.
+fn pushes(text: &str) -> bool {
+    text.lines().any(|l| {
+        value_of(l, "push").is_some_and(|v| v != "false")
+            || value_of(l, "push-to-registry").is_some_and(|v| v != "false")
+            || l.contains("docker push")
+            || l.contains("imagetools create")
+    })
+}
+
+/// RFC 010 D-10: the rehearsal cannot reach the real package, structurally.
+fn scan_release_paths(text: &str) -> Hits {
+    let mut hits = Hits::new();
+    for step in steps_of(text) {
+        let names_real = names_real_image(&step.text);
+        let names_rehearsal = step.text.contains(REHEARSAL_IMAGE);
+        let rehearsal_conditioned = step.condition.contains("rehearsal");
+        let n = step.line;
+        if names_real && !step.condition.contains(PUSH_COND) {
+            hits.push((
+                n,
+                format!(
+                    "a step naming the real image {REAL_IMAGE} must have {PUSH_COND} in its `if` (it must not run in a dispatch)"
+                ),
+            ));
+        }
+        if names_real && names_rehearsal {
+            hits.push((
+                n,
+                format!("a step names both the real image {REAL_IMAGE} and the rehearsal package"),
+            ));
+        }
+        if (names_rehearsal || rehearsal_conditioned) && !step.condition.contains(REHEARSAL_COND) {
+            hits.push((
+                n,
+                format!("a step in the rehearsal path must have {REHEARSAL_COND} in its `if`"),
+            ));
+        }
+        if rehearsal_conditioned
+            && (step.condition.contains(PUSH_COND) || step.condition.contains("||"))
+        {
+            hits.push((
+                n,
+                format!(
+                    "a rehearsal step can also run on a tag push ({PUSH_COND} or `||` in its `if`)"
+                ),
+            ));
+        }
+        if rehearsal_conditioned && pushes(&step.text) && !names_rehearsal {
+            hits.push((
+                n,
+                format!("a rehearsal step pushes to something other than {REHEARSAL_IMAGE}"),
+            ));
+        }
+        if rehearsal_conditioned
+            && let Some(w) = RELEASE_WORDS.iter().find(|w| step.text.contains(**w))
+        {
+            hits.push((
+                n,
+                format!(
+                    "a rehearsal step names a release, tag or crates.io action or command ({w:?})"
+                ),
+            ));
         }
     }
     hits
