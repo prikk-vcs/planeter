@@ -58,13 +58,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d661e0f57be36a5c14c48f78d09011e67e0cb618f269cca9f2fd8d15b68c46ac"
 dependencies = [
  "askama_parser",
- "basic-toml",
  "memchr",
  "proc-macro2",
  "quote",
  "rustc-hash",
- "serde",
- "serde_derive",
  "syn 2.0.119",
 ]
 
@@ -75,8 +72,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf315ce6524c857bb129ff794935cf6d42c82a6cff60526fe2a63593de4d0d4f"
 dependencies = [
  "memchr",
- "serde",
- "serde_derive",
  "winnow",
 ]
 
@@ -159,15 +154,6 @@ name = "base64ct"
 version = "1.8.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "2af50177e190e07a26ab74f8b1efbfe2ef87da2116221318cb1c2e82baf7de06"
-
-[[package]]
-name = "basic-toml"
-version = "0.1.10"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ba62675e8242a4c4e806d12f11d136e626e6c8361d6b829310732241652a178a"
-dependencies = [
- "serde",
-]
 
 [[package]]
 name = "bitflags"

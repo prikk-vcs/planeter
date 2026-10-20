@@ -20,7 +20,10 @@ pulldown-cmark = { version = "0.12", default-features = false, features = ["html
 # T3 HTTP/API surface (RFC 003 / STD-3): the standard async web stack (owner-approved).
 axum = { version = "0.8", default-features = false, features = ["http1", "json", "query", "form", "tokio"] }
 # Browse UI templates (compile-time, auto-escaping). Measured 2026-09-23: +6 crates, deny/audit clean.
-askama = "0.13"
+# The default features are trimmed on purpose (IS-42): `config` (askama.toml) pulls `basic-toml`, which carries
+# RUSTSEC-2026-0374, and planeter has no `askama.toml`. Re-enable `config` only if an `askama.toml` is needed
+# and the advisory is resolved.
+askama = { version = "0.13", default-features = false, features = ["derive", "std"] }
 tokio = { version = "1", features = ["rt-multi-thread", "net", "macros", "sync", "time"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
