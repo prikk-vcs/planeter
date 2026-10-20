@@ -143,8 +143,8 @@ fn schemas() -> Value {
         "Error": obj(&["code", "message", "hint"], json!({
             "code": {"type": "string", "enum": ErrorCode::ALL.iter().map(|c| c.code()).collect::<Vec<_>>(),
                      "description": "A stable, machine-readable code."},
-            "message": {"type": "string", "description": "One plain sentence. Never a path, a repository's existence, or tool output."},
-            "hint": {"type": "string", "description": "What the caller can do next."}
+            "message": {"type": "string", "description": "One plain sentence, in the language negotiated from `Accept-Language` (English by default). Never a path, a repository's existence, or tool output."},
+            "hint": {"type": "string", "description": "What the caller can do next, in the same language."}
         })),
         "Assurance": {"type": "string", "enum": ["prikk-verified", "forge-approved-unsealed", "unverified"]},
         "PatchMessage": obj(&["patch_id", "message"], json!({"patch_id": string_prop(), "message": string_prop()})),
@@ -386,7 +386,7 @@ pub fn document(content_origin: &str) -> Value {
         "info": {
             "title": "planeter read API",
             "version": env!("CARGO_PKG_VERSION"),
-            "description": "Read-only JSON over a planeter repository. Every error has the one `Error` shape. Hidden and absent repositories are indistinguishable (`not_found`). Raw file bytes are served only on the content origin named on the raw operation."
+            "description": "Read-only JSON over a planeter repository. Every error has the one `Error` shape. Hidden and absent repositories are indistinguishable (`not_found`). Raw file bytes are served only on the content origin named on the raw operation. This document is in English; the `message` and `hint` of an error follow `Accept-Language` (the `code` and the shape never change)."
         },
         "paths": Value::Object(paths_obj),
         "components": {

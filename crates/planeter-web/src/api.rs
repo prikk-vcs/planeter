@@ -27,7 +27,7 @@ use planeter_core::admission::{ReadVerb, ceiling_for};
 use planeter_core::{CallLimits, Principal, RawFile, RawTarget, ReadError, ReadService};
 use planeter_store::Owner;
 
-use crate::errors::{ErrorCode, TOO_LARGE_RAW_HINT};
+use crate::errors::{ErrorBody, ErrorCode};
 use crate::gate::{AdmitError, PrikkGate, offload};
 use crate::security::{ContentOrigin, app_security_headers, raw_content_headers};
 
@@ -549,7 +549,7 @@ pub(crate) fn error_response(state: &AppState, e: Failure) -> Response {
         Failure::Read(ReadError::Unavailable(_)) => ErrorCode::Unavailable,
         Failure::Read(ReadError::TooLarge) | Failure::OverBudget => ErrorCode::TooLarge,
         Failure::RawTooLarge => {
-            return code_response_with_hint(state, ErrorCode::TooLarge, TOO_LARGE_RAW_HINT);
+            return code_response_with_keys(state, ErrorCode::TooLarge, ErrorCode::TOO_LARGE_RAW);
         }
         // Backend and any future variant: an internal fault (existence-neutral).
         Failure::Read(_) => ErrorCode::Internal,
@@ -559,13 +559,22 @@ pub(crate) fn error_response(state: &AppState, e: Failure) -> Response {
 
 /// A response for an [`ErrorCode`] (used by the router fallbacks too).
 pub(crate) fn code_response(state: &AppState, code: ErrorCode) -> Response {
-    code_response_with_hint(state, code, code.hint())
+    code_response_with_keys(state, code, code.keys())
 }
 
-/// [`code_response`] with a hint chosen for the cause (see [`ErrorCode::body_with_hint`]).
-pub(crate) fn code_response_with_hint(state: &AppState, code: ErrorCode, hint: &str) -> Response {
+/// [`code_response`] with the message and hint keys chosen for the cause (see
+/// [`ErrorCode::TOO_LARGE_RAW`]). **The one place an error body is built.** The body written here is the
+/// English one; the response carries an [`ErrorBody`] extension, and the response-policy layer
+/// ([`crate::headers`]), which sees the request, writes it again in the caller's language
+/// (`Accept-Language`) and adds `Vary: Accept-Language` — so no handler needs the request's headers.
+pub(crate) fn code_response_with_keys(
+    state: &AppState,
+    code: ErrorCode,
+    keys: crate::errors::ErrorKeys,
+) -> Response {
     let mut builder = with_security_headers(state, Response::builder().status(code.status()))
-        .header(header::CONTENT_TYPE, "application/json");
+        .header(header::CONTENT_TYPE, "application/json")
+        .extension(ErrorBody { code, keys });
     if code == ErrorCode::Busy {
         builder = builder.header(header::RETRY_AFTER, retry_after_secs(state).to_string());
     }
@@ -573,7 +582,7 @@ pub(crate) fn code_response_with_hint(state: &AppState, code: ErrorCode, hint: &
         builder = builder.header(header::ALLOW, "GET");
     }
     builder
-        .body(Body::from(code.body_with_hint(hint)))
+        .body(Body::from(code.body_for(keys, crate::catalog::EN)))
         .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response_fallback())
 }
 

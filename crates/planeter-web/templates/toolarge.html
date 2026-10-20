@@ -1,6 +1,6 @@
 {% extends "base.html" %}
-{% block title %}Too large · planeter{% endblock %}
+{% block title %}{{ t.msg(Key::TitleTooLarge).product() }}{% endblock %}
 {% block body %}
-<h1>Too large</h1>
-<p class="muted">{{ message }} {{ hint }}</p>
+<h1>{{ t.get(Key::TooLargeHeading) }}</h1>
+<p class="muted">{{ t.get(Key::ErrTooLargeMessage) }} {{ t.get(Key::ErrTooLargeHint) }}</p>
 {% endblock %}

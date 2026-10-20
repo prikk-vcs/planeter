@@ -10,6 +10,7 @@
 use askama::Template;
 use axum::Router;
 use axum::body::Body;
+use axum::extract::rejection::{FormRejection, QueryRejection};
 use axum::extract::{Form, Path, Query, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::Response;
@@ -26,11 +27,11 @@ use crate::api::{
     with_security_headers,
 };
 use crate::authn;
+use crate::catalog::{Key, LanguageVaries, T, negotiate_from_headers};
 use crate::client_ip::{PeerAddr, client_ip};
 use crate::cookies::{
     CSRF_COOKIE, OIDC_STATE_COOKIE, SESSION_COOKIE, clear_cookie, get_cookie, set_cookie,
 };
-use crate::errors::ErrorCode;
 use crate::gate::GateError;
 use crate::principal::principal_from_request;
 use crate::sanitize::render_markdown;
@@ -63,6 +64,8 @@ struct Ctx {
     principal: Principal,
     user: Option<String>,
     csrf: String,
+    /// The page language and its messages (RFC 012 D-3).
+    t: T,
     /// A `Set-Cookie` to attach if the CSRF cookie was just minted.
     set_csrf: Option<String>,
 }
@@ -82,6 +85,7 @@ async fn ctx(headers: &HeaderMap, state: &AppState) -> Ctx {
         principal,
         user,
         csrf,
+        t: T::new(negotiate_from_headers(headers)),
         set_csrf,
     }
 }
@@ -91,7 +95,8 @@ fn html(state: &AppState, status: StatusCode, body: String, cookies: Vec<String>
         state,
         Response::builder()
             .status(status)
-            .header(header::CONTENT_TYPE, "text/html; charset=utf-8"),
+            .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
+            .extension(LanguageVaries),
     );
     for c in cookies {
         b = b.header(header::SET_COOKIE, c);
@@ -125,10 +130,11 @@ fn redirect(state: &AppState, to: &str, cookies: Vec<String>) -> Response {
 fn render<T: Template>(state: &AppState, status: StatusCode, tpl: &T, c: &Ctx) -> Response {
     match tpl.render() {
         Ok(body) => html(state, status, body, c.set_csrf.iter().cloned().collect()),
+        // A template that cannot render cannot be a page: the one sentence, as the body.
         Err(_) => html(
             state,
             StatusCode::INTERNAL_SERVER_ERROR,
-            "template error".into(),
+            c.t.get(Key::PageTemplateError),
             vec![],
         ),
     }
@@ -146,8 +152,7 @@ fn error_page(state: &AppState, c: &Ctx, e: Failure) -> Response {
             &TooLargeTpl {
                 user: c.user.clone(),
                 csrf: c.csrf.clone(),
-                message: ErrorCode::TooLarge.message(),
-                hint: ErrorCode::TooLarge.hint(),
+                t: c.t,
             },
             c,
         ),
@@ -157,6 +162,7 @@ fn error_page(state: &AppState, c: &Ctx, e: Failure) -> Response {
             &NotFoundTpl {
                 user: c.user.clone(),
                 csrf: c.csrf.clone(),
+                t: c.t,
             },
             c,
         ),
@@ -166,6 +172,7 @@ fn error_page(state: &AppState, c: &Ctx, e: Failure) -> Response {
             &UnavailableTpl {
                 user: c.user.clone(),
                 csrf: c.csrf.clone(),
+                t: c.t,
             },
             c,
         ),
@@ -180,6 +187,7 @@ fn busy_page(state: &AppState, c: &Ctx, retry_after: u64) -> Response {
         &UnavailableTpl {
             user: c.user.clone(),
             csrf: c.csrf.clone(),
+            t: c.t,
         },
         c,
     );
@@ -190,11 +198,123 @@ fn busy_page(state: &AppState, c: &Ctx, retry_after: u64) -> Response {
     resp
 }
 
-fn assurance(a: Assurance) -> (&'static str, &'static str) {
+/// The pages that used to be bare strings (RFC 012 T7): each is a heading, one sentence and one link.
+#[derive(Clone, Copy)]
+enum Notice {
+    CsrfFailed,
+    FormIncomplete,
+    BadAddress,
+    SsoOff,
+    SsoDown,
+    SsoIncomplete,
+    SsoMismatch,
+    SsoExpired,
+    SsoRefused,
+    SsoUnlinked,
+    ServerError,
+}
+
+impl Notice {
+    /// (title, heading, body) keys.
+    fn keys(self) -> (Key, Key, Key) {
+        match self {
+            Notice::CsrfFailed => (Key::PageCsrfTitle, Key::PageCsrfHeading, Key::PageCsrfBody),
+            Notice::FormIncomplete => (Key::PageFormTitle, Key::PageFormHeading, Key::PageFormBody),
+            Notice::BadAddress => (
+                Key::PageBadAddressTitle,
+                Key::PageBadAddressHeading,
+                Key::PageBadAddressBody,
+            ),
+            Notice::SsoOff => (
+                Key::PageSsoOffTitle,
+                Key::PageSsoOffHeading,
+                Key::PageSsoOffBody,
+            ),
+            Notice::SsoDown => (
+                Key::PageSsoDownTitle,
+                Key::PageSsoDownHeading,
+                Key::PageSsoDownBody,
+            ),
+            Notice::SsoIncomplete => (
+                Key::PageSsoIncompleteTitle,
+                Key::PageSsoIncompleteHeading,
+                Key::PageSsoIncompleteBody,
+            ),
+            Notice::SsoMismatch => (
+                Key::PageSsoMismatchTitle,
+                Key::PageSsoMismatchHeading,
+                Key::PageSsoMismatchBody,
+            ),
+            Notice::SsoExpired => (
+                Key::PageSsoExpiredTitle,
+                Key::PageSsoExpiredHeading,
+                Key::PageSsoExpiredBody,
+            ),
+            Notice::SsoRefused => (
+                Key::PageSsoRefusedTitle,
+                Key::PageSsoRefusedHeading,
+                Key::PageSsoRefusedBody,
+            ),
+            Notice::SsoUnlinked => (
+                Key::PageSsoUnlinkedTitle,
+                Key::PageSsoUnlinkedHeading,
+                Key::PageSsoUnlinkedBody,
+            ),
+            Notice::ServerError => (
+                Key::PageServerErrorTitle,
+                Key::PageServerErrorHeading,
+                Key::PageServerErrorBody,
+            ),
+        }
+    }
+}
+
+/// Where a notice page sends the reader next.
+#[derive(Clone, Copy)]
+enum Next {
+    SignIn,
+    Home,
+}
+
+/// A notice page with its status code (the codes the bare strings had) and, optionally, cookies.
+fn notice(
+    state: &AppState,
+    c: &Ctx,
+    status: StatusCode,
+    which: Notice,
+    next: Next,
+    cookies: Vec<String>,
+) -> Response {
+    let (title, heading, body) = which.keys();
+    let (link_label, link_href) = match next {
+        Next::SignIn => (Key::PageLinkSignIn, "/login"),
+        Next::Home => (Key::PageLinkHome, "/"),
+    };
+    let tpl = MessageTpl {
+        user: c.user.clone(),
+        csrf: c.csrf.clone(),
+        t: c.t,
+        title: c.t.msg(title).product().text(),
+        heading: c.t.get(heading),
+        body: c.t.get(body),
+        link_label: c.t.get(link_label),
+        link_href: link_href.to_owned(),
+    };
+    let mut resp = render(state, status, &tpl, c);
+    for ck in cookies {
+        if let Ok(v) = ck.parse() {
+            resp.headers_mut().append(header::SET_COOKIE, v);
+        }
+    }
+    resp
+}
+
+/// The assurance badge: its CSS class and its label's catalog key.
+fn assurance(a: Assurance) -> (&'static str, Key) {
     match a {
-        Assurance::PrikkVerified => ("ok", "prikk-verified"),
-        Assurance::ForgeApprovedUnsealed => ("warn", "forge-approved, unsealed"),
-        Assurance::Unverified => ("bad", "unverified"),
+        Assurance::PrikkVerified => ("ok", Key::AssuranceVerified),
+        Assurance::ForgeApprovedUnsealed => ("warn", Key::AssuranceQueued),
+        Assurance::Unverified => ("bad", Key::AssuranceUnverified),
     }
 }
 
@@ -267,18 +387,22 @@ fn listing(entries: &[TreeEntryView], prefix: &str) -> (Vec<DirRow>, Vec<FileRow
 }
 
 // -- templates --
+//
+// Every template carries `t`, the page's language (RFC 012 D-3): all words come from the catalog.
 
 #[derive(Template)]
 #[template(path = "home.html")]
 struct HomeTpl {
     user: Option<String>,
     csrf: String,
+    t: T,
 }
 #[derive(Template)]
 #[template(path = "login.html")]
 struct LoginTpl {
     user: Option<String>,
     csrf: String,
+    t: T,
     failed: bool,
     sso: bool,
 }
@@ -287,32 +411,48 @@ struct LoginTpl {
 struct NotFoundTpl {
     user: Option<String>,
     csrf: String,
+    t: T,
 }
 #[derive(Template)]
 #[template(path = "unavailable.html")]
 struct UnavailableTpl {
     user: Option<String>,
     csrf: String,
+    t: T,
 }
 #[derive(Template)]
 #[template(path = "toolarge.html")]
 struct TooLargeTpl {
     user: Option<String>,
     csrf: String,
-    message: &'static str,
-    hint: &'static str,
+    t: T,
+}
+#[derive(Template)]
+#[template(path = "message.html")]
+struct MessageTpl {
+    user: Option<String>,
+    csrf: String,
+    t: T,
+    title: String,
+    heading: String,
+    body: String,
+    link_label: String,
+    link_href: String,
 }
 #[derive(Template)]
 #[template(path = "repo.html")]
 struct RepoTpl {
     user: Option<String>,
     csrf: String,
+    t: T,
     owner: String,
     name: String,
+    /// `owner/name`, the repository's address.
+    repo: String,
     point: String,
     current_branch: Option<String>,
     assurance_class: &'static str,
-    assurance_label: &'static str,
+    assurance_label: Key,
     dirs: Vec<DirRow>,
     files: Vec<FileRow>,
     ref_query: String,
@@ -323,8 +463,10 @@ struct RepoTpl {
 struct TreeTpl {
     user: Option<String>,
     csrf: String,
+    t: T,
     owner: String,
     name: String,
+    repo: String,
     point: String,
     prefix: String,
     dirs: Vec<DirRow>,
@@ -336,8 +478,10 @@ struct TreeTpl {
 struct FileTpl {
     user: Option<String>,
     csrf: String,
+    t: T,
     owner: String,
     name: String,
+    repo: String,
     path: String,
     size: u64,
     encoding: String,
@@ -358,11 +502,13 @@ struct HistoryRow {
 struct HistoryTpl {
     user: Option<String>,
     csrf: String,
+    t: T,
     owner: String,
     name: String,
+    repo: String,
     ref_name: String,
     assurance_class: &'static str,
-    assurance_label: &'static str,
+    assurance_label: Key,
     entries: Vec<HistoryRow>,
 }
 struct OpRow {
@@ -372,7 +518,7 @@ struct OpRow {
 struct PatchRow {
     short_id: String,
     assurance_class: &'static str,
-    assurance_label: &'static str,
+    assurance_label: Key,
     operations: Vec<OpRow>,
 }
 #[derive(Template)]
@@ -380,8 +526,10 @@ struct PatchRow {
 struct ChangeTpl {
     user: Option<String>,
     csrf: String,
+    t: T,
     owner: String,
     name: String,
+    repo: String,
     target: String,
     patches: Vec<PatchRow>,
 }
@@ -400,14 +548,17 @@ struct TagRow {
 struct RefsTpl {
     user: Option<String>,
     csrf: String,
+    t: T,
     owner: String,
     name: String,
+    repo: String,
     branches: Vec<BranchRow>,
     tags: Vec<TagRow>,
 }
 struct StageRow {
     stage: String,
-    status: String,
+    /// The status in the page's language (an unknown token from prikk is shown as it came).
+    status_label: String,
     detail: String,
 }
 #[derive(Template)]
@@ -415,14 +566,27 @@ struct StageRow {
 struct VerifyTpl {
     user: Option<String>,
     csrf: String,
+    t: T,
     owner: String,
     name: String,
+    repo: String,
     assurance_class: &'static str,
-    assurance_label: &'static str,
+    assurance_label: Key,
     verified_sessions: u64,
     total_sessions: u64,
     failed: Vec<String>,
     stages: Vec<StageRow>,
+}
+
+/// The catalog label of a verify stage status token (`evaluated`, `failed`, `not_evaluated`, `halted`).
+fn stage_status_label(t: &T, token: &str) -> String {
+    match token {
+        "evaluated" => t.get(Key::VerifyStatusEvaluated),
+        "failed" => t.get(Key::VerifyStatusFailed),
+        "not_evaluated" => t.get(Key::VerifyStatusNotEvaluated),
+        "halted" => t.get(Key::VerifyStatusHalted),
+        other => other.to_owned(),
+    }
 }
 
 // -- query models --
@@ -457,12 +621,28 @@ async fn home(State(state): State<AppState>, headers: HeaderMap) -> Response {
         &HomeTpl {
             user: c.user.clone(),
             csrf: c.csrf.clone(),
+            t: c.t,
         },
         &c,
     )
 }
 
-async fn go(State(state): State<AppState>, Query(q): Query<GoQuery>) -> Response {
+async fn go(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    q: Result<Query<GoQuery>, QueryRejection>,
+) -> Response {
+    let Ok(Query(q)) = q else {
+        let c = ctx(&headers, &state).await;
+        return notice(
+            &state,
+            &c,
+            StatusCode::BAD_REQUEST,
+            Notice::BadAddress,
+            Next::Home,
+            vec![],
+        );
+    };
     let ok = q
         .repo
         .split_once('/')
@@ -499,6 +679,7 @@ async fn login_form(State(state): State<AppState>, headers: HeaderMap) -> Respon
         &LoginTpl {
             user: c.user.clone(),
             csrf: c.csrf.clone(),
+            t: c.t,
             failed: false,
             sso: state.oidc.is_some(),
         },
@@ -510,15 +691,27 @@ async fn login_submit(
     State(state): State<AppState>,
     PeerAddr(peer): PeerAddr,
     headers: HeaderMap,
-    Form(form): Form<LoginForm>,
+    form: Result<Form<LoginForm>, FormRejection>,
 ) -> Response {
     let c = ctx(&headers, &state).await;
+    let Ok(Form(form)) = form else {
+        return notice(
+            &state,
+            &c,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Notice::FormIncomplete,
+            Next::SignIn,
+            vec![],
+        );
+    };
     let cookie_csrf = get_cookie(&headers, CSRF_COOKIE).unwrap_or_default();
     if cookie_csrf.is_empty() || !tokens_match(&cookie_csrf, &form.csrf) {
-        return html(
+        return notice(
             &state,
+            &c,
             StatusCode::FORBIDDEN,
-            "CSRF check failed".into(),
+            Notice::CsrfFailed,
+            Next::SignIn,
             vec![],
         );
     }
@@ -536,6 +729,7 @@ async fn login_submit(
             &LoginTpl {
                 user: None,
                 csrf: c.csrf.clone(),
+                t: c.t,
                 failed: true,
                 sso: state.oidc.is_some(),
             },
@@ -557,10 +751,12 @@ async fn login_submit(
             return busy_page(&state, &c, wait);
         }
         Err(GateError::Aborted) => {
-            return html(
+            return notice(
                 &state,
+                &c,
                 StatusCode::INTERNAL_SERVER_ERROR,
-                "sign-in error".into(),
+                Notice::ServerError,
+                Next::SignIn,
                 vec![],
             );
         }
@@ -581,10 +777,12 @@ async fn login_submit(
                     "/",
                     vec![set_cookie(SESSION_COOKIE, &session.id.0, SESSION_TTL_SECS)],
                 ),
-                _ => html(
+                _ => notice(
                     &state,
+                    &c,
                     StatusCode::INTERNAL_SERVER_ERROR,
-                    "session error".into(),
+                    Notice::ServerError,
+                    Next::SignIn,
                     vec![],
                 ),
             }
@@ -600,6 +798,7 @@ async fn login_submit(
                 &LoginTpl {
                     user: None,
                     csrf: c.csrf.clone(),
+                    t: c.t,
                     failed: true,
                     sso: state.oidc.is_some(),
                 },
@@ -612,14 +811,27 @@ async fn login_submit(
 async fn logout(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Form(form): Form<CsrfForm>,
+    form: Result<Form<CsrfForm>, FormRejection>,
 ) -> Response {
+    let c = ctx(&headers, &state).await;
+    let Ok(Form(form)) = form else {
+        return notice(
+            &state,
+            &c,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Notice::FormIncomplete,
+            Next::Home,
+            vec![],
+        );
+    };
     let cookie_csrf = get_cookie(&headers, CSRF_COOKIE).unwrap_or_default();
     if cookie_csrf.is_empty() || !tokens_match(&cookie_csrf, &form.csrf) {
-        return html(
+        return notice(
             &state,
+            &c,
             StatusCode::FORBIDDEN,
-            "CSRF check failed".into(),
+            Notice::CsrfFailed,
+            Next::Home,
             vec![],
         );
     }
@@ -636,12 +848,15 @@ struct OidcCallbackQuery {
 }
 
 /// Start an SSO sign-in: 303 to the provider; the opaque `state` rides in a short-lived cookie.
-async fn oidc_begin(State(state): State<AppState>) -> Response {
+async fn oidc_begin(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    let c = ctx(&headers, &state).await;
     if state.oidc.is_none() {
-        return html(
+        return notice(
             &state,
+            &c,
             StatusCode::NOT_FOUND,
-            "SSO is not configured".into(),
+            Notice::SsoOff,
+            Next::SignIn,
             vec![],
         );
     }
@@ -651,10 +866,12 @@ async fn oidc_begin(State(state): State<AppState>) -> Response {
     let begun = match begun {
         Ok(Some(r)) => r,
         _ => {
-            return html(
+            return notice(
                 &state,
+                &c,
                 StatusCode::BAD_GATEWAY,
-                "SSO provider unavailable".into(),
+                Notice::SsoDown,
+                Next::SignIn,
                 vec![],
             );
         }
@@ -665,12 +882,18 @@ async fn oidc_begin(State(state): State<AppState>) -> Response {
             &b.authorization_url,
             vec![set_cookie(OIDC_STATE_COOKIE, &b.state, PENDING_TTL_SECS)],
         ),
-        Err(e) => html(
-            &state,
-            StatusCode::BAD_GATEWAY,
-            format!("SSO provider unavailable: {e}"),
-            vec![],
-        ),
+        Err(e) => {
+            // The provider's error is for the operator's log, never for the page.
+            eprintln!("planeter: SSO provider unavailable: {e}");
+            notice(
+                &state,
+                &c,
+                StatusCode::BAD_GATEWAY,
+                Notice::SsoDown,
+                Next::SignIn,
+                vec![],
+            )
+        }
     }
 }
 
@@ -679,30 +902,37 @@ async fn oidc_begin(State(state): State<AppState>) -> Response {
 async fn oidc_callback(
     State(state): State<AppState>,
     headers: HeaderMap,
-    Query(q): Query<OidcCallbackQuery>,
+    q: Result<Query<OidcCallbackQuery>, QueryRejection>,
 ) -> Response {
+    let c = ctx(&headers, &state).await;
     if state.oidc.is_none() {
-        return html(
+        return notice(
             &state,
+            &c,
             StatusCode::NOT_FOUND,
-            "SSO is not configured".into(),
+            Notice::SsoOff,
+            Next::SignIn,
             vec![],
         );
     }
-    let (Some(code), Some(st)) = (q.code, q.state) else {
-        return html(
+    let (Some(code), Some(st)) = q.map(|Query(q)| (q.code, q.state)).unwrap_or((None, None)) else {
+        return notice(
             &state,
+            &c,
             StatusCode::BAD_REQUEST,
-            "missing code or state".into(),
+            Notice::SsoIncomplete,
+            Next::SignIn,
             vec![],
         );
     };
     let cookie_state = get_cookie(&headers, OIDC_STATE_COOKIE).unwrap_or_default();
     if cookie_state.is_empty() || !tokens_match(&cookie_state, &st) {
-        return html(
+        return notice(
             &state,
+            &c,
             StatusCode::BAD_REQUEST,
-            "SSO state mismatch".into(),
+            Notice::SsoMismatch,
+            Next::SignIn,
             vec![],
         );
     }
@@ -726,16 +956,20 @@ async fn oidc_callback(
     })
     .await;
     match completed {
-        Ok(Some(Err(OidcError::State))) => html(
+        Ok(Some(Err(OidcError::State))) => notice(
             &state,
+            &c,
             StatusCode::BAD_REQUEST,
-            "SSO state expired".into(),
+            Notice::SsoExpired,
+            Next::SignIn,
             vec![],
         ),
-        Ok(Some(Err(_))) => html(
+        Ok(Some(Err(_))) => notice(
             &state,
+            &c,
             StatusCode::UNAUTHORIZED,
-            "SSO sign-in failed".into(),
+            Notice::SsoRefused,
+            Next::SignIn,
             vec![],
         ),
         Ok(Some(Ok(Ok(Some(session))))) => redirect(
@@ -746,16 +980,20 @@ async fn oidc_callback(
                 clear_cookie(OIDC_STATE_COOKIE),
             ],
         ),
-        Ok(Some(Ok(Ok(None)))) => html(
+        Ok(Some(Ok(Ok(None)))) => notice(
             &state,
+            &c,
             StatusCode::UNAUTHORIZED,
-            "this SSO identity is not linked to a planeter account".into(),
+            Notice::SsoUnlinked,
+            Next::SignIn,
             vec![clear_cookie(OIDC_STATE_COOKIE)],
         ),
-        _ => html(
+        _ => notice(
             &state,
+            &c,
             StatusCode::INTERNAL_SERVER_ERROR,
-            "session error".into(),
+            Notice::ServerError,
+            Next::SignIn,
             vec![],
         ),
     }
@@ -843,7 +1081,7 @@ async fn repo_home(
     let verify = badge_verify(&state, &c.principal, &owner, &name).await;
     let (ac, al) = match &verify {
         Ok(v) => assurance(v.assurance()),
-        Err(_) => ("bad", "verify unavailable"),
+        Err(_) => ("bad", Key::AssuranceVerifyUnavailable),
     };
     let readme_html = readme.map(|raw| render_markdown(&String::from_utf8_lossy(&raw.bytes)));
     let (dirs, files) = listing(&tree.entries, "");
@@ -853,6 +1091,8 @@ async fn repo_home(
         &RepoTpl {
             user: c.user.clone(),
             csrf: c.csrf.clone(),
+            t: c.t,
+            repo: format!("{owner}/{name}"),
             owner: owner.clone(),
             name: name.clone(),
             point: tree.point.clone(),
@@ -909,6 +1149,8 @@ async fn tree_page(
         &TreeTpl {
             user: c.user.clone(),
             csrf: c.csrf.clone(),
+            t: c.t,
+            repo: format!("{owner}/{name}"),
             owner: owner.clone(),
             name: name.clone(),
             point: tree.point.clone(),
@@ -982,6 +1224,8 @@ async fn file_page(
         &FileTpl {
             user: c.user.clone(),
             csrf: c.csrf.clone(),
+            t: c.t,
+            repo: format!("{owner}/{name}"),
             owner,
             name,
             path,
@@ -1030,7 +1274,7 @@ async fn history_page(
     let verify = badge_verify(&state, &c.principal, &owner, &name).await;
     let (ac, al) = match &verify {
         Ok(v) => assurance(v.assurance()),
-        Err(_) => ("bad", "verify unavailable"),
+        Err(_) => ("bad", Key::AssuranceVerifyUnavailable),
     };
     let entries = h
         .entries
@@ -1050,6 +1294,8 @@ async fn history_page(
         &HistoryTpl {
             user: c.user.clone(),
             csrf: c.csrf.clone(),
+            t: c.t,
+            repo: format!("{owner}/{name}"),
             owner,
             name,
             ref_name: h.ref_name,
@@ -1110,6 +1356,8 @@ async fn change_page(
         &ChangeTpl {
             user: c.user.clone(),
             csrf: c.csrf.clone(),
+            t: c.t,
+            repo: format!("{owner}/{name}"),
             owner,
             name,
             target,
@@ -1143,6 +1391,8 @@ async fn refs_page(
         &RefsTpl {
             user: c.user.clone(),
             csrf: c.csrf.clone(),
+            t: c.t,
+            repo: format!("{owner}/{name}"),
             owner,
             name,
             branches: v
@@ -1193,6 +1443,8 @@ async fn verify_page(
         &VerifyTpl {
             user: c.user.clone(),
             csrf: c.csrf.clone(),
+            t: c.t,
+            repo: format!("{owner}/{name}"),
             owner,
             name,
             assurance_class: ac,
@@ -1209,7 +1461,7 @@ async fn verify_page(
                 .iter()
                 .map(|s| StageRow {
                     stage: s.stage.clone(),
-                    status: s.status.clone(),
+                    status_label: stage_status_label(&c.t, &s.status),
                     detail: s.detail.clone().unwrap_or_default(),
                 })
                 .collect(),

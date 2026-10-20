@@ -1,15 +1,15 @@
 {% extends "base.html" %}
-{% block title %}{{ path }} · {{ owner }}/{{ name }}{% endblock %}
+{% block title %}{{ t.msg(Key::TitleFile).with("path", path).with("repo", repo) }}{% endblock %}
 {% block nav %}{% include "repo_nav.html" %}{% endblock %}
 {% block body %}
-<p class="crumbs"><a href="/{{ owner }}/{{ name }}">{{ name }}</a> / <code>{{ path }}</code> <span class="muted">{{ size }} B · {{ encoding }}</span> · <a href="{{ raw_url }}">raw</a></p>
+<p class="crumbs"><a href="/{{ owner }}/{{ name }}">{{ name }}</a> / <code>{{ path }}</code> <span class="muted">{{ t.msg(Key::SizeAndEncoding).with("size", t.size(*size)).with("encoding", encoding) }}</span> · <a href="{{ raw_url }}">{{ t.get(Key::FileRaw) }}</a></p>
 {% if let Some(html) = rendered_html %}
 <section class="readme">{{ html|safe }}</section>
 {% else %}
-{% if let Some(t) = text %}
-<pre><code>{{ t }}</code></pre>
+{% if let Some(txt) = text %}
+<pre><code>{{ txt }}</code></pre>
 {% else %}
-<p class="muted">Binary content — <a href="{{ raw_url }}">download</a>.</p>
+<p class="muted">{{ t.msg(Key::FileBinary).link("download", t.get(Key::FileDownload), raw_url).html() }}</p>
 {% endif %}
 {% endif %}
 {% endblock %}

@@ -1,6 +1,6 @@
 <nav class="repo">
-  <a href="/{{ owner }}/{{ name }}">code</a>
-  <a href="/{{ owner }}/{{ name }}/history">history</a>
-  <a href="/{{ owner }}/{{ name }}/refs">refs</a>
-  <a href="/{{ owner }}/{{ name }}/verify">verify</a>
+  <a href="/{{ owner }}/{{ name }}">{{ t.get(Key::NavCode) }}</a>
+  <a href="/{{ owner }}/{{ name }}/history">{{ t.get(Key::NavHistory) }}</a>
+  <a href="/{{ owner }}/{{ name }}/refs">{{ t.get(Key::NavRefs) }}</a>
+  <a href="/{{ owner }}/{{ name }}/verify">{{ t.get(Key::NavVerify) }}</a>
 </nav>

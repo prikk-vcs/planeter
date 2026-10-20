@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}{{ owner }}/{{ name }} · planeter{% endblock %}
+{% block title %}{{ t.msg(Key::TitleRepo).with("repo", repo).product() }}{% endblock %}
 {% block nav %}{% include "repo_nav.html" %}{% endblock %}
 {% block body %}
-<h1>{{ owner }}/{{ name }} <span class="badge {{ assurance_class }}">{{ assurance_label }}</span></h1>
-<p class="muted">at <code>{{ point }}</code>{% if let Some(b) = current_branch %} · branch <code>{{ b }}</code>{% endif %}</p>
+<h1>{{ repo }} <span class="badge {{ assurance_class }}">{{ t.get(*assurance_label) }}</span></h1>
+<p class="muted">{% if let Some(b) = current_branch %}{{ t.msg(Key::RepoLocationBranch).code("point", point).code("branch", b).html() }}{% else %}{{ t.msg(Key::RepoLocation).code("point", point).html() }}{% endif %}</p>
 {% include "listing.html" %}
 {% if let Some(html) = readme_html %}
 <section class="readme">{{ html|safe }}</section>

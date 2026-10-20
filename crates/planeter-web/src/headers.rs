@@ -9,6 +9,11 @@
 //!   responses — are `Cache-Control: no-store`.
 //! - **The stylesheet** keeps its own `public, max-age=3600` (a handler-set `Cache-Control` is never
 //!   overwritten) and, being static, is not `Vary`.
+//! - **Language** (RFC 012 D-3): a response whose text depends on the caller's language — every HTML page
+//!   ([`crate::catalog::LanguageVaries`]) and every API error body ([`crate::errors::ErrorBody`]) — gets
+//!   `Vary: Accept-Language` and `Content-Language`; an error body is written here, in the language
+//!   negotiated from the `planeter_lang` cookie and `Accept-Language`, from the code and the catalog keys the
+//!   handler chose, so that no handler needs the request's headers.
 //! - `Permissions-Policy` switches off browser features the app never uses.
 //! - `Strict-Transport-Security: max-age=15552000` (180 days, no `includeSubDomains`, no `preload`) is
 //!   sent **only when trusted proxies are configured**: that is the declaration that the app sits behind
@@ -35,8 +40,26 @@ const STYLESHEET: &str = "/static/app.css";
 pub async fn response_policy(State(state): State<AppState>, req: Request, next: Next) -> Response {
     let path = req.uri().path().to_owned();
     let signs_in_or_out = (path == "/login" && req.method() == Method::POST) || path == "/logout";
+    let lang = crate::catalog::negotiate_from_headers(req.headers());
     let mut resp = next.run(req).await;
+    let varies_by_language = resp
+        .extensions()
+        .get::<crate::catalog::LanguageVaries>()
+        .is_some();
+    if let Some(eb) = resp.extensions().get::<crate::errors::ErrorBody>().copied() {
+        let body = eb.code.body_for(eb.keys, lang);
+        *resp.body_mut() = axum::body::Body::from(body);
+        resp.headers_mut().remove(header::CONTENT_LENGTH);
+    }
+    let language_varies = varies_by_language
+        || resp
+            .extensions()
+            .get::<crate::errors::ErrorBody>()
+            .is_some();
     let headers = resp.headers_mut();
+    if language_varies && let Ok(v) = HeaderValue::from_str(lang.tag()) {
+        headers.insert(header::CONTENT_LANGUAGE, v);
+    }
 
     let sets_cookie = headers.contains_key(header::SET_COOKIE);
     if !headers.contains_key(header::CACHE_CONTROL) {
@@ -58,7 +81,11 @@ pub async fn response_policy(State(state): State<AppState>, req: Request, next: 
             .map(|t| t.trim().to_owned())
             .filter(|t| !t.is_empty())
             .collect();
-        for needed in ["Cookie", "Authorization"] {
+        let mut needed_tokens = vec!["Cookie", "Authorization"];
+        if language_varies {
+            needed_tokens.push("Accept-Language");
+        }
+        for needed in needed_tokens {
             if !vary.iter().any(|t| t.eq_ignore_ascii_case(needed)) {
                 vary.push(needed.to_owned());
             }

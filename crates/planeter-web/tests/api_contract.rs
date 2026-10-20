@@ -30,7 +30,8 @@ use planeter_store::{
     InMemoryMembershipStore, InMemoryRepositoryStore, MembershipStore, Owner, RepoId,
     RepositoryRecord, RepositoryStore, UserId, Visibility,
 };
-use planeter_web::errors::{ErrorCode, TOO_LARGE_RAW_HINT};
+use planeter_web::catalog::EN;
+use planeter_web::errors::ErrorCode;
 use planeter_web::{AppState, BlockingGate, ContentOrigin, PrikkGate, TrustedProxies, router};
 
 /// The routes the API is meant to have, written down independently of `api::paths`.
@@ -233,21 +234,25 @@ fn every_code_has_one_plain_sentence_and_the_shape_is_stable() {
 #[test]
 fn too_large_has_one_code_and_a_hint_per_cause() {
     // The raw route's hint is one plain sentence, like the others, and differs from the default one.
-    let raw = TOO_LARGE_RAW_HINT;
+    let on_raw: Value =
+        serde_json::from_str(&ErrorCode::TooLarge.body_for(ErrorCode::TOO_LARGE_RAW, EN)).unwrap();
+    let raw = on_raw["hint"].as_str().unwrap().to_owned();
     assert!(
         raw.ends_with('.') && raw.matches(". ").count() == 0,
         "{raw:?}"
     );
     assert_ne!(raw, ErrorCode::TooLarge.hint());
     let default: Value = serde_json::from_str(&ErrorCode::TooLarge.body()).unwrap();
-    let on_raw: Value = serde_json::from_str(&ErrorCode::TooLarge.body_with_hint(raw)).unwrap();
     for v in [&default, &on_raw] {
         assert_eq!(v["code"], "too_large");
         assert_eq!(v["message"], ErrorCode::TooLarge.message());
         assert_eq!(v.as_object().unwrap().len(), 3);
     }
     assert_eq!(default["hint"], ErrorCode::TooLarge.hint());
-    assert_eq!(on_raw["hint"], raw);
+    assert_eq!(
+        on_raw["hint"],
+        "This server does not serve files that large; ask the operator."
+    );
     // No other code is given a second hint: the plain body is the code's own.
     for c in ErrorCode::ALL {
         let v: Value = serde_json::from_str(&c.body()).unwrap();
@@ -621,13 +626,25 @@ fn the_etag_is_specified_stable_and_independent_of_key_order() {
 
 // ---------------------------------------------------------------- T4: cache and browser policy
 
-fn assert_dynamic(h: &HeaderMap, what: &str) {
+/// `varies_by_language`: HTML pages and API error bodies are written in the caller's language, so they also
+/// `Vary: Accept-Language`; a successful API document does not depend on it.
+fn assert_dynamic(h: &HeaderMap, what: &str, varies_by_language: bool) {
     assert_eq!(
         header_str(h, "cache-control"),
         "private, no-cache",
         "{what}"
     );
-    assert_eq!(header_str(h, "vary"), "Cookie, Authorization", "{what}");
+    let vary = if varies_by_language {
+        "Cookie, Authorization, Accept-Language"
+    } else {
+        "Cookie, Authorization"
+    };
+    assert_eq!(header_str(h, "vary"), vary, "{what}");
+    assert_eq!(
+        h.contains_key("content-language"),
+        varies_by_language,
+        "{what}"
+    );
     assert_eq!(
         header_str(h, "permissions-policy"),
         "camera=(), microphone=(), geolocation=(), payment=(), usb=()",
@@ -649,9 +666,9 @@ async fn dynamic_responses_are_private_no_cache_and_vary() {
     )
     .await;
     assert_eq!(ui.0, StatusCode::OK);
-    assert_dynamic(&ui.1, "ui home");
+    assert_dynamic(&ui.1, "ui home", true);
     let api = send(&r, get("/api/v1/openapi.json")).await;
-    assert_dynamic(&api.1, "openapi");
+    assert_dynamic(&api.1, "openapi", false);
     for (uri, what) in [
         ("/api/v1/repos/alice/secret/history", "404"),
         ("/api/v1/repos/alice/open/history?limit=x", "400"),
@@ -659,7 +676,7 @@ async fn dynamic_responses_are_private_no_cache_and_vary() {
         ("/api/v1/nonsense", "unknown api route"),
     ] {
         let e = send(&r, get(uri)).await;
-        assert_dynamic(&e.1, what);
+        assert_dynamic(&e.1, what, true);
     }
 }
 

@@ -1,16 +1,30 @@
 //! The read API's one error shape (RFC 003 STD-3): `{ "code", "message", "hint" }`.
 //!
 //! Every non-2xx, non-304 response of the API carries this body as `application/json`. The codes are
-//! stable; the messages and hints are written **once, here** (they will be catalogued for translation
-//! later), one plain sentence each, and they never carry a path, a repository's existence or the
-//! output of a tool. `not_found` is the same for a hidden repository and an absent one.
+//! stable; the messages and hints are catalog messages ([`crate::catalog`]), one plain sentence each, in
+//! the language the caller negotiated (`Accept-Language`, English by default), and they never carry a path,
+//! a repository's existence or the output of a tool. `not_found` is the same for a hidden repository and an
+//! absent one. The `description` texts are the OpenAPI document's developer-facing prose and stay English.
 
 use axum::http::StatusCode;
 
-/// The hint of a `too_large` from the raw route (a file above the raw cap): the content origin serves
-/// no more than the cap, so "download it from there" would be untrue; only the operator can help.
-pub const TOO_LARGE_RAW_HINT: &str =
-    "This server does not serve files that large; ask the operator.";
+use crate::catalog::{EN, Key, Lang};
+
+/// The catalog keys of one error body: its message and its hint. Chosen at the call site, so that one code
+/// can have more than one hint (`too_large`) without anyone matching on text.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ErrorKeys {
+    pub message: Key,
+    pub hint: Key,
+}
+
+/// What the response layer needs to write an error body in the caller's language: the code and the keys.
+/// Attached to the response as an extension by the one place that builds error bodies.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ErrorBody {
+    pub code: ErrorCode,
+    pub keys: ErrorKeys,
+}
 
 /// A stable, machine-readable error code of the API.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -27,7 +41,7 @@ pub enum ErrorCode {
     MethodNotAllowed,
     /// 422: the response would exceed what this server serves, or the repository needs more memory than
     /// the read budget permits (RFC 011 D-4). Not retryable as is, unlike `busy`. The hint depends on the
-    /// cause ([`ErrorCode::hint`] for a file or the budget, [`TOO_LARGE_RAW_HINT`] for the raw route).
+    /// cause ([`ErrorCode::keys`] for a file or the budget, [`ErrorCode::TOO_LARGE_RAW`] for the raw route).
     TooLarge,
     /// 404 from the raw route on any host but the content origin's. Decided from the request's host
     /// alone, before any lookup, so it says nothing about any repository.
@@ -75,40 +89,48 @@ impl ErrorCode {
         }
     }
 
-    /// One plain sentence.
-    pub fn message(self) -> &'static str {
-        match self {
-            ErrorCode::NotFound => "No such resource.",
-            ErrorCode::Unavailable => "The repository could not be read right now.",
-            ErrorCode::Busy => "The server is busy.",
-            ErrorCode::InvalidRequest => "The request is malformed.",
-            ErrorCode::MethodNotAllowed => "That method is not supported here.",
-            ErrorCode::RawElsewhere => "Raw file bytes are not served from this address.",
-            ErrorCode::TooLarge => "This is too large to serve here.",
-            ErrorCode::Internal => "The server could not complete the request.",
-        }
+    /// The catalog keys of this code's message and (default) hint.
+    pub fn keys(self) -> ErrorKeys {
+        let (message, hint) = match self {
+            ErrorCode::NotFound => (Key::ErrNotFoundMessage, Key::ErrNotFoundHint),
+            ErrorCode::Unavailable => (Key::ErrUnavailableMessage, Key::ErrUnavailableHint),
+            ErrorCode::Busy => (Key::ErrBusyMessage, Key::ErrBusyHint),
+            ErrorCode::InvalidRequest => {
+                (Key::ErrInvalidRequestMessage, Key::ErrInvalidRequestHint)
+            }
+            ErrorCode::MethodNotAllowed => (
+                Key::ErrMethodNotAllowedMessage,
+                Key::ErrMethodNotAllowedHint,
+            ),
+            ErrorCode::RawElsewhere => (Key::ErrRawElsewhereMessage, Key::ErrRawElsewhereHint),
+            ErrorCode::TooLarge => (Key::ErrTooLargeMessage, Key::ErrTooLargeHint),
+            ErrorCode::Internal => (Key::ErrInternalMessage, Key::ErrInternalHint),
+        };
+        ErrorKeys { message, hint }
     }
 
-    /// What the caller can do next, one sentence.
-    pub fn hint(self) -> &'static str {
-        match self {
-            ErrorCode::NotFound => {
-                "Check the owner, the repository name and the path, and that your token may read it."
-            }
-            ErrorCode::Unavailable => "Try again in a little while.",
-            ErrorCode::Busy => "Retry after the number of seconds in the Retry-After header.",
-            ErrorCode::InvalidRequest => {
-                "Check the request against the OpenAPI document at /api/v1/openapi.json."
-            }
-            ErrorCode::MethodNotAllowed => "Use GET.",
-            ErrorCode::TooLarge => {
-                "Download it from the content origin, or ask the operator to raise the read memory budget."
-            }
-            ErrorCode::RawElsewhere => {
-                "Use the link on the file's page, or the content origin named in the OpenAPI document."
-            }
-            ErrorCode::Internal => "Try again later; if it persists, tell the operator.",
-        }
+    /// `too_large` from the raw route: the same code, status and message, and the hint that is true there
+    /// (the content origin serves no more than the cap, so "download it from there" would be untrue).
+    pub const TOO_LARGE_RAW: ErrorKeys = ErrorKeys {
+        message: Key::ErrTooLargeMessage,
+        hint: Key::ErrTooLargeRawHint,
+    };
+
+    fn text(key: Key, lang: Lang) -> String {
+        crate::catalog::T::new(lang)
+            .msg(key)
+            .with("document", crate::api::paths::OPENAPI)
+            .text()
+    }
+
+    /// The message, in English. One plain sentence.
+    pub fn message(self) -> String {
+        Self::text(self.keys().message, EN)
+    }
+
+    /// What the caller can do next, in English, one sentence.
+    pub fn hint(self) -> String {
+        Self::text(self.keys().hint, EN)
     }
 
     /// A short description for the OpenAPI document.
@@ -131,18 +153,18 @@ impl ErrorCode {
         }
     }
 
-    /// The JSON body: `{ "code", "message", "hint" }`.
+    /// The JSON body in English: `{ "code", "message", "hint" }`.
     pub fn body(self) -> String {
-        self.body_with_hint(self.hint())
+        self.body_for(self.keys(), EN)
     }
 
-    /// The JSON body with a hint chosen at the call site, for a code whose remedy depends on the cause
-    /// (only `too_large` today). One code, one message, one status; the hint is the one varying field.
-    pub fn body_with_hint(self, hint: &str) -> String {
+    /// The JSON body for these keys in `lang`. One code, one status; the message and hint are the
+    /// language-dependent fields.
+    pub fn body_for(self, keys: ErrorKeys, lang: Lang) -> String {
         serde_json::json!({
             "code": self.code(),
-            "message": self.message(),
-            "hint": hint,
+            "message": Self::text(keys.message, lang),
+            "hint": Self::text(keys.hint, lang),
         })
         .to_string()
     }

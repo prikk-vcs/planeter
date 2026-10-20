@@ -24,7 +24,8 @@ use planeter_store::{
     RepositoryRecord, RepositoryStore, Visibility,
 };
 use planeter_web::budget::MIB;
-use planeter_web::errors::{ErrorCode, TOO_LARGE_RAW_HINT};
+use planeter_web::catalog::EN;
+use planeter_web::errors::ErrorCode;
 use planeter_web::{AppState, BlockingGate, ContentOrigin, PrikkGate, TrustedProxies, router};
 
 fn scratch(name: &str) -> PathBuf {
@@ -182,7 +183,7 @@ async fn a_repository_above_the_budget_is_422_too_large_for_a_reader_and_404_for
     let (status, _, body) = get(&r, "/api/v1/repos/alice/open/raw?path=x", RAW).await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
     assert_eq!(body, ErrorCode::TooLarge.body());
-    assert!(!body.contains(TOO_LARGE_RAW_HINT), "{body}");
+    assert!(!body.contains("does not serve files that large"), "{body}");
 
     // The same request for a repository the caller may not read — and for one that does not exist — is the
     // one `not_found`, byte for byte: `too_large` cannot reveal a hidden repository.
@@ -338,7 +339,7 @@ async fn file_is_bounded_at_4_mib_and_raw_keeps_its_25_mib_cap_each_with_its_own
         Arc::new(PrikkGate::default().with_budget(2048 * MIB)),
         Prikk::Real,
     );
-    let raw_hint_body = ErrorCode::TooLarge.body_with_hint(TOO_LARGE_RAW_HINT);
+    let raw_hint_body = ErrorCode::TooLarge.body_for(ErrorCode::TOO_LARGE_RAW, EN);
 
     // Below both bounds: `file` is 200 with a kind-tagged content; raw is 200 on the content host.
     let (status, _, body) = get(&r, "/api/v1/repos/alice/open/file?path=small.bin", APP).await;
