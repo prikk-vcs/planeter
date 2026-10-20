@@ -1,7 +1,8 @@
 # planeter — words the interface uses (proposal, awaiting the owner's reading)
 
-**Status.** *Proposed* by the architect on 2026-10-23 for RFC 012 D-4 (plain words). It becomes binding when the
-owner approves it; until then the catalog keeps today's words. Nothing here changes what a label *means*: a label
+**Status.** *Proposed* by the architect for RFC 012 D-4 (plain words); **read and approved by the owner (2026-10-21)**,
+including every *Owner's choice* row as proposed. One row is **held** for prikk's confirmation (the `session(s)` count,
+section 1). The catalog follows this page through `rfcs/handoffs/012-web-ui-foundations/plain-words-handoff-v1.md`. Nothing here changes what a label *means*: a label
 that carries trust (what is verified, what is not) keeps its exact meaning and gets plainer words around it.
 
 **Rules (RFC 012 D-4, D-6).** Say what happened and what to do next. Prefer the reader's word to the
@@ -64,7 +65,7 @@ private repository exists.
 
 ## 3. Unresolved before the wording handoff
 
-1. The owner's reading of sections 1 and 2 (anything marked *Owner's choice*, and the two badge sentences above all).
+1. ~~The owner's reading of sections 1 and 2~~ — done, approved (2026-10-21).
 2. **Confirm with prikk** (next letter): that `active_sessions` in the verify report means queued, not-yet-sealed
    work, and the right user-facing name for it.
 3. Who reads the Japanese (RFC 012 O-2): the wording must be settled in English **before** translation starts.
