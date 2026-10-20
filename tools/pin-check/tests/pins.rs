@@ -155,12 +155,8 @@ fn a_service_image_and_a_docker_action_without_a_digest_fail() {
 
 #[test]
 fn a_second_toolchain_version_fails_and_names_the_files() {
-    let ci = workflow(&format!(
-        "      - run: rustup toolchain install 1.99.0 --profile minimal\n"
-    ));
-    let release = workflow(&format!(
-        "      - run: rustup toolchain install 1.98.1 --profile minimal\n"
-    ));
+    let ci = workflow("      - run: rustup toolchain install 1.99.0 --profile minimal\n");
+    let release = workflow("      - run: rustup toolchain install 1.98.1 --profile minimal\n");
     expect_fail(
         "two-toolchains",
         &[
@@ -179,9 +175,7 @@ fn a_second_toolchain_version_fails_and_names_the_files() {
 
 #[test]
 fn one_toolchain_version_across_workflows_passes() {
-    let wf = workflow(&format!(
-        "      - run: rustup toolchain install 1.99.0 --profile minimal\n"
-    ));
+    let wf = workflow("      - run: rustup toolchain install 1.99.0 --profile minimal\n");
     let (code, text) = run(&fixture(
         "one-toolchain",
         &[
@@ -262,9 +256,7 @@ fn a_planted_mismatch_between_the_msrv_job_and_rust_version_fails_and_names_both
 
 #[test]
 fn a_declared_minimum_with_no_msrv_job_fails_and_names_cargo_toml() {
-    let ci = workflow(&format!(
-        "      - run: rustup toolchain install 1.99.0 --profile minimal\n"
-    ));
+    let ci = workflow("      - run: rustup toolchain install 1.99.0 --profile minimal\n");
     expect_fail(
         "msrv-missing",
         &[
@@ -296,9 +288,7 @@ fn only_a_job_named_msrv_is_exempt_from_the_one_compiler_rule() {
 fn the_msrv_job_does_not_count_towards_the_build_compilers_agreement() {
     // Build jobs in two files agree; the msrv job is a third version and is checked on its own.
     let a = two_job_ci("msrv", "1.99.0", "1.88.0");
-    let b = workflow(&format!(
-        "      - run: rustup toolchain install 1.99.0 --profile minimal\n"
-    ));
+    let b = workflow("      - run: rustup toolchain install 1.99.0 --profile minimal\n");
     let (code, text) = run(&fixture(
         "msrv-third-version",
         &[
