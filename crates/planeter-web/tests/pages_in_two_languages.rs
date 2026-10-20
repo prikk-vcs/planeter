@@ -194,7 +194,7 @@ async fn every_repository_page_fills_every_placeholder_and_takes_every_word_from
             "/alice/app",
             &[
                 "<span class=\"badge ok\">Verified</span>",
-                "at <code>heads/main</code> · branch <code>heads/main</code>",
+                "Showing <code>heads/main</code> · branch <code>heads/main</code>",
                 "2.9 KiB · binary",
                 "<title>alice/app · planeter</title>",
             ],
@@ -320,7 +320,7 @@ async fn every_repository_page_fills_every_placeholder_and_takes_every_word_from
     assert!(
         en.contains("<h1>Change <code>")
             && en.contains("<h2>patch <code>")
-            && en.contains("badge ok\">Verified"),
+            && en.contains("badge neutral\">Signed into the history"),
         "{en}"
     );
     assert_eq!(unfilled(&en), None);

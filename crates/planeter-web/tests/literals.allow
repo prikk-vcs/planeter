@@ -29,6 +29,7 @@ exact :: ui.rs :: {prefix}{d} :: a format string of identifiers
 # --- tokens matched or classes emitted, never shown as words
 exact :: ui.rs :: warn :: a CSS class (badge colour)
 exact :: ui.rs :: bad :: a CSS class (badge colour)
+exact :: ui.rs :: neutral :: a CSS class (the plain badge: no colour)
 exact :: ui.rs :: evaluated :: a verify stage status token matched against; the word shown is the catalog's
 exact :: ui.rs :: failed :: a verify stage status token matched against; the word shown is the catalog's
 exact :: ui.rs :: not_evaluated :: a verify stage status token matched against; the word shown is the catalog's

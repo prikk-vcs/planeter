@@ -146,7 +146,7 @@ fn schemas() -> Value {
             "message": {"type": "string", "description": "One plain sentence, in the language negotiated from `Accept-Language` (English by default). Never a path, a repository's existence, or tool output."},
             "hint": {"type": "string", "description": "What the caller can do next, in the same language."}
         })),
-        "Assurance": {"type": "string", "enum": ["prikk-verified", "forge-approved-unsealed", "unverified"]},
+        "Assurance": {"type": "string", "enum": ["prikk-verified", "sealed", "forge-approved-unsealed", "unverified"], "description": "`prikk-verified` only where the repository's verification ran and passed; a sealed patch on the change endpoint is `sealed` (signed into the history; nothing was verified for that view); a queued one is `forge-approved-unsealed`."},
         "PatchMessage": obj(&["patch_id", "message"], json!({"patch_id": string_prop(), "message": string_prop()})),
         "HistoryEntry": obj(
             &["block_id", "ref_state_id", "kind", "rollback_block", "patch_count", "messages"],
@@ -210,7 +210,8 @@ fn schemas() -> Value {
         "FailedCondition": obj(&["id", "message"], json!({"id": string_prop(), "message": string_prop()})),
         "Stage": obj(&["stage", "status", "detail"], json!({
             "stage": string_prop(), "status": string_prop(), "detail": nullable_string(),
-            "blocked_by": {"type": "string", "description": "Only on a `not_evaluated` stage: the id of the stage that blocked it. Absent otherwise."}
+            "blocked_by": {"type": "string", "description": "Only on a `not_evaluated` stage: the id of the stage that blocked it. Absent otherwise."},
+            "after": {"type": "string", "description": "Only on a `halted` stage: the id of the stage it stopped after. Absent otherwise."}
         })),
         "VerifyView": obj(&["ok", "verified_sessions", "total_sessions", "failed_conditions", "stages"], json!({
             "ok": {"type": "boolean"},

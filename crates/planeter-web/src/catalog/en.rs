@@ -30,7 +30,10 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg("title.not_found", "Not found · {path} · {product}"),
     msg("title.unavailable", "Unavailable · {path} · {product}"),
-    msg("title.too_large", "Too large · {path} · {product}"),
+    msg(
+        "title.too_large",
+        "Too large to show here · {path} · {product}",
+    ),
     msg("title.repo", "{repo} · {product}"),
     msg("title.tree", "{prefix} · {repo} · {product}"),
     msg("title.file", "{path} · {repo} · {product}"),
@@ -87,7 +90,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     // repository, tree, file
     msg("repo.location", "Showing {point}"),
-    msg("repo.location_branch", "at {point} · branch {branch}"),
+    msg("repo.location_branch", "Showing {point} · branch {branch}"),
     msg("tree.at", "Showing {point}"),
     msg("listing.size_and_encoding", "{size} · {encoding}"),
     msg("listing.caption", "Files and folders"),
@@ -106,12 +109,11 @@ pub const CATALOG: &[Entry] = &[
     msg("size.gib", "{value} GiB"),
     // assurance labels (trust-bearing)
     msg("assurance.verified", "Verified"),
+    msg("assurance.sealed", "Signed into the history"),
     msg("assurance.queued", "Approved, awaiting signature"),
     msg("assurance.unverified", "Verification failed"),
     msg("assurance.verify_unavailable", "Could not be checked now"),
-    // in-place explanations (a native <details>, no script). `explain.queued` and `explain.unavailable` are
-    // the glossary's sentences; the others are PROPOSED by the dev team and wait for the owner (the review
-    // request lists them as questions).
+    // in-place explanations (a native <details>, no script); the wording is on the glossary page.
     msg("explain.summary", "What does this mean?"),
     msg(
         "explain.verified",
@@ -128,6 +130,10 @@ pub const CATALOG: &[Entry] = &[
     msg(
         "explain.failed",
         "prikk checked this repository and found problems. The Verification page lists what was found.",
+    ),
+    msg(
+        "explain.failed_here",
+        "prikk checked this repository and found problems. They are listed below.",
     ),
     msg("explain.unavailable", "Try again in a little while."),
     msg("explain.patch", "A patch is one recorded edit."),
@@ -180,9 +186,13 @@ pub const CATALOG: &[Entry] = &[
         "verify.status.not_evaluated",
         "not run (blocked by {check})",
     ),
-    // PROPOSED: the status of a not-run check whose blocker prikk did not name (never seen from prikk 0.52).
+    // The status of a not-run check whose blocker prikk did not name (never seen from prikk 0.52).
     msg("verify.status.not_run", "not run"),
     msg("verify.status.halted", "stopped early"),
+    msg(
+        "verify.status.halted_after",
+        "stopped early (after {check})",
+    ),
     msg("verify.col.stage", "Check"),
     msg("verify.col.status", "Status"),
     msg("verify.col.detail", "Detail"),

@@ -333,6 +333,8 @@ fn notice(
 fn assurance(a: Assurance) -> (&'static str, Key) {
     match a {
         Assurance::PrikkVerified => ("ok", Key::AssuranceVerified),
+        // Signed in, nothing verified: the plain badge, never the green one (IS-44).
+        Assurance::Sealed => ("neutral", Key::AssuranceSealed),
         Assurance::ForgeApprovedUnsealed => ("warn", Key::AssuranceQueued),
         Assurance::Unverified => ("bad", Key::AssuranceUnverified),
     }
@@ -349,6 +351,7 @@ struct ExplainRow {
 fn explanation(label: Key) -> Key {
     match label {
         Key::AssuranceVerified => Key::ExplainVerified,
+        Key::AssuranceSealed => Key::ExplainSigned,
         Key::AssuranceQueued => Key::ExplainQueued,
         Key::AssuranceUnverified => Key::ExplainFailed,
         _ => Key::ExplainUnavailable,
@@ -360,6 +363,18 @@ fn explain_badge(label: Key) -> Vec<ExplainRow> {
     vec![ExplainRow {
         label: None,
         text: explanation(label),
+    }]
+}
+
+/// The same on the Verification page, where the findings are on the page itself: the failed sentence says
+/// "listed below" instead of pointing at the page the reader is on.
+fn explain_badge_here(label: Key) -> Vec<ExplainRow> {
+    vec![ExplainRow {
+        label: None,
+        text: match label {
+            Key::AssuranceUnverified => Key::ExplainFailedHere,
+            other => explanation(other),
+        },
     }]
 }
 
@@ -636,7 +651,7 @@ struct StageRow {
     /// The status in the page's language (an unknown token from prikk is shown as it came). For a check that
     /// was not run it names the check that blocked it.
     status_label: String,
-    /// prikk's own message for a failed check; "after {x}" for a stopped one. Empty when the status says it all.
+    /// prikk's own message for a failed check. Empty when the status says it all.
     detail: String,
 }
 /// One finding of a failed check: prikk's id and message, shown as prikk wrote them.
@@ -704,7 +719,8 @@ fn history_row(t: &T, e: &planeter_core::read::HistoryEntry) -> HistoryRow {
 }
 
 /// The catalog label of a verify stage status token (`evaluated`, `failed`, `not_evaluated`, `halted`). A
-/// `not_evaluated` stage names its blocker from the view's `blocked_by` field, not from the English `detail`.
+/// `not_evaluated` stage names its blocker from the view's `blocked_by` field and a `halted` one the stage it
+/// stopped after from `after`, not from the English `detail`.
 fn stage_status_label(t: &T, stage: &planeter_core::read::StageView) -> String {
     match stage.status.as_str() {
         "evaluated" => t.get(Key::VerifyStatusEvaluated),
@@ -716,15 +732,21 @@ fn stage_status_label(t: &T, stage: &planeter_core::read::StageView) -> String {
                 .text(),
             None => t.get(Key::VerifyStatusNotRun),
         },
-        "halted" => t.get(Key::VerifyStatusHalted),
+        "halted" => match stage.after.as_deref().filter(|a| !a.is_empty()) {
+            Some(check) => t
+                .msg(Key::VerifyStatusHaltedAfter)
+                .with("check", check)
+                .text(),
+            None => t.get(Key::VerifyStatusHalted),
+        },
         other => other.to_owned(),
     }
 }
 
-/// The detail cell of a verify stage: prikk's message for a failure, `after {x}` for a stop. A check that
-/// was not run has none: its status already names the blocker.
+/// The detail cell of a verify stage: prikk's message for a failure. A check that was not run or stopped early
+/// has none: its status already names the other check (and the English `detail` would not translate).
 fn stage_detail(stage: &planeter_core::read::StageView) -> String {
-    if stage.status == "not_evaluated" {
+    if matches!(stage.status.as_str(), "not_evaluated" | "halted") {
         return String::new();
     }
     stage.detail.clone().unwrap_or_default()
@@ -1436,7 +1458,15 @@ async fn history_page(
         Ok(v) => assurance(v.assurance()),
         Err(_) => ("bad", Key::AssuranceVerifyUnavailable),
     };
-    let entries = h.entries.iter().map(|e| history_row(&c.t, e)).collect();
+    let entries: Vec<HistoryRow> = h.entries.iter().map(|e| history_row(&c.t, e)).collect();
+    // The rollback tag is explained once, and only on a page that shows one.
+    let mut explain = explain_badge(al);
+    if entries.iter().any(|e| e.rollback_block) {
+        explain.push(ExplainRow {
+            label: None,
+            text: Key::ExplainRollback,
+        });
+    }
     render(
         &state,
         StatusCode::OK,
@@ -1450,7 +1480,7 @@ async fn history_page(
             ref_name: h.ref_name,
             assurance_class: ac,
             assurance_label: al,
-            explain: explain_badge(al),
+            explain,
             entries,
         },
         &c,
@@ -1494,12 +1524,7 @@ async fn change_page(
         if !explain.iter().any(|r| r.label == Some(label)) {
             explain.push(ExplainRow {
                 label: Some(label),
-                // A sealed patch carries no re-derived verdict on this page, so its explanation says what
-                // is known here (it is signed in) and points to the Verification page for the rest.
-                text: match label {
-                    Key::AssuranceVerified => Key::ExplainSigned,
-                    other => explanation(other),
-                },
+                text: explanation(label),
             });
         }
     }
@@ -1627,7 +1652,7 @@ async fn verify_page(
             name,
             assurance_class: ac,
             assurance_label: al,
-            explain: explain_badge(al),
+            explain: explain_badge_here(al),
             verified_sessions: v.verified_sessions,
             total_sessions: v.total_sessions,
             failed: v
@@ -1696,6 +1721,7 @@ mod tests {
             status: status.into(),
             detail: detail.map(str::to_owned),
             blocked_by: blocked_by.map(str::to_owned),
+            after: None,
         }
     }
 
@@ -1724,10 +1750,20 @@ mod tests {
             stage_detail(&stage("failed", Some("prikk says"), None)),
             "prikk says"
         );
-        assert_eq!(
-            stage_detail(&stage("halted", Some("after refs"), None)),
-            "after refs"
-        );
+        // A stopped check has no detail cell either: its status names the check it stopped after.
+        assert_eq!(stage_detail(&stage("halted", Some("after refs"), None)), "");
+    }
+
+    #[test]
+    fn a_stopped_check_names_what_it_stopped_after_from_the_field_not_from_the_detail() {
+        let t = T::new(crate::catalog::EN);
+        let mut s = stage("halted", Some("after x"), None);
+        s.after = Some("refs".into());
+        assert_eq!(stage_status_label(&t, &s), "stopped early (after refs)");
+        for after in [None, Some("".to_owned())] {
+            s.after = after;
+            assert_eq!(stage_status_label(&t, &s), "stopped early");
+        }
     }
 
     #[test]

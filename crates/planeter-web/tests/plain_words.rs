@@ -179,14 +179,16 @@ fn assert_directly_after_the_heading(html: &str, what: &str) {
     );
 }
 
-const EXPLAIN_SENTENCES: [Key; 4] = [
+const EXPLAIN_SENTENCES: [Key; 6] = [
     Key::ExplainVerified,
+    Key::ExplainSigned,
     Key::ExplainQueued,
     Key::ExplainFailed,
+    Key::ExplainFailedHere,
     Key::ExplainUnavailable,
 ];
 
-/// The page carries the sentence of its own state and none of the other three: the meaning is asserted, not
+/// The page carries the sentence of its own state and none of the others: the meaning is asserted, not
 /// only the words (a failed check must never be explained as a pass, nor a pass as a failure).
 fn assert_only(html: &str, want: Key, what: &str) {
     let paragraphs = explanation(html).unwrap_or_else(|| panic!("{what}: no explanation block"));
@@ -254,10 +256,19 @@ async fn failed_pages_explain_the_failure_and_never_call_it_a_pass() {
         );
         assert!(!html.contains("badge ok"), "{uri}: {html}");
         assert_directly_after_the_heading(&html, uri);
-        assert_only(&html, Key::ExplainFailed, uri);
+        // The Verification page lists the findings itself, so its sentence says "below"; the other two point at it.
+        let want = if uri.ends_with("/verify") {
+            Key::ExplainFailedHere
+        } else {
+            Key::ExplainFailed
+        };
+        assert_only(&html, want, uri);
     }
-    assert!(text(Key::ExplainFailed).contains("found problems"));
-    assert!(!text(Key::ExplainFailed).contains("no problems"));
+    for key in [Key::ExplainFailed, Key::ExplainFailedHere] {
+        assert!(text(key).contains("found problems"));
+        assert!(!text(key).contains("no problems"));
+    }
+    assert!(text(Key::ExplainFailedHere).ends_with("They are listed below."));
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -290,54 +301,111 @@ async fn pages_whose_check_could_not_run_say_so_and_what_to_do() {
     );
 }
 
-const SHOW_REPORT: &str = r#"{
-  "schema_version": "show-report-v1",
-  "patches": [
-    {"patch_id": "aaaaaaaaaaaaaaaaaaaa", "queued": true, "operations": [
-      {"kind": "create-file", "paths": [{"path": "b.txt"}],
-       "content": {"kind": "create-file", "content": {"kind": "text", "text": "hi"}, "mode": 420}}]},
-    {"patch_id": "bbbbbbbbbbbbbbbbbbbb", "queued": false, "operations": [
-      {"kind": "create-file", "paths": [{"path": "c.txt"}],
-       "content": {"kind": "create-file", "content": {"kind": "text", "text": "hi"}, "mode": 420}}]},
-    {"patch_id": "cccccccccccccccccccc", "queued": true, "operations": []}
-  ]
-}"#;
+/// The change page for a `show` report with the given patches (`true` = queued).
+async fn change_page(name: &str, queued: &[bool]) -> String {
+    let patches: Vec<String> = queued
+        .iter()
+        .enumerate()
+        .map(|(i, q)| {
+            format!(
+                r#"{{"patch_id": "{id}", "queued": {q}, "operations": [
+                  {{"kind": "create-file", "paths": [{{"path": "f{i}.txt"}}],
+                   "content": {{"kind": "create-file", "content": {{"kind": "text", "text": "hi"}}, "mode": 420}}}}]}}"#,
+                id = format!("{:x}", i + 10).repeat(20),
+            )
+        })
+        .collect();
+    let show = fixture(
+        &format!("show-{name}.json"),
+        &format!(
+            r#"{{"schema_version": "show-report-v1", "patches": [{}]}}"#,
+            patches.join(",")
+        ),
+    );
+    let r = app(name, Some(&standin(None, Some(&show))));
+    let (s, html) = get(&r, "/alice/app/change/abc").await;
+    assert_eq!(s, StatusCode::OK, "{html}");
+    html
+}
+
+/// The badge labels on a page, in order (`<span class="badge …">label</span>`).
+fn badges(html: &str) -> Vec<(String, String)> {
+    html.split("<span class=\"badge")
+        .skip(1)
+        .map(|b| {
+            let (class, rest) = b.split_once("\">").unwrap();
+            (
+                class.trim().to_owned(),
+                rest.split("</span>").next().unwrap().to_owned(),
+            )
+        })
+        .collect()
+}
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
-async fn the_change_page_explains_each_badge_once_and_the_two_terms() {
+async fn the_change_page_never_says_verified_and_explains_each_badge_once_and_the_two_terms() {
     if !have_prikk() {
         eprintln!("skipping: needs prikk on PATH");
         return;
     }
-    let show = fixture("show-report.json", SHOW_REPORT);
-    let r = app("change", Some(&standin(None, Some(&show))));
-    let (s, html) = get(&r, "/alice/app/change/abc").await;
-    assert_eq!(s, StatusCode::OK, "{html}");
-    assert!(
-        html.contains("badge warn\">Approved, awaiting signature</span>"),
-        "{html}"
+    let sealed = ("neutral".to_owned(), text(Key::AssuranceSealed));
+    let queued = ("warn".to_owned(), text(Key::AssuranceQueued));
+    let explain_sealed = format!(
+        "{} | {}",
+        text(Key::AssuranceSealed),
+        text(Key::ExplainSigned)
     );
-    assert!(html.contains("badge ok\">Verified</span>"), "{html}");
-    assert_directly_after_the_heading(&html, "change");
-    // Two queued patches and one sealed: one paragraph per distinct badge (in order of first appearance),
-    // each under its label, then patch and rollback.
-    assert_eq!(
-        explanation(&html).unwrap(),
-        [
-            format!(
-                "{} | {}",
-                text(Key::AssuranceQueued),
-                text(Key::ExplainQueued)
-            ),
-            format!(
-                "{} | {}",
-                text(Key::AssuranceVerified),
-                text(Key::ExplainSigned)
-            ),
-            text(Key::ExplainPatch),
-            text(Key::ExplainRollback),
-        ]
+    let explain_queued = format!(
+        "{} | {}",
+        text(Key::AssuranceQueued),
+        text(Key::ExplainQueued)
     );
+    let terms = [text(Key::ExplainPatch), text(Key::ExplainRollback)];
+
+    // (patches as queued?, the badges in order, the explanation paragraphs in order)
+    // (name, patches as queued?, the badges in order, the explanation paragraphs in order)
+    type Case<'a> = (&'a str, &'a [bool], Vec<(String, String)>, Vec<String>);
+    let cases: [Case; 3] = [
+        (
+            "sealed",
+            &[false, false],
+            vec![sealed.clone(), sealed.clone()],
+            vec![explain_sealed.clone()],
+        ),
+        (
+            "queued",
+            &[true],
+            vec![queued.clone()],
+            vec![explain_queued.clone()],
+        ),
+        (
+            // two queued patches and one sealed: one paragraph per distinct badge, in order of first appearance
+            "both",
+            &[true, false, true],
+            vec![queued.clone(), sealed.clone(), queued.clone()],
+            vec![explain_queued, explain_sealed],
+        ),
+    ];
+    for (name, patches, want_badges, mut want_explain) in cases {
+        let html = change_page(&format!("change-{name}"), patches).await;
+        assert_eq!(badges(&html), want_badges, "{name}: the badges");
+        // No green badge and the word "Verified" is in no badge, whatever the patches are (IS-44).
+        assert!(!html.contains("badge ok"), "{name}: {html}");
+        assert!(!html.contains(">Verified<"), "{name}: {html}");
+        assert!(
+            !explanation(&html)
+                .unwrap()
+                .iter()
+                .any(|p| p.contains(&text(Key::ExplainVerified)))
+        );
+        assert_directly_after_the_heading(&html, name);
+        want_explain.extend(terms.clone());
+        assert_eq!(
+            explanation(&html).unwrap(),
+            want_explain,
+            "{name}: the explanation"
+        );
+    }
     // The meaning of "approved, awaiting signature" is the glossary's, word for word: approved here, not yet
     // signed by a maintainer, not part of the verified record.
     assert_eq!(
@@ -345,8 +413,9 @@ async fn the_change_page_explains_each_badge_once_and_the_two_terms() {
         "This change was approved on this server. A maintainer has not yet signed it into the project's \
          history, so it is not part of the verified record."
     );
-    // A sealed patch on this page is signed in; nothing here has re-checked the repository, so the sentence
-    // must not claim a check (it points to the Verification page instead).
+    // A sealed patch on this page is signed in; nothing here has checked the repository, so the sentence must
+    // not claim a check (it points to the Verification page instead). The label is the plain, not the green, one.
+    assert_eq!(text(Key::AssuranceSealed), "Signed into the history");
     let signed = text(Key::ExplainSigned);
     assert!(
         signed.contains("signed this patch into the project's history"),
@@ -361,6 +430,79 @@ async fn the_change_page_explains_each_badge_once_and_the_two_terms() {
         text(Key::ExplainRollback),
         "A rollback is a change that undoes an earlier change."
     );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_change_api_says_sealed_for_a_sealed_patch_and_nothing_is_called_verified() {
+    if !have_prikk() {
+        eprintln!("skipping: needs prikk on PATH");
+        return;
+    }
+    let show = fixture(
+        "show-api.json",
+        r#"{"schema_version": "show-report-v1", "patches": [
+            {"patch_id": "aaaaaaaaaaaaaaaaaaaa", "queued": true, "operations": []},
+            {"patch_id": "bbbbbbbbbbbbbbbbbbbb", "queued": false, "operations": []}]}"#,
+    );
+    let r = app("change-api", Some(&standin(None, Some(&show))));
+    let (s, body) = get(&r, "/api/v1/repos/alice/app/change/abc").await;
+    assert_eq!(s, StatusCode::OK, "{body}");
+    let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(
+        v["patches"][0]["assurance"], "forge-approved-unsealed",
+        "{body}"
+    );
+    assert_eq!(v["patches"][1]["assurance"], "sealed", "{body}");
+    assert!(!body.contains("prikk-verified"), "{body}");
+}
+
+const LOG_WITH_ROLLBACK: &str = r#"{"schema_version":"log-report-v1","repository":"/r/.prikk","ref":"heads/main",
+  "current_branch":"main","blocks":[
+  {"block_id":"b2","ref_state_id":"r2","update_seq":1,"kind":"Rollback","rollback_block":true,"parent_count":1,
+   "patch_count":1,"rollback_patch_count":1,"required_attestation_count":0,
+   "patch_messages":[{"patch_id":"p2","message":"undo it"}],"previous_ref_state_id":"r1"},
+  {"block_id":"b1","ref_state_id":"r1","update_seq":0,"kind":"Root","rollback_block":false,"parent_count":0,
+   "patch_count":1,"rollback_patch_count":0,"required_attestation_count":0,
+   "patch_messages":[{"patch_id":"p1","message":"init"}],"previous_ref_state_id":null}]}"#;
+
+const LOG_WITHOUT_ROLLBACK: &str = r#"{"schema_version":"log-report-v1","repository":"/r/.prikk","ref":"heads/main",
+  "current_branch":"main","blocks":[
+  {"block_id":"b1","ref_state_id":"r1","update_seq":0,"kind":"Root","rollback_block":false,"parent_count":0,
+   "patch_count":1,"rollback_patch_count":0,"required_attestation_count":0,
+   "patch_messages":[{"patch_id":"p1","message":"init"}],"previous_ref_state_id":null}]}"#;
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_history_page_explains_the_rollback_tag_once_and_only_when_it_shows_one() {
+    if !have_prikk() {
+        eprintln!("skipping: needs prikk on PATH");
+        return;
+    }
+    let with = fixture("log-with-rollback.json", LOG_WITH_ROLLBACK);
+    let without = fixture("log-without-rollback.json", LOG_WITHOUT_ROLLBACK);
+    let standin_log = |f: &Path| {
+        format!(
+            "case \"$*\" in\n  *\"log --format\"*) cat '{}'; exit 0 ;;\n  *) exec prikk \"$@\" ;;\nesac",
+            f.display()
+        )
+    };
+    let r = app("history-rollback", Some(&standin_log(&with)));
+    let (s, html) = get(&r, "/alice/app/history").await;
+    assert_eq!(s, StatusCode::OK, "{html}");
+    assert!(
+        html.contains("<span class=\"badge warn\">rollback</span>"),
+        "{html}"
+    );
+    // The badge's sentence, then the rollback one — once, although the log could hold many rollbacks.
+    assert_eq!(
+        explanation(&html).unwrap(),
+        [text(Key::ExplainVerified), text(Key::ExplainRollback)]
+    );
+    // No rollback row, no rollback paragraph.
+    let r = app("history-plain", Some(&standin_log(&without)));
+    let (s, html) = get(&r, "/alice/app/history").await;
+    assert_eq!(s, StatusCode::OK, "{html}");
+    assert!(!html.contains("badge warn\">rollback"), "{html}");
+    assert_eq!(explanation(&html).unwrap(), [text(Key::ExplainVerified)]);
 }
 
 // ----------------------------------------------------------------------------------------------- T3 table
@@ -396,7 +538,17 @@ async fn the_verification_table_uses_plain_words_and_names_the_blocker_from_the_
     assert!(row("objects").contains("<td>problem found</td>"));
     assert!(row("objects").contains("integrity error: ref pointer index has a damaged entry"));
     assert!(row("lifecycle-cache").contains("<td>completed</td>"));
-    assert!(row("commit-index").contains("<td>stopped early</td>"));
+    // The stopped check names what it stopped after, from the field; the English detail is not shown.
+    let stopped = row("commit-index");
+    assert!(
+        stopped.contains("<td>stopped early (after refs)</td>"),
+        "{stopped}"
+    );
+    assert_eq!(
+        stopped.matches("after refs").count(),
+        1,
+        "said once: {stopped}"
+    );
     // The blocked check names its blocker, taken from the field (not parsed out of the English `detail`).
     let blocked = row("ref-update-schema-trust");
     assert!(
@@ -462,5 +614,11 @@ async fn a_verified_repository_has_no_findings_heading_and_the_api_keeps_its_fie
         let s = stage(name);
         assert!(s.get("blocked_by").is_none(), "{name} has no blocker: {s}");
     }
-    assert_eq!(stage("commit-index")["detail"], "after refs");
+    // `after` only on the stopped check; its English detail is unchanged.
+    let halted = stage("commit-index");
+    assert_eq!(halted["after"], "refs");
+    assert_eq!(halted["detail"], "after refs");
+    for name in ["objects", "ref-update-schema-trust", "lifecycle-cache"] {
+        assert!(stage(name).get("after").is_none(), "{name} did not stop");
+    }
 }

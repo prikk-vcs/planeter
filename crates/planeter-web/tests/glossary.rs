@@ -105,13 +105,7 @@ fn a_key_is_named_once_with_a_known_status() {
     for r in &rows {
         assert!(seen.insert(r.key.clone()), "`{}` is listed twice", r.key);
         assert!(
-            [
-                "Approved",
-                "Derived",
-                "Awaiting the owner",
-                "Held for prikk's confirmation"
-            ]
-            .contains(&r.status.as_str()),
+            ["Approved", "Derived", "Held for prikk's confirmation"].contains(&r.status.as_str()),
             "`{}`: unknown status {:?}",
             r.key,
             r.status
@@ -145,6 +139,7 @@ fn the_words_the_handoff_names_are_all_on_the_page() {
         "file.binary",
         "history.empty",
         "assurance.verified",
+        "assurance.sealed",
         "assurance.queued",
         "assurance.unverified",
         "assurance.verify_unavailable",
@@ -153,6 +148,7 @@ fn the_words_the_handoff_names_are_all_on_the_page() {
         "explain.signed",
         "explain.queued",
         "explain.failed",
+        "explain.failed_here",
         "explain.unavailable",
         "explain.patch",
         "explain.rollback",
@@ -163,6 +159,10 @@ fn the_words_the_handoff_names_are_all_on_the_page() {
         "verify.status.failed",
         "verify.status.not_evaluated",
         "verify.status.halted",
+        "verify.status.halted_after",
+        "verify.status.not_run",
+        "repo.location_branch",
+        "title.too_large",
         "verify.sessions",
         "page.csrf.body",
         "page.form_incomplete.body",
@@ -213,6 +213,11 @@ fn the_tables_use_the_new_column_names() {
         }
     }
     assert!(src.contains("Certainty"), "the Certainty column stays");
+    // The case rule (the architect's answer to Q8) is written on the page.
+    assert!(
+        src.contains("In-cell tags and status words are lowercase"),
+        "the case rule is not on the page"
+    );
     assert!(
         !src.to_lowercase().contains("awaiting the owner's reading"),
         "no 'proposal' status left"

@@ -6,9 +6,10 @@
 //!   calls `authorize(principal, Read, resource)`. A denied private repository is **indistinguishable
 //!   from a nonexistent one** ([`ReadError::NotFound`] for both — T-7). UI and API share this one gate.
 //! - **T2 browse surfaces.** Each prikk `--format json` verb maps to a view-model here.
-//! - **T5 honesty.** A change/history view marks **prikk-verified** vs merely **forge-approved
-//!   (approved-but-unsealed)** distinctly ([`Assurance`]); the security verify status is **re-derived**
-//!   from prikk on every call, never served from a cache (D-5 / SEC-1).
+//! - **T5 honesty.** A change/history view marks **signed into the history** (sealed) vs merely
+//!   **forge-approved (approved-but-unsealed)** distinctly ([`Assurance`]); only the repository-level
+//!   verification path says **verified**, and it is **re-derived** from prikk on every call, never served
+//!   from a cache (D-5 / SEC-1).
 //! - **T1 cache is never the authority.** The view-models are **pure functions of prikk output**, so a
 //!   derived cache (keyed by prikk object id) is always droppable and rebuildable from prikk; when prikk
 //!   is unavailable a cached view is served **labelled [`Freshness::Stale`]**, never fabricated. The
@@ -87,12 +88,17 @@ pub struct Served<T> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "kebab-case")]
 pub enum Assurance {
-    /// Sealed and prikk-verified.
+    /// The repository's verification **ran and passed**: prikk's verdict is `ok` and every stage was
+    /// evaluated. Produced only by [`VerifyView::assurance`] (the repository, history and verification
+    /// pages' badge) — never from a `show` or `log` alone (IS-44).
     PrikkVerified,
+    /// Sealed: `show` reports the patch as signed into the history. That is all that is known about it
+    /// where no verification ran (the change page); it is **not** a claim that anything was checked.
+    Sealed,
     /// Accepted by the forge but **not yet sealed** (queued) — a forge-side approval, not a prikk
     /// signature. Must never render as verified.
     ForgeApprovedUnsealed,
-    /// Neither sealed nor verifiable.
+    /// The repository's verification ran and did not pass, or could not be completed as a pass.
     Unverified,
 }
 
@@ -161,7 +167,8 @@ pub struct ChangeView {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct ChangePatchView {
     pub patch_id: String,
-    /// Honest assurance: a queued (unsealed) patch is `ForgeApprovedUnsealed`, never verified (T5).
+    /// Honest assurance: a queued patch is `ForgeApprovedUnsealed`, a sealed one `Sealed`; never verified,
+    /// because no verification runs for this view (T5, IS-44).
     pub assurance: Assurance,
     pub operations: Vec<OperationView>,
 }
@@ -183,9 +190,9 @@ impl ChangeView {
                     assurance: if p.queued {
                         Assurance::ForgeApprovedUnsealed
                     } else {
-                        // Sealed here; the repository-level verify view (re-derived) is the authority on
-                        // whether the seal actually verifies.
-                        Assurance::PrikkVerified
+                        // Sealed, and nothing more is known here: whether the repository verifies is the
+                        // repository-level verify view's to say (re-derived), not this view's.
+                        Assurance::Sealed
                     },
                     operations: p
                         .operations
@@ -397,6 +404,10 @@ pub struct StageView {
     /// the JSON otherwise. `detail` keeps its English text unchanged for existing API readers.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub blocked_by: Option<String>,
+    /// For a `halted` stage: the id of the stage it stopped after, as data (the same pattern as
+    /// `blocked_by`). Absent from the JSON otherwise; `detail` is unchanged.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub after: Option<String>,
 }
 
 impl VerifyView {
@@ -439,24 +450,28 @@ fn stage_view(s: &model::Stage) -> StageView {
             status: "evaluated".into(),
             detail: None,
             blocked_by: None,
+            after: None,
         },
         model::Stage::Failed { stage, message } => StageView {
             stage: stage.clone(),
             status: "failed".into(),
             detail: Some(message.clone()),
             blocked_by: None,
+            after: None,
         },
         model::Stage::NotEvaluated { stage, blocked_by } => StageView {
             stage: stage.clone(),
             status: "not_evaluated".into(),
             detail: Some(format!("blocked by {blocked_by}")),
             blocked_by: Some(blocked_by.clone()),
+            after: None,
         },
         model::Stage::Halted { stage, after } => StageView {
             stage: stage.clone(),
             status: "halted".into(),
             detail: Some(format!("after {after}")),
             blocked_by: None,
+            after: Some(after.clone()),
         },
     }
 }
@@ -792,16 +807,33 @@ mod tests {
     }
 
     #[test]
-    fn queued_patch_is_forge_approved_never_verified() {
+    fn a_change_view_never_says_verified_because_no_verification_ran_for_it() {
+        // IS-44: a sealed patch is `Sealed` (signed in, nothing more is known), a queued one is
+        // `ForgeApprovedUnsealed`; no patch, in any mix, is ever `PrikkVerified`.
         let show: model::ShowReport = serde_json::from_str(
             r#"{"schema_version":"show-report-v1","patches":[
                 {"patch_id":"p1","queued":true,"operations":[]},
-                {"patch_id":"p2","queued":false,"operations":[]}]}"#,
+                {"patch_id":"p2","queued":false,"operations":[]},
+                {"patch_id":"p3","queued":false,"operations":[]},
+                {"patch_id":"p4","queued":true,"operations":[]}]}"#,
         )
         .unwrap();
         let v = ChangeView::from_show(&show);
-        assert_eq!(v.patches[0].assurance, Assurance::ForgeApprovedUnsealed);
-        assert_eq!(v.patches[1].assurance, Assurance::PrikkVerified);
+        let got: Vec<Assurance> = v.patches.iter().map(|p| p.assurance).collect();
+        assert_eq!(
+            got,
+            [
+                Assurance::ForgeApprovedUnsealed,
+                Assurance::Sealed,
+                Assurance::Sealed,
+                Assurance::ForgeApprovedUnsealed
+            ]
+        );
+        assert!(!got.contains(&Assurance::PrikkVerified));
+        // The JSON tells the truth too.
+        let json = serde_json::to_value(&v).unwrap();
+        assert_eq!(json["patches"][1]["assurance"], "sealed");
+        assert_eq!(json["patches"][0]["assurance"], "forge-approved-unsealed");
     }
 
     #[test]
@@ -819,7 +851,7 @@ mod tests {
     }
 
     #[test]
-    fn only_a_blocked_stage_carries_the_blocker_and_the_english_detail_is_unchanged() {
+    fn only_a_blocked_or_halted_stage_carries_its_field_and_the_english_detail_is_unchanged() {
         let report: model::VerifyReport = serde_json::from_str(
             r#"{"schema_version":"verify-report-v1","verdict":{"ok":false,
                 "failed_conditions":[]},
@@ -836,14 +868,26 @@ mod tests {
         assert_eq!(blockers, [None, None, Some("b"), None]);
         assert_eq!(v.stages[2].detail.as_deref(), Some("blocked by b"));
         assert_eq!(v.stages[3].detail.as_deref(), Some("after b"));
-        // In the JSON the field is absent, not null, when there is no blocker.
+        let afters: Vec<Option<&str>> = v.stages.iter().map(|s| s.after.as_deref()).collect();
+        assert_eq!(afters, [None, None, None, Some("b")]);
+        // In the JSON each field is absent, not null, when it does not apply.
         let json = serde_json::to_value(&v).unwrap();
         let stages = json["stages"].as_array().unwrap();
-        for (i, has) in [false, false, true, false].into_iter().enumerate() {
-            assert_eq!(stages[i].get("blocked_by").is_some(), has, "{}", stages[i]);
+        for (i, (blocked, halted)) in [(false, false), (false, false), (true, false), (false, true)]
+            .into_iter()
+            .enumerate()
+        {
+            assert_eq!(
+                stages[i].get("blocked_by").is_some(),
+                blocked,
+                "{}",
+                stages[i]
+            );
+            assert_eq!(stages[i].get("after").is_some(), halted, "{}", stages[i]);
             assert!(stages[i].get("detail").is_some(), "detail is always there");
         }
         assert_eq!(stages[2]["blocked_by"], "b");
+        assert_eq!(stages[3]["after"], "b");
     }
 
     // -- the T6 authorization gate (no prikk: deny returns before opening prikk) --

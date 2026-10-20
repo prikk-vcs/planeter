@@ -298,6 +298,7 @@ keys! {
     SizeGib => "size.gib",
     // assurance labels (trust-bearing)
     AssuranceVerified => "assurance.verified",
+    AssuranceSealed => "assurance.sealed",
     AssuranceQueued => "assurance.queued",
     AssuranceUnverified => "assurance.unverified",
     AssuranceVerifyUnavailable => "assurance.verify_unavailable",
@@ -307,6 +308,7 @@ keys! {
     ExplainSigned => "explain.signed",
     ExplainQueued => "explain.queued",
     ExplainFailed => "explain.failed",
+    ExplainFailedHere => "explain.failed_here",
     ExplainUnavailable => "explain.unavailable",
     ExplainPatch => "explain.patch",
     ExplainRollback => "explain.rollback",
@@ -342,6 +344,7 @@ keys! {
     VerifyStatusNotEvaluated => "verify.status.not_evaluated",
     VerifyStatusNotRun => "verify.status.not_run",
     VerifyStatusHalted => "verify.status.halted",
+    VerifyStatusHaltedAfter => "verify.status.halted_after",
     VerifyColStage => "verify.col.stage",
     VerifyColStatus => "verify.col.status",
     VerifyColDetail => "verify.col.detail",

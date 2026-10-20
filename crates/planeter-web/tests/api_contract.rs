@@ -368,7 +368,7 @@ async fn the_document_describes_parameters_responses_security_and_the_error_sche
             .collect();
         // The additive fields: declared, documented, and not `required` because a view omits them when they
         // do not apply (RFC 012 D-4). Every other property is required.
-        let additive: &[(&str, &str)] = &[("Stage", "blocked_by")];
+        let additive: &[(&str, &str)] = &[("Stage", "blocked_by"), ("Stage", "after")];
         props.retain(|p| !additive.contains(&(name.as_str(), *p)));
         props.sort_unstable();
         required.sort_unstable();
@@ -417,7 +417,7 @@ async fn every_view_serializes_to_exactly_the_declared_fields() {
             serde_json::to_value(ChangeView {
                 patches: vec![ChangePatchView {
                     patch_id: "p".into(),
-                    assurance: Assurance::ForgeApprovedUnsealed,
+                    assurance: Assurance::Sealed,
                     operations: vec![OperationView {
                         kind: "create-file".into(),
                         paths: vec!["a".into()],
@@ -487,18 +487,28 @@ async fn every_view_serializes_to_exactly_the_declared_fields() {
                         status: "evaluated".into(),
                         detail: None,
                         blocked_by: None,
+                        after: None,
                     },
                     StageView {
                         stage: "refs".into(),
                         status: "failed".into(),
                         detail: Some("m".into()),
                         blocked_by: None,
+                        after: None,
                     },
                     StageView {
                         stage: "commit-index".into(),
                         status: "not_evaluated".into(),
                         detail: Some("blocked by refs".into()),
                         blocked_by: Some("refs".into()),
+                        after: None,
+                    },
+                    StageView {
+                        stage: "wal-replay".into(),
+                        status: "halted".into(),
+                        detail: Some("after refs".into()),
+                        blocked_by: None,
+                        after: Some("refs".into()),
                     },
                 ],
             })
@@ -607,6 +617,7 @@ async fn every_view_serializes_to_exactly_the_declared_fields() {
     }
     for a in [
         Assurance::PrikkVerified,
+        Assurance::Sealed,
         Assurance::ForgeApprovedUnsealed,
         Assurance::Unverified,
     ] {
