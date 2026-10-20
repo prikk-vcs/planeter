@@ -243,23 +243,50 @@ fn parse_schema_json<T: DeserializeOwned>(stdout: &str, expected_schema: &str) -
     serde_json::from_value(value).map_err(|e| PrikkError::Parse(e.to_string()))
 }
 
-/// Whether a stage's failure message says the process ran out of memory (what a `RLIMIT_DATA` ceiling
-/// does to prikk's `objects` stage: `i/o error: out of memory`, measured on prikk 0.52.0), as opposed to a
-/// finding about the repository ("integrity error: …").
+/// Whether a stage's failure message is the process running out of memory — what a `RLIMIT_DATA` ceiling
+/// does to prikk's `objects` stage — as opposed to a finding about the repository.
+///
+/// The shape is the measured one and nothing looser: the message **starts with** prikk's error-class prefix
+/// `i/o error:` and what follows is **exactly** the out-of-memory condition. On prikk 0.52.0, across six
+/// repositories and about a hundred ceilings each, every ceiling hit that prints a report prints exactly
+/// `i/o error: out of memory` (the rest abort: exit 134 / `SIGABRT`, which never reaches this function). The
+/// second phrase is the text Rust gives for the raw `ENOMEM` (`os error 12`); it has not been seen from prikk
+/// and is accepted only in full, never as a substring. A message can embed data the repository owner chooses
+/// (a ref or a path name); a name containing "out of memory" must not turn damage into a ceiling hit, so no
+/// substring of a message is ever matched. Re-measure the message at every prikk re-baseline.
 fn is_resource_failure(message: &str) -> bool {
-    let m = message.to_ascii_lowercase();
-    m.contains("out of memory")
-        || m.contains("cannot allocate memory")
-        || m.contains("memory allocation")
+    message
+        .strip_prefix("i/o error:")
+        .map(str::trim)
+        .is_some_and(|rest| {
+            rest == "out of memory" || rest == "Cannot allocate memory (os error 12)"
+        })
 }
 
-/// A failing report that is a complete verdict about the repository: every stage ran to an outcome (see
-/// `CliPrikkRepo::verify`).
+/// A failing report that is a complete verdict about the repository: every stage ran to an outcome, or was
+/// not run **because a stage of the same report failed with a finding** (see [`CliPrikkRepo::verify`]).
+///
+/// * `evaluated`: ran. `failed` with a finding: ran, and found damage. `failed` out of memory: a ceiling hit.
+/// * `not_evaluated` carries the id of the stage that blocked it (`blocked_by`, a field of the report, not
+///   text to parse). It is part of the verdict only if that id is a stage of this report that is `failed` with
+///   a finding; a blocker that is itself `not_evaluated`, missing from the report, unknown, or failed for lack
+///   of memory leaves the report partial.
+/// * `halted`: the run stopped; partial.
 fn is_complete_verdict(report: &model::VerifyReport) -> bool {
+    // A blocker must be a stage of this report that failed. That it failed with a finding and not for lack
+    // of memory needs no second check here: a resource failure is itself a stage of the report, and the
+    // `Failed` arm below rejects the whole report for it.
+    let failed = |id: &str| {
+        report
+            .stages
+            .iter()
+            .any(|s| matches!(s, model::Stage::Failed { stage, .. } if stage == id))
+    };
     report.stages.iter().all(|s| match s {
         model::Stage::Evaluated { .. } => true,
         model::Stage::Failed { message, .. } => !is_resource_failure(message),
-        model::Stage::NotEvaluated { .. } | model::Stage::Halted { .. } => false,
+        model::Stage::NotEvaluated { blocked_by, .. } => failed(blocked_by),
+        model::Stage::Halted { .. } => false,
     })
 }
 
@@ -314,11 +341,12 @@ impl super::repo::PrikkRepo for CliPrikkRepo {
     ///
     /// * exit status **1** (never 2, 124, 134 or a signal) and no timeout;
     /// * stdout that parses as `verify-report-v1` with `verdict.ok == false`;
-    /// * **every stage ran to an outcome**: none `halted`, none `not_evaluated`, and no `failed` stage whose
-    ///   message says the process ran out of memory (`is_resource_failure`). A stage that *failed*
-    ///   because the repository is damaged ("integrity error: …") is part of the verdict; one that failed
-    ///   for lack of memory is a memory ceiling hit (RFC 011 D-2), which must never read as "your
-    ///   repository is damaged".
+    /// * **every stage ran to an outcome** (`is_complete_verdict`): none `halted`; no `failed` stage whose
+    ///   message is the out-of-memory condition (`is_resource_failure`, exact shape); and every
+    ///   `not_evaluated` stage names, in its `blocked_by` field, a stage of the same report that failed with a
+    ///   finding. A stage that *failed* because the repository is damaged ("integrity error: …") is part of
+    ///   the verdict; one that failed for lack of memory is a memory ceiling hit (RFC 011 D-2), which must
+    ///   never read as "your repository is damaged".
     ///
     /// Everything else goes through `failure` as before: a ceiling hit is
     /// [`PrikkError::CeilingExceeded`], a partial report is that too when a ceiling was set (and a plain

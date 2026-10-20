@@ -162,6 +162,12 @@ async fn a_failed_verification_is_unverified_with_its_conditions_never_an_outage
             ".prikk/containers/block/a.container",
             "item-failure",
         ),
+        // 3 failed stages and 2 blocked behind `refs` (IS-43): a verdict, not an outage
+        (
+            "pointer-index",
+            ".prikk/refs/containers/pointer-index-a.container",
+            "stage-failure",
+        ),
     ];
     for (name, rel, _) in damage {
         let repo = sealed(name);

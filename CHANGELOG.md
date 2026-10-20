@@ -30,7 +30,8 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
   for lack of memory (the per-read memory ceiling), was cut short, timed out or printed nothing usable is
   still an error, never a verdict. A page whose own content cannot be read (damaged history or file
   objects) is still `503`; no page ever says "verified" unless prikk's verdict is ok and every stage was
-  evaluated. No wording changed.
+  evaluated. A repository with a damaged ref pointer index (stages blocked behind a failed `refs` stage) is
+  likewise shown as unverified now, not as unavailable. No wording changed.
 
 ## [0.4.0] — 2026-10-19 — the read-path resource model: memory-weighted admission, a per-call ceiling, children that die with the server
 

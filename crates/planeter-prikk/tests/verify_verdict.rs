@@ -44,6 +44,22 @@ const FAILED_INTEGRITY: &str = r#"{"stage":"objects","status":"failed","message"
 /// the same shape, a different message.
 const FAILED_OOM: &str = r#"{"stage":"objects","status":"failed","message":"i/o error: out of memory"},{"stage":"refs","status":"evaluated"}"#;
 
+/// A name the repository owner chose can end up in a message; these plant "out of memory" in one. Damage, not
+/// a ceiling hit: the message does not *begin* `i/o error:` and then say only that.
+const FAILED_PLANTED_NAME: &str = r#"{"stage":"refs","status":"failed","message":"integrity error: ref heads/out of memory has a damaged entry"},{"stage":"objects","status":"evaluated"}"#;
+/// …and with prikk's own prefix, a genuine i/o finding about a path whose name *begins* with the phrase: still
+/// damage (the condition must be the whole remainder, not a prefix of it).
+const FAILED_PLANTED_IO: &str = r#"{"stage":"objects","status":"failed","message":"i/o error: out of memory.txt could not be read"},{"stage":"refs","status":"evaluated"}"#;
+/// The raw `ENOMEM` text, accepted only in full.
+const FAILED_ENOMEM: &str = r#"{"stage":"objects","status":"failed","message":"i/o error: Cannot allocate memory (os error 12)"},{"stage":"refs","status":"evaluated"}"#;
+/// A blocker that is itself not evaluated, one that is not in the report, one nobody can identify, and one that
+/// failed for lack of memory: each leaves the report partial.
+const BLOCKER_NOT_EVALUATED: &str = r#"{"stage":"refs","status":"failed","message":"integrity error: x"},{"stage":"a","status":"not_evaluated","blocked_by":"refs"},{"stage":"b","status":"not_evaluated","blocked_by":"a"}"#;
+const BLOCKER_MISSING: &str = r#"{"stage":"refs","status":"failed","message":"integrity error: x"},{"stage":"a","status":"not_evaluated","blocked_by":"nonexistent"}"#;
+const BLOCKER_UNKNOWN: &str = r#"{"stage":"refs","status":"failed","message":"integrity error: x"},{"stage":"a","status":"not_evaluated","blocked_by":""},{"stage":"b","status":"not_evaluated","blocked_by":"??"}"#;
+const BLOCKER_RESOURCE: &str = r#"{"stage":"objects","status":"failed","message":"i/o error: out of memory"},{"stage":"a","status":"not_evaluated","blocked_by":"objects"}"#;
+/// What real prikk 0.52.0 prints for a damaged ref pointer index (3 failed, 2 blocked by `refs`).
+const BLOCKED_REAL_SHAPE: &str = r#"{"stage":"objects","status":"failed","message":"integrity error: ref pointer index has a damaged entry"},{"stage":"refs","status":"failed","message":"integrity error: ref pointer index has a damaged entry"},{"stage":"ref-update-schema-trust","status":"not_evaluated","blocked_by":"refs"},{"stage":"publication-reclassification","status":"not_evaluated","blocked_by":"refs"},{"stage":"commit-index","status":"evaluated"}"#;
 const BLOCKED: &str = r#"{"stage":"refs","status":"failed","message":"integrity error: ref pointer index has a damaged entry"},{"stage":"ref-update-schema-trust","status":"not_evaluated","blocked_by":"refs"}"#;
 const HALTED: &str = r#"{"stage":"objects","status":"evaluated"},{"stage":"refs","status":"halted","after":"objects"}"#;
 
@@ -101,6 +117,54 @@ fn cases() -> Vec<Case> {
         c(
             "fail-blocked-stage",
             report(false, &[("stage-failure", "x")], BLOCKED),
+            "error: repository verification did not complete every stage",
+            1,
+        ),
+        c(
+            "fail-blocked-real-shape",
+            report(false, &[("stage-failure", "x")], BLOCKED_REAL_SHAPE),
+            "error: repository verification did not complete every stage",
+            1,
+        ),
+        c(
+            "fail-planted-name",
+            report(false, &[("item-failure", "x")], FAILED_PLANTED_NAME),
+            "error: repository verification did not complete every stage",
+            1,
+        ),
+        c(
+            "fail-planted-io",
+            report(false, &[("stage-failure", "x")], FAILED_PLANTED_IO),
+            "error: repository verification did not complete every stage",
+            1,
+        ),
+        c(
+            "fail-enomem",
+            report(false, &[("stage-failure", "x")], FAILED_ENOMEM),
+            "error: repository verification did not complete every stage",
+            1,
+        ),
+        c(
+            "fail-blocker-not-evaluated",
+            report(false, &[("stage-failure", "x")], BLOCKER_NOT_EVALUATED),
+            "error: repository verification did not complete every stage",
+            1,
+        ),
+        c(
+            "fail-blocker-missing",
+            report(false, &[("stage-failure", "x")], BLOCKER_MISSING),
+            "error: repository verification did not complete every stage",
+            1,
+        ),
+        c(
+            "fail-blocker-unknown",
+            report(false, &[("stage-failure", "x")], BLOCKER_UNKNOWN),
+            "error: repository verification did not complete every stage",
+            1,
+        ),
+        c(
+            "fail-blocker-resource",
+            report(false, &[("stage-failure", "x")], BLOCKER_RESOURCE),
             "error: repository verification did not complete every stage",
             1,
         ),
@@ -183,7 +247,16 @@ fn only_exit_one_with_a_complete_failing_report_is_a_verdict() {
 
         // exit 1 + a complete failing report: the answer, with or without a ceiling armed. This includes
         // the trust-policy shape, whose stderr says "did not complete every stage" like a ceiling hit does.
-        for name in ["fail-items", "fail-integrity-stage"] {
+        for name in [
+            "fail-items",
+            "fail-integrity-stage",
+            // blocked behind a stage that failed with a finding (real prikk's ref-pointer-index shape)
+            "fail-blocked-stage",
+            "fail-blocked-real-shape",
+            // names that say "out of memory" are data, not the condition
+            "fail-planted-name",
+            "fail-planted-io",
+        ] {
             let r = verdict(name).unwrap_or_else(|e| panic!("{label}: {name}: {e:?}"));
             assert!(
                 !r.verdict.ok && !r.verdict.failed_conditions.is_empty(),
@@ -192,7 +265,15 @@ fn only_exit_one_with_a_complete_failing_report_is_a_verdict() {
         }
 
         // A partial report is never a verdict: a ceiling hit when a ceiling is set, a plain failure otherwise.
-        for name in ["fail-oom-stage", "fail-blocked-stage", "fail-halted-stage"] {
+        for name in [
+            "fail-oom-stage",
+            "fail-enomem",
+            "fail-halted-stage",
+            "fail-blocker-not-evaluated",
+            "fail-blocker-missing",
+            "fail-blocker-unknown",
+            "fail-blocker-resource",
+        ] {
             match (ceiling, verdict(name)) {
                 (
                     Some(c),
@@ -243,6 +324,29 @@ fn only_exit_one_with_a_complete_failing_report_is_a_verdict() {
     }
 }
 
+/// An oracle written apart from the production code, over the JSON: a report is a complete verdict when no
+/// stage `halted`, no stage `failed` with exactly the out-of-memory condition, and every `not_evaluated` stage
+/// is blocked by a stage of the same report that `failed` with a finding.
+fn oracle_complete(stages: &str) -> bool {
+    let v: Vec<serde_json::Value> = serde_json::from_str(&format!("[{stages}]")).unwrap();
+    let resource = |m: &str| {
+        m == "i/o error: out of memory" || m == "i/o error: Cannot allocate memory (os error 12)"
+    };
+    let finding_failed = |id: &str| {
+        v.iter().any(|s| {
+            s["stage"] == id
+                && s["status"] == "failed"
+                && !resource(s["message"].as_str().unwrap_or(""))
+        })
+    };
+    v.iter().all(|s| match s["status"].as_str().unwrap() {
+        "evaluated" => true,
+        "failed" => !resource(s["message"].as_str().unwrap_or("")),
+        "not_evaluated" => finding_failed(s["blocked_by"].as_str().unwrap_or("")),
+        _ => false,
+    })
+}
+
 /// The honesty invariant at the boundary, property-style over every small combination: whatever prikk
 /// exits with and prints, `Ok(report)` with `ok == false` appears only for exit 1 and a complete report,
 /// and `Ok(report)` with `ok == true` only for exit 0.
@@ -255,7 +359,22 @@ fn no_combination_of_exit_status_and_output_yields_ok_unless_prikk_said_ok() {
     std::fs::write(&script, SCRIPT).unwrap();
     std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
 
-    let stage_sets = [EVALUATED, FAILED_INTEGRITY, FAILED_OOM, BLOCKED, HALTED, ""];
+    let stage_sets = [
+        EVALUATED,
+        FAILED_INTEGRITY,
+        FAILED_OOM,
+        FAILED_PLANTED_NAME,
+        FAILED_PLANTED_IO,
+        FAILED_ENOMEM,
+        BLOCKED,
+        BLOCKED_REAL_SHAPE,
+        BLOCKER_NOT_EVALUATED,
+        BLOCKER_MISSING,
+        BLOCKER_UNKNOWN,
+        BLOCKER_RESOURCE,
+        HALTED,
+        "",
+    ];
     let mut n = 0;
     for exit in [0, 1, 2, 124, 134, 137] {
         for ok in [true, false] {
@@ -268,9 +387,7 @@ fn no_combination_of_exit_status_and_output_yields_ok_unless_prikk_said_ok() {
                 std::fs::write(d.join("exit"), exit.to_string()).unwrap();
                 let repo = CliPrikkRepo::with_binary(&d, &script).with_sandbox(Sandbox::Unconfined);
                 if let Ok(r) = repo.verify() {
-                    let complete = !stages.contains("not_evaluated")
-                        && !stages.contains("halted")
-                        && !stages.contains("out of memory");
+                    let complete = oracle_complete(stages);
                     match (r.verdict.ok, exit) {
                         (true, 0) => {}
                         (false, 1) => assert!(
@@ -286,12 +403,18 @@ fn no_combination_of_exit_status_and_output_yields_ok_unless_prikk_said_ok() {
             }
         }
     }
-    assert_eq!(n, 72);
+    assert_eq!(n, 6 * 2 * stage_sets.len());
 }
 
 // ---------------------------------------------------------------- real prikk
 
 fn sealed(name: &str) -> PathBuf {
+    sealed_with_names(name, false)
+}
+
+/// `names`: also a file, a directory, two branches and two tags whose names say "out of memory" (the
+/// repository owner chooses names).
+fn sealed_with_names(name: &str, names: bool) -> PathBuf {
     let base = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("verify-verdict-{name}"));
     let _ = std::fs::remove_dir_all(&base);
     let repo = base.join("repo");
@@ -310,8 +433,21 @@ fn sealed(name: &str) -> PathBuf {
     };
     prikk(&["setup"]);
     std::fs::write(repo.join("a.txt"), b"hello\n").unwrap();
+    if names {
+        std::fs::write(repo.join("out of memory.txt"), b"x\n").unwrap();
+        std::fs::create_dir_all(repo.join("out of memory")).unwrap();
+        std::fs::write(repo.join("out of memory/b.txt"), b"y\n").unwrap();
+    }
     prikk(&["commit", "--from-worktree", "-m", "init"]);
     prikk(&["seal", "--allow-no-audit"]);
+    if names {
+        for b in ["heads/out of memory", "heads/i/o-error:-out-of-memory"] {
+            prikk(&["branch", "create", b]);
+        }
+        for t in ["tags/out of memory", "tags/i/o-error:-out-of-memory"] {
+            prikk(&["tag", "create", t, "--target", "heads/main"]);
+        }
+    }
     repo
 }
 
@@ -352,6 +488,12 @@ fn the_three_real_corruptions_are_unverified_verdicts_with_and_without_a_ceiling
             ".prikk/containers/block/a.container",
             "item-failure",
         ),
+        // 3 failed stages and 2 blocked behind `refs`: a verdict since IS-43, not a partial report
+        (
+            "pointer-index",
+            ".prikk/refs/containers/pointer-index-a.container",
+            "stage-failure",
+        ),
     ] {
         let repo = sealed(name);
         corrupt(&repo, rel);
@@ -380,6 +522,56 @@ fn the_three_real_corruptions_are_unverified_verdicts_with_and_without_a_ceiling
                 "{name} ({label}): {:?}",
                 r.verdict.failed_conditions
             );
+        }
+    }
+}
+
+/// T1(c): names that say "out of memory" are data. Real damage in a repository full of them is a verdict, with
+/// and without a ceiling. (prikk 0.52.0's stage messages do not embed names at all, so this guards the
+/// future; the stand-in cases `fail-planted-name` / `fail-planted-io` pin the message shapes that would.)
+#[test]
+fn damage_in_a_repository_whose_names_say_out_of_memory_is_still_a_verdict() {
+    if !have("prikk") {
+        eprintln!("skipping: needs prikk on PATH");
+        return;
+    }
+    for (name, rel) in [
+        ("n-policy", ".prikk/trust/policy-a.container"),
+        (
+            "n-pointer-index",
+            ".prikk/refs/containers/pointer-index-a.container",
+        ),
+        ("n-ref-state", ".prikk/containers/ref-state/a.container"),
+        ("n-tag", ".prikk/containers/tag/a.container"),
+    ] {
+        let repo = sealed_with_names(name, true);
+        assert!(
+            CliPrikkRepo::new(&repo)
+                .with_sandbox(Sandbox::Unconfined)
+                .verify()
+                .unwrap()
+                .verdict
+                .ok,
+            "{name}: intact, with those names, verifies"
+        );
+        corrupt(&repo, rel);
+        let mut handles = vec![(
+            "no ceiling",
+            CliPrikkRepo::new(&repo).with_sandbox(Sandbox::Unconfined),
+        )];
+        if have(PRLIMIT) {
+            handles.push((
+                "512 MiB ceiling",
+                CliPrikkRepo::new(&repo)
+                    .with_sandbox(Sandbox::Unconfined)
+                    .with_limits(CallLimits::data_ceiling(512 << 20)),
+            ));
+        }
+        for (label, h) in handles {
+            let r = h
+                .verify()
+                .unwrap_or_else(|e| panic!("{name} ({label}): {e:?}"));
+            assert!(!r.verdict.ok, "{name} ({label})");
         }
     }
 }
