@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | Implements RFC 012 **D-4** (plain words) and the wording side of D-6, using the owner-approved [`docs/glossary.md`](../../../docs/glossary.md) (sections 1 and 2). D-7 step (4). The structure (landmarks, headings, tables) and presentation are done; the Japanese catalog starts only from the English this handoff produces. Issue IS-30. |
-| Status | **Assigned** (2026-10-21), after the owner read and approved the glossary. |
+| Status | **Done, reviewed Approved (2026-10-21; commits `fab79ff`, `4bb8cf8`, `1192b14`);** refinements in `plain-words-refinements-handoff-v1.md`. |
 | Basis | [`../../accepted/012-web-ui-foundations.md`](../../accepted/012-web-ui-foundations.md) D-4, D-6; `docs/glossary.md` (the table of concepts, the table of messages, certainty column); `docs/messages-and-languages.md`; `crates/planeter-web/src/catalog/en.rs`, `templates/`, `ui.rs`; `crates/planeter-core/src/read.rs` (the verify view); [`message-catalog-handoff-v1.md`](message-catalog-handoff-v1.md) (the rules for keys, placeholders and checks). |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 
