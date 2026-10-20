@@ -1,18 +1,30 @@
-:root{--bg:#fff;--fg:#1a1a1a;--muted:#666;--line:#ddd;--accent:#2a5db0;--ok:#1a7f37;--warn:#9a6700;--bad:#b42318}
-@media (prefers-color-scheme:dark){:root{--bg:#111;--fg:#eee;--muted:#aaa;--line:#333;--accent:#7aa7ff;--ok:#3fb950;--warn:#d4a72c;--bad:#f85149}}
+:root{color-scheme:light dark;--bg:#fff;--fg:#1a1a1a;--muted:#666;--line:#ddd;--control:#767676;--accent:#2a5db0;--ok:#1a7f37;--warn:#9a6700;--bad:#b42318}
+@media (prefers-color-scheme:dark){:root{--bg:#111;--fg:#eee;--muted:#aaa;--line:#333;--control:#8c8c8c;--accent:#7aa7ff;--ok:#3fb950;--warn:#d4a72c;--bad:#f85149}}
 *{box-sizing:border-box}body{margin:0;font:15px/1.5 system-ui,sans-serif;color:var(--fg);background:var(--bg)}
-header{border-bottom:1px solid var(--line);padding:.6rem 1rem;display:flex;gap:1rem;align-items:center}
-header a{color:var(--fg);text-decoration:none;font-weight:600}header .who{margin-left:auto;color:var(--muted)}
+header{border-bottom:1px solid var(--line);padding:.6rem 1rem;display:flex;flex-wrap:wrap;gap:.25rem 1rem;align-items:center}
+header a{color:var(--fg);text-decoration:none;font-weight:600}header a:hover,header a:focus-visible{text-decoration:underline}header .who{margin-inline-start:auto;min-width:0;color:var(--muted)}
 main{max-width:64rem;margin:0 auto;padding:1rem}h1,h2{font-weight:600}a{color:var(--accent)}
-nav.repo a{margin-right:1rem}table{border-collapse:collapse;width:100%}td,th{text-align:left;padding:.3rem .5rem;border-bottom:1px solid var(--line)}
+nav.repo a{margin-inline-end:1rem}table{border-collapse:collapse;width:100%}td,th{text-align:start;padding:.3rem .5rem;border-bottom:1px solid var(--line)}
 pre{overflow:auto;padding:.75rem;border:1px solid var(--line);border-radius:4px;font-size:13px}code{font-family:ui-monospace,monospace}
 .badge{display:inline-block;padding:.1rem .5rem;border-radius:1rem;font-size:.85em;border:1px solid var(--line)}
 .badge.ok{color:var(--ok);border-color:var(--ok)}.badge.warn{color:var(--warn);border-color:var(--warn)}.badge.bad{color:var(--bad);border-color:var(--bad)}
-.muted{color:var(--muted)}form.inline{display:inline}input,button{font:inherit;padding:.3rem .5rem}button{cursor:pointer}
-.readme{border:1px solid var(--line);border-radius:4px;padding:1rem;margin-top:1rem}.crumbs a{margin-right:.25rem}
-/* structure and semantics (RFC 012 D-2): the minimum the new markup needs; the presentation work is a later step */
+.muted{color:var(--muted)}form.inline{display:inline}
+input,button{font:inherit;padding:.3rem .5rem;min-height:24px;min-width:24px;border:1px solid var(--control);border-radius:4px;background:var(--bg);color:var(--fg)}button{cursor:pointer}
+.readme{border:1px solid var(--line);border-radius:4px;padding:1rem;margin-top:1rem}.crumbs a{margin-inline-end:.25rem}
+/* structure and semantics (RFC 012 D-2): what the landmarks, captions and row headers need */
 .visually-hidden{position:absolute;width:1px;height:1px;margin:-1px;padding:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
-.skip-link{position:absolute;inset-inline-start:.5rem;inset-block-start:-100vh;padding:.5rem .75rem;background:var(--bg);color:var(--fg);border:1px solid var(--line);z-index:1}.skip-link:focus{inset-block-start:.5rem}
+.skip-link{position:absolute;display:block;inset-inline-start:.5rem;inset-block-start:-100vh;min-height:24px;min-width:24px;padding:.5rem .75rem;background:var(--bg);color:var(--fg);border:1px solid var(--control);z-index:1}.skip-link:focus{inset-block-start:.5rem}
 caption{text-align:start;font-weight:600;padding:.3rem .5rem}tbody th{font-weight:normal}
-header .who{min-width:0}.name{overflow-wrap:anywhere}
 footer{max-width:64rem;margin:0 auto;padding:1rem;color:var(--muted)}
+/* presentation and operation (RFC 012 D-2, D-3): targets of at least 24 CSS px, one focus ring, long tokens wrap */
+header a,nav.repo a,th a,td a,.crumbs a,main > p > a{display:inline-block;min-height:24px;min-width:24px;padding-block:.15rem}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+h1,h2,td,th,.name,.crumbs,.readme{overflow-wrap:anywhere}pre code{overflow-wrap:normal}
+th a,td a,.crumbs a{unicode-bidi:plaintext}
+.readme img{max-width:100%;height:auto}
+@media (forced-colors:active){
+.badge{border:1px solid CanvasText}.skip-link{border:1px solid CanvasText}
+:focus-visible{outline:2px solid Highlight}
+button,input{border:1px solid ButtonBorder}
+header,td,th{border-bottom:1px solid CanvasText}
+}
