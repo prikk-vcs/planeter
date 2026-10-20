@@ -22,12 +22,12 @@ pub const CATALOG: &[Entry] = &[
         "Find a repository · address not recognised · {product}",
     ),
     msg("title.busy", "Busy · {path} · {product}"),
+    msg("title.login", "Sign in · {product}"),
     msg("title.login_failed", "Sign in · not accepted · {product}"),
     msg(
         "title.login_locked",
         "Sign in · too many attempts · {product}",
     ),
-    msg("title.login", "Sign in · {product}"),
     msg("title.not_found", "Not found · {path} · {product}"),
     msg("title.unavailable", "Unavailable · {path} · {product}"),
     msg("title.too_large", "Too large · {path} · {product}"),
