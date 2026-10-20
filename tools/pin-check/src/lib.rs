@@ -17,6 +17,14 @@
 //!   declared minimum, so its `toolchain:` must equal `rust-version` in the root `Cargo.toml` (as
 //!   `X.Y.Z`; `1.88` means `1.88.0`), and that job must exist whenever `rust-version` is declared (IS-32);
 //! - a runner image named by a moving label: any `runs-on` or matrix `os` value ending in `-latest`;
+//! - a workflow `uses:` whose owner is not `actions` (RFC 010 D-11: the release chain trusts GitHub-owned
+//!   actions only; everything else is a shell step in the repository);
+//! - an image the workflow runs or builds with that is not referenced by `sha256:` digest: a `docker run` or
+//!   `docker pull` line without one, and a `docker buildx create` step without `image=<ref>@sha256:<64 hex>`
+//!   in its `--driver-opt` (the BuildKit image of a `docker-container` builder);
+//! - a registry credential on a command line: a `docker login` step without `--password-stdin` or with
+//!   `--password`/`-p`, a `docker login` that runs outside a tag push or a rehearsal, and a `secrets.*` /
+//!   `github.token` expression anywhere in a `run:` script (it belongs in `env:` or `with:`);
 //! - a release path that can reach the real image from a rehearsal (RFC 010 D-10, "the rehearsal cannot
 //!   reach the real package, structurally"): a workflow step that names the real image
 //!   `ghcr.io/prikk-vcs/planeter` (not `-rehearsal`) without `github.event_name == 'push'` in its (or its
@@ -349,7 +357,17 @@ fn scan_workflow(text: &str) -> Hits {
                 if !image.contains("@sha256:") {
                     hits.push((n, format!("docker action {v:?} has no @sha256: digest")));
                 }
+                hits.push((
+                    n,
+                    format!("action {v:?} is not from the `actions/` owner (RFC 010 D-11)"),
+                ));
                 continue;
+            }
+            if !v.starts_with("actions/") {
+                hits.push((
+                    n,
+                    format!("action {v:?} is not from the `actions/` owner (RFC 010 D-11)"),
+                ));
             }
             match v.rsplit_once('@') {
                 Some((_, sha)) if is_hex(sha, 40) => {}
@@ -386,8 +404,33 @@ fn scan_workflow(text: &str) -> Hits {
         {
             hits.push((n, format!("image {v:?} has no @sha256: digest")));
         }
-        // `rustup default stable`, `rustup toolchain install nightly`, `rustup update beta`, …
         let code = strip_comment(line);
+        if (code.contains("secrets.") || code.contains("github.token")) && code.contains("${{") {
+            let t = code.trim();
+            let t = t.strip_prefix("- ").map_or(t, str::trim_start);
+            let key = t.split_once(':').map(|(k, _)| k.trim());
+            let is_mapping = key.is_some_and(|k| {
+                !k.is_empty()
+                    && k != "run"
+                    && k.bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || b == b'_' || b == b'-')
+            });
+            if !is_mapping {
+                hits.push((
+                    n,
+                    "a secret or the job token is interpolated into a script or command line; pass it in `env:` and pipe it on standard input".to_owned(),
+                ));
+            }
+        }
+        for cmd in ["docker run", "docker pull"] {
+            if code.contains(cmd) && !has_digest_ref(code) {
+                hits.push((
+                    n,
+                    format!("`{cmd}` of an image not referenced by @sha256:<64 hex> digest"),
+                ));
+            }
+        }
+        // `rustup default stable`, `rustup toolchain install nightly`, `rustup update beta`, …
         if code.contains("rustup") && code.split_whitespace().any(is_channel) {
             hits.push((
                 n,
@@ -521,6 +564,12 @@ fn if_expr(line: &str) -> Option<String> {
     Some(v.to_owned())
 }
 
+/// `true` when `text` contains a `…@sha256:<64 lowercase hex>` reference.
+fn has_digest_ref(text: &str) -> bool {
+    text.match_indices("@sha256:")
+        .any(|(i, m)| is_hex(text[i + m.len()..].get(..64).unwrap_or(""), 64))
+}
+
 fn indent_of(line: &str) -> usize {
     line.len() - line.trim_start().len()
 }
@@ -604,6 +653,8 @@ fn steps_of(text: &str) -> Vec<Step> {
 fn pushes(text: &str) -> bool {
     text.lines().any(|l| {
         value_of(l, "push").is_some_and(|v| v != "false")
+            || l.contains("push=true")
+            || l.split_whitespace().any(|w| w == "--push")
             || value_of(l, "push-to-registry").is_some_and(|v| v != "false")
             || l.contains("docker push")
             || l.contains("imagetools create")
@@ -618,6 +669,39 @@ fn scan_release_paths(text: &str) -> Hits {
         let names_rehearsal = step.text.contains(REHEARSAL_IMAGE);
         let rehearsal_conditioned = step.condition.contains("rehearsal");
         let n = step.line;
+        if step.text.contains("docker buildx create") {
+            let pinned = step.text.lines().any(|l| {
+                l.split_whitespace().any(|w| {
+                    w.strip_prefix("image=")
+                        .is_some_and(|r| has_digest_ref(r) && !r.contains('$'))
+                })
+            });
+            if !pinned {
+                hits.push((
+                    n,
+                    "a `docker buildx create` step must set `--driver-opt image=<ref>@sha256:<64 hex>` (the BuildKit image pinned by digest)".to_owned(),
+                ));
+            }
+        }
+        if step.text.contains("docker login") {
+            let mut words = step.text.split_whitespace();
+            let bad_flag =
+                words.any(|w| w == "--password" || w == "-p" || w.starts_with("--password="));
+            if bad_flag || !step.text.contains("--password-stdin") {
+                hits.push((
+                    n,
+                    "a `docker login` must read the credential with `--password-stdin` (never `--password` / `-p`)".to_owned(),
+                ));
+            }
+            if !(step.condition.contains(PUSH_COND) || step.condition.contains(REHEARSAL_COND)) {
+                hits.push((
+                    n,
+                    format!(
+                        "a registry login must run only on a tag push ({PUSH_COND}) or in a rehearsal ({REHEARSAL_COND})"
+                    ),
+                ));
+            }
+        }
         if names_real && !step.condition.contains(PUSH_COND) {
             hits.push((
                 n,

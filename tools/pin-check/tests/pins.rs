@@ -57,7 +57,7 @@ fn the_real_repository_passes() {
 #[test]
 fn a_fully_pinned_chain_passes() {
     let wf = workflow(&format!(
-        "      - uses: actions/checkout@{SHA} # v7.0.1\n      - uses: ./local-action\n      - uses: dtolnay/rust-toolchain@{SHA}\n        with:\n          toolchain: 1.99.0\n      - run: rustup component add clippy\n"
+        "      - uses: actions/checkout@{SHA} # v7.0.1\n      - uses: ./local-action\n      - run: rustup toolchain install 1.99.0 --profile minimal\n      - run: rustup component add clippy\n"
     ));
     let df = format!("FROM debian:bookworm-slim@{DIGEST} AS base\nFROM base\nFROM scratch\n");
     let (code, text) = run(&fixture(
@@ -156,10 +156,10 @@ fn a_service_image_and_a_docker_action_without_a_digest_fail() {
 #[test]
 fn a_second_toolchain_version_fails_and_names_the_files() {
     let ci = workflow(&format!(
-        "      - uses: dtolnay/rust-toolchain@{SHA}\n        with:\n          toolchain: 1.99.0\n"
+        "      - run: rustup toolchain install 1.99.0 --profile minimal\n"
     ));
     let release = workflow(&format!(
-        "      - uses: dtolnay/rust-toolchain@{SHA}\n        with:\n          toolchain: 1.98.1\n"
+        "      - run: rustup toolchain install 1.98.1 --profile minimal\n"
     ));
     expect_fail(
         "two-toolchains",
@@ -168,8 +168,8 @@ fn a_second_toolchain_version_fails_and_names_the_files() {
             (".github/workflows/release.yml", &release),
         ],
         &[
-            ".github/workflows/ci.yml:9:",
-            ".github/workflows/release.yml:9:",
+            ".github/workflows/ci.yml:7:",
+            ".github/workflows/release.yml:7:",
             "disagrees with the other workflows",
             "1.99.0 in .github/workflows/ci.yml",
             "1.98.1 in .github/workflows/release.yml",
@@ -180,7 +180,7 @@ fn a_second_toolchain_version_fails_and_names_the_files() {
 #[test]
 fn one_toolchain_version_across_workflows_passes() {
     let wf = workflow(&format!(
-        "      - uses: dtolnay/rust-toolchain@{SHA}\n        with:\n          toolchain: 1.99.0\n"
+        "      - run: rustup toolchain install 1.99.0 --profile minimal\n"
     ));
     let (code, text) = run(&fixture(
         "one-toolchain",
@@ -220,7 +220,7 @@ fn a_bad_root_is_a_usage_error() {
 /// A CI workflow with a build job on `build` and a job `msrv_id` on `msrv`.
 fn two_job_ci(msrv_id: &str, build: &str, msrv: &str) -> String {
     format!(
-        "name: t\non: push\njobs:\n  build:\n    runs-on: ubuntu-24.04\n    steps:\n      - uses: dtolnay/rust-toolchain@{SHA}\n        with:\n          toolchain: {build}\n  {msrv_id}:\n    runs-on: ubuntu-24.04\n    steps:\n      - uses: dtolnay/rust-toolchain@{SHA}\n        with:\n          toolchain: {msrv}\n"
+        "name: t\non: push\njobs:\n  build:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: rustup toolchain install {build} --profile minimal\n  {msrv_id}:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: rustup toolchain install {msrv} --profile minimal\n"
     )
 }
 
@@ -253,7 +253,7 @@ fn a_planted_mismatch_between_the_msrv_job_and_rust_version_fails_and_names_both
             ("Cargo.toml", &manifest("1.88.0")),
         ],
         &[
-            ".github/workflows/ci.yml:15:",
+            ".github/workflows/ci.yml:11:",
             "job `msrv` builds with \"1.87.0\"",
             "Cargo.toml:3 declares rust-version 1.88.0",
         ],
@@ -263,7 +263,7 @@ fn a_planted_mismatch_between_the_msrv_job_and_rust_version_fails_and_names_both
 #[test]
 fn a_declared_minimum_with_no_msrv_job_fails_and_names_cargo_toml() {
     let ci = workflow(&format!(
-        "      - uses: dtolnay/rust-toolchain@{SHA}\n        with:\n          toolchain: 1.99.0\n"
+        "      - run: rustup toolchain install 1.99.0 --profile minimal\n"
     ));
     expect_fail(
         "msrv-missing",
@@ -297,7 +297,7 @@ fn the_msrv_job_does_not_count_towards_the_build_compilers_agreement() {
     // Build jobs in two files agree; the msrv job is a third version and is checked on its own.
     let a = two_job_ci("msrv", "1.99.0", "1.88.0");
     let b = workflow(&format!(
-        "      - uses: dtolnay/rust-toolchain@{SHA}\n        with:\n          toolchain: 1.99.0\n"
+        "      - run: rustup toolchain install 1.99.0 --profile minimal\n"
     ));
     let (code, text) = run(&fixture(
         "msrv-third-version",
@@ -319,7 +319,7 @@ fn a_channel_in_the_msrv_job_is_still_refused() {
             (".github/workflows/ci.yml", &ci),
             ("Cargo.toml", &manifest("1.88.0")),
         ],
-        &["toolchain \"stable\" is not an explicit X.Y.Z version"],
+        &["rustup selects a toolchain by channel"],
     );
 }
 
@@ -339,37 +339,36 @@ on:
         type: choice
         options: [dry-run, rehearsal]
 jobs:
-  container:
+  image:
     runs-on: ubuntu-24.04
     steps:
-      - uses: docker/login-action@{SHA} # v3
+      - name: BuildKit builder
+        run: docker buildx create --name b --driver docker-container --driver-opt image=moby/buildkit@{DIGEST} --use
+      - name: Log in to ghcr
         if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
+        run: printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
       - name: Build image (dry run)
         if: inputs.mode == 'dry-run'
-        uses: docker/build-push-action@{SHA}
-        with:
-          push: false
+        run: docker buildx build --output type=cacheonly .
       - name: Build and push (rehearsal)
         id: rehearsal_push
         if: inputs.mode == 'rehearsal'
-        uses: docker/build-push-action@{SHA}
-        with:
-          push: true
-          tags: ghcr.io/prikk-vcs/planeter-rehearsal:rehearsal
+        env:
+          IMAGE: ghcr.io/prikk-vcs/planeter-rehearsal:rehearsal
+        run: docker buildx build --push --tag "$IMAGE" .
       - name: Attest rehearsal image
         if: inputs.mode == 'rehearsal'
-        uses: actions/attest-build-provenance@{SHA}
+        uses: actions/attest@{SHA}
         with:
           subject-name: ghcr.io/prikk-vcs/planeter-rehearsal
           push-to-registry: true
       - name: Build and push
         if: github.event_name == 'push'
-        uses: docker/build-push-action@{SHA}
-        with:
-          push: ${{{{ github.event_name == 'push' }}}}
-          tags: |
-            ghcr.io/prikk-vcs/planeter:${{{{ github.ref_name }}}}
-            ghcr.io/prikk-vcs/planeter:latest
+        run: |
+          docker buildx build --push \
+            --tag ghcr.io/prikk-vcs/planeter:"$TAG" --tag ghcr.io/prikk-vcs/planeter:latest .
 {extra_rehearsal_step}  publish:
     if: github.event_name == 'push'
     runs-on: ubuntu-24.04
@@ -431,8 +430,8 @@ fn a_step_naming_the_real_image_without_the_push_condition_fails() {
 #[test]
 fn a_step_naming_both_the_real_image_and_the_rehearsal_package_fails() {
     let wf = release_shaped("").replace(
-        "          tags: ghcr.io/prikk-vcs/planeter-rehearsal:rehearsal\n",
-        "          tags: |\n            ghcr.io/prikk-vcs/planeter-rehearsal:rehearsal\n            ghcr.io/prikk-vcs/planeter:latest\n",
+        "          IMAGE: ghcr.io/prikk-vcs/planeter-rehearsal:rehearsal\n",
+        "          IMAGE: ghcr.io/prikk-vcs/planeter-rehearsal:rehearsal ghcr.io/prikk-vcs/planeter:latest\n",
     );
     expect_fail(
         "both",
@@ -610,4 +609,161 @@ fn rustup_versions_must_agree_across_workflows_and_the_msrv_job_keeps_its_except
     ));
     assert_eq!(code, 1, "{text}");
     assert!(text.contains("job `msrv` builds with \"1.88.0\""), "{text}");
+}
+
+// ---------------------------------------------------------------- only GitHub-owned actions, pinned images, no token on a command line (RFC 010 D-11)
+
+#[test]
+fn an_action_outside_the_actions_owner_fails_even_when_pinned() {
+    for (name, uses) in [
+        ("dtolnay", "dtolnay/rust-toolchain"),
+        ("docker", "docker/login-action"),
+        ("third-party", "softprops/action-gh-release"),
+        ("lookalike", "actionsx/checkout"),
+    ] {
+        let wf = workflow(&format!("      - uses: {uses}@{SHA}\n"));
+        expect_fail(
+            &format!("owner-{name}"),
+            &[(".github/workflows/o.yml", &wf)],
+            &["is not from the `actions/` owner"],
+        );
+    }
+    // A docker:// action is outside the owner too, digest or not.
+    let wf = workflow(&format!("      - uses: docker://alpine@{DIGEST}\n"));
+    expect_fail(
+        "owner-docker-uri",
+        &[(".github/workflows/o.yml", &wf)],
+        &["is not from the `actions/` owner"],
+    );
+    // The four GitHub-owned actions the chain uses pass.
+    let wf = workflow(&format!(
+        "      - uses: actions/checkout@{SHA}\n      - uses: actions/upload-artifact@{SHA}\n      - uses: actions/download-artifact@{SHA}\n      - uses: actions/attest@{SHA}\n"
+    ));
+    let (code, text) = run(&fixture("owner-ok", &[(".github/workflows/o.yml", &wf)]));
+    assert_eq!(code, 0, "{text}");
+}
+
+#[test]
+fn a_builder_image_or_a_docker_run_or_pull_without_a_digest_fails() {
+    for (name, cmd, needle) in [
+        (
+            "create-no-image",
+            "docker buildx create --name b --driver docker-container --use".to_owned(),
+            "must set `--driver-opt image=",
+        ),
+        (
+            "create-tag",
+            "docker buildx create --driver docker-container --driver-opt image=moby/buildkit:buildx-stable-1 --use".to_owned(),
+            "must set `--driver-opt image=",
+        ),
+        (
+            "create-short-digest",
+            "docker buildx create --driver docker-container --driver-opt image=moby/buildkit@sha256:abc --use".to_owned(),
+            "must set `--driver-opt image=",
+        ),
+        (
+            "create-variable",
+            "docker buildx create --driver docker-container --driver-opt image=$BUILDKIT --use".to_owned(),
+            "must set `--driver-opt image=",
+        ),
+        ("run-tag", "docker run --rm alpine:3.20 true".to_owned(), "`docker run` of an image not referenced"),
+        ("pull-tag", "docker pull debian:bookworm".to_owned(), "`docker pull` of an image not referenced"),
+    ] {
+        let wf = workflow(&format!("      - name: x\n        run: {cmd}\n"));
+        expect_fail(name, &[(".github/workflows/d.yml", &wf)], &[needle]);
+    }
+    let ok = format!(
+        "      - run: docker buildx create --driver docker-container --driver-opt image=moby/buildkit@{DIGEST} --use\n      - run: docker run --rm alpine@{DIGEST} true\n      - run: docker pull debian@{DIGEST}\n"
+    );
+    let (code, text) = run(&fixture(
+        "digests-ok",
+        &[(".github/workflows/d.yml", &workflow(&ok))],
+    ));
+    assert_eq!(code, 0, "{text}");
+}
+
+#[test]
+fn a_token_on_a_command_line_or_in_a_script_fails() {
+    let login = |body: &str| {
+        workflow(&format!(
+            "      - name: Log in\n        if: github.event_name == 'push'\n        env:\n          GH_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}\n        run: {body}\n"
+        ))
+    };
+    for (name, body, needle) in [
+        (
+            "password",
+            "docker login ghcr.io -u me --password \"$GH_TOKEN\"",
+            "must read the credential with `--password-stdin`",
+        ),
+        (
+            "short",
+            "docker login ghcr.io -u me -p \"$GH_TOKEN\"",
+            "must read the credential with `--password-stdin`",
+        ),
+        (
+            "eq",
+            "docker login ghcr.io -u me --password=\"$GH_TOKEN\"",
+            "must read the credential with `--password-stdin`",
+        ),
+        (
+            "no-stdin",
+            "docker login ghcr.io",
+            "must read the credential with `--password-stdin`",
+        ),
+        (
+            "interpolated",
+            "echo ${{ secrets.GITHUB_TOKEN }} | docker login ghcr.io -u me --password-stdin",
+            "interpolated into a script or command line",
+        ),
+        (
+            "interpolated-job-token",
+            "echo ${{ github.token }} | docker login ghcr.io -u me --password-stdin",
+            "interpolated into a script or command line",
+        ),
+    ] {
+        expect_fail(
+            &format!("login-{name}"),
+            &[(".github/workflows/l.yml", &login(body))],
+            &[needle],
+        );
+    }
+    // The correct form passes: the token in `env:`, piped on standard input.
+    let ok = login(
+        "printf '%s' \"$GH_TOKEN\" | docker login ghcr.io -u \"$GITHUB_ACTOR\" --password-stdin",
+    );
+    let (code, text) = run(&fixture("login-ok", &[(".github/workflows/l.yml", &ok)]));
+    assert_eq!(code, 0, "{text}");
+}
+
+#[test]
+fn a_registry_login_outside_a_tag_push_or_a_rehearsal_fails() {
+    for (name, cond) in [
+        ("none", ""),
+        ("dry-run", "        if: inputs.mode == 'dry-run'\n"),
+    ] {
+        let wf = workflow(&format!(
+            "      - name: Log in\n{cond}        env:\n          GH_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}\n        run: printf '%s' \"$GH_TOKEN\" | docker login ghcr.io -u me --password-stdin\n"
+        ));
+        expect_fail(
+            &format!("login-where-{name}"),
+            &[(".github/workflows/l.yml", &wf)],
+            &["a registry login must run only on a tag push"],
+        );
+    }
+}
+
+#[test]
+fn a_rehearsal_push_by_a_script_to_another_package_fails() {
+    let step = "      - name: Push elsewhere\n        if: inputs.mode == 'rehearsal'\n        run: docker buildx build --output \"type=image,name=ghcr.io/someone/else,push=true\" .\n";
+    expect_fail(
+        "script-push-elsewhere",
+        &[(".github/workflows/release.yml", &release_shaped(step))],
+        &["pushes to something other than"],
+    );
+    let step = "      - name: Push elsewhere\n        if: inputs.mode == 'rehearsal'\n        run: docker buildx build --push --tag ghcr.io/someone/else:x .\n";
+    expect_fail(
+        "script-push-flag",
+        &[(".github/workflows/release.yml", &release_shaped(step))],
+        &["pushes to something other than"],
+    );
 }
