@@ -279,6 +279,7 @@ keys! {
     BusyHeading => "busy.heading",
     BusyBody => "busy.body",
     TooLargeHeading => "too_large.heading",
+    TooLargeBody => "too_large.body",
     // repository, tree, file
     RepoLocation => "repo.location",
     RepoLocationBranch => "repo.location_branch",
@@ -300,6 +301,15 @@ keys! {
     AssuranceQueued => "assurance.queued",
     AssuranceUnverified => "assurance.unverified",
     AssuranceVerifyUnavailable => "assurance.verify_unavailable",
+    // in-place explanations of the labels above and of two terms (RFC 012 D-4)
+    ExplainSummary => "explain.summary",
+    ExplainVerified => "explain.verified",
+    ExplainSigned => "explain.signed",
+    ExplainQueued => "explain.queued",
+    ExplainFailed => "explain.failed",
+    ExplainUnavailable => "explain.unavailable",
+    ExplainPatch => "explain.patch",
+    ExplainRollback => "explain.rollback",
     // history, change, refs, verify
     HistoryHeading => "history.heading",
     HistoryRollback => "history.rollback",
@@ -325,10 +335,12 @@ keys! {
     RefsColTarget => "refs.col.target",
     VerifyHeading => "verify.heading",
     VerifyIntro => "verify.intro",
+    VerifyFindings => "verify.findings",
     VerifySessions => "verify.sessions",
     VerifyStatusEvaluated => "verify.status.evaluated",
     VerifyStatusFailed => "verify.status.failed",
     VerifyStatusNotEvaluated => "verify.status.not_evaluated",
+    VerifyStatusNotRun => "verify.status.not_run",
     VerifyStatusHalted => "verify.status.halted",
     VerifyColStage => "verify.col.stage",
     VerifyColStatus => "verify.col.status",
@@ -651,10 +663,6 @@ impl T {
     /// The running version, for the page footer: a number, not a translatable word.
     pub fn version(&self) -> &'static str {
         env!("CARGO_PKG_VERSION")
-    }
-    /// The command the verify page names (`prikk verify`): a program's name, not a translatable word.
-    pub fn verify_command(&self) -> &'static str {
-        "prikk verify"
     }
     /// A size with the unit from the catalog (`223 B`, `2.0 KiB`, `5.0 MiB`).
     pub fn size(&self, bytes: u64) -> String {

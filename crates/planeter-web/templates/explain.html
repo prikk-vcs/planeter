@@ -1,0 +1,4 @@
+<details class="explain">
+<summary>{{ t.get(Key::ExplainSummary) }}</summary>
+{% for row in explain %}<p>{% if let Some(l) = row.label %}<strong>{{ t.get(**l) }}</strong><br>{% endif %}{{ t.get(*row.text) }}</p>{% endfor %}
+</details>

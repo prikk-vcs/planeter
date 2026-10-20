@@ -209,7 +209,8 @@ fn schemas() -> Value {
         })),
         "FailedCondition": obj(&["id", "message"], json!({"id": string_prop(), "message": string_prop()})),
         "Stage": obj(&["stage", "status", "detail"], json!({
-            "stage": string_prop(), "status": string_prop(), "detail": nullable_string()
+            "stage": string_prop(), "status": string_prop(), "detail": nullable_string(),
+            "blocked_by": {"type": "string", "description": "Only on a `not_evaluated` stage: the id of the stage that blocked it. Absent otherwise."}
         })),
         "VerifyView": obj(&["ok", "verified_sessions", "total_sessions", "failed_conditions", "stages"], json!({
             "ok": {"type": "boolean"},

@@ -251,7 +251,7 @@ fn too_large_has_one_code_and_a_hint_per_cause() {
     assert_eq!(default["hint"], ErrorCode::TooLarge.hint());
     assert_eq!(
         on_raw["hint"],
-        "This server does not serve files that large; ask the operator."
+        "This server does not serve files that large; ask the person who runs this server."
     );
     // No other code is given a second hint: the plain body is the code's own.
     for c in ErrorCode::ALL {
@@ -348,7 +348,8 @@ async fn the_document_describes_parameters_responses_security_and_the_error_sche
         .find(|p| p["name"] == "path")
         .unwrap();
     assert_eq!(path["required"], true);
-    // Views never omit a field, so every declared property of every object schema is required.
+    // Views never omit a field (except the additive ones named below), so every other declared property of
+    // every object schema is required.
     for (name, schema) in doc["components"]["schemas"].as_object().unwrap() {
         if schema["type"] != "object" {
             continue;
@@ -365,6 +366,10 @@ async fn the_document_describes_parameters_responses_security_and_the_error_sche
             .iter()
             .filter_map(Value::as_str)
             .collect();
+        // The additive fields: declared, documented, and not `required` because a view omits them when they
+        // do not apply (RFC 012 D-4). Every other property is required.
+        let additive: &[(&str, &str)] = &[("Stage", "blocked_by")];
+        props.retain(|p| !additive.contains(&(name.as_str(), *p)));
         props.sort_unstable();
         required.sort_unstable();
         assert_eq!(
@@ -476,11 +481,26 @@ async fn every_view_serializes_to_exactly_the_declared_fields() {
                     id: "stage-failure".into(),
                     message: "m".into(),
                 }],
-                stages: vec![StageView {
-                    stage: "objects".into(),
-                    status: "evaluated".into(),
-                    detail: None,
-                }],
+                stages: vec![
+                    StageView {
+                        stage: "objects".into(),
+                        status: "evaluated".into(),
+                        detail: None,
+                        blocked_by: None,
+                    },
+                    StageView {
+                        stage: "refs".into(),
+                        status: "failed".into(),
+                        detail: Some("m".into()),
+                        blocked_by: None,
+                    },
+                    StageView {
+                        stage: "commit-index".into(),
+                        status: "not_evaluated".into(),
+                        detail: Some("blocked by refs".into()),
+                        blocked_by: Some("refs".into()),
+                    },
+                ],
             })
             .unwrap(),
         ),
@@ -514,10 +534,18 @@ async fn every_view_serializes_to_exactly_the_declared_fields() {
                         return Err(format!("{at}: missing {req}"));
                     }
                 }
-                // The views never omit a field (an absent value is `null`), so a declared property
-                // that is not serialized is a document that over-promises.
+                // The views do not omit a field (an absent value is `null`), so a declared property that is
+                // not serialized is a document that over-promises. The one exception is a property the
+                // document does not list as `required` (an additive field such as a stage's `blocked_by`):
+                // it may be absent, and the samples below include a view that has it.
+                let required: Vec<&str> = schema["required"]
+                    .as_array()
+                    .into_iter()
+                    .flatten()
+                    .filter_map(Value::as_str)
+                    .collect();
                 for k in props.keys() {
-                    if !obj.contains_key(k) {
+                    if !obj.contains_key(k) && required.contains(&k.as_str()) {
                         return Err(format!("{at}: declared but not serialized: {k}"));
                     }
                 }

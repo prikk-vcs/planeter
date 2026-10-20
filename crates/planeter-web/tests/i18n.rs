@@ -149,7 +149,7 @@ async fn english_is_the_default_and_the_page_says_so() {
     let (s, headers, page) = send(&r, get("/", None, None)).await;
     assert_eq!(s, StatusCode::OK);
     assert!(page.contains("<html lang=\"en\" dir=\"ltr\">"), "{page}");
-    assert!(page.contains(">Open</button>"), "{page}");
+    assert!(page.contains(">Open repository</button>"), "{page}");
     assert_eq!(h(&headers, "content-language"), "en");
     assert_eq!(
         h(&headers, "vary"),
@@ -162,7 +162,7 @@ async fn accept_language_selects_a_language_by_q_value_and_unknown_ones_fall_bac
     let r = app();
     let (_, headers, page) = send(&r, get("/", Some("qaa"), None)).await;
     assert!(page.contains("<html lang=\"qaa\" dir=\"rtl\">"), "{page}");
-    assert!(page.contains(">‹Open›</button>"), "{page}");
+    assert!(page.contains(">‹Open repository›</button>"), "{page}");
     assert!(
         page.contains("<title>‹Find a repository · planeter›</title>"),
         "the product name is not translated: {page}"
@@ -367,7 +367,7 @@ fn the_two_hints_of_too_large_are_two_keys_chosen_at_the_call_site() {
     assert_ne!(g["hint"], r["hint"]);
     assert_eq!(
         r["hint"],
-        "‹This server does not serve files that large; ask the operator.›"
+        "‹This server does not serve files that large; ask the person who runs this server.›"
     );
     assert_eq!(ErrorCode::TOO_LARGE_RAW.hint, Key::ErrTooLargeRawHint);
 }
@@ -539,7 +539,7 @@ fn a_hostile_value_in_a_text_code_muted_or_link_slot_cannot_inject_markup_or_an_
             .with("repo", "{repo}")
             .product()
             .text(),
-        "refs · {repo} · planeter"
+        "Branches and tags · {repo} · planeter"
     );
     // The plain-text rendering is not HTML and is escaped by whoever prints it (askama, JSON).
     assert_eq!(
@@ -548,7 +548,7 @@ fn a_hostile_value_in_a_text_code_muted_or_link_slot_cannot_inject_markup_or_an_
             .with("repo", "r")
             .product()
             .text(),
-        "change <b> · r · planeter"
+        "Change <b> · r · planeter"
     );
 }
 
@@ -685,7 +685,8 @@ fn askama_renders_catalog_html_as_is_and_still_escapes_everything_else() {
         "{out}"
     );
     assert!(
-        out.contains("<p>Sign-in failed.</p>") && out.contains("<p>&#60;script&#62;</p>"),
+        out.contains("<p>The username or password was not correct. Check both and try again.</p>")
+            && out.contains("<p>&#60;script&#62;</p>"),
         "{out}"
     );
 }

@@ -193,7 +193,7 @@ async fn every_repository_page_fills_every_placeholder_and_takes_every_word_from
         (
             "/alice/app",
             &[
-                "<span class=\"badge ok\">prikk-verified</span>",
+                "<span class=\"badge ok\">Verified</span>",
                 "at <code>heads/main</code> · branch <code>heads/main</code>",
                 "2.9 KiB · binary",
                 "<title>alice/app · planeter</title>",
@@ -203,7 +203,7 @@ async fn every_repository_page_fills_every_placeholder_and_takes_every_word_from
             "/alice/app/tree/src",
             &[
                 "<h1><code>src</code></h1>",
-                "<span class=\"muted\">at heads/main</span>",
+                "<span class=\"muted\">Showing heads/main</span>",
                 "13 B · text",
                 "<title>src · alice/app · planeter</title>",
             ],
@@ -212,7 +212,7 @@ async fn every_repository_page_fills_every_placeholder_and_takes_every_word_from
             "/alice/app/blob/data.bin",
             &[
                 "<span class=\"muted\">2.9 KiB · binary</span>",
-                "Binary content — <a href=\"https://raw.planeter.example/api/v1/repos/alice/app/raw?path=data.bin\">Download data.bin</a>.",
+                "This file is not text, so it cannot be shown here. <a href=\"https://raw.planeter.example/api/v1/repos/alice/app/raw?path=data.bin\">Download data.bin</a>.",
                 ">Download data.bin</a>",
             ],
         ),
@@ -228,7 +228,7 @@ async fn every_repository_page_fills_every_placeholder_and_takes_every_word_from
             &[
                 "History <span class=\"muted\">heads/main</span>",
                 "1 patch</td>",
-                "<title>history · alice/app · planeter</title>",
+                "<title>History · alice/app · planeter</title>",
                 ">init</a>",
             ],
         ),
@@ -240,16 +240,16 @@ async fn every_repository_page_fills_every_placeholder_and_takes_every_word_from
                 "<span class=\"badge\">current</span>",
                 "<span class=\"badge warn\">closed</span>",
                 "<h2>Tags</h2>",
-                "<title>refs · alice/app · planeter</title>",
+                "<title>Branches and tags · alice/app · planeter</title>",
             ],
         ),
         (
             "/alice/app/verify",
             &[
-                "<h1>Verification <span class=\"badge ok\">prikk-verified</span></h1>",
-                "Re-derived from <code>prikk verify</code> on this request — never served from a cache. 1 of 1 session verified.",
-                "<td>evaluated</td>",
-                "<title>verify · alice/app · planeter</title>",
+                "<h1>Verification <span class=\"badge ok\">Verified</span></h1>",
+                "These checks were run just now, when you opened this page. They are never reused from an earlier visit. 1 of 1 session verified.",
+                "<td>completed</td>",
+                "<title>Verification · alice/app · planeter</title>",
             ],
         ),
         (
@@ -271,8 +271,8 @@ async fn every_repository_page_fills_every_placeholder_and_takes_every_word_from
         for p in phrases {
             assert!(en.contains(p), "{uri}: English no longer says {p:?}:\n{en}");
         }
-        for nav in ["code", "history", "refs", "verify"] {
-            if uri != "/alice/app/blob/README.md" || nav == "code" {
+        for nav in ["Files", "History", "Branches and tags", "Verification"] {
+            if uri != "/alice/app/blob/README.md" || nav == "Files" {
                 assert!(en.contains(&format!(">{nav}</a>")), "{uri}: nav {nav}");
             }
         }
@@ -282,7 +282,7 @@ async fn every_repository_page_fills_every_placeholder_and_takes_every_word_from
         assert!(q.contains("<html lang=\"qaa\" dir=\"rtl\">"), "{uri}: {q}");
         assert_eq!(unfilled(&q), None, "{uri}: an unfilled placeholder in qaa");
         assert!(
-            q.contains("‹code›") && q.contains("‹history›"),
+            q.contains("‹Files›") && q.contains("‹History›"),
             "{uri}: the nav is not from the catalog: {q}"
         );
         // No English sentence of the catalog survives outside a marker: strip every ‹…› and look for words.
@@ -300,12 +300,13 @@ async fn every_repository_page_fills_every_placeholder_and_takes_every_word_from
             out
         };
         for word in [
-            "prikk-verified",
-            "Binary content",
-            "No sealed history",
+            "Verified",
+            "This file is not text",
+            "There are no signed changes",
             "Branches",
             "Verification",
-            "sign in",
+            "Sign in",
+            "What does this mean?",
         ] {
             assert!(
                 !outside.contains(word),
@@ -319,25 +320,25 @@ async fn every_repository_page_fills_every_placeholder_and_takes_every_word_from
     assert!(
         en.contains("<h1>Change <code>")
             && en.contains("<h2>patch <code>")
-            && en.contains("badge ok\">prikk-verified"),
+            && en.contains("badge ok\">Verified"),
         "{en}"
     );
     assert_eq!(unfilled(&en), None);
     let (_, q) = get(&r, &format!("/alice/app/change/{block}"), "qaa").await;
     assert!(
-        q.contains("<h1>‹Change <code>") && q.contains("<title>‹change "),
+        q.contains("<h1>‹Change <code>") && q.contains("<title>‹Change "),
         "{q}"
     );
     assert_eq!(unfilled(&q), None);
     let (_, home) = get(&r, "/", "en").await;
     assert!(
-        home.contains("<p class=\"muted\">A forge for prikk repositories. Browse a repository by its <code>owner/name</code>.</p>")
+        home.contains("<p class=\"muted\">planeter hosts prikk repositories. To open one, enter its address, written as <code>owner/name</code>.</p>")
             && home.contains("placeholder=\"owner/name\"")
-            && home.contains(">Open</button>"),
+            && home.contains(">Open repository</button>"),
         "{home}"
     );
     let (_, home_q) = get(&r, "/", "qaa").await;
-    assert!(home_q.contains("‹A forge for prikk repositories. Browse a repository by its <code>‹owner/name›</code>.›"), "{home_q}");
+    assert!(home_q.contains("‹planeter hosts prikk repositories. To open one, enter its address, written as <code>‹owner/name›</code>.›"), "{home_q}");
     for (uri, status, en_heading) in [
         ("/alice/none", StatusCode::NOT_FOUND, "<h1>Not found</h1>"),
         ("/", StatusCode::OK, "<h1>planeter</h1>"),

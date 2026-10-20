@@ -5,7 +5,8 @@
 //! from `/static/app.css` on the app origin; raw bytes link to the isolated content origin.
 //!
 //! Honesty on the page (WEB-06): the repository badge is prikk's re-derived `verify` verdict, and a
-//! queued patch is labelled *forge-approved, unsealed* — never *prikk-verified*.
+//! queued patch is labelled *Approved, awaiting signature* — never *Verified* (the words are the catalog's;
+//! the API keeps its stable `Assurance` values).
 
 use askama::Template;
 use axum::Router;
@@ -337,6 +338,31 @@ fn assurance(a: Assurance) -> (&'static str, Key) {
     }
 }
 
+/// One paragraph of the in-place explanation (RFC 012 D-4): the sentence, and the label it explains when the
+/// page can show several labels (the change page, one per patch).
+struct ExplainRow {
+    label: Option<Key>,
+    text: Key,
+}
+
+/// What a badge's label means, as the catalog key of its explanation.
+fn explanation(label: Key) -> Key {
+    match label {
+        Key::AssuranceVerified => Key::ExplainVerified,
+        Key::AssuranceQueued => Key::ExplainQueued,
+        Key::AssuranceUnverified => Key::ExplainFailed,
+        _ => Key::ExplainUnavailable,
+    }
+}
+
+/// The explanation of the one badge a repository-level page shows.
+fn explain_badge(label: Key) -> Vec<ExplainRow> {
+    vec![ExplainRow {
+        label: None,
+        text: explanation(label),
+    }]
+}
+
 fn short(id: &str) -> String {
     id.chars().take(12).collect()
 }
@@ -492,6 +518,7 @@ struct RepoTpl {
     current_branch: Option<String>,
     assurance_class: &'static str,
     assurance_label: Key,
+    explain: Vec<ExplainRow>,
     dirs: Vec<DirRow>,
     files: Vec<FileRow>,
     ref_query: String,
@@ -553,6 +580,7 @@ struct HistoryTpl {
     ref_name: String,
     assurance_class: &'static str,
     assurance_label: Key,
+    explain: Vec<ExplainRow>,
     entries: Vec<HistoryRow>,
 }
 struct OpRow {
@@ -577,6 +605,8 @@ struct ChangeTpl {
     target: String,
     /// The target shortened for the title.
     target_short: String,
+    /// What each badge on the page means, and the two terms the page uses (patch, rollback).
+    explain: Vec<ExplainRow>,
     patches: Vec<PatchRow>,
 }
 struct BranchRow {
@@ -603,9 +633,16 @@ struct RefsTpl {
 }
 struct StageRow {
     stage: String,
-    /// The status in the page's language (an unknown token from prikk is shown as it came).
+    /// The status in the page's language (an unknown token from prikk is shown as it came). For a check that
+    /// was not run it names the check that blocked it.
     status_label: String,
+    /// prikk's own message for a failed check; "after {x}" for a stopped one. Empty when the status says it all.
     detail: String,
+}
+/// One finding of a failed check: prikk's id and message, shown as prikk wrote them.
+struct FindingRow {
+    id: String,
+    message: String,
 }
 #[derive(Template)]
 #[template(path = "verify.html")]
@@ -618,9 +655,10 @@ struct VerifyTpl {
     repo: String,
     assurance_class: &'static str,
     assurance_label: Key,
+    explain: Vec<ExplainRow>,
     verified_sessions: u64,
     total_sessions: u64,
-    failed: Vec<String>,
+    failed: Vec<FindingRow>,
     stages: Vec<StageRow>,
 }
 
@@ -665,15 +703,31 @@ fn history_row(t: &T, e: &planeter_core::read::HistoryEntry) -> HistoryRow {
     }
 }
 
-/// The catalog label of a verify stage status token (`evaluated`, `failed`, `not_evaluated`, `halted`).
-fn stage_status_label(t: &T, token: &str) -> String {
-    match token {
+/// The catalog label of a verify stage status token (`evaluated`, `failed`, `not_evaluated`, `halted`). A
+/// `not_evaluated` stage names its blocker from the view's `blocked_by` field, not from the English `detail`.
+fn stage_status_label(t: &T, stage: &planeter_core::read::StageView) -> String {
+    match stage.status.as_str() {
         "evaluated" => t.get(Key::VerifyStatusEvaluated),
         "failed" => t.get(Key::VerifyStatusFailed),
-        "not_evaluated" => t.get(Key::VerifyStatusNotEvaluated),
+        "not_evaluated" => match stage.blocked_by.as_deref().filter(|b| !b.is_empty()) {
+            Some(check) => t
+                .msg(Key::VerifyStatusNotEvaluated)
+                .with("check", check)
+                .text(),
+            None => t.get(Key::VerifyStatusNotRun),
+        },
         "halted" => t.get(Key::VerifyStatusHalted),
         other => other.to_owned(),
     }
+}
+
+/// The detail cell of a verify stage: prikk's message for a failure, `after {x}` for a stop. A check that
+/// was not run has none: its status already names the blocker.
+fn stage_detail(stage: &planeter_core::read::StageView) -> String {
+    if stage.status == "not_evaluated" {
+        return String::new();
+    }
+    stage.detail.clone().unwrap_or_default()
 }
 
 // -- query models --
@@ -1103,7 +1157,7 @@ async fn oidc_callback(
 }
 
 /// The repository badge's `verify`, admitted on its own: it is the page's most expensive call
-/// (4.1 × the store) and optional — the page shows "verify unavailable" when it is refused or fails — so
+/// (4.1 × the store) and optional — the page shows "Could not be checked now" when it is refused or fails — so
 /// it must not decide whether the rest of the page can be served.
 async fn badge_verify(
     state: &AppState,
@@ -1137,7 +1191,7 @@ async fn repo_home(
         r.map(str::to_owned),
     );
     // The badge's `verify` is admitted on its own (below): it costs 4.1 × the store, twice a `tree`, and
-    // the page renders "verify unavailable" without it — so a repository whose `verify` does not fit the
+    // the page renders "Could not be checked now" without it — so a repository whose `verify` does not fit the
     // budget still gets its page instead of `too_large`.
     let subject = Subject::new(
         &c.principal,
@@ -1202,6 +1256,7 @@ async fn repo_home(
             current_branch: refs.and_then(|r| r.current_branch),
             assurance_class: ac,
             assurance_label: al,
+            explain: explain_badge(al),
             dirs,
             files,
             ref_query: ref_query(r),
@@ -1395,6 +1450,7 @@ async fn history_page(
             ref_name: h.ref_name,
             assurance_class: ac,
             assurance_label: al,
+            explain: explain_badge(al),
             entries,
         },
         &c,
@@ -1431,6 +1487,25 @@ async fn change_page(
             );
         }
     };
+    // One explanation per distinct badge on the page, then the two terms the page uses.
+    let mut explain: Vec<ExplainRow> = Vec::new();
+    for p in &ch.patches {
+        let label = assurance(p.assurance).1;
+        if !explain.iter().any(|r| r.label == Some(label)) {
+            explain.push(ExplainRow {
+                label: Some(label),
+                // A sealed patch carries no re-derived verdict on this page, so its explanation says what
+                // is known here (it is signed in) and points to the Verification page for the rest.
+                text: match label {
+                    Key::AssuranceVerified => Key::ExplainSigned,
+                    other => explanation(other),
+                },
+            });
+        }
+    }
+    for text in [Key::ExplainPatch, Key::ExplainRollback] {
+        explain.push(ExplainRow { label: None, text });
+    }
     let patches = ch
         .patches
         .iter()
@@ -1463,6 +1538,7 @@ async fn change_page(
             name,
             target_short: short(&target),
             target,
+            explain,
             patches,
         },
         &c,
@@ -1551,20 +1627,24 @@ async fn verify_page(
             name,
             assurance_class: ac,
             assurance_label: al,
+            explain: explain_badge(al),
             verified_sessions: v.verified_sessions,
             total_sessions: v.total_sessions,
             failed: v
                 .failed_conditions
                 .iter()
-                .map(|f| format!("{}: {}", f.id, f.message))
+                .map(|f| FindingRow {
+                    id: f.id.clone(),
+                    message: f.message.clone(),
+                })
                 .collect(),
             stages: v
                 .stages
                 .iter()
                 .map(|s| StageRow {
                     stage: s.stage.clone(),
-                    status_label: stage_status_label(&c.t, &s.status),
-                    detail: s.detail.clone().unwrap_or_default(),
+                    status_label: stage_status_label(&c.t, s),
+                    detail: stage_detail(s),
                 })
                 .collect(),
         },
@@ -1604,6 +1684,50 @@ mod tests {
         let (dirs, files) = listing(&e, "src/");
         assert_eq!(dirs[0].path, "src/lib");
         assert_eq!(files[0].path, "src/main.rs");
+    }
+
+    fn stage(
+        status: &str,
+        detail: Option<&str>,
+        blocked_by: Option<&str>,
+    ) -> planeter_core::read::StageView {
+        planeter_core::read::StageView {
+            stage: "s".into(),
+            status: status.into(),
+            detail: detail.map(str::to_owned),
+            blocked_by: blocked_by.map(str::to_owned),
+        }
+    }
+
+    #[test]
+    fn a_check_that_was_not_run_names_its_blocker_from_the_field_not_from_the_detail() {
+        let t = T::new(crate::catalog::EN);
+        // The detail says something else on purpose: the sentence is built from `blocked_by`.
+        let s = stage("not_evaluated", Some("blocked by x"), Some("refs"));
+        assert_eq!(stage_status_label(&t, &s), "not run (blocked by refs)");
+        assert_eq!(stage_detail(&s), "", "the status already says it");
+        // No blocker, or an empty one: the plain status, never "blocked by " and nothing.
+        for blocked_by in [None, Some("")] {
+            let s = stage("not_evaluated", Some("blocked by x"), blocked_by);
+            assert_eq!(stage_status_label(&t, &s), "not run");
+        }
+        // The other statuses are the plain words; an unknown token is shown as it came.
+        for (token, word) in [
+            ("evaluated", "completed"),
+            ("failed", "problem found"),
+            ("halted", "stopped early"),
+            ("surprise", "surprise"),
+        ] {
+            assert_eq!(stage_status_label(&t, &stage(token, None, None)), word);
+        }
+        assert_eq!(
+            stage_detail(&stage("failed", Some("prikk says"), None)),
+            "prikk says"
+        );
+        assert_eq!(
+            stage_detail(&stage("halted", Some("after refs"), None)),
+            "after refs"
+        );
     }
 
     #[test]

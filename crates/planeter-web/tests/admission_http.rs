@@ -270,9 +270,12 @@ async fn the_repository_page_renders_a_plain_too_large_page() {
     let (r, _) = app(repos, gate, Prikk::Missing);
     let (status, _, html) = get(&r, "/alice/open", APP).await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert!(html.contains("This is too large to serve here."), "{html}");
     assert!(
-        html.contains("ask the operator to raise the read memory budget"),
+        html.contains("This is too large for this server to show."),
+        "{html}"
+    );
+    assert!(
+        html.contains("ask the person who runs this server to raise the limit"),
         "{html}"
     );
     let (status, _, html) = get(&r, "/alice/open/blob/anything.bin", APP).await;
@@ -392,7 +395,7 @@ async fn file_is_bounded_at_4_mib_and_raw_keeps_its_25_mib_cap_each_with_its_own
     assert_ne!(file_v["hint"], raw_v["hint"]);
     assert_eq!(
         raw_v["hint"],
-        "This server does not serve files that large; ask the operator."
+        "This server does not serve files that large; ask the person who runs this server."
     );
 
     // A path that is not there is still a plain 404.
@@ -404,8 +407,11 @@ async fn file_is_bounded_at_4_mib_and_raw_keeps_its_25_mib_cap_each_with_its_own
     // The UI file page keeps the 4 MiB bound (as in 0.3.0) and its default hint.
     let (status, _, html) = get(&r, "/alice/open/blob/big.bin", APP).await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
-    assert!(html.contains("This is too large to serve here."), "{html}");
-    assert!(html.contains("raise the read memory budget"), "{html}");
+    assert!(
+        html.contains("This is too large for this server to show."),
+        "{html}"
+    );
+    assert!(html.contains("to raise the limit"), "{html}");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -426,7 +432,7 @@ async fn a_repository_whose_verify_does_not_fit_still_gets_its_page() {
     let (status, _, html) = get(&r, "/alice/open", APP).await;
     assert_eq!(status, StatusCode::OK, "{html}");
     assert!(
-        html.contains("verify unavailable"),
+        html.contains("Could not be checked now"),
         "the badge degrades: {html}"
     );
     assert!(html.contains("README.md"), "the listing is there: {html}");

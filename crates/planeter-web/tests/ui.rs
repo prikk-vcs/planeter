@@ -277,11 +277,8 @@ async fn signed_in_owner_browses_her_private_repo() {
     assert_eq!(resp.status(), StatusCode::OK);
     let body = body_string(resp).await;
     assert!(body.contains("alice/app"));
-    assert!(
-        body.contains("prikk-verified"),
-        "fresh repo verifies: {body}"
-    );
-    assert!(body.contains("sign out"));
+    assert!(body.contains("Verified"), "fresh repo verifies: {body}");
+    assert!(body.contains("Sign out"));
     for uri in ["/alice/app/history", "/alice/app/refs", "/alice/app/verify"] {
         assert_eq!(
             send(&r, with_session(uri)).await.status(),

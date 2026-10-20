@@ -1,20 +1,20 @@
-//! The English catalog (RFC 012 D-3): the words the pages say today, as whole sentences with named
-//! placeholders. Wording is unchanged except where a fragment had to become a sentence (listed in the
-//! message-catalog review request). The order follows [`super::Key`].
+//! The English catalog (RFC 012 D-3): whole sentences with named placeholders. The wording follows
+//! `docs/glossary.md` (RFC 012 D-4, plain words): a change to a user-facing message is a change to that page
+//! first, and `tests/glossary.rs` fails if the two disagree. The order follows [`super::Key`].
 
 use super::{Entry, msg, plural_msg};
 
 pub const CATALOG: &[Entry] = &[
     // layout and navigation
-    msg("layout.sign_in", "sign in"),
-    msg("layout.sign_out", "sign out"),
+    msg("layout.sign_in", "Sign in"),
+    msg("layout.sign_out", "Sign out"),
     msg("layout.skip", "Skip to content"),
     msg("layout.nav_repository", "Repository"),
     msg("layout.footer", "{product} {version}"),
-    msg("nav.code", "code"),
-    msg("nav.history", "history"),
-    msg("nav.refs", "refs"),
-    msg("nav.verify", "verify"),
+    msg("nav.code", "Files"),
+    msg("nav.history", "History"),
+    msg("nav.refs", "Branches and tags"),
+    msg("nav.verify", "Verification"),
     // page titles (one pattern: page · context · product)
     msg("title.home", "Find a repository · {product}"),
     msg(
@@ -34,14 +34,14 @@ pub const CATALOG: &[Entry] = &[
     msg("title.repo", "{repo} · {product}"),
     msg("title.tree", "{prefix} · {repo} · {product}"),
     msg("title.file", "{path} · {repo} · {product}"),
-    msg("title.history", "history · {repo} · {product}"),
-    msg("title.change", "change {target} · {repo} · {product}"),
-    msg("title.refs", "refs · {repo} · {product}"),
-    msg("title.verify", "verify · {repo} · {product}"),
+    msg("title.history", "History · {repo} · {product}"),
+    msg("title.change", "Change {target} · {repo} · {product}"),
+    msg("title.refs", "Branches and tags · {repo} · {product}"),
+    msg("title.verify", "Verification · {repo} · {product}"),
     // home
     msg(
         "home.intro",
-        "A forge for prikk repositories. Browse a repository by its {address}.",
+        "planeter hosts prikk repositories. To open one, enter its address, written as {address}.",
     ),
     msg("home.address_example", "owner/name"),
     msg("home.address_label", "Repository address"),
@@ -49,12 +49,15 @@ pub const CATALOG: &[Entry] = &[
         "home.address_error",
         "That is not a repository address. Write it as {address}.",
     ),
-    msg("home.open", "Open"),
+    msg("home.open", "Open repository"),
     // sign-in
     msg("login.heading", "Sign in"),
-    msg("login.failed", "Sign-in failed."),
-    msg("login.sso", "Sign in with SSO"),
-    msg("login.user", "User"),
+    msg(
+        "login.failed",
+        "The username or password was not correct. Check both and try again.",
+    ),
+    msg("login.sso", "Sign in with single sign-on"),
+    msg("login.user", "Username"),
     msg("login.password", "Password"),
     msg("login.submit", "Sign in"),
     msg(
@@ -65,29 +68,36 @@ pub const CATALOG: &[Entry] = &[
     msg("not_found.heading", "Not found"),
     msg(
         "not_found.body",
-        "There is no such repository, or you do not have access to it.",
+        "There is no repository at this address, or you do not have access to it. Check the address, or sign in if the repository is private.",
     ),
     msg("unavailable.heading", "Temporarily unavailable"),
     msg(
         "unavailable.body",
-        "The repository could not be read right now. Nothing is shown rather than something stale or invented.",
+        "This repository could not be read right now. Try again in a little while. If it keeps happening, tell the person who runs this server.",
     ),
     msg("busy.heading", "The server is busy"),
     msg(
         "busy.body",
         "Too many requests are being handled right now. Try again in a little while.",
     ),
-    msg("too_large.heading", "Too large"),
+    msg("too_large.heading", "Too large to show here"),
+    msg(
+        "too_large.body",
+        "This is too large for this server to show. You can download it, or ask the person who runs this server to raise the limit.",
+    ),
     // repository, tree, file
-    msg("repo.location", "at {point}"),
+    msg("repo.location", "Showing {point}"),
     msg("repo.location_branch", "at {point} · branch {branch}"),
-    msg("tree.at", "at {point}"),
+    msg("tree.at", "Showing {point}"),
     msg("listing.size_and_encoding", "{size} · {encoding}"),
     msg("listing.caption", "Files and folders"),
     msg("listing.name", "Name"),
     msg("listing.details", "Size and type"),
     msg("listing.folder", "folder"),
-    msg("file.binary", "Binary content — {download}."),
+    msg(
+        "file.binary",
+        "This file is not text, so it cannot be shown here. {download}.",
+    ),
     msg("file.download_named", "Download {name}"),
     // sizes
     msg("size.bytes", "{value} B"),
@@ -95,15 +105,44 @@ pub const CATALOG: &[Entry] = &[
     msg("size.mib", "{value} MiB"),
     msg("size.gib", "{value} GiB"),
     // assurance labels (trust-bearing)
-    msg("assurance.verified", "prikk-verified"),
-    msg("assurance.queued", "forge-approved, unsealed"),
-    msg("assurance.unverified", "unverified"),
-    msg("assurance.verify_unavailable", "verify unavailable"),
+    msg("assurance.verified", "Verified"),
+    msg("assurance.queued", "Approved, awaiting signature"),
+    msg("assurance.unverified", "Verification failed"),
+    msg("assurance.verify_unavailable", "Could not be checked now"),
+    // in-place explanations (a native <details>, no script). `explain.queued` and `explain.unavailable` are
+    // the glossary's sentences; the others are PROPOSED by the dev team and wait for the owner (the review
+    // request lists them as questions).
+    msg("explain.summary", "What does this mean?"),
+    msg(
+        "explain.verified",
+        "prikk ran all of its checks on this repository just now, and they found no problems.",
+    ),
+    msg(
+        "explain.signed",
+        "A maintainer signed this patch into the project's history. The Verification page shows whether the whole repository checks out.",
+    ),
+    msg(
+        "explain.queued",
+        "This change was approved on this server. A maintainer has not yet signed it into the project's history, so it is not part of the verified record.",
+    ),
+    msg(
+        "explain.failed",
+        "prikk checked this repository and found problems. The Verification page lists what was found.",
+    ),
+    msg("explain.unavailable", "Try again in a little while."),
+    msg("explain.patch", "A patch is one recorded edit."),
+    msg(
+        "explain.rollback",
+        "A rollback is a change that undoes an earlier change.",
+    ),
     // history, change, refs, verify
     msg("history.heading", "History {ref}"),
     msg("history.rollback", "rollback"),
     plural_msg("history.patch_count", "{count} patch", "{count} patches"),
-    msg("history.empty", "No sealed history on this ref yet."),
+    msg(
+        "history.empty",
+        "There are no signed changes on this branch yet.",
+    ),
     msg("history.col.change", "Change"),
     msg("history.col.kind", "Kind"),
     msg("history.col.patches", "Patches"),
@@ -125,18 +164,26 @@ pub const CATALOG: &[Entry] = &[
     msg("verify.heading", "Verification"),
     msg(
         "verify.intro",
-        "Re-derived from {command} on this request — never served from a cache.",
+        "These checks were run just now, when you opened this page. They are never reused from an earlier visit.",
     ),
+    msg("verify.findings", "What was found"),
+    // HELD (RFC 012 D-4): the glossary proposes "Waiting work: {verified} of {count} checked." but only once
+    // prikk confirms what `active_sessions` means (letter pending). Text and plural forms stay as they were.
     plural_msg(
         "verify.sessions",
         "{verified} of {count} session verified.",
         "{verified} of {count} sessions verified.",
     ),
-    msg("verify.status.evaluated", "evaluated"),
-    msg("verify.status.failed", "failed"),
-    msg("verify.status.not_evaluated", "not_evaluated"),
-    msg("verify.status.halted", "halted"),
-    msg("verify.col.stage", "Stage"),
+    msg("verify.status.evaluated", "completed"),
+    msg("verify.status.failed", "problem found"),
+    msg(
+        "verify.status.not_evaluated",
+        "not run (blocked by {check})",
+    ),
+    // PROPOSED: the status of a not-run check whose blocker prikk did not name (never seen from prikk 0.52).
+    msg("verify.status.not_run", "not run"),
+    msg("verify.status.halted", "stopped early"),
+    msg("verify.col.stage", "Check"),
     msg("verify.col.status", "Status"),
     msg("verify.col.detail", "Detail"),
     // the API's error messages and hints
@@ -183,7 +230,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "error.too_large.raw_hint",
-        "This server does not serve files that large; ask the operator.",
+        "This server does not serve files that large; ask the person who runs this server.",
     ),
     msg(
         "error.internal.message",
@@ -204,7 +251,7 @@ pub const CATALOG: &[Entry] = &[
     msg("page.csrf.heading", "The request was not accepted"),
     msg(
         "page.csrf.body",
-        "The form could not be checked, so nothing was done.",
+        "The form could not be confirmed as yours, so nothing was done. Go back, reload the page and try again.",
     ),
     msg(
         "page.form_incomplete.title",
@@ -213,7 +260,7 @@ pub const CATALOG: &[Entry] = &[
     msg("page.form_incomplete.heading", "The form was incomplete"),
     msg(
         "page.form_incomplete.body",
-        "Some required fields were missing, so nothing was done.",
+        "Some fields were empty, so nothing was done. Go back and fill them in.",
     ),
     msg(
         "page.sso_off.title",
@@ -222,7 +269,7 @@ pub const CATALOG: &[Entry] = &[
     msg("page.sso_off.heading", "Single sign-on is not set up"),
     msg(
         "page.sso_off.body",
-        "This server has no single sign-on provider configured.",
+        "This server has no single sign-on provider configured. Try signing in with your username instead.",
     ),
     msg(
         "page.sso_down.title",
@@ -234,7 +281,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "page.sso_down.body",
-        "The sign-in provider could not be reached.",
+        "The sign-in provider could not be reached. Try signing in with your username instead.",
     ),
     msg(
         "page.sso_incomplete.title",
@@ -246,7 +293,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "page.sso_incomplete.body",
-        "The sign-in provider's reply was incomplete.",
+        "The sign-in provider's reply was incomplete. Try signing in with your username instead.",
     ),
     msg(
         "page.sso_mismatch.title",
@@ -255,7 +302,7 @@ pub const CATALOG: &[Entry] = &[
     msg("page.sso_mismatch.heading", "The sign-in did not match"),
     msg(
         "page.sso_mismatch.body",
-        "The sign-in could not be matched to the request that started it.",
+        "The sign-in could not be matched to the request that started it. Try signing in with your username instead.",
     ),
     msg(
         "page.sso_expired.title",
@@ -264,7 +311,7 @@ pub const CATALOG: &[Entry] = &[
     msg("page.sso_expired.heading", "The sign-in has expired"),
     msg(
         "page.sso_expired.body",
-        "The sign-in took too long and has expired.",
+        "The sign-in took too long and has expired. Try signing in with your username instead.",
     ),
     msg(
         "page.sso_refused.title",
@@ -273,7 +320,7 @@ pub const CATALOG: &[Entry] = &[
     msg("page.sso_refused.heading", "The sign-in was not accepted"),
     msg(
         "page.sso_refused.body",
-        "The sign-in provider did not accept the sign-in.",
+        "The sign-in provider did not accept the sign-in. Try signing in with your username instead.",
     ),
     msg(
         "page.sso_unlinked.title",
@@ -282,7 +329,7 @@ pub const CATALOG: &[Entry] = &[
     msg("page.sso_unlinked.heading", "This account is not linked"),
     msg(
         "page.sso_unlinked.body",
-        "This single sign-on identity is not linked to a planeter account.",
+        "This single sign-on identity is not linked to a planeter account. Ask the person who runs this server.",
     ),
     msg(
         "page.server_error.title",
@@ -291,6 +338,6 @@ pub const CATALOG: &[Entry] = &[
     msg("page.server_error.heading", "Something went wrong"),
     msg(
         "page.server_error.body",
-        "The server could not complete the sign-in.",
+        "Something went wrong on the server, and you were not signed in. Try again in a little while.",
     ),
 ];

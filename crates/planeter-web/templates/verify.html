@@ -3,8 +3,14 @@
 {% block nav %}{% include "repo_nav.html" %}{% endblock %}
 {% block body %}
 <h1>{{ t.get(Key::VerifyHeading) }} <span class="badge {{ assurance_class }}">{{ t.get(*assurance_label) }}</span></h1>
-<p class="muted">{{ t.msg(Key::VerifyIntro).code("command", t.verify_command()).html() }} {{ t.msg(Key::VerifySessions).with("verified", verified_sessions).n(*total_sessions) }}</p>
-{% for c in failed %}<p class="badge bad">{{ c }}</p>{% endfor %}
+{% include "explain.html" %}
+<p class="muted">{{ t.get(Key::VerifyIntro) }} {{ t.msg(Key::VerifySessions).with("verified", verified_sessions).n(*total_sessions) }}</p>
+{% if !failed.is_empty() %}
+<h2>{{ t.get(Key::VerifyFindings) }}</h2>
+<ul>
+{% for f in failed %}<li><code>{{ f.id }}</code> {{ f.message }}</li>{% endfor %}
+</ul>
+{% endif %}
 <table>
 <caption class="visually-hidden">{{ t.get(Key::VerifyHeading) }}</caption>
 <thead><tr><th scope="col">{{ t.get(Key::VerifyColStage) }}</th><th scope="col">{{ t.get(Key::VerifyColStatus) }}</th><th scope="col">{{ t.get(Key::VerifyColDetail) }}</th></tr></thead>

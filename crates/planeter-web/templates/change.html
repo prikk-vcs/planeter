@@ -3,6 +3,7 @@
 {% block nav %}{% include "repo_nav.html" %}{% endblock %}
 {% block body %}
 <h1>{{ t.msg(Key::ChangeHeading).code("target", target).html() }}</h1>
+{% include "explain.html" %}
 {% for p in patches %}
 <h2>{{ t.msg(Key::ChangePatch).code("id", p.short_id).html() }} <span class="badge {{ p.assurance_class }}">{{ t.get(*p.assurance_label) }}</span></h2>
 <table>

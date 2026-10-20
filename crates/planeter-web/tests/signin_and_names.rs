@@ -138,7 +138,7 @@ async fn a_failed_sign_in_is_an_alert_tied_to_the_form_and_a_fresh_form_has_none
     assert_eq!(failed.status, StatusCode::UNAUTHORIZED);
     assert!(
         failed.body.contains(
-            "<p id=\"login-error\" class=\"badge bad\" role=\"alert\">Sign-in failed.</p>"
+            "<p id=\"login-error\" class=\"badge bad\" role=\"alert\">The username or password was not correct. Check both and try again.</p>"
         ),
         "{}",
         failed.body
@@ -153,7 +153,7 @@ async fn a_failed_sign_in_is_an_alert_tied_to_the_form_and_a_fresh_form_has_none
     // The fields keep their autofill hints and their visible labels.
     assert!(failed.body.contains("autocomplete=\"username\""));
     assert!(failed.body.contains("autocomplete=\"current-password\""));
-    assert!(failed.body.contains("<label>User <input"));
+    assert!(failed.body.contains("<label>Username <input"));
     assert!(failed.body.contains("<label>Password <input"));
 }
 
@@ -205,7 +205,11 @@ async fn a_locked_account_gets_its_own_message_and_a_locked_unknown_name_gets_ex
     assert_eq!(wrong_existing.status, wrong_unknown.status);
     assert_eq!(wrong_existing.headers, wrong_unknown.headers);
     assert_eq!(wrong_existing.body, wrong_unknown.body);
-    assert!(wrong_existing.body.contains(">Sign-in failed.</p>"));
+    assert!(
+        wrong_existing
+            .body
+            .contains(">The username or password was not correct. Check both and try again.</p>")
+    );
     assert!(!wrong_existing.body.contains("Too many sign-in attempts"));
     assert_ne!(wrong_existing.body, existing.body);
 
@@ -359,7 +363,7 @@ async fn with_no_display_name_the_account_id_alone_is_shown() {
     let r = send(&a.router, get("/", None)).await;
     assert!(
         r.body
-            .contains("<div class=\"who\"><a href=\"/login\">sign in</a></div>"),
+            .contains("<div class=\"who\"><a href=\"/login\">Sign in</a></div>"),
         "{}",
         r.body
     );

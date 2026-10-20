@@ -179,7 +179,7 @@ async fn a_failed_verification_is_unverified_with_its_conditions_never_an_outage
     // The control: an intact repository is verified, on every surface.
     let (s, page) = get(&r, "/alice/good/verify").await;
     assert_eq!(s, StatusCode::OK, "{page}");
-    assert!(page.contains("badge ok\">prikk-verified<"), "{page}");
+    assert!(page.contains("badge ok\">Verified<"), "{page}");
     let (s, body) = get(&r, "/api/v1/repos/alice/good/verify").await;
     assert_eq!(s, StatusCode::OK);
     assert!(body.contains("\"ok\":true"), "{body}");
@@ -188,29 +188,35 @@ async fn a_failed_verification_is_unverified_with_its_conditions_never_an_outage
         // The verify page: 200, unverified, the conditions listed, no outage wording.
         let (s, page) = get(&r, &format!("/alice/{name}/verify")).await;
         assert_eq!(s, StatusCode::OK, "{name}: {page}");
-        assert!(page.contains("badge bad\">unverified<"), "{name}: {page}");
+        assert!(
+            page.contains("badge bad\">Verification failed<"),
+            "{name}: {page}"
+        );
         assert!(
             page.contains(condition),
             "{name}: {condition} missing: {page}"
         );
         assert!(!page.contains("Temporarily unavailable"), "{name}: {page}");
-        assert!(!page.contains("prikk-verified"), "{name}: {page}");
+        assert!(!page.contains("badge ok"), "{name}: {page}");
 
         // The repository and history pages. For the trust-policy damage the listing and the log still read, so
-        // the badge is the only thing that was wrong: it must say unverified, not "verify unavailable". For
+        // the badge is the only thing that was wrong: it must say unverified, not "could not be checked now". For
         // damaged patch or block objects `tree` and `log` themselves fail (the pages are a real outage, which
         // is the honest answer for pages whose content cannot be read): the one thing they must never do is
         // say the repository is verified.
         for page_uri in [format!("/alice/{name}"), format!("/alice/{name}/history")] {
             let (s, page) = get(&r, &page_uri).await;
-            assert!(!page.contains("prikk-verified"), "{page_uri}: {page}");
+            assert!(!page.contains("badge ok"), "{page_uri}: {page}");
             if name == "policy" {
                 assert_eq!(s, StatusCode::OK, "{page_uri}: {page}");
                 assert!(
-                    page.contains("badge bad\">unverified<"),
+                    page.contains("badge bad\">Verification failed<"),
                     "{page_uri}: {page}"
                 );
-                assert!(!page.contains("verify unavailable"), "{page_uri}: {page}");
+                assert!(
+                    !page.contains("Could not be checked now"),
+                    "{page_uri}: {page}"
+                );
             }
         }
 

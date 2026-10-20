@@ -393,6 +393,10 @@ pub struct StageView {
     /// `evaluated` | `failed` | `not_evaluated` | `halted`.
     pub status: String,
     pub detail: Option<String>,
+    /// For a `not_evaluated` stage: the id of the stage that blocked it, as data (RFC 012 D-4). Absent from
+    /// the JSON otherwise. `detail` keeps its English text unchanged for existing API readers.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub blocked_by: Option<String>,
 }
 
 impl VerifyView {
@@ -434,21 +438,25 @@ fn stage_view(s: &model::Stage) -> StageView {
             stage: stage.clone(),
             status: "evaluated".into(),
             detail: None,
+            blocked_by: None,
         },
         model::Stage::Failed { stage, message } => StageView {
             stage: stage.clone(),
             status: "failed".into(),
             detail: Some(message.clone()),
+            blocked_by: None,
         },
         model::Stage::NotEvaluated { stage, blocked_by } => StageView {
             stage: stage.clone(),
             status: "not_evaluated".into(),
             detail: Some(format!("blocked by {blocked_by}")),
+            blocked_by: Some(blocked_by.clone()),
         },
         model::Stage::Halted { stage, after } => StageView {
             stage: stage.clone(),
             status: "halted".into(),
             detail: Some(format!("after {after}")),
+            blocked_by: None,
         },
     }
 }
@@ -808,6 +816,34 @@ mod tests {
             VerifyView::from_verify(&bad).assurance(),
             Assurance::Unverified
         );
+    }
+
+    #[test]
+    fn only_a_blocked_stage_carries_the_blocker_and_the_english_detail_is_unchanged() {
+        let report: model::VerifyReport = serde_json::from_str(
+            r#"{"schema_version":"verify-report-v1","verdict":{"ok":false,
+                "failed_conditions":[]},
+                "active_sessions":{"count":0,"verified_count":0},"stages":[
+                {"stage":"a","status":"evaluated"},
+                {"stage":"b","status":"failed","message":"boom"},
+                {"stage":"c","status":"not_evaluated","blocked_by":"b"},
+                {"stage":"d","status":"halted","after":"b"}]}"#,
+        )
+        .unwrap();
+        let v = VerifyView::from_verify(&report);
+        let blockers: Vec<Option<&str>> =
+            v.stages.iter().map(|s| s.blocked_by.as_deref()).collect();
+        assert_eq!(blockers, [None, None, Some("b"), None]);
+        assert_eq!(v.stages[2].detail.as_deref(), Some("blocked by b"));
+        assert_eq!(v.stages[3].detail.as_deref(), Some("after b"));
+        // In the JSON the field is absent, not null, when there is no blocker.
+        let json = serde_json::to_value(&v).unwrap();
+        let stages = json["stages"].as_array().unwrap();
+        for (i, has) in [false, false, true, false].into_iter().enumerate() {
+            assert_eq!(stages[i].get("blocked_by").is_some(), has, "{}", stages[i]);
+            assert!(stages[i].get("detail").is_some(), "detail is always there");
+        }
+        assert_eq!(stages[2]["blocked_by"], "b");
     }
 
     // -- the T6 authorization gate (no prikk: deny returns before opening prikk) --

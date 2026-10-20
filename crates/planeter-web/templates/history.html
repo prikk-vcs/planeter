@@ -3,6 +3,7 @@
 {% block nav %}{% include "repo_nav.html" %}{% endblock %}
 {% block body %}
 <h1>{{ t.msg(Key::HistoryHeading).muted("ref", ref_name).html() }} <span class="badge {{ assurance_class }}">{{ t.get(*assurance_label) }}</span></h1>
+{% include "explain.html" %}
 {% if entries.is_empty() %}
 <p class="muted">{{ t.get(Key::HistoryEmpty) }}</p>
 {% else %}

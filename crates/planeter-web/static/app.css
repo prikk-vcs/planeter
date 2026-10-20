@@ -22,6 +22,8 @@ header a,nav.repo a,th a,td a,.crumbs a,main > p > a{display:inline-block;min-he
 h1,h2,td,th,.name,.crumbs,.readme{overflow-wrap:anywhere}pre code{overflow-wrap:normal}
 th a,td a,.crumbs a{unicode-bidi:plaintext}
 .readme img{max-width:100%;height:auto}
+/* plain words (RFC 012 D-4): the in-place explanations are native <details>, no script */
+details.explain{margin-block:.5rem}details.explain summary{cursor:pointer;min-height:24px;min-width:24px;padding-block:.15rem}details.explain p{margin-block:.4rem;overflow-wrap:anywhere}
 @media (forced-colors:active){
 .badge{border:1px solid CanvasText}.skip-link{border:1px solid CanvasText}
 :focus-visible{outline:2px solid Highlight}
