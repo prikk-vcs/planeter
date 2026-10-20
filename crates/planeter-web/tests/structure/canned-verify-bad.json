@@ -1,0 +1,31 @@
+{
+  "schema_version": "verify-report-v1",
+  "verdict": {
+    "ok": false,
+    "failed_conditions": [
+      {"id": "stage-failure", "message": "repository verification did not complete every stage; see stage outcomes above"},
+      {"id": "item-failure", "message": "repository verification found at least one failed object, block, or ref; see item outcomes above"},
+      {"id": "publication-trust", "message": "repository has publication-trust issues"}
+    ]
+  },
+  "active_sessions": {"count": 1, "verified_count": 1},
+  "stages": [
+    {"stage": "objects", "status": "failed", "message": "integrity error: trust policy container has a damaged entry; run doctor for diagnosis (nothing is repaired automatically)"},
+    {"stage": "refs", "status": "evaluated"},
+    {"stage": "ref-update-schema-trust", "status": "evaluated"},
+    {"stage": "wal-replay", "status": "evaluated"},
+    {"stage": "wal-persistence", "status": "evaluated"},
+    {"stage": "rollback-drafts", "status": "evaluated"},
+    {"stage": "wal-record-schema", "status": "evaluated"},
+    {"stage": "active-wal-metadata", "status": "evaluated"},
+    {"stage": "commit-witness", "status": "evaluated"},
+    {"stage": "publication-reclassification", "status": "evaluated"},
+    {"stage": "commit-index", "status": "evaluated"},
+    {"stage": "lifecycle-cache", "status": "evaluated"},
+    {"stage": "wal-ordering", "status": "evaluated"},
+    {"stage": "received-refs", "status": "evaluated"},
+    {"stage": "local-tag-trust", "status": "evaluated"},
+    {"stage": "object-connectivity", "status": "evaluated"},
+    {"stage": "appended-file-tails", "status": "evaluated"}
+  ]
+}

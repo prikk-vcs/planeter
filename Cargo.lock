@@ -1222,6 +1222,7 @@ dependencies = [
  "ammonia",
  "askama",
  "axum",
+ "html5ever",
  "jsonwebtoken",
  "planeter-auth",
  "planeter-core",

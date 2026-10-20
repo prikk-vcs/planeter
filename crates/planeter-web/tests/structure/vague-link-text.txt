@@ -1,0 +1,15 @@
+# Link text that says nothing out of context (WCAG 2.4.4). One entry per line, compared case-insensitively
+# with the link's whole text. Reviewed like code: a line added here is a decision.
+here
+click here
+more
+read more
+link
+this
+that
+details
+go
+raw
+download
+open
+view
