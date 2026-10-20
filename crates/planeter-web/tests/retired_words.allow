@@ -1,0 +1,10 @@
+# The allowlist of tests/retired_words.rs (RFC 012 D-4): a user-facing message may not use a word the plain-word
+# rewrite retired, except where the word is not ours to change. Reviewed like code: a line added here is a decision.
+#
+# key :: term :: reason
+#   key     the message key (for example `verify.intro`)
+#   term    the retired word or label the message is allowed to contain
+#   reason  why it is legitimate (data owned by prikk, the name of a command in operator text, ...)
+#
+# An entry that no message needs any more fails the test, so this file cannot collect dead lines. It is empty
+# today: no message of the English catalog uses a retired word.

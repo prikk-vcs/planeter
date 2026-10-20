@@ -1,0 +1,231 @@
+//! RFC 012 D-4, T4: the words the plain-word rewrite retired do not come back. A user-facing message of any
+//! shipped language must not contain them, except for the entries of `tests/retired_words.allow` (each with a
+//! reason). The check is shown able to fail below (planted cases); the review request lists the source
+//! mutation that was applied and restored.
+
+use std::path::PathBuf;
+
+use planeter_web::catalog::{Dir, Entry, LangDef, Plural, shipped};
+
+/// Words that may not appear in a message at all (matched as whole words, ignoring case).
+const WORDS: &[&str] = &[
+    "unsealed",
+    "forge-approved",
+    "prikk-verified",
+    "not_evaluated",
+    "evaluated",
+    "refs",
+    "SSO",
+];
+/// Old navigation words that may not be a whole message (a label); `Verification` and `error code` are fine.
+const LABELS: &[&str] = &["code", "history", "verify"];
+
+#[derive(Debug, PartialEq, Eq)]
+struct Allowed {
+    key: String,
+    term: String,
+}
+
+fn parse_allow(src: &str) -> Result<Vec<Allowed>, String> {
+    let mut out = Vec::new();
+    for line in src.lines().map(str::trim) {
+        if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let parts: Vec<&str> = line.splitn(3, " :: ").collect();
+        if parts.len() != 3 || parts.iter().any(|p| p.trim().is_empty()) {
+            return Err(format!("needs key :: term :: reason: {line}"));
+        }
+        out.push(Allowed {
+            key: parts[0].trim().to_owned(),
+            term: parts[1].trim().to_owned(),
+        });
+    }
+    Ok(out)
+}
+
+/// The text without its `{placeholders}` (their names are code, not words).
+fn without_placeholders(text: &str) -> String {
+    let mut out = String::new();
+    let mut depth = 0;
+    for c in text.chars() {
+        match c {
+            '{' => depth += 1,
+            '}' if depth > 0 => depth -= 1,
+            c if depth == 0 => out.push(c),
+            _ => {}
+        }
+    }
+    out
+}
+
+fn contains_word(text: &str, word: &str) -> bool {
+    let (text, word) = (text.to_lowercase(), word.to_lowercase());
+    let is_word_char = |c: char| c.is_alphanumeric() || c == '_';
+    text.match_indices(&word).any(|(at, _)| {
+        let before = text[..at].chars().next_back();
+        let after = text[at + word.len()..].chars().next();
+        !before.is_some_and(is_word_char) && !after.is_some_and(is_word_char)
+    })
+}
+
+/// The retired terms one message form uses.
+fn terms_in(text: &str) -> Vec<&'static str> {
+    let text = without_placeholders(text);
+    let mut out: Vec<&'static str> = WORDS
+        .iter()
+        .copied()
+        .filter(|w| contains_word(&text, w))
+        .collect();
+    out.extend(LABELS.iter().copied().filter(|l| text.trim() == *l));
+    out
+}
+
+/// (problems, stale allowlist entries) for the given languages.
+fn check(langs: &[&LangDef], allow: &[Allowed]) -> (Vec<String>, Vec<String>) {
+    let mut problems = Vec::new();
+    let mut used = vec![false; allow.len()];
+    for lang in langs {
+        for e in lang.entries {
+            let mut seen: Vec<&str> = Vec::new();
+            for form in [e.one, e.other] {
+                for term in terms_in(form) {
+                    if seen.contains(&term) {
+                        continue;
+                    }
+                    seen.push(term);
+                    match allow.iter().position(|a| a.key == e.key && a.term == term) {
+                        Some(i) => used[i] = true,
+                        None => problems.push(format!(
+                            "{} `{}` uses the retired {term:?}: {form:?}",
+                            lang.tag, e.key
+                        )),
+                    }
+                }
+            }
+        }
+    }
+    let stale = allow
+        .iter()
+        .zip(used)
+        .filter(|(_, u)| !u)
+        .map(|(a, _)| {
+            format!(
+                "`{}` :: {:?} is allowed but no message uses it",
+                a.key, a.term
+            )
+        })
+        .collect();
+    (problems, stale)
+}
+
+fn planted(entries: Vec<Entry>) -> &'static LangDef {
+    fn one_other(n: u64) -> Plural {
+        if n == 1 { Plural::One } else { Plural::Other }
+    }
+    Box::leak(Box::new(LangDef {
+        tag: "planted",
+        endonym: "planted",
+        dir: Dir::Ltr,
+        plural: one_other,
+        group_separator: ',',
+        decimal_separator: '.',
+        entries: Box::leak(entries.into_boxed_slice()),
+    }))
+}
+
+fn message(key: &'static str, text: &'static str) -> Entry {
+    Entry {
+        key,
+        one: text,
+        other: text,
+    }
+}
+
+fn allow_file() -> String {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/retired_words.allow");
+    std::fs::read_to_string(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display()))
+}
+
+#[test]
+fn no_shipped_message_uses_a_retired_word_and_the_allowlist_has_no_dead_lines() {
+    let allow = parse_allow(&allow_file()).unwrap();
+    let (problems, stale) = check(shipped(), &allow);
+    assert_eq!(problems, Vec::<String>::new());
+    assert_eq!(stale, Vec::<String>::new());
+}
+
+#[test]
+fn every_retired_word_is_found_wherever_it_hides() {
+    for (text, term) in [
+        ("There are no unsealed changes.", "unsealed"),
+        ("Unsealed work", "unsealed"),
+        ("forge-approved, unsealed", "forge-approved"),
+        ("prikk-verified", "prikk-verified"),
+        ("The stage is not_evaluated.", "not_evaluated"),
+        ("evaluated", "evaluated"),
+        ("Show refs · {repo}", "refs"),
+        ("Sign in with SSO", "SSO"),
+        ("sign in with sso", "SSO"),
+        // a whole message that is an old navigation label
+        ("code", "code"),
+        ("history", "history"),
+        ("verify", "verify"),
+    ] {
+        let l = planted(vec![message("planted.key", text)]);
+        let (problems, _) = check(&[l], &[]);
+        assert!(
+            problems.iter().any(|p| p.contains(&format!("{term:?}"))),
+            "{text:?} should be found as {term:?}: {problems:?}"
+        );
+    }
+    // Hidden in the other plural form only.
+    let l = planted(vec![Entry {
+        key: "planted.count",
+        one: "{count} change",
+        other: "{count} unsealed changes",
+    }]);
+    assert_eq!(check(&[l], &[]).0.len(), 1);
+}
+
+#[test]
+fn ordinary_words_and_placeholders_are_not_mistaken_for_retired_ones() {
+    for text in [
+        "History",
+        "Verification",
+        "Files",
+        "Branches and tags",
+        "The error code is shown.",
+        "Use {refs} here",
+        "Your prefs are saved.",
+        "Sign in with single sign-on",
+        "The checks were reevaluated by hand",
+        "This history is empty.",
+    ] {
+        let l = planted(vec![message("planted.key", text)]);
+        let (problems, _) = check(&[l], &[]);
+        // A whole-word match, not a substring match ("reevaluated", "prefs"), and placeholder names are code.
+        assert_eq!(problems, Vec::<String>::new(), "{text:?}");
+    }
+}
+
+#[test]
+fn an_allowlist_entry_silences_exactly_its_message_and_term_and_a_dead_one_fails() {
+    let l = planted(vec![
+        message("planted.a", "The command is prikk-verified."),
+        message("planted.b", "Also prikk-verified."),
+    ]);
+    let allow =
+        parse_allow("planted.a :: prikk-verified :: the name of prikk's own data\n").unwrap();
+    let (problems, stale) = check(&[l], &allow);
+    assert_eq!(problems.len(), 1, "{problems:?}");
+    assert!(problems[0].contains("planted.b"));
+    assert!(stale.is_empty());
+    // An entry nothing needs.
+    let allow = parse_allow("planted.zzz :: refs :: gone\n").unwrap();
+    let (_, stale) = check(&[planted(vec![message("planted.ok", "Fine.")])], &allow);
+    assert_eq!(stale.len(), 1, "{stale:?}");
+    // An entry without a reason is refused.
+    assert!(parse_allow("planted.a :: refs\n").is_err());
+    assert!(parse_allow("planted.a :: refs :: \n").is_err());
+}
