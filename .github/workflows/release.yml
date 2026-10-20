@@ -182,27 +182,123 @@ jobs:
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-path: rehearsal/*.tar.gz
-      # REHEARSAL ONLY: what the runner's docker offers natively (RFC 010 D-11 asks whether the arm runner
-      # can build its own architecture without QEMU). Read-only; prints, builds nothing that is kept.
-      - name: Measure docker on this runner (rehearsal)
-        if: inputs.mode == 'rehearsal'
-        run: |
-          uname -m
-          docker version
-          docker buildx version
-          docker buildx ls
-          arch="$(dpkg --print-architecture)"
-          printf 'FROM scratch\nLABEL measured=native\n' | docker buildx build --platform "linux/${arch}" -f - . && echo "native buildx build for linux/${arch}: OK"
-
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: planeter-${{ matrix.target }}
           path: dist/*
           if-no-files-found: error
 
-  container:
-    name: container image (ghcr.io, linux/amd64 + linux/arm64)
+  # The container image (RFC 010 D-11): each architecture is built NATIVELY on its own runner (no QEMU, no
+  # `docker/*` action) by a `docker-container` buildx builder whose BuildKit image is pinned by digest
+  # (moby/buildkit v0.33.1, the build `docker/setup-buildx-action` pulled as `buildx-stable-1` before this
+  # change). Each architecture is pushed BY DIGEST, with BuildKit's provenance (`mode=max`, as before), and a
+  # later job joins the two into one manifest list with `docker buildx imagetools create`, tags it, and
+  # attests the manifest list's digest. No per-architecture tag is ever written to a package.
+  #
+  # Which package a step writes is decided by its own `if`, and `planeter-pin-check` enforces it: the steps
+  # that name `ghcr.io/prikk-vcs/planeter` run on a tag push only; the steps that name the rehearsal package
+  # run in a rehearsal only; a dry run builds without a push. The registry login pipes the job token on
+  # standard input.
+  image:
+    name: image (${{ matrix.arch }}, native)
     needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: x86_64-unknown-linux-gnu
+            os: ubuntu-24.04
+            arch: amd64
+          - target: aarch64-unknown-linux-gnu
+            os: ubuntu-24.04-arm
+            arch: arm64
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Only this architecture's planeter build artifact (the prebuilt, attested binary; the image never compiles).
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: planeter-${{ matrix.target }}
+          path: dist
+      - name: Stage the binary for the Dockerfile
+        env:
+          TARGET: ${{ matrix.target }}
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          mkdir -p "ctx/${ARCH}"
+          tar -xzf "dist/planeter-${TARGET}.tar.gz" -C "ctx/${ARCH}" planeter
+      - name: BuildKit builder (docker-container; image pinned by digest, D-9 record in the review request)
+        run: |
+          set -euo pipefail
+          docker buildx create --name planeter-builder --driver docker-container --driver-opt image=moby/buildkit@sha256:cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea --use
+          docker buildx inspect --bootstrap planeter-builder
+      # A dry run builds the image for this architecture and discards it: no login, no push, no tag.
+      - name: Build image (dry run)
+        if: inputs.mode == 'dry-run'
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          docker buildx build --builder planeter-builder --platform "linux/${ARCH}" --file Dockerfile \
+            --build-arg "PRIKK_VERSION=${PRIKK_VERSION}" --output type=cacheonly .
+      # The real publish: only a tag push.
+      - name: Log in to ghcr
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Build and push by digest
+        if: github.event_name == 'push'
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          docker buildx build --builder planeter-builder --platform "linux/${ARCH}" --file Dockerfile \
+            --build-arg "PRIKK_VERSION=${PRIKK_VERSION}" \
+            --provenance "mode=max,builder-id=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}" \
+            --output "type=image,name=ghcr.io/prikk-vcs/planeter,push-by-digest=true,name-canonical=true,push=true" \
+            --metadata-file meta.json .
+          mkdir -p digest
+          jq -er '."containerimage.digest"' meta.json > "digest/${ARCH}"
+          grep -Eqx 'sha256:[0-9a-f]{64}' "digest/${ARCH}"
+          cat "digest/${ARCH}"
+      # REHEARSAL ONLY (RFC 010 D-10): the same, to the throwaway package.
+      - name: Log in to ghcr (rehearsal)
+        if: inputs.mode == 'rehearsal'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Build and push by digest (rehearsal)
+        if: inputs.mode == 'rehearsal'
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          docker buildx build --builder planeter-builder --platform "linux/${ARCH}" --file Dockerfile \
+            --build-arg "PRIKK_VERSION=${PRIKK_VERSION}" \
+            --provenance "mode=max,builder-id=${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/attempts/${GITHUB_RUN_ATTEMPT}" \
+            --output "type=image,name=ghcr.io/prikk-vcs/planeter-rehearsal,push-by-digest=true,name-canonical=true,push=true" \
+            --metadata-file meta.json .
+          mkdir -p digest
+          jq -er '."containerimage.digest"' meta.json > "digest/${ARCH}"
+          grep -Eqx 'sha256:[0-9a-f]{64}' "digest/${ARCH}"
+          cat "digest/${ARCH}"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: image-digest-${{ matrix.arch }}
+          path: digest/*
+          if-no-files-found: ignore
+
+  # The real manifest list: only a tag push. Joins the two architectures' digests, tags `<tag>` and `latest`,
+  # and attests the manifest list.
+  image-publish:
+    name: image manifest list + attestation (ghcr.io/prikk-vcs/planeter)
+    if: github.event_name == 'push'
+    needs: image
     runs-on: ubuntu-24.04
     permissions:
       contents: read
@@ -210,109 +306,91 @@ jobs:
       id-token: write
       attestations: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # Only the planeter build artifacts: docker/build-push-action also uploads a `*.dockerbuild`
-      # build-record artifact, and an unfiltered download of it failed the first 0.1.0 publish attempt.
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          pattern: planeter-*
-          path: dist
+          pattern: image-digest-*
+          path: digest
           merge-multiple: true
-      # The image copies the prebuilt, attested binaries in; it never compiles (no QEMU-emulated Rust).
-      - name: Stage binaries per architecture
-        run: |
-          mkdir -p ctx/amd64 ctx/arm64
-          tar -xzf dist/planeter-x86_64-unknown-linux-gnu.tar.gz -C ctx/amd64 planeter
-          tar -xzf dist/planeter-aarch64-unknown-linux-gnu.tar.gz -C ctx/arm64 planeter
-      - uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3.7.0
-      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
-      - uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
-        if: github.event_name == 'push'
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      # A dry run builds the image for both platforms and discards it: no login, no push, no tag.
-      - name: Build image (dry run)
-        if: inputs.mode == 'dry-run'
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
-        with:
-          context: .
-          file: Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: false
-          build-args: PRIKK_VERSION=${{ env.PRIKK_VERSION }}
-      # REHEARSAL ONLY (RFC 010 D-10): the same build, logged in and pushed to the throwaway package and
-      # nowhere else. One tag, overwritten each run. These steps name the rehearsal package only; the real
-      # image is named by the push-only steps below (`planeter-pin-check` enforces both).
-      - name: Log in to ghcr (rehearsal)
-        if: inputs.mode == 'rehearsal'
-        uses: docker/login-action@c94ce9fb468520275223c153574b00df6fe4bcc9 # v3.7.0
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build and push (rehearsal)
-        id: rehearsal_push
-        if: inputs.mode == 'rehearsal'
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
-        with:
-          context: .
-          file: Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: true
-          build-args: PRIKK_VERSION=${{ env.PRIKK_VERSION }}
-          tags: ghcr.io/prikk-vcs/planeter-rehearsal:rehearsal
-      - name: Attest rehearsal image provenance
-        if: inputs.mode == 'rehearsal'
-        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
-        with:
-          subject-name: ghcr.io/prikk-vcs/planeter-rehearsal
-          subject-digest: ${{ steps.rehearsal_push.outputs.digest }}
-          push-to-registry: true
-          create-storage-record: false
-      # Measured, not designed: did the job token create the package, and what are its visibility and its
-      # link to the repository. A failure of this step is a finding, not a failure of the rehearsal.
-      - name: Read the rehearsal package (rehearsal)
-        if: inputs.mode == 'rehearsal'
+      - name: Log in to ghcr
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Join the architectures into one manifest list
+        id: manifest
+        env:
+          TAG: ${{ github.ref_name }}
         run: |
-          gh api /orgs/prikk-vcs/packages/container/planeter-rehearsal --jq '{name, visibility, html_url, repository: .repository.full_name, created_at, updated_at}' || echo "package read failed: $?"
-      # The real publish: only a tag push.
-      - name: Build and push
-        id: push
-        if: github.event_name == 'push'
-        uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
-        with:
-          context: .
-          file: Dockerfile
-          platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name == 'push' }}
-          build-args: PRIKK_VERSION=${{ env.PRIKK_VERSION }}
-          tags: |
-            ghcr.io/prikk-vcs/planeter:${{ github.ref_name }}
-            ghcr.io/prikk-vcs/planeter:latest
+          set -euo pipefail
+          amd64="$(cat digest/amd64)"; arm64="$(cat digest/arm64)"
+          printf '%s\n%s\n' "$amd64" "$arm64" | grep -Ecx 'sha256:[0-9a-f]{64}' | grep -qx 2
+          docker buildx imagetools create \
+            --tag "ghcr.io/prikk-vcs/planeter:${TAG}" --tag ghcr.io/prikk-vcs/planeter:latest \
+            "ghcr.io/prikk-vcs/planeter@${amd64}" "ghcr.io/prikk-vcs/planeter@${arm64}"
+          docker buildx imagetools inspect "ghcr.io/prikk-vcs/planeter:${TAG}"
+          list="$(docker buildx imagetools inspect "ghcr.io/prikk-vcs/planeter:${TAG}" --format '{{json .Manifest}}' | jq -er .digest)"
+          printf '%s\n' "$list" | grep -Eqx 'sha256:[0-9a-f]{64}'
+          echo "digest=${list}" >> "$GITHUB_OUTPUT"
       - name: Attest image provenance
-        if: github.event_name == 'push'
         uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
         with:
           subject-name: ghcr.io/prikk-vcs/planeter
-          subject-digest: ${{ steps.push.outputs.digest }}
+          subject-digest: ${{ steps.manifest.outputs.digest }}
+          push-to-registry: true
+          create-storage-record: false
+
+  # REHEARSAL ONLY (RFC 010 D-10): the same, to the throwaway package; one tag, overwritten each run.
+  image-rehearsal:
+    name: image manifest list + attestation (rehearsal package)
+    if: inputs.mode == 'rehearsal'
+    needs: image
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      packages: write
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: image-digest-*
+          path: digest
+          merge-multiple: true
+      - name: Log in to ghcr (rehearsal)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Join the architectures into one manifest list (rehearsal)
+        id: manifest
+        run: |
+          set -euo pipefail
+          amd64="$(cat digest/amd64)"; arm64="$(cat digest/arm64)"
+          printf '%s\n%s\n' "$amd64" "$arm64" | grep -Ecx 'sha256:[0-9a-f]{64}' | grep -qx 2
+          docker buildx imagetools create \
+            --tag ghcr.io/prikk-vcs/planeter-rehearsal:rehearsal \
+            "ghcr.io/prikk-vcs/planeter-rehearsal@${amd64}" "ghcr.io/prikk-vcs/planeter-rehearsal@${arm64}"
+          docker buildx imagetools inspect ghcr.io/prikk-vcs/planeter-rehearsal:rehearsal
+          list="$(docker buildx imagetools inspect ghcr.io/prikk-vcs/planeter-rehearsal:rehearsal --format '{{json .Manifest}}' | jq -er .digest)"
+          printf '%s\n' "$list" | grep -Eqx 'sha256:[0-9a-f]{64}'
+          echo "digest=${list}" >> "$GITHUB_OUTPUT"
+      - name: Attest rehearsal image provenance
+        uses: actions/attest@1e69f48acb82d1966a394da916b4c1698aa569d6 # v4.2.2
+        with:
+          subject-name: ghcr.io/prikk-vcs/planeter-rehearsal
+          subject-digest: ${{ steps.manifest.outputs.digest }}
           push-to-registry: true
           create-storage-record: false
 
   publish:
     name: publish release assets
     if: github.event_name == 'push'
-    needs: [build, container]
+    needs: [build, image-publish]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      # Only the planeter build artifacts: docker/build-push-action also uploads a `*.dockerbuild`
-      # build-record artifact, and an unfiltered download of it failed the first 0.1.0 publish attempt.
+      # Only the planeter build artifacts (a name filter keeps any other artifact, such as a BuildKit build
+      # record, out of the release; an unfiltered download of one failed the first 0.1.0 publish attempt).
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: planeter-*
