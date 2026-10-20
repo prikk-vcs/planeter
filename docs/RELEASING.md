@@ -55,9 +55,9 @@ attestations, and the notes assembled from a tag's CHANGELOG section — that is
 
 ## Rehearsal (RFC 010 D-10)
 
-`gh workflow run release.yml --ref main -f mode=rehearsal` runs everything the dry run does, **and then
-exercises the steps a dry run cannot**: it logs in to ghcr, pushes the image and attests it, and attests the
-tarballs. It does so against a throwaway target only:
+`gh workflow run release.yml --ref main -f mode=rehearsal` runs the gates and the builds, **and then
+exercises the steps a dry run cannot**: it logs in to ghcr, pushes the image (by digest per architecture, then
+the joined manifest list) and attests it, and attests the tarballs. It does so against a throwaway target only:
 
 | it writes | where |
 |---|---|
@@ -69,12 +69,14 @@ It never creates a GitHub release or a tag, never runs the `publish` job, never 
 `ghcr.io/prikk-vcs/planeter` (any tag, `latest` included) and never touches crates.io. This is structural, not
 a matter of care: the real publish steps are conditioned on `github.event_name == 'push'`, the rehearsal steps
 on `inputs.mode == 'rehearsal'`, and `planeter-pin-check` fails the build if a step could cross over (see
-`docs/dependency-policy.md`). The rehearsal prints what the runners' `docker`/`buildx` offer and what the
-package looks like (visibility, link to the repository); read those lines in the run's log.
+`docs/dependency-policy.md`). 
 
-**When to run it** (RFC 010 D-10): before any change to an action or to the `Dockerfile` of the release chain
-(and record its run id in the change's review), and before each release candidate whose chain changed since
-the last rehearsal. Verify the image attestation with `gh attestation verify
+**When to run it** (RFC 010 D-10): before any change to an action, to the toolchain installation, to the
+image-building steps (including the BuildKit digest) or to the `Dockerfile` of the release chain (and record its
+run id in the change's review), and before each release candidate whose chain changed since the last
+rehearsal. Its jobs: the two native `image` jobs push by digest to the rehearsal package, `image-rehearsal`
+joins them into the one tag `rehearsal` and attests the manifest list; the log of that job prints the manifest
+list's shape (`docker buildx imagetools inspect`). Verify the image attestation with `gh attestation verify
 oci://ghcr.io/prikk-vcs/planeter-rehearsal:rehearsal --repo prikk-vcs/planeter` (needs a token that may read
 packages).
 
@@ -93,15 +95,44 @@ single version there). Nothing in the workflow deletes anything, and nothing her
 1. **gates** — re-runs every gate on the tagged commit and checks tag == version.
 2. **build** — `planeter` for `x86_64-unknown-linux-gnu` (ubuntu-24.04) and
    `aarch64-unknown-linux-gnu` (native arm runner); tarball + `.sha256` + `build-info.txt`; a
-   **build-provenance attestation** for each tarball.
-3. **container** — `ghcr.io/prikk-vcs/planeter:<tag>` and `:latest`, `linux/amd64` + `linux/arm64`,
-   built from the prebuilt binaries (never compiled in Docker) with a checksum-verified prikk
-   release and bubblewrap baked in; the image is attested too.
+   **build-provenance attestation** (`actions/attest`) for each tarball.
+3. **image** — one job per architecture, **natively** on that architecture's runner (no QEMU): a
+   `docker-container` buildx builder whose BuildKit image is pinned by digest builds the image from the
+   prebuilt binary (never compiled in Docker, with a checksum-verified prikk release and bubblewrap baked in)
+   and pushes it **by digest** with BuildKit's provenance; then **image-publish** joins the two digests into
+   one manifest list `ghcr.io/prikk-vcs/planeter:<tag>` and `:latest` (`linux/amd64` + `linux/arm64`) with
+   `docker buildx imagetools create` and attests the manifest list's digest. No per-architecture tag is
+   written to the package.
 4. **publish** — the GitHub release with the tarballs, checksums, build-info, and notes taken from
    the tag's `CHANGELOG.md` section plus the runtime prerequisites.
 
 Only Linux targets ship: the sandbox is bubblewrap, which is Linux-only, and planeter does not make
 platform claims it cannot run (prikk RFC 107's lesson).
+
+## What the release chain trusts (RFC 010 D-11)
+
+* **Actions:** only GitHub's own, from the `actions/` owner — `checkout`, `upload-artifact`,
+  `download-artifact` and `attest` — each pinned to a full commit SHA. `planeter-pin-check` fails on any other
+  `uses:` (including `docker://`).
+* **Toolchain:** installed by the runner's own `rustup` at the one pinned version (`rustup toolchain install
+  X.Y.Z --profile minimal …`); `pin-check` reads the version from that command as it did from the former
+  `toolchain:` input (one build compiler across workflows, the `msrv` job's exception, no channel or `latest`).
+* **Container tooling:** the runner's `docker` and `buildx`, and one outside artifact: the **BuildKit image**
+  of the builder, `moby/buildkit@sha256:…` (v0.33.1 at this writing), written in the `BuildKit builder` step of
+  the `image` job. `pin-check` fails on a `docker buildx create` without a digest-pinned `image=`, on a `docker
+  run`/`docker pull` of an undigested image, on a registry login that does not read the token from standard
+  input (`--password-stdin`), on a token interpolated into a script, and on a login that can run outside a tag
+  push or a rehearsal.
+* **The base image** of the `Dockerfile` stays pinned by digest as before.
+
+**Updating one of these (RFC 010 D-9)** is a reviewed change, one pin per change, with the record in its review:
+old and new tag and **full SHA** (or image digest); that the SHA is the tag's commit **in the upstream
+repository** (for an image: that the registry digest carries the revision annotation of the upstream tag's
+commit, and which mutable tag it equals today); whether the commit is marked verified; the upstream release
+notes read and summarized (renamed inputs, runtime changes, new permissions); `pin-check` green; and a
+**rehearsal** run green before the change lands. To update the BuildKit image: resolve the new release's index
+digest (`Docker Hub moby/buildkit:<tag>`), check its `org.opencontainers.image.revision` annotation against the
+upstream tag's commit, edit the one `image=moby/buildkit@sha256:…` in `release.yml`, rehearse.
 
 ## Verifying a release
 

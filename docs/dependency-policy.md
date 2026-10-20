@@ -65,6 +65,20 @@ release dry run and the rehearsal. Deliberately out of the gate's scope: the ver
 by the workflows (current on purpose, so they can read the advisory database) and the content of a named
 runner image, which GitHub updates in place.
 
+### The release chain trusts GitHub-owned actions only (RFC 010 D-11)
+
+The five third-party pins that lagged upstream (IS-35: `docker/setup-qemu`, `setup-buildx`, `login`,
+`build-push-action`, and `attest-build-provenance` two majors behind) and the single-maintainer
+`dtolnay/rust-toolchain` were **retired, not updated**: the toolchain is installed by the runner's `rustup`,
+the image is built natively per architecture with the runner's `docker`/`buildx` and a BuildKit image pinned by
+digest (`moby/buildkit` v0.33.1), the registry login is `docker login --password-stdin`, and attestation is
+`actions/attest` v4.2.2 (SHA `1e69f48a…`, `create-storage-record: false`). What is left outside the
+repository: GitHub's `actions/checkout`, `upload-artifact`, `download-artifact`, `attest`, one BuildKit image, the
+base image and the runners' own tools. `pin-check` enforces the shape: no `uses:` outside `actions/`; an
+undigested `docker buildx create` image, `docker run` or `docker pull` fails; a `docker login` must read the
+token with `--password-stdin` and run only on a tag push or in a rehearsal; no `secrets.*`/`github.token`
+expression inside a script. Updating a remaining pin follows RFC 010 D-9 (see `docs/RELEASING.md`).
+
 ### The rehearsal cannot reach the real package (RFC 010 D-10)
 
 `release.yml` has a `rehearsal` dispatch mode that logs in to ghcr, pushes and attests, but only to
