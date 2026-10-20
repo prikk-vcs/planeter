@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | Implements RFC 010's amendment of 2026-10-20, **D-10** (a release rehearsal) on the **current chain and pins**, and measures the three unknowns the amendment names. It is the first of two handoffs for IS-35; the second (D-11, the simplified chain) follows after this is reviewed, and is built and checked behind this rehearsal. |
-| Status | **Assigned** (2026-10-20), after the owner accepted D-9 to D-11 (O-4) and the rehearsal's footprint (O-5). |
+| Status | **Done, reviewed Approved (2026-10-21; commit `8d52eba`).** (Assigned 2026-10-20, after the owner accepted D-9 to D-11 (O-4) and the rehearsal's footprint (O-5). |
 | Basis | [`../../accepted/010-upstream-and-supply-chain-maintenance.md`](../../accepted/010-upstream-and-supply-chain-maintenance.md) "Proposed amendment (2026-10-20)" (now accepted) D-9, D-10, D-11; `.github/workflows/release.yml` and its dry-run mode ([`maintenance-gates-handoff-v2.md`](maintenance-gates-handoff-v2.md)); `tools/pin-check`; `docs/RELEASING.md`; the 0.3.0 and 0.4.0 tag runs. |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 
