@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | Implements RFC 012 **D-2** (structure, labels, links, titles, accessible forms) and **D-6(a)** (names), and the structural half of **D-5**: the rendered-page checks. D-7 step (3), first part. The presentation half (focus, target size, reflow, colour scheme, forced colours, logical CSS properties, the contrast test) is the next handoff. Issues IS-41, IS-30. |
-| Status | **Assigned** (2026-10-22), after the message-catalog handoff was reviewed Approved. |
+| Status | **Done, reviewed Approved (2026-10-23; commits `d359e09`, `e808ac5`, `092e1f1`, `162b7b7`).** IS-41 (structure) closed; presentation and operation remain (next handoff). |
 | Basis | [`../../accepted/012-web-ui-foundations.md`](../../accepted/012-web-ui-foundations.md) D-2, D-5, D-6; the baseline review request (private): **B1** (76 states and how they were rendered: reuse its render program), **B2** (the per-page rule grid and `b2-per-page.md`: every offending element), **B5** (accessibility trees); [`message-catalog-handoff-v1.md`](message-catalog-handoff-v1.md) (done): every new text goes through the catalog; `docs/messages-and-languages.md`; `crates/planeter-web/templates/*.html`, `ui.rs`, `catalog/`. |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 

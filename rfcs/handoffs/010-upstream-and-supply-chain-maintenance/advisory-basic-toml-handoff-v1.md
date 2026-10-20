@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | An instance of RFC 010 D-3/D-4 (the supply-chain gate at a project event; the triage ladder). The `supply-chain` job of CI has been red on `main` since commit `67dab7d`: `cargo deny check` fails on **RUSTSEC-2026-0374** ("`basic-toml` is unmaintained", advisory dated 2026-09-26, in the database after 2026-10-17). `cargo audit` reports it as an allowed warning. Issue **IS-42**. |
-| Status | **Assigned** (2026-10-22). Fix the red gate first (RFC 010 D-4). |
+| Status | **SUPERSEDED 2026-10-23 by [`advisory-basic-toml-handoff-v2.md`](advisory-basic-toml-handoff-v2.md)** (the dev team's T1 found a rung-2 fix; the scoped ignore is not used). T1's evidence was delivered and accepted. |
 | Basis | RFC 010 D-4 (ladder: lock-only update → manifest change after measuring → a scoped ignore with reachability shown), `docs/dependency-policy.md` rule 3 (an ignore needs a reason and a revisit condition), `deny.toml` and `.cargo/audit.toml` (the existing RUSTSEC-2023-0071 entry is the pattern); the dev team's reports in the IS-39 and message-catalog review requests. |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 

@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | A small follow-on of [`verify-failure-honesty-handoff-v1.md`](verify-failure-honesty-handoff-v1.md) (done, approved 2026-10-22), taking the architect's decisions on the dev team's two questions in its review request. Issue **IS-43**. |
-| Status | **Assigned** (2026-10-22), after the advisory handoff (IS-42) which clears the red CI. |
+| Status | **Done, reviewed Approved (2026-10-23; commit `ec8b41b`).** IS-43 closed. |
 | Basis | The dev team's review request for IS-39 (decision 1 and its second question; `real-corruptions.txt`, `other-real-corruptions.txt`, `ceiling-sweep.txt`); `crates/planeter-prikk/src/cli.rs` (`verify`, `is_complete_verdict`, `is_resource_failure`); RFC 011 D-2; ledger PK-50, PK-51. |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 
