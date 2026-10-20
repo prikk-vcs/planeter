@@ -5,6 +5,22 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **The pages use plain words (RFC 012 D-4; IS-30).** The wording follows `docs/glossary.md`, which the owner
+  approved. The four trust badges: *prikk-verified* → **Verified**; *forge-approved, unsealed* → **Approved,
+  awaiting signature**; *unverified* → **Verification failed**; *verify unavailable* → **Could not be checked
+  now**. The repository menu: *code* → **Files**, *history* → **History**, *refs* → **Branches and tags**,
+  *verify* → **Verification** (page titles follow). Every page that shows a badge has a **"What does this
+  mean?"** block under its heading (a native expand/collapse control, no script) that says what the badge
+  claims and what it does not; the change page also says what a *patch* and a *rollback* are. The verification
+  table says **Check** instead of *Stage*, and **completed / problem found / not run (blocked by …) / stopped
+  early** instead of *evaluated / failed / not_evaluated / halted*; a failed check lists what prikk found under
+  **What was found**. Sign-in says **Username** and **Sign in with single sign-on**, and a failed sign-in,
+  a missing page, an unreadable or too-large repository, a rejected form and each single-sign-on failure now say
+  what to do next. **API:** `GET …/verify` adds `blocked_by` (the id of the blocking check) to a `not_evaluated`
+  stage and omits it otherwise; every existing field, including `detail`, is unchanged; the raw route's
+  too-large hint now says "ask the person who runs this server". One wording is **held**: "N of M sessions
+  verified." stays as it was until prikk confirms what its `active_sessions` count means.
+
 - **The pages look slightly different: bigger click areas, a visible focus ring, wrapping at narrow widths, dark
   form controls (RFC 012 D-2, D-3; IS-41).** Links, buttons and fields are at least 24 × 24 CSS px (rows are a few
   pixels taller); keyboard focus shows a 2 px ring in both themes; header links underline on hover and focus;

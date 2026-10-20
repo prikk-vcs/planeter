@@ -87,7 +87,10 @@ hover and on keyboard focus**, not by colour alone.
 These are known and planned, not fixed yet:
 
 - A README's own links that are relative resolve against the page address, not the file's folder.
-- Wording: the plain-word rewrite of the interface is a later step, and the new "busy" page's words await it.
+- Wording: the interface now uses the plain words of `docs/glossary.md` (approved by the owner), and the badges,
+  *patch* and *rollback* are explained in place by a native expand/collapse block. No reader has tested whether the
+  words are understood. One message is held unchanged until prikk confirms its meaning (the "N of M sessions
+  verified" count), and the *halted* check's detail ("after …") is still prikk-side English.
 - One language (English). Japanese and a language switcher are planned, and with them a reader's review of the
   wording and of right-to-left layout.
 - The focus ring is the same colour as links (it stands off the control by a 2 px gap); a designed ring for the

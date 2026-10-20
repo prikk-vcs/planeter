@@ -26,6 +26,16 @@ is for the person who adds a message, a placeholder or a language.
 6. **A missing key is never a crash and never a silent English fallback**: it renders as `[the.key]` and is
    logged; the tests fail before it can ship.
 
+## Change a message's words
+
+**Wording changes go through the glossary** ([`glossary.md`](glossary.md)). It is the owner-approved list of the
+words the interface uses; its section 2 has a row for each message it governs, with the English text now in
+force. Change the row and the catalog in the same commit: `tests/glossary.rs` fails when they disagree, and
+`tests/retired_words.rs` fails when a word the plain-words work retired (`unsealed`, `forge-approved`,
+`prikk-verified`, `not_evaluated`, `evaluated`, `refs`, `SSO`, or an old navigation label) comes back (a
+legitimate use goes in `tests/retired_words.allow`, with its reason). A message the glossary does not list is
+new wording: propose it to the architect, do not choose it silently.
+
 ## Add a message
 
 1. Add a variant to `keys!` in `catalog/mod.rs` (`PageNewThing => "page.new_thing"`): the identifier is stable
@@ -61,16 +71,17 @@ names; the order and the words around them are the translator's.
   and failed-condition texts (prikk's English, shown as it came), the `encoding` token (`text`, `binary`).
 * **Punctuation and icons:** the `·` and `/` separators and the 📁 📄 icons (the structural-accessibility
   handoff replaces the icons).
-* **One planeter-owned English text outside the catalog:** the `detail` of a verify stage that is
-  `not_evaluated` (`blocked by <stage>`) is built in `planeter-core` and is part of the API's JSON; it is shown
-  as it comes until the wording handoff restructures it.
+* **Planeter-owned English text outside the catalog, in the API's JSON only:** the `detail` of a verify stage
+  that is `not_evaluated` (`blocked by <stage>`) or `halted` (`after <stage>`) is built in `planeter-core`. The
+  page does not show the first (it builds "not run (blocked by {check})" from the stage's `blocked_by` field,
+  through the catalog); it still shows the second as it comes (a `halted` stage has no field of its own yet).
 
 Every line of that file has a reason, and the test fails on an entry nothing uses.
 
-## The checks (`tests/catalog_checks.rs`, `tests/i18n.rs`, `tests/pages_in_two_languages.rs`)
+## The checks (`tests/catalog_checks.rs`, `tests/i18n.rs`, `tests/pages_in_two_languages.rs`, `tests/glossary.rs`, `tests/retired_words.rs`)
 
 A key missing in a shipped language; a key the enum does not have; a duplicate; differing placeholder names;
 a counted message whose forms do not fit the language; markup, an entity or a URL in a message; a key nothing
 uses; user-visible literal text in a template or in a source file outside the allowlist; `|safe` on anything but
-the allowlisted Markdown; a placeholder left unfilled in a rendered page. Each has a planted case in the
-tests that proves it can fail.
+the allowlisted Markdown; a placeholder left unfilled in a rendered page; a glossary row whose *Current* text is
+not the catalog's; a retired word in a message. Each has a planted case in the tests that proves it can fail.
