@@ -41,6 +41,9 @@ permissions:
   contents: read
 
 env:
+  # What the retired toolchain action used to set for every job.
+  CARGO_INCREMENTAL: "0"
+  CARGO_TERM_COLOR: always
   # The prikk release baked into the container image (dependency-ledger PK-26). Bump with the pin.
   PRIKK_VERSION: "0.52.0"
 
@@ -55,11 +58,13 @@ jobs:
           echo "A dispatch (dry-run or rehearsal) runs from main only; a release is made only by pushing a version tag." >&2
           exit 1
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable branch head, 2026-10-15; toolchain pinned by input
-        with:
-          toolchain: 1.99.0
-          # The action installs a minimal profile; the gates below run `cargo fmt` and `cargo clippy`.
-          components: rustfmt, clippy
+      - name: Rust toolchain (pinned, one compiler for CI and release)
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --no-self-update
+          rustup default 1.99.0
+          rustc --version
+          cargo --version
       - name: Tag must equal the workspace version
         if: github.event_name == 'push'
         env:
@@ -102,10 +107,13 @@ jobs:
       attestations: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      - uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable branch head, 2026-10-15; toolchain pinned by input
-        with:
-          toolchain: 1.99.0
-          targets: ${{ matrix.target }}
+      - name: Rust toolchain (pinned, one compiler for CI and release)
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.99.0 --profile minimal --no-self-update
+          rustup default 1.99.0
+          rustc --version
+          cargo --version
 
       - name: Build (x86_64-unknown-linux-gnu)
         if: matrix.target == 'x86_64-unknown-linux-gnu'

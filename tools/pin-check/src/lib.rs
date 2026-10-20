@@ -7,10 +7,12 @@
 //!   allowed; `docker://` must carry `@sha256:`);
 //! - a workflow `image:` without `@sha256:`;
 //! - a Dockerfile `FROM` without `@sha256:<64 hex>` (`scratch` and an earlier stage's alias are fine);
-//! - a toolchain named by channel (`stable`, `beta`, `nightly`) rather than by `X.Y.Z`: the `toolchain:`
-//!   input, a `rustup` command line, or the `channel` of a `rust-toolchain` file;
-//! - `toolchain:` inputs that are not one and the same version across the workflows (CI and release
-//!   must build with one compiler, RFC 010 D-5);
+//! - a toolchain named by channel (`stable`, `beta`, `nightly`, `latest`) rather than by `X.Y.Z`: the
+//!   `toolchain:` input, the version argument of a `rustup toolchain install` / `rustup default` /
+//!   `rustup install` / `rustup update` / `rustup override set` command line, or the `channel` of a
+//!   `rust-toolchain` file;
+//! - toolchain versions (the `toolchain:` input or the `rustup` command's argument) that are not one and the
+//!   same version across the workflows (CI and release must build with one compiler, RFC 010 D-5);
 //! - the one named exception to "one compiler": a job whose id is `msrv` builds with the workspace's
 //!   declared minimum, so its `toolchain:` must equal `rust-version` in the root `Cargo.toml` (as
 //!   `X.Y.Z`; `1.88` means `1.88.0`), and that job must exist whenever `rust-version` is declared (IS-32);
@@ -187,15 +189,18 @@ fn toolchain_disagreements(root: &Path, workflows: &[PathBuf]) -> io::Result<Vec
             if let Some(id) = job_id(line) {
                 job = id;
             }
-            if let Some(v) = value_of(line, "toolchain")
-                && is_semver(v)
+            let named = value_of(line, "toolchain")
+                .map(str::to_owned)
+                .or_else(|| rustup_toolchain_arg(line));
+            if let Some(v) = named
+                && is_semver(&v)
             {
                 let list = if job == MSRV_JOB {
                     &mut msrv_inputs
                 } else {
                     &mut inputs
                 };
-                list.push((file.clone(), i + 1, v.to_owned()));
+                list.push((file.clone(), i + 1, v));
             }
         }
     }
@@ -294,7 +299,35 @@ fn is_semver(v: &str) -> bool {
 }
 
 fn is_channel(w: &str) -> bool {
-    matches!(w, "stable" | "beta" | "nightly")
+    matches!(w, "stable" | "beta" | "nightly" | "latest")
+}
+
+/// The toolchain a `rustup` command line selects, as written: the first argument after
+/// `rustup toolchain install` / `rustup install` / `rustup default` / `rustup update` /
+/// `rustup override set`, skipping flags and the values of the flags that take one. `None` when the line
+/// has no such command or names no toolchain.
+fn rustup_toolchain_arg(line: &str) -> Option<String> {
+    let code = strip_comment(line);
+    let words: Vec<&str> = code
+        .split(|c: char| c.is_whitespace() || matches!(c, ';' | '&' | '|'))
+        .filter(|w| !w.is_empty())
+        .collect();
+    let at = words.iter().position(|w| *w == "rustup")?;
+    let rest = &words[at + 1..];
+    let skip = match rest {
+        ["toolchain", "install", ..] | ["override", "set", ..] => 2,
+        ["install" | "default" | "update", ..] => 1,
+        _ => return None,
+    };
+    let mut args = rest[skip..].iter();
+    while let Some(w) = args.next() {
+        if matches!(*w, "--profile" | "--component" | "-c" | "--target" | "-t") {
+            args.next();
+        } else if !w.starts_with('-') {
+            return Some(w.trim_matches(['"', '\'']).to_owned());
+        }
+    }
+    None
 }
 
 fn value_of<'a>(line: &'a str, key: &str) -> Option<&'a str> {
@@ -359,6 +392,13 @@ fn scan_workflow(text: &str) -> Hits {
             hits.push((
                 n,
                 "rustup selects a toolchain by channel, not by X.Y.Z".to_owned(),
+            ));
+        } else if let Some(v) = rustup_toolchain_arg(line)
+            && !is_semver(&v)
+        {
+            hits.push((
+                n,
+                format!("rustup selects toolchain {v:?}, which is not an explicit X.Y.Z version"),
             ));
         }
     }

@@ -513,3 +513,101 @@ fn a_rehearsal_step_that_names_a_release_a_tag_or_crates_io_fails() {
         );
     }
 }
+
+// ---------------------------------------------------------------- the toolchain installed by the runner's own rustup (RFC 010 D-11)
+
+fn rustup_step(cmds: &str) -> String {
+    format!("      - name: Rust toolchain\n        run: |\n{cmds}")
+}
+
+#[test]
+fn a_rustup_install_of_one_pinned_version_passes() {
+    let wf = workflow(&rustup_step(
+        "          set -euo pipefail\n          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --no-self-update\n          rustup default 1.99.0\n",
+    ));
+    let (code, text) = run(&fixture("rustup-ok", &[(".github/workflows/ci.yml", &wf)]));
+    assert_eq!(code, 0, "{text}");
+}
+
+#[test]
+fn a_rustup_channel_or_latest_or_variable_fails() {
+    for (name, cmd) in [
+        (
+            "stable",
+            "rustup toolchain install stable --profile minimal",
+        ),
+        ("default-beta", "rustup default beta"),
+        ("latest", "rustup install latest"),
+        ("short", "rustup toolchain install 1.99 --profile minimal"),
+        (
+            "variable",
+            "rustup toolchain install \"$TOOLCHAIN\" --no-self-update",
+        ),
+    ] {
+        let wf = workflow(&rustup_step(&format!("          {cmd}\n")));
+        expect_fail(
+            &format!("rustup-{name}"),
+            &[(".github/workflows/ci.yml", &wf)],
+            &["rustup selects"],
+        );
+    }
+}
+
+#[test]
+fn rustup_versions_must_agree_across_workflows_and_the_msrv_job_keeps_its_exception() {
+    let ci = workflow(&rustup_step(
+        "          rustup toolchain install 1.99.0 --profile minimal\n",
+    ));
+    let release = workflow(&rustup_step(
+        "          rustup toolchain install 1.98.1 --profile minimal\n",
+    ));
+    expect_fail(
+        "rustup-two",
+        &[
+            (".github/workflows/ci.yml", &ci),
+            (".github/workflows/release.yml", &release),
+        ],
+        &[
+            "disagrees with the other workflows",
+            "1.99.0 in .github/workflows/ci.yml",
+            "1.98.1 in .github/workflows/release.yml",
+        ],
+    );
+    // A `toolchain:` input and a rustup command are compared with each other, too.
+    let action = workflow(&format!(
+        "      - uses: dtolnay/rust-toolchain@{SHA}\n        with:\n          toolchain: 1.98.1\n"
+    ));
+    expect_fail(
+        "rustup-vs-input",
+        &[
+            (".github/workflows/ci.yml", &ci),
+            (".github/workflows/r.yml", &action),
+        ],
+        &["disagrees with the other workflows"],
+    );
+    // The msrv job may differ when it equals rust-version.
+    let msrv = "name: t\non: push\njobs:\n  build:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: rustup toolchain install 1.99.0 --profile minimal\n  msrv:\n    runs-on: ubuntu-24.04\n    steps:\n      - run: rustup toolchain install 1.88.0 --profile minimal\n";
+    let (code, text) = run(&fixture(
+        "rustup-msrv",
+        &[
+            (".github/workflows/ci.yml", msrv),
+            (
+                "Cargo.toml",
+                "[workspace.package]\nrust-version = \"1.88.0\"\n",
+            ),
+        ],
+    ));
+    assert_eq!(code, 0, "{text}");
+    let (code, text) = run(&fixture(
+        "rustup-msrv-wrong",
+        &[
+            (".github/workflows/ci.yml", msrv),
+            (
+                "Cargo.toml",
+                "[workspace.package]\nrust-version = \"1.87.0\"\n",
+            ),
+        ],
+    ));
+    assert_eq!(code, 1, "{text}");
+    assert!(text.contains("job `msrv` builds with \"1.88.0\""), "{text}");
+}

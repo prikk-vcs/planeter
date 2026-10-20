@@ -9,6 +9,12 @@ on:
 permissions:
   contents: read
 
+# What the retired toolchain action used to set for every job: no incremental builds on a one-shot runner,
+# coloured cargo output in the logs.
+env:
+  CARGO_INCREMENTAL: "0"
+  CARGO_TERM_COLOR: always
+
 jobs:
   build:
     runs-on: ubuntu-24.04
@@ -17,10 +23,12 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Rust toolchain (pinned, one compiler for CI and release)
-        uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable branch head, 2026-10-15; toolchain pinned by input
-        with:
-          toolchain: 1.99.0
-          components: rustfmt, clippy
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --no-self-update
+          rustup default 1.99.0
+          rustc --version
+          cargo --version
 
       - name: Format
         run: cargo fmt --all --check
@@ -41,9 +49,12 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Rust toolchain (the declared minimum, not the pinned build compiler)
-        uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable branch head, 2026-10-15; toolchain pinned by input
-        with:
-          toolchain: 1.88.0
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.88.0 --profile minimal --no-self-update
+          rustup default 1.88.0
+          rustc --version
+          cargo --version
 
       - name: Check the workspace at the declared minimum
         run: cargo check --workspace --locked
@@ -56,10 +67,12 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Rust toolchain (pinned, one compiler for CI and release)
-        uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable branch head, 2026-10-15; toolchain pinned by input
-        with:
-          toolchain: 1.99.0
-          components: rustfmt, clippy
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --no-self-update
+          rustup default 1.99.0
+          rustc --version
+          cargo --version
 
       - name: ENF-2 symbol-absence check
         run: tools/enf2-symbol-check/check.sh
@@ -72,10 +85,12 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Rust toolchain (pinned, one compiler for CI and release)
-        uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable branch head, 2026-10-15; toolchain pinned by input
-        with:
-          toolchain: 1.99.0
-          components: rustfmt, clippy
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --no-self-update
+          rustup default 1.99.0
+          rustc --version
+          cargo --version
 
       - name: Floor check (cli.rs, release.yml, Dockerfile agree)
         run: cargo run --locked -p planeter-floor-check
@@ -90,10 +105,12 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Rust toolchain (pinned, one compiler for CI and release)
-        uses: dtolnay/rust-toolchain@686976e191b89faba57d3206551f0f330d8cb249 # stable branch head, 2026-10-15; toolchain pinned by input
-        with:
-          toolchain: 1.99.0
-          components: rustfmt, clippy
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --no-self-update
+          rustup default 1.99.0
+          rustc --version
+          cargo --version
 
       - name: Install cargo-deny and cargo-audit
         run: cargo install cargo-deny cargo-audit --locked
