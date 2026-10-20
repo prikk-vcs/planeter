@@ -5,6 +5,24 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **Pages have a proper structure for keyboards and screen readers (RFC 012 D-2, D-5; IS-41, IS-30).** Every
+  page now starts with a **"Skip to content"** link, and has a header, a main area and a **footer**
+  (the product name and version) as landmarks; the repository menu is a named navigation block. Every page has
+  one top-level heading (the file and folder pages and the refs page had none or two), the headings of a
+  README or other Markdown file are shown one level lower than before, tables have captions and header cells,
+  the folder/file icons (📁 📄) are replaced by the word "folder" in the size column, and the history rows are
+  linked by the change's first message line (the short id stays beside it) instead of by a bare id. The "raw"
+  link now reads "Download *file name*". Page **titles** follow one pattern (`page · context · planeter`), long
+  ids are shortened to 12 characters, and the busy page, the unavailable page and a missing page no longer
+  share one title; **a busy server now has its own page** ("The server is busy"), still with `Retry-After`.
+  **Sign-in:** a failed sign-in is announced as an alert tied to the form, and **a locked-out account now says
+  "Too many sign-in attempts. Wait a few minutes and try again."** (status 429, unchanged) — the same for a
+  name that does not exist, so it tells no one which names do. **The home page's address field has a visible
+  label, and a bad address in `/go` now shows the home page again with the error beside the field (status
+  400)** instead of silently redirecting home. **The signed-in header shows your display name** with the
+  account id beside it (the id alone when there is no name). The words are in the catalog; the API is
+  unchanged. `docs/accessibility.md` is a first draft of the accessibility statement (no claim of conformance).
+
 - **Every word the UI and the API's error bodies say now comes from a message catalog; pages that were bare
   strings are pages; sizes show KiB/MiB (RFC 012 D-3, D-5; IS-27).** There is still one language (English),
   and the pages say what they said, with these exceptions: sizes read `2.0 KiB` / `5.0 MiB` instead of raw
