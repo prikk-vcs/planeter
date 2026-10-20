@@ -97,11 +97,53 @@ impl Out {
     }
 }
 
+/// `STRUCTURE_LANG=qaa` renders every state in the test language (right to left, every message wrapped in
+/// `‹ ›`), for looking at a page with `dir="rtl"` (with `STRUCTURE_DUMP`); the rules that read English text
+/// (the title pattern) are expected to complain then, so it is never set in a normal run.
+fn test_language() -> Option<&'static str> {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    let lang = std::env::var("STRUCTURE_LANG").ok()?;
+    if lang != "qaa" {
+        return None;
+    }
+    ONCE.call_once(|| {
+        use planeter_web::catalog::{Dir, Entry, LangDef, Plural, register_test_language, shipped};
+        fn other_only(_: u64) -> Plural {
+            Plural::Other
+        }
+        let entries: Vec<Entry> = shipped()[0]
+            .entries
+            .iter()
+            .map(|e| {
+                let text: &'static str = Box::leak(format!("‹{}›", e.other).into_boxed_str());
+                Entry {
+                    key: e.key,
+                    one: text,
+                    other: text,
+                }
+            })
+            .collect();
+        register_test_language(Box::leak(Box::new(LangDef {
+            tag: "qaa",
+            endonym: "Test language",
+            dir: Dir::Rtl,
+            plural: other_only,
+            group_separator: ',',
+            decimal_separator: '.',
+            entries: Box::leak(entries.into_boxed_slice()),
+        })));
+    });
+    Some("qaa")
+}
+
 fn req(method: &str, uri: &str, cookie: Option<&str>, form: Option<String>) -> Request<Body> {
     let mut b = Request::builder()
         .method(method)
         .uri(uri)
         .header(header::HOST, "forge.example");
+    if let Some(lang) = test_language() {
+        b = b.header(header::ACCEPT_LANGUAGE, lang);
+    }
     if let Some(c) = cookie {
         b = b.header(header::COOKIE, c);
     }
@@ -1146,6 +1188,19 @@ fn finish(label: &str, out: &Out) {
     let rep = run(&all);
     let text = print(label, &rep, &out.skipped);
     eprintln!("{text}");
+    // `STRUCTURE_DUMP=<dir>` saves every state's page as `<dir>/<id>.html` (the browser measurements of the
+    // presentation checks read them), with its status in `<id>.status`.
+    if let Ok(dir) = std::env::var("STRUCTURE_DUMP") {
+        std::fs::create_dir_all(&dir).unwrap();
+        for s in &out.states {
+            std::fs::write(Path::new(&dir).join(format!("{}.html", s.id)), &s.html).unwrap();
+            std::fs::write(
+                Path::new(&dir).join(format!("{}.status", s.id)),
+                s.status.to_string(),
+            )
+            .unwrap();
+        }
+    }
     if let Ok(path) = std::env::var("STRUCTURE_OUTLINES") {
         use std::io::Write;
         let mut f = std::fs::OpenOptions::new()
