@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | Implements RFC 010's amendment **D-11** (with **D-9**'s procedure for the pins that remain), behind the rehearsal built by [`release-rehearsal-handoff-v1.md`](release-rehearsal-handoff-v1.md) (done, approved 2026-10-21). It retires the five lagging pins and the toolchain action instead of updating them (IS-35). |
-| Status | **Assigned** (2026-10-21). |
+| Status | **Done, reviewed Approved (2026-10-21; commits `17a07d0`…`ed7e3b2`).** IS-35 closed. |
 | Basis | RFC 010 amendment D-9, D-10, D-11; the dev team's rehearsal findings (review request `release-rehearsal-review-request.md`: runners have Docker 28.0.4 and buildx v0.38.0 with the `docker` driver on both architectures; the job token creates a private package; `actions/attest` v4.2.2 is the form for new use, SHA `1e69f48acb82d1966a394da916b4c1698aa569d6`, verified by the dev team as the upstream tag's commit); `.github/workflows/{release,ci,supply-chain}.yml`; `Dockerfile`; `tools/pin-check`; `docs/RELEASING.md`. |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 
