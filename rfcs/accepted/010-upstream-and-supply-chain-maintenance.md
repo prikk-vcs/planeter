@@ -118,8 +118,9 @@ cadences for planning (the CI schedule in D-3 is a mechanism, not a plan).
 
 ### Proposed amendment (2026-10-20): a release chain that is rehearsed and trusts few outside parties (IS-35)
 
-*Status: proposed by the architect on the owner's direction to take "a stable and secure approach" with a view
-to long-term investment; awaiting the owner's decisions O-4 and O-5 below. It amends D-5 and adds D-9 to D-11.*
+*Status: **accepted by the owner 2026-10-20** (O-4 and O-5). Proposed by the architect on the owner's direction to
+take "a stable and secure approach" with a view to long-term investment. It amends D-5 and adds D-9 to D-11.
+Handoffs: `release-rehearsal-handoff-v1.md` (D-10, on the current chain, first), then the D-11 simplification.*
 
 **Evidence.** Five third-party actions (`docker/setup-qemu`, `setup-buildx`, `login`, `build-push`; GitHub's own
 `attest-build-provenance`) lag upstream by one or two majors, and `dtolnay/rust-toolchain` is a sixth outside
