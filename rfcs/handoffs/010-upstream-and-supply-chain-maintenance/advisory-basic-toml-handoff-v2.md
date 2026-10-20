@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | Supersedes [`advisory-basic-toml-handoff-v1.md`](advisory-basic-toml-handoff-v1.md), whose T1 evidence the dev team delivered and which found that the architect's triage was incomplete: in every `askama_derive` version `basic-toml` is an **optional** dependency behind the `config` feature, which `askama`'s default features enable and `planeter-web` does not use (no `askama.toml`). RFC 010 D-4 puts a manifest change (rung 2) **before** an ignore (rung 3). Decision (architect): **option B**. Issue **IS-42**. |
-| Status | **Assigned** (2026-10-23). `main` stays red until this lands. |
+| Status | **Done, reviewed Approved (2026-10-23; commit `ca98129`).** IS-42 closed; CI green. |
 | Basis | RFC 010 D-4; the dev team's stop report (`advisory-basic-toml-review-request.md`, T1(a–d), `finding-askama-without-config.txt`, `option-B-trim-askama-features.patch`); the architect's re-verification on 2026-10-23: the patch applies to `HEAD`, `cargo deny check` reports `advisories ok`, `cargo audit` (fresh database, 1,345 advisories) no vulnerability and no warning, `basic-toml` gone from the lock (213 → 212 crates), `cargo test -p planeter-web` 154 passed. |
 | Audience | Dev team. Return a short review-request package (`.git-exclude/review-requests/`). |
 

@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | Implements RFC 012 **D-2** (visible focus, target size, reflow, text spacing, colour scheme, forced colours) and **D-3(c)** (logical CSS properties), plus the presentation half of **D-5**: stylesheet checks as tests. D-7 step (3), second part, after [`structure-and-semantics-handoff-v1.md`](structure-and-semantics-handoff-v1.md) (done). Issue IS-41. |
-| Status | **Assigned** (2026-10-23). |
+| Status | **Done, reviewed Approved (2026-10-23; commits `bc1b9cf`, `877014b`, `64a7ca1`).** |
 | Basis | [`../../accepted/012-web-ui-foundations.md`](../../accepted/012-web-ui-foundations.md) D-2, D-3(c), D-5; the baseline review request (private): **B3** (every colour pair, light and dark, with ratios), **B4** (focus, target sizes, reflow at 320 px, text spacing, motion, physical-direction CSS: 4 declarations), the render and browser tooling and the 76 states (Chromium 154, axe-core 4.14.0, puppeteer-core: reuse the scripts and the approach); the structure checker under `crates/planeter-web/tests/structure/`; `crates/planeter-web/static/app.css`; `docs/accessibility.md`. |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 
