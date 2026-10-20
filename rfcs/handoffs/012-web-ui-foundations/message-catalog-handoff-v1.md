@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | Implements RFC 012 **D-3** (the catalog mechanism, language negotiation, API messages by language) and the first half of **D-5** (the catalog checks), and performs D-7 step (2): every user-visible string moves into the catalog, **in English, without changing what the pages say** except where a fragment must become a whole sentence. It is the first implementation handoff of RFC 012; the structural accessibility fixes (D-2) follow in the next, and the plain-word rewrite (D-4) and Japanese after that. Issues IS-27, IS-30. |
-| Status | **Assigned** (2026-10-21), after the baseline investigation was reviewed Approved. |
+| Status | **Done, reviewed Approved (2026-10-22; commits `caf86d1`, `98a56a3`, `90d3f84`).** IS-27 closed for the mechanism and the extraction. |
 | Basis | [`../../accepted/012-web-ui-foundations.md`](../../accepted/012-web-ui-foundations.md) D-3, D-5, D-7; the baseline review request (private): **B6** (the 104-string inventory with file:line and the 36 fragments), **B8** (where `Accept-Language` can be read), **B9** (the scratch catalog proof: `Key` enum, one table per language, plural rules, `fill`, negotiation, tests, and the **design gap** of markup inside sentences) — reuse its source; `crates/planeter-web/templates/*.html`, `ui.rs`, `errors.rs`, `headers.rs`, `openapi.rs`. |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 

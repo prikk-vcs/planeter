@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | A **follow-on** handoff of the done RFC 003 (T5: the repository's verify status is the honesty anchor, always re-derived) and RFC 001 D-3 (the prikk boundary). It fixes **IS-39**, found by the accessibility baseline (finding 2): `prikk verify` exits **1** when verification fails and prints the failing `verify-report-v1` on stdout, but the boundary treats any non-zero exit as an error, so a repository whose verification **failed** is shown as *Temporarily unavailable* ("could not be read right now") and the repository badge says *verify unavailable*. The `unverified` badge and the failed-conditions table can never be produced by real prikk. |
-| Status | **Assigned** (2026-10-21). |
+| Status | **Done, reviewed Approved (2026-10-22; commit `440b4d1`);** refinements in `verify-verdict-refinements-handoff-v1.md`. |
 | Basis | `crates/planeter-prikk/src/cli.rs` (`verify`, `run_json`, `trust_check` — which already handles exit 1 with a document — and `failure`/ceiling classification from RFC 011), `crates/planeter-core/src/read.rs` (`VerifyView::from_verify`, `ReadService::verify`, the repository page's use), `crates/planeter-web/src/ui.rs`; the baseline review request (private, finding 2 and `states-html/verify-bad`, `verify-unverified` with the three real corruptions and the stand-in that returns the real failing stdout); ledger PK-50 (a keyless forge's `verify` exits 1 on publication-trust issues until keys are adopted); RFC 011 D-2 (a ceiling hit is never a verification verdict). |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 
