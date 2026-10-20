@@ -5,6 +5,18 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **The change page no longer says "Verified" for a sealed patch (IS-44) — and the change API's `assurance`
+  changes with it.** The change page showed the badge **Verified** for any patch that is signed into the history,
+  although no verification runs on that page. A sealed patch is now labelled **Signed into the history** in a plain
+  (not green) badge, and **Verified** appears only where a verification ran and passed: the repository, history and
+  verification pages. **API (breaking for a client of `GET …/change/{target}`):** the `assurance` of a sealed
+  patch is now `"sealed"` instead of `"prikk-verified"`; `"forge-approved-unsealed"` (queued) is unchanged, and
+  `"prikk-verified"` remains a value of the schema but no change response carries it. A stage of `GET …/verify`
+  that is `halted` now carries `after` (the id of the stage it stopped after), as a `not_evaluated` one carries
+  `blocked_by`; `detail` is unchanged. Wording: the Verification page's failed explanation says "They are listed
+  below."; the history page explains the *rollback* tag when it shows one; a stopped check reads "stopped early
+  (after …)"; "Showing … · branch …" and the "Too large to show here" title follow their neighbours.
+
 - **The pages use plain words (RFC 012 D-4; IS-30).** The wording follows `docs/glossary.md`, which the owner
   approved. The four trust badges: *prikk-verified* → **Verified**; *forge-approved, unsealed* → **Approved,
   awaiting signature**; *unverified* → **Verification failed**; *verify unavailable* → **Could not be checked

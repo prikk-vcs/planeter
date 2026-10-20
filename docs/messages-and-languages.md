@@ -73,8 +73,8 @@ names; the order and the words around them are the translator's.
   handoff replaces the icons).
 * **Planeter-owned English text outside the catalog, in the API's JSON only:** the `detail` of a verify stage
   that is `not_evaluated` (`blocked by <stage>`) or `halted` (`after <stage>`) is built in `planeter-core`. The
-  page does not show the first (it builds "not run (blocked by {check})" from the stage's `blocked_by` field,
-  through the catalog); it still shows the second as it comes (a `halted` stage has no field of its own yet).
+  page shows neither: it builds "not run (blocked by {check})" and "stopped early (after {check})" from the
+  stage's `blocked_by` and `after` fields, through the catalog.
 
 Every line of that file has a reason, and the test fails on an entry nothing uses.
 
