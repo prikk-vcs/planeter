@@ -5,6 +5,21 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **Every word the UI and the API's error bodies say now comes from a message catalog; pages that were bare
+  strings are pages; sizes show KiB/MiB (RFC 012 D-3, D-5; IS-27).** There is still one language (English),
+  and the pages say what they said, with these exceptions: sizes read `2.0 KiB` / `5.0 MiB` instead of raw
+  bytes (`223 B` below 1 KiB is unchanged); `patch(es)` and `session(s)` become `1 patch` / `2 patches` and
+  `1 of 1 session verified` / `1 of 2 sessions verified`. The server now **negotiates a language**: a
+  `planeter_lang` cookie (a language code only; it is read but nothing sets it until a second language
+  ships) beats `Accept-Language`, which beats English; `<html lang>` and `dir` follow it, and every HTML
+  page and every API error carries `Vary: Accept-Language` and `Content-Language` (a caching proxy must
+  honour `Vary`, as it must for the existing `Cookie` and `Authorization`). The API's error `message` and
+  `hint` follow the same negotiation; `code`, status and shape never change, and the OpenAPI document stays
+  English (it says so). **The eleven responses that used to be a bare string** (a failed form check,
+  an incomplete form, a missing address on `/go`, and the single-sign-on errors) are now pages with a
+  heading, one sentence and one link back, **with the same status codes**; the single-sign-on provider's
+  own error text is no longer shown (it is logged). English API bodies are byte-for-byte unchanged.
+
 - **A repository whose verification fails is now shown as unverified, with the failed conditions, instead of
   as "temporarily unavailable" (IS-39).** `prikk verify` exits 1 and prints the failing report when a
   repository does not verify; planeter used to treat every non-zero exit as an outage, so the verify page

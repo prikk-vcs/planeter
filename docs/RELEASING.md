@@ -175,9 +175,10 @@ docker run --rm ghcr.io/prikk-vcs/planeter:X.Y.Z --version
   operation; the file page's own link already points there. `raw_elsewhere` depends only on the host
   asked, never on the repository or the caller, so it says nothing about whether a repository exists.
 - **Cache directives and HSTS (IS-29):** the app sets its own `Cache-Control` (`private, no-cache` and
-  `Vary: Cookie, Authorization` on dynamic responses, `no-store` on sign-in and sign-out, a one-hour
-  `public` lifetime only on the stylesheet), so the proxy needs no cache rules of its own and must not
-  override them. When `PLANETER_TRUSTED_PROXIES` is set the app also sends
+  `Vary: Cookie, Authorization` on dynamic responses — plus `Accept-Language` on the responses whose text
+  depends on the caller's language: every HTML page and every API error, which also carry
+  `Content-Language` — `no-store` on sign-in and sign-out, a one-hour `public` lifetime only on the
+  stylesheet), so the proxy needs no cache rules of its own and must not override them. When `PLANETER_TRUSTED_PROXIES` is set the app also sends
   `Strict-Transport-Security: max-age=15552000` (180 days; no `includeSubDomains`, no `preload`): the
   proxy must therefore serve HTTPS for the whole host. A proxy that adds its own HSTS header should
   replace the app's value, not append a second one. API errors are JSON (`{code, message, hint}`); a proxy's own

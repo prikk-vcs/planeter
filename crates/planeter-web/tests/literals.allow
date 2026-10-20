@@ -1,0 +1,68 @@
+# The allowlist of tests/catalog_checks.rs (RFC 012 D-5): every user-visible-looking literal that is NOT a
+# catalog message, with the reason. Reviewed like code: a line added here is a decision.
+#
+# kind :: file :: literal or pattern :: reason
+#   exact  the literal, as written in the source (or the template text)
+#   re     a regular expression the literal must match completely
+#   safe   a template expression that may be printed with `|safe`
+#   scope  a source file that is not scanned, with the reason
+
+scope :: openapi.rs :: * :: the OpenAPI document is developer-facing prose and stays English (RFC 012 D-3d); it says so in its description
+scope :: security.rs :: * :: header values and policy names, not text a person reads
+scope :: sanitize.rs :: * :: sanitiser configuration (HTML tag and attribute names)
+scope :: cookies.rs :: * :: cookie names and attributes
+scope :: principal.rs :: * :: header and token handling
+scope :: client_ip.rs :: * :: network parsing and its operator-facing log lines
+scope :: gate.rs :: * :: operator-facing log lines and the gate's counters
+scope :: budget.rs :: * :: operator-facing configuration messages (start-up)
+
+# --- routes, URLs and templates
+re :: * :: ^/.* :: a route or URL path
+re :: * :: ^\?ref=.* :: a query string built by the code
+re :: * :: ^&ref=.* :: a query string built by the code
+re :: * :: ^\{.*\}/\{.*\}$ :: a format string of identifiers and separators, no words
+re :: * :: ^\{[a-z_]*\}\{?[a-z_]*\}?/?$ :: a format string of identifiers
+re :: * :: ^\.\./static/app\.css$ :: the stylesheet embedded with include_str!
+re :: * :: ^[a-z_]+\.html$ :: a template file name
+exact :: ui.rs :: {prefix}{d} :: a format string of identifiers
+
+# --- tokens matched or classes emitted, never shown as words
+exact :: ui.rs :: warn :: a CSS class (badge colour)
+exact :: ui.rs :: bad :: a CSS class (badge colour)
+exact :: ui.rs :: evaluated :: a verify stage status token matched against; the word shown is the catalog's
+exact :: ui.rs :: failed :: a verify stage status token matched against; the word shown is the catalog's
+exact :: ui.rs :: not_evaluated :: a verify stage status token matched against; the word shown is the catalog's
+exact :: ui.rs :: halted :: a verify stage status token matched against; the word shown is the catalog's
+exact :: ui.rs :: README.md :: a file name compared with, to find the README
+exact :: ui.rs :: text :: prikk's encoding token compared with
+exact :: ui.rs :: ref :: a query-parameter name (serde rename)
+
+# --- headers, media types, protocol words
+exact :: ui.rs :: text/html; charset=utf-8 :: a media type
+exact :: ui.rs :: text/css; charset=utf-8 :: a media type
+exact :: ui.rs :: public, max-age=3600 :: a Cache-Control value
+exact :: api.rs :: application/json :: a media type
+exact :: api.rs :: GET :: an Allow header value
+exact :: api.rs :: ref :: a query-parameter name (serde rename)
+exact :: api.rs :: the read task did not complete :: an internal error value that maps to the `internal` code; never shown
+exact :: headers.rs :: no-store :: a Cache-Control value
+exact :: headers.rs :: private, no-cache :: a Cache-Control value
+exact :: headers.rs :: Cookie :: a Vary token
+exact :: headers.rs :: Authorization :: a Vary token
+exact :: headers.rs :: Accept-Language :: a Vary token
+exact :: headers.rs :: permissions-policy :: a header name
+exact :: headers.rs :: camera=(), microphone=(), geolocation=(), payment=(), usb=() :: a Permissions-Policy value
+exact :: headers.rs :: max-age=15552000 :: an HSTS value
+exact :: authn.rs :: Bearer  :: the Authorization scheme prefix
+
+# --- errors.rs: the stable machine codes and the OpenAPI prose (developer-facing, English by decision)
+re :: errors.rs :: ^(not_found|unavailable|busy|invalid_request|method_not_allowed|raw_elsewhere|too_large|internal)$ :: a stable machine-readable error code
+exact :: errors.rs :: document :: a placeholder name
+exact :: errors.rs :: code :: a JSON field name
+exact :: errors.rs :: message :: a JSON field name
+exact :: errors.rs :: hint :: a JSON field name
+re :: errors.rs :: ^(no such resource, or|the repository could not be read|too many requests|a malformed parameter|the method is not supported|the raw route, asked|the response would exceed|an internal fault).* :: ErrorCode::description: OpenAPI prose for developers, English by decision (D-3d)
+
+# --- templates: `|safe` is for sanitised repository content only
+safe :: file.html :: html :: the Markdown renderer's output, sanitised by ammonia (RFC 003 T4); not catalog output
+safe :: repo.html :: html :: the README, rendered and sanitised the same way
