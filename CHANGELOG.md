@@ -5,6 +5,16 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **The pages look slightly different: bigger click areas, a visible focus ring, wrapping at narrow widths, dark
+  form controls (RFC 012 D-2, D-3; IS-41).** Links, buttons and fields are at least 24 × 24 CSS px (rows are a few
+  pixels taller); keyboard focus shows a 2 px ring in both themes; header links underline on hover and focus;
+  long ids, file names and display names wrap, so **no page scrolls sideways at 320 px** (the change and history
+  pages did, even at desktop width for a change id); form controls follow the dark theme (`color-scheme`) and
+  have a visible border; a forced-colours (high-contrast) block keeps badges, borders and the focus ring
+  distinguishable; layout uses logical CSS properties (a right-to-left language will mirror). No page structure,
+  wording or API changed. `docs/accessibility.md` now states the border rule and what is tested automatically
+  (a new stylesheet test) and what was measured.
+
 - **Pages have a proper structure for keyboards and screen readers (RFC 012 D-2, D-5; IS-41, IS-30).** Every
   page now starts with a **"Skip to content"** link, and has a header, a main area and a **footer**
   (the product name and version) as landmarks; the repository menu is a named navigation block. Every page has

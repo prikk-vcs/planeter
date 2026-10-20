@@ -27,10 +27,40 @@ Everything below was checked by tools, not by people.
   repository content safe runs first; a test shows that hostile heading markup stays inert.
 - **Text, words and translation** — every word on a page comes from one message catalog (RFC 012 D-3) and is
   checked by tests, which is what lets a screen reader and a translator find them.
+- **The stylesheet** — a test (`crates/planeter-web/tests/stylesheet.rs`) reads `static/app.css` and fails on:
+  a text colour pair below 4.5:1, or a control's border or the focus ring below 3:1, in either the light or the
+  dark theme (every pair the rules use is computed, with thresholds written in the test, not read from the
+  stylesheet); any physical-direction declaration (`margin-left`, `padding-right`, `left`, `text-align: left`,
+  `float: right` …: logical properties only); an outline that is removed, a focus style that is thinner than 2 px,
+  has no offset or does not cover links, buttons, inputs and the skip link; an animation or transition without a
+  `prefers-reduced-motion` guard; a standalone link, button or input without a 24 × 24 CSS px minimum; a missing
+  `color-scheme: light dark` or forced-colours block; `!important`; `overflow: hidden` used to hide overflow. Each
+  check has a deliberately broken stylesheet in the test.
+- **Reflow, text spacing and target size in a browser** (2026-10-23, headless Chromium 154 driven by
+  puppeteer-core 25.14.0, over all 61 rendered states): no state scrolls sideways at 320 CSS px (the width a
+  1280 px window has at 400 % zoom) or at 1280 px, with or without the WCAG 1.4.12 text-spacing override
+  (line height 1.5, paragraph spacing 2×, letter spacing 0.12 em, word spacing 0.16 em); no standalone target is
+  smaller than 24 × 24 CSS px; the focus ring was measured by pixel in both themes (light `#2a5db0` on white,
+  6.38:1; dark `#7aa7ff` on `#111`, 7.91:1). This was measured once, by a script that is not part of the build.
+- **Colour scheme and forced colours** were looked at in Chromium with `prefers-color-scheme` light and dark and
+  `forced-colors: active` emulated, and with the test-only right-to-left language: the pages mirror and nothing
+  overlaps. Screenshots are kept with the review.
 - **A one-off baseline** (2026-10-21) measured the pages in Chromium with axe-core 4.14.0 and html-validate
   11.17.0, scripted keyboard walks with puppeteer-core 25.14.0, colour contrast computed from the stylesheet
   (lowest ratio 4.87:1, passes), and the browser's accessibility tree. That run is where the list of gaps
   below comes from. It is not repeated on every change.
+
+## The border rule
+
+WCAG 1.4.11 asks for 3:1 on the parts of a control that are needed to see it. In planeter that means the
+**border of a text field and of a button** (and of the skip link) — `--control` in the stylesheet, 4.54:1 on white
+and 5.62:1 on the dark background — and the **focus ring** (`--accent`). Those are tested. The other lines are
+**decorative** and are left as they are: the rules between table rows and under the header (`--line`, 1.36:1 and
+1.49:1), the frame of a README and of code blocks, and the border of a plain badge; each is next to text that
+carries the same information (a badge has its words; a row has its content), so nothing depends on seeing the line.
+Status badges that are coloured (`ok`, `warn`, `bad`) draw their border in the same colour as their text, which is
+checked as text at 4.5:1. The header's navigation links are told apart from text by **weight and an underline on
+hover and on keyboard focus**, not by colour alone.
 
 ## What has not been checked
 
@@ -38,10 +68,14 @@ Everything below was checked by tools, not by people.
   control. Whether the pages are *usable* with them, as opposed to passing the checks above, is unknown.
   In particular: how a screen reader reads the status badges and the tables row by row; whether a failed
   sign-in is noticed (the failure is announced as an alert, but that has not been heard).
-- **Other browsers and systems.** The tool measurements used Chromium on Linux only.
-- **Forced-colours and high-contrast modes, text-only zoom to 200 %, screen magnifiers, print output.**
-- **Touch-target comfort on real devices** (the baseline found targets of 20–22.5 px that pass only by the
-  spacing exception).
+- **Other browsers and systems.** The tool measurements used Chromium on Linux only; Firefox and Safari were
+  not measured, nor the focus ring in them.
+- **Forced colours on a real system** (Windows high-contrast with a real screen; the block was checked only
+  with Chromium's emulation), **text-only zoom to 200 %, screen magnifiers, print output.**
+- **Touch-target comfort on real devices** (every target is at least 24 × 24 CSS px, which is the minimum, not
+  a comfortable size).
+- **A real right-to-left language.** Only the test language was rendered; numbers and units inside a
+  right-to-left sentence (`223 B`) have not been looked at by a reader of such a language.
 - **Whether the wording is understood** — plain words, the sentences' tone, and any translation need a
   fluent human reader.
 - **Voice control** ("label in name", WCAG 2.5.3) beyond what a script can compute.
@@ -50,17 +84,14 @@ Everything below was checked by tools, not by people.
 
 ## Known gaps
 
-These are known and planned, not fixed yet (the next steps of RFC 012):
+These are known and planned, not fixed yet:
 
-- Pages that scroll sideways at 320 px width, the change page above all (a 64-character identifier in a
-  heading).
-- Focus is shown only by the browser's default; no designed focus indicator.
-- No colour-scheme handling beyond the light/dark switch; form controls stay light in the dark scheme; header
-  links are not underlined.
-- Layout uses physical (left/right) CSS properties, which a right-to-left language will need changed.
-- Target sizes below the recommended size, as above.
 - A README's own links that are relative resolve against the page address, not the file's folder.
-- One language (English). Japanese and a language switcher are planned.
+- Wording: the plain-word rewrite of the interface is a later step, and the new "busy" page's words await it.
+- One language (English). Japanese and a language switcher are planned, and with them a reader's review of the
+  wording and of right-to-left layout.
+- The focus ring is the same colour as links (it stands off the control by a 2 px gap); a designed ring for the
+  few places where that is not enough has not been needed so far.
 
 ## How to report a problem
 
