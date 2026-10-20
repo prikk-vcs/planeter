@@ -374,17 +374,21 @@ fn a_genuine_verification_failure_is_not_mistaken_for_a_ceiling_hit() {
     data[mid] ^= 0xFF;
     std::fs::write(&container, data).unwrap();
 
-    // A generous ceiling is set, so the classifier is armed; the damage must still be a plain failure.
+    // A generous ceiling is set, so the classifier is armed; the damage must not be read as a ceiling hit.
+    // Since IS-39 it is not an error either: it is the verification's own answer, "does not verify" (this
+    // test asserted a plain exit-1 `Command` error before; the distinction it protects is unchanged).
     let repo = CliPrikkRepo::new(&root)
         .with_sandbox(Sandbox::Unconfined)
         .with_limits(CallLimits::data_ceiling(512 << 20));
-    match repo.verify() {
-        Err(PrikkError::Command {
-            code: Some(1),
-            stderr,
-        }) => {
-            assert!(stderr.contains("failed object"), "{stderr}");
-        }
-        other => panic!("expected a plain exit-1 failure, got {other:?}"),
-    }
+    let report = repo.verify().expect("a failing verification is a report");
+    assert!(!report.verdict.ok);
+    assert!(
+        report
+            .verdict
+            .failed_conditions
+            .iter()
+            .any(|c| c.id == "item-failure"),
+        "{:?}",
+        report.verdict.failed_conditions
+    );
 }

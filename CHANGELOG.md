@@ -5,6 +5,18 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **A repository whose verification fails is now shown as unverified, with the failed conditions, instead of
+  as "temporarily unavailable" (IS-39).** `prikk verify` exits 1 and prints the failing report when a
+  repository does not verify; planeter used to treat every non-zero exit as an outage, so the verify page
+  and the repository badge said the repository "could not be read right now" (and the API answered `503
+  unavailable`). They now show the verdict: the verify page and `GET …/verify` answer `200` with the
+  failed conditions and stages (`ok: false` in the API), and the repository and history badges say
+  `unverified`. Only a report in which every stage ran to an outcome is read this way: a run that stopped
+  for lack of memory (the per-read memory ceiling), was cut short, timed out or printed nothing usable is
+  still an error, never a verdict. A page whose own content cannot be read (damaged history or file
+  objects) is still `503`; no page ever says "verified" unless prikk's verdict is ok and every stage was
+  evaluated. No wording changed.
+
 ## [0.4.0] — 2026-10-19 — the read-path resource model: memory-weighted admission, a per-call ceiling, children that die with the server
 
 ### Upgrading from 0.3.0

@@ -415,8 +415,12 @@ impl VerifyView {
     }
 
     /// The repository-level assurance the UI shows next to a sealed change (T5).
+    ///
+    /// The honesty invariant (IS-39): `PrikkVerified` only when prikk's verdict is `ok` **and** every stage
+    /// was evaluated. prikk never reports `ok` with an unfinished stage; the check is here so that no future
+    /// input can turn one into the "verified" badge.
     pub fn assurance(&self) -> Assurance {
-        if self.ok {
+        if self.ok && self.stages.iter().all(|s| s.status == "evaluated") {
             Assurance::PrikkVerified
         } else {
             Assurance::Unverified

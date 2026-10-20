@@ -149,9 +149,9 @@ impl CliPrikkRepo {
     /// - the wall-time bound fired: the status `timeout` used to report ([`TIMEOUT_EXIT_CODE`]);
     /// - a **ceiling hit** (only when a ceiling was set): prikk aborted on an allocation failure (exit 134
     ///   behind `bwrap`, `SIGABRT` unconfined, or the Rust "memory allocation of … failed" line), or
-    ///   `verify` stopped with "did not complete every stage". A *genuine* verification failure says
-    ///   "found at least one failed object, block, or ref" with every stage evaluated, and is not
-    ///   mistaken for this. Either way the result is an error, never a verdict;
+    ///   `verify` stopped with "did not complete every stage". Either way the result is an error, never a
+    ///   verdict. (`verify` itself decides between a ceiling hit and a genuine failure from the report on
+    ///   stdout, not from this text: see `verify`, IS-39.)
     /// - anything else: the plain non-zero exit.
     fn failure(&self, args: &[&str], run: &Run) -> PrikkError {
         use std::os::unix::process::ExitStatusExt;
@@ -243,6 +243,26 @@ fn parse_schema_json<T: DeserializeOwned>(stdout: &str, expected_schema: &str) -
     serde_json::from_value(value).map_err(|e| PrikkError::Parse(e.to_string()))
 }
 
+/// Whether a stage's failure message says the process ran out of memory (what a `RLIMIT_DATA` ceiling
+/// does to prikk's `objects` stage: `i/o error: out of memory`, measured on prikk 0.52.0), as opposed to a
+/// finding about the repository ("integrity error: …").
+fn is_resource_failure(message: &str) -> bool {
+    let m = message.to_ascii_lowercase();
+    m.contains("out of memory")
+        || m.contains("cannot allocate memory")
+        || m.contains("memory allocation")
+}
+
+/// A failing report that is a complete verdict about the repository: every stage ran to an outcome (see
+/// `CliPrikkRepo::verify`).
+fn is_complete_verdict(report: &model::VerifyReport) -> bool {
+    report.stages.iter().all(|s| match s {
+        model::Stage::Evaluated { .. } => true,
+        model::Stage::Failed { message, .. } => !is_resource_failure(message),
+        model::Stage::NotEvaluated { .. } | model::Stage::Halted { .. } => false,
+    })
+}
+
 /// Extract the version token from a `prikk --version` line (`"prikk 0.43.0\n"` → `"0.43.0"`).
 fn parse_version_line(line: &str) -> Option<&str> {
     line.trim().strip_prefix("prikk ").map(str::trim)
@@ -285,8 +305,63 @@ impl super::repo::PrikkRepo for CliPrikkRepo {
         self.run_json(&["show", target, "--format", "json"], "show-report-v1")
     }
 
+    /// Re-derive the repository's verification (`prikk verify`).
+    ///
+    /// prikk exits **1 when verification fails and still prints the failing `verify-report-v1`** on
+    /// stdout; that report *is* the answer ("this repository does not verify, and why"), so it is returned
+    /// as `Ok` — like `trust_check` reads exit 1 — and not turned into an outage (IS-39). Only
+    /// the following is read as a verdict:
+    ///
+    /// * exit status **1** (never 2, 124, 134 or a signal) and no timeout;
+    /// * stdout that parses as `verify-report-v1` with `verdict.ok == false`;
+    /// * **every stage ran to an outcome**: none `halted`, none `not_evaluated`, and no `failed` stage whose
+    ///   message says the process ran out of memory (`is_resource_failure`). A stage that *failed*
+    ///   because the repository is damaged ("integrity error: …") is part of the verdict; one that failed
+    ///   for lack of memory is a memory ceiling hit (RFC 011 D-2), which must never read as "your
+    ///   repository is damaged".
+    ///
+    /// Everything else goes through `failure` as before: a ceiling hit is
+    /// [`PrikkError::CeilingExceeded`], a partial report is that too when a ceiling was set (and a plain
+    /// [`PrikkError::Command`] otherwise), a timeout, garbage or another schema are errors. The verdict is
+    /// decided from the **report on stdout**, never from stderr text.
     fn verify(&self) -> Result<model::VerifyReport> {
-        self.run_json(&["verify", "--format", "json"], "verify-report-v1")
+        const SCHEMA: &str = "verify-report-v1";
+        let args = ["verify", "--format", "json"];
+        let run = self.execute(&args)?;
+        if run.timed_out {
+            return Err(self.failure(&args, &run));
+        }
+        if run.status.success() {
+            let stdout = String::from_utf8(run.stdout)
+                .map_err(|e| PrikkError::Parse(format!("prikk stdout was not UTF-8: {e}")))?;
+            return parse_schema_json(&stdout, SCHEMA);
+        }
+        if run.status.code() == Some(1) {
+            let report = std::str::from_utf8(&run.stdout)
+                .ok()
+                .and_then(|out| parse_schema_json::<model::VerifyReport>(out, SCHEMA).ok())
+                .filter(|r| !r.verdict.ok);
+            match report {
+                Some(r) if is_complete_verdict(&r) => return Ok(r),
+                // A failing report that is not a complete verdict: a partial run. With a ceiling set it
+                // is a ceiling hit by construction (the stage that did not finish ran out of memory or was
+                // blocked behind it); without one it is a plain failure.
+                Some(_) => {
+                    return Err(match self.limits.data_ceiling {
+                        Some(ceiling_bytes) => PrikkError::CeilingExceeded {
+                            verb: "verify".to_owned(),
+                            ceiling_bytes,
+                        },
+                        None => PrikkError::Command {
+                            code: Some(1),
+                            stderr: String::from_utf8_lossy(&run.stderr).into_owned(),
+                        },
+                    });
+                }
+                None => {}
+            }
+        }
+        Err(self.failure(&args, &run))
     }
 
     fn branches(&self, all: bool) -> Result<model::BranchList> {
