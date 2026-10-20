@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | An **investigation** handoff under the accepted RFC 012 (workflow Phase 1–2; RFC 010 D-8). It measures the current UI against RFC 012 D-2, D-3, D-5 and D-6 and settles unknown U1. It builds small proofs of concept in scratch directories; it changes nothing in the repository. Issues IS-27, IS-30. |
-| Status | **Assigned** (2026-10-20). |
+| Status | **Done, reviewed Approved (2026-10-21).** Findings drive `message-catalog-handoff-v1.md` and the next handoffs. |
 | Basis | [`../../accepted/012-web-ui-foundations.md`](../../accepted/012-web-ui-foundations.md) (D-1…D-8, U1…U3); the architect's UI/API audit findings in `docs/STATUS.md` (IS-27, IS-30); `crates/planeter-web/templates/*.html`, `static/app.css`, `ui.rs`, `errors.rs`. |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`) with the raw outputs. |
 | Scope | Scratch directories only (under `.git-exclude/tmp/<name>/` or `/tmp`, removed when finished). **Non-change scope:** nothing in the repository except the review request; no product code; no manifest change; no commit to `main`. Install tools only in the scratch directory, name each tool and version, and treat their downloads as untrusted. |
