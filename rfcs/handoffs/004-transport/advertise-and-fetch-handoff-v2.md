@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | Part 2 of the RFC 004 v2 series (after [`transport-foundations-handoff-v2.md`](transport-foundations-handoff-v2.md), done and approved): the **read side of the transport** over HTTPS — advertise what a repository holds, and fetch it as a **whole artifact that is spooled, verified, cached and conditional** (RFC 004 D-2), with the lease classes of D-7, the HTTP envelope of D-11 and the instrumentation of D-12. Push, accept and the intent journal are part 3; creation from an archive (D-4) is a later part. |
-| Status | **Assigned** (2026-10-21), after part 1 was reviewed Approved. |
+| Status | **Done, reviewed Approved (2026-10-21; commits `a53d955`…`258bc9a`).** Next: `../005-change-review/change-model-and-journal-handoff-v2.md` (part 3a). |
 | Basis | [`../../accepted/004-transport.md`](../../accepted/004-transport.md) D-2, D-7, D-11, D-12 and the measured facts U-15, U-16 (archive export: flat memory, byte-identical for the same state, readers unaffected; export and accept exclude each other, whoever starts second fails); ledger PK-32, PK-37, PK-38, PK-60; part 1 (`planeter-core::lease`, `planeter-transport::artifacts`, `ExtraMounts`, the route registry and the enumeration test); RFC 011 (`CallLimits`, the gate and admission); RFC 003 (error shape, `Authorized(Read)`, existence-neutral 404); the API-messages-by-language machinery of the catalog. |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 
