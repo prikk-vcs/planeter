@@ -602,6 +602,33 @@ impl super::repo::PrikkRepo for CliPrikkRepo {
         Ok(report)
     }
 
+    fn doctor_report(&self) -> Result<crate::maintenance::DoctorReport> {
+        let run = self.execute(&["doctor"])?;
+        if run.timed_out {
+            return Err(self.failure(&["doctor"], &run));
+        }
+        let stdout = String::from_utf8_lossy(&run.stdout).into_owned();
+        match crate::maintenance::parse_doctor_output(&stdout) {
+            Ok(report) => Ok(report),
+            Err(parse) if run.status.success() => Err(parse),
+            // A failed run whose output is not a report: the plain failure, with prikk's own text.
+            Err(_) => Err(self.failure(&["doctor"], &run)),
+        }
+    }
+
+    fn doctor_repair(&self, repair: crate::maintenance::Repair) -> Result<String> {
+        self.run(&["doctor", repair.flag()])
+    }
+
+    fn unlock_list(&self) -> Result<Vec<crate::maintenance::LockInfo>> {
+        let stdout = self.run(&["unlock"])?;
+        crate::maintenance::parse_unlock_output(&stdout)
+    }
+
+    fn unlock_force(&self, lock_path: &str) -> Result<String> {
+        self.run(&["unlock", "--lock", lock_path, "--force"])
+    }
+
     fn sync_pending_patches(&self) -> Result<Vec<String>> {
         let stdout = self.run(&["sync", "pending"])?;
         crate::exchange::parse_pending_output(&stdout)

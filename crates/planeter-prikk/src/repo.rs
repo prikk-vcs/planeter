@@ -124,6 +124,23 @@ pub trait PrikkRepo {
     /// number of ids, [`crate::exchange::parse_pending_output`]).
     fn sync_pending_patches(&self) -> Result<Vec<String>>;
 
+    // -- maintenance (RFC 004 part 4: recovery)
+
+    /// `doctor` → its report, read strictly ([`crate::maintenance::parse_doctor_output`]). The report is returned
+    /// whatever the exit status (a repository with errors still has a report); an output of an unknown shape is
+    /// [`crate::PrikkError::Parse`].
+    fn doctor_report(&self) -> Result<crate::maintenance::DoctorReport>;
+
+    /// `doctor <repair flag>`: one named repair; returns prikk's stdout verbatim for the recovery record.
+    fn doctor_repair(&self, repair: crate::maintenance::Repair) -> Result<String>;
+
+    /// `unlock` (the listing): every lock currently held, read strictly. Clears nothing.
+    fn unlock_list(&self) -> Result<Vec<crate::maintenance::LockInfo>>;
+
+    /// `unlock --lock <path> --force`: clear one stale lock. **The caller must have its own evidence that nothing
+    /// is using the repository**; prikk's liveness advisory is not evidence (U-16). Returns prikk's stdout.
+    fn unlock_force(&self, lock_path: &str) -> Result<String>;
+
     /// `sync seal <ref> --claim <id>` → seal an accepted claim (needs a maintainer key in this repo;
     /// a keyless forge cannot call this — RFC 001 §0a / dependency-ledger PK-3).
     fn sync_seal(&self, ref_name: &str, claim: &str) -> Result<()>;

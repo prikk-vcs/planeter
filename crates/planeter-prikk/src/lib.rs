@@ -12,6 +12,7 @@
 pub mod cli;
 pub mod error;
 pub mod exchange;
+pub mod maintenance;
 pub mod model;
 pub mod repo;
 pub mod sandbox;
