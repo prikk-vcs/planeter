@@ -1,6 +1,9 @@
 # RFC 005 — Change proposal and review (third edition)
 
-**Status.** Proposed — **third edition, drafted 2026-10-21** for the owner's reading; the implementer must
+**Status.** **Accepted (2026-10-21) by the owner, with the contribution model (SCHEDULE D-9: the `propose` action, the
+`proposals` setting and its default `members`, the quota defaults of Q-2)** — third edition, drafted 2026-10-21. D-8 (publication)
+remains the owner's open question and does not block this RFC. Handoffs: [`../handoffs/005-change-review/`](../handoffs/005-change-review/),
+sequenced in §Sequencing and handoff. Previously: Proposed — third edition, drafted 2026-10-21 for the owner's reading; the implementer must
 not start. It replaces the body of the second edition (2026-10-15; earlier editions are in this path's git
 history). **Issues (CAP-4), bundled in v1, are split out** (see §Scope). The upstream rows the second edition
 waited for were measured (transport measurement A1–A12, ledger v1.9 PK-57 to PK-61, 2026-10-21); this edition
@@ -8,7 +11,7 @@ changes the design where they disagreed: the accept is resumable, not atomic, so
 from an **intent journal after a complete accept** (D-1); a revision's patch set cannot be recovered from
 prikk's output when patches overlap, so it is **declared by the client helper and checked by the forge**
 (D-1); a change is shown **file by file from `prikk extract` of the claim and of its parent** (D-4; `show <block-id>` is a prikk defect and `show <patch-id>` cannot name the file of an edit, PK-57, PK-64); and `queued` never
-means "unsealed" (D-10, PK-58). Ready for the owner's decision to accept (it depends on RFC 004 third edition).
+means "unsealed" (D-10, PK-58). It depends on RFC 004 third edition.
 Handoff: v1 ([`../handoffs/005-change-review/change-review-handoff-v1.md`](../handoffs/005-change-review/change-review-handoff-v1.md))
 is superseded; **handoff v2 is written on acceptance.**
 **Tracks.** ROADMAP Phase A3 → M3. Requirements `CAP-5`, `SEC-1`, `NG-3`, `NG-6`; external design

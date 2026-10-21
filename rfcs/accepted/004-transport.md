@@ -1,13 +1,15 @@
 # RFC 004 — Transport: clone and push as a ferry over prikk's artifact exchange (third edition)
 
-**Status.** Proposed — **third edition, drafted 2026-10-21** for the owner's reading; the implementer must not
+**Status.** **Accepted (2026-10-21) by the owner** — third edition, drafted 2026-10-21 (Q-2 and Q-3 decided by the
+architect as recorded in §Risks and open questions; D-8, what a branch is, remains the owner's open question and does not
+block this RFC). Handoffs: [`../handoffs/004-transport/`](../handoffs/004-transport/), sequenced in §Sequencing and handoff.
+Previously: Proposed — third edition, drafted 2026-10-21 for the owner's reading; the implementer must not
 start. It replaces the body of the second edition (2026-10-15; earlier editions are in this path's git history).
 **The measurement the second edition waited for is done and reviewed** (the transport measurement handoff
 [`../handoffs/004-transport/transport-measurement-handoff-v1.md`](../handoffs/004-transport/transport-measurement-handoff-v1.md),
 rows A1–A12, run on prikk 0.53.0 and side by side on 0.52.0; ledger v1.9 PK-57 to PK-60), so the rows that
 blocked acceptance (RFC 010 D-8) are now **confirmed**; this edition changes the design where the numbers
-disagreed with the second edition (see §What the measurements changed). It is ready for the owner's decision to
-accept. Handoff v1 is superseded; **handoff v2 is written on acceptance.**
+disagreed with the second edition (see §What the measurements changed). Handoff v1 is superseded; the v2 series is written.
 **Tracks.** ROADMAP Phase A2 → M2 (reduced; see §Scope); requirements `CAP-2`, `INT-2`, `STD-1`, `NG-2`,
 `OPS-3`; external design `TX-01…06`, `FL-02/03`, `OP-01/03`; internal design `WR-1/2/3/6`, `CON-1/3`,
 `PKI-2/3`; threat model `T-3`, `T-4`, `T-9`, `INV-2/3`, `C-4`; RFC 002 (`authorize()`, new action `propose`),

@@ -42,8 +42,8 @@ artifact) are accepted by the prikk owner, so 008 is gated on RFC 154 shipping; 
 | 001 | [Foundations: prikk-integration layer, the layering gate, multi-repo hosting & identity](done/001-foundations.md) | A0→A1 | **done** (0.1.0) |
 | 002 | [Authorization model (`authorize()`, roles, per-ref permissions)](done/002-authorization.md) | A1 | **done** (0.1.0; SSO in 0.2.0) |
 | 003 | [Read path & web browse (re-derivation, caching, safe rendering)](done/003-read-path.md) | A1 | **done** (0.1.0; UI in 0.1.1) |
-| 004 | [Transport, third edition: whole-artifact fetch, leased keyless push with an intent journal, resumable recovery, client helper](proposed/004-transport.md) | A2 | **proposed** (third edition 2026-10-21, on the measured rows; awaiting the owner's decision to accept) |
-| 005 | [Change proposal and review, third edition (issues split out; merge is RFC 008 / D-8)](proposed/005-change-review.md) | A3 | **proposed** (third edition 2026-10-21, on the measured rows; awaiting the owner's decision to accept, after 004) |
+| 004 | [Transport, third edition: whole-artifact fetch, leased keyless push with an intent journal, resumable recovery, client helper](accepted/004-transport.md) | A2 | **accepted** (2026-10-21) |
+| 005 | [Change proposal and review, third edition (issues split out; merge is RFC 008 / D-8)](accepted/005-change-review.md) | A3 | **accepted** (2026-10-21, with the contribution model D-9) |
 | 006 | [Continuous integration and the runner protocol](proposed/006-ci-runners.md) | A4 | **proposed** (re-opened 2026-10-15; v2 pending) |
 | 007 | [Package and artifact registry](proposed/007-registry.md) | A5 | **proposed** (re-opened 2026-10-15; v2 pending) |
 | 008 | [*(joint prikk)* One-click merge without a forge key (UD-6)](proposed/008-seal-one-click-merge.md) | B1 | **proposed** (re-opened 2026-10-15; v2 pending) |
@@ -56,8 +56,8 @@ artifact) are accepted by the prikk owner, so 008 is gated on RFC 154 shipping; 
 
 | State | RFCs |
 |---|---|
-| Proposed | [004](proposed/004-transport.md), [005](proposed/005-change-review.md), [006](proposed/006-ci-runners.md), [007](proposed/007-registry.md), [008](proposed/008-seal-one-click-merge.md), [009](proposed/009-hosted-format-durability.md) — re-opened 2026-10-15 for revision |
-| Accepted | [010 — Upstream tracking and supply-chain maintenance](accepted/010-upstream-and-supply-chain-maintenance.md), [011 — The read-path resource model](accepted/011-read-path-resource-model.md), [012 — Web UI foundations](accepted/012-web-ui-foundations.md) |
+| Proposed | [006](proposed/006-ci-runners.md), [007](proposed/007-registry.md), [008](proposed/008-seal-one-click-merge.md), [009](proposed/009-hosted-format-durability.md) — re-opened 2026-10-15 for revision |
+| Accepted | [004 — Transport](accepted/004-transport.md), [005 — Change proposal and review](accepted/005-change-review.md), [010 — Upstream tracking and supply-chain maintenance](accepted/010-upstream-and-supply-chain-maintenance.md), [011 — The read-path resource model](accepted/011-read-path-resource-model.md), [012 — Web UI foundations](accepted/012-web-ui-foundations.md) |
 | Done | [001 — Foundations](done/001-foundations.md), [002 — Authorization](done/002-authorization.md), [003 — Read path](done/003-read-path.md) — shipped in 0.1.0 (2026-09-23) |
 | Archived | *(none yet)* |
 
