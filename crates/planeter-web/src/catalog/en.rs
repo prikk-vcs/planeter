@@ -324,6 +324,39 @@ pub const CATALOG: &[Entry] = &[
         "error.invalid_request.ref_hint",
         "A bundle needs a ref: add ref=NAME, taking the name from the advertisement.",
     ),
+    // quota refusals of a proposed change (RFC 005 D-9)
+    msg(
+        "quota.open_changes.message",
+        "You already have {used} open changes in this repository, and the limit is {limit}.",
+    ),
+    msg(
+        "quota.open_changes.hint",
+        "Close one of your open changes, or ask a maintainer to raise the limit.",
+    ),
+    msg(
+        "quota.accepted_bytes.message",
+        "You have already sent {used} MiB to this repository, and the limit is {limit} MiB.",
+    ),
+    msg(
+        "quota.accepted_bytes.hint",
+        "Ask a maintainer to raise the limit, because what you have sent stays on the server even after a change is closed.",
+    ),
+    msg(
+        "quota.revisions.message",
+        "This change already has {used} revisions, and the limit is {limit}.",
+    ),
+    msg(
+        "quota.revisions.hint",
+        "Open a new change for further work, or ask a maintainer to raise the limit.",
+    ),
+    msg(
+        "quota.capacity.message",
+        "This repository has reached its capacity for proposed changes: {used} MiB of {limit} MiB are in use.",
+    ),
+    msg(
+        "quota.capacity.hint",
+        "Ask a maintainer to close finished changes, or ask the person who runs this server to raise the capacity.",
+    ),
     // pages that used to be bare strings (T7): a heading, one sentence, one link
     msg("page.link.sign_in", "Go to the sign-in page"),
     msg("page.link.home", "Go to the home page"),

@@ -19,6 +19,7 @@
 pub mod admission;
 pub mod audit;
 pub mod authorize;
+pub mod change;
 pub mod egress;
 pub mod fetch;
 pub mod hosting;

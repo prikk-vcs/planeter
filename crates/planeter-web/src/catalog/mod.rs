@@ -458,6 +458,15 @@ keys! {
     ErrRangeMessage => "error.range_not_satisfiable.message",
     ErrRangeHint => "error.range_not_satisfiable.hint",
     ErrRefRequiredHint => "error.invalid_request.ref_hint",
+    // quota refusals of a proposed change (RFC 005 D-9)
+    QuotaOpenChangesMessage => "quota.open_changes.message",
+    QuotaOpenChangesHint => "quota.open_changes.hint",
+    QuotaAcceptedBytesMessage => "quota.accepted_bytes.message",
+    QuotaAcceptedBytesHint => "quota.accepted_bytes.hint",
+    QuotaRevisionsMessage => "quota.revisions.message",
+    QuotaRevisionsHint => "quota.revisions.hint",
+    QuotaCapacityMessage => "quota.capacity.message",
+    QuotaCapacityHint => "quota.capacity.hint",
     // pages that used to be bare strings (RFC 012 T7)
     PageLinkSignIn => "page.link.sign_in",
     PageLinkHome => "page.link.home",

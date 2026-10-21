@@ -349,6 +349,39 @@ pub const CATALOG: &[Entry] = &[
         "error.invalid_request.ref_hint",
         "バンドルには ref が必要です。アドバタイズから名前を確認して、ref=名前 を追加してください。",
     ),
+    // quota refusals of a proposed change (RFC 005 D-9)
+    msg(
+        "quota.open_changes.message",
+        "このリポジトリで開いている変更がすでに{used}件あり、上限は{limit}件です。",
+    ),
+    msg(
+        "quota.open_changes.hint",
+        "開いている変更のどれかを閉じるか、メンテナーに上限の引き上げを依頼してください。",
+    ),
+    msg(
+        "quota.accepted_bytes.message",
+        "このリポジトリにはすでに{used} MiB を送信済みで、上限は{limit} MiB です。",
+    ),
+    msg(
+        "quota.accepted_bytes.hint",
+        "送信した内容は変更を閉じた後もサーバーに残るため、メンテナーに上限の引き上げを依頼してください。",
+    ),
+    msg(
+        "quota.revisions.message",
+        "この変更にはすでに{used}件のリビジョンがあり、上限は{limit}件です。",
+    ),
+    msg(
+        "quota.revisions.hint",
+        "続きの作業は新しい変更として開くか、メンテナーに上限の引き上げを依頼してください。",
+    ),
+    msg(
+        "quota.capacity.message",
+        "このリポジトリは、提案された変更を受け入れる容量の上限に達しています。{limit} MiB のうち {used} MiB が使用中です。",
+    ),
+    msg(
+        "quota.capacity.hint",
+        "メンテナーに完了した変更を閉じるよう依頼するか、このサーバーの管理者に容量の引き上げを依頼してください。",
+    ),
     // pages that used to be bare strings (T7): a heading, one sentence, one link
     msg("page.link.sign_in", "ログインのページへ"),
     msg("page.link.home", "ホームページへ"),
