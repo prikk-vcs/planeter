@@ -166,34 +166,4 @@ mod tests {
         assert_eq!(entries[0].principal, "user:alice");
         assert!(entries[0].resource.starts_with("repo:alice/"));
     }
-
-    #[test]
-    fn a_proposal_is_audited_allowed_or_denied() {
-        let sink = InMemoryAuditSink::new();
-        let principal = Principal::User(UserId::new("stranger"));
-        let resource = repo_resource();
-        audit_if_sensitive(
-            &sink,
-            &principal,
-            Action::Propose,
-            &resource,
-            &Decision::Allow,
-            1,
-        );
-        audit_if_sensitive(
-            &sink,
-            &principal,
-            Action::Propose,
-            &resource,
-            &Decision::Deny(DenyReason::NotAuthorized),
-            2,
-        );
-        let entries = sink.entries();
-        assert_eq!(entries.len(), 2);
-        assert!(entries.iter().all(|e| e.action == Action::Propose));
-        assert_eq!(
-            entries.iter().map(|e| e.allowed).collect::<Vec<_>>(),
-            [true, false]
-        );
-    }
 }

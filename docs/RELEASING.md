@@ -193,6 +193,24 @@ docker run --rm ghcr.io/prikk-vcs/planeter:X.Y.Z --version
   (before, `timeout` → `bwrap` outlived it until the call ended). A call that hits its ceiling is a `503`
   (`unavailable`) and logs one line naming the verb and the ceiling; it is never reported as a
   verification result.
+- **One server per database; the artifact store and the export spool (RFC 004 D-2, D-7).** The repository
+  lease that keeps a write and an export from touching one repository at once lives **in the server process**,
+  so **only one planeter server per database is supported**. The server enforces it at start: it takes a lock
+  file `<PLANETER_DB>.lock` (holding its process id) before it opens the database, and **refuses to start** — exit
+  1, with the other process's id and what to do — if a running server holds it. The file is removed on a normal exit
+  and on any refused start; a server that is killed (`SIGKILL`, `SIGTERM`, power loss) leaves it, and the next start
+  sees that the process named in it is gone and replaces it. If the process id was reused by an unrelated process
+  after a crash, the start is refused and the message names the file to delete. Do not run two servers on one
+  database file, and do not delete the lock file of a running server. Two settings name the directories the
+  transport (not built yet) will use; both are optional and unset means *none*:
+  **`PLANETER_ARTIFACT_DIR`** (accepted artifacts; content-addressed by SHA-256; **never evicted**) and
+  **`PLANETER_SPOOL_DIR`** (exports being served; content-addressed; the **least recently used are evicted** to
+  stay within **`PLANETER_SPOOL_BUDGET_MB`**, default 1024, which needs the spool directory). Both must be
+  absolute paths **outside `PLANETER_REPOS_ROOT`** (a path that is inside it, around it, or a symlink into it is
+  refused at start), and they must not overlap each other. They are created at start, and `.partial` files
+  that a crash left are removed then. Give them a disk of their own or a quota: the spool stays within its
+  budget, the artifact store grows with what is accepted. Nothing uses them yet: no route reads or writes
+  them, and an unset setting changes nothing.
 - **Sign-in concurrency (IS-24, IS-31):** password verification (Argon2id) runs off the async workers
   behind its own gate, separate from the prikk one. **`PLANETER_AUTH_CONCURRENCY`** is the most
   verifications at once (positive integer; default `min(CPUs, 4)`); **`PLANETER_AUTH_QUEUE_WAIT_SECS`**

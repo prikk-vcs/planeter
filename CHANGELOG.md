@@ -5,6 +5,21 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **Foundations for the transport (RFC 004, part 1) — nothing is reachable from the network that was not before.**
+  (1) **A test that every route authorizes (IS-14).** Every route of the web surface is registered in one table with
+  its authorization class — it checks `authorize()` or is on a short list of public routes, each with a written
+  reason — and a test fails the build for a route that is not in it, or that is in it but leaks. (2) **A new
+  permission, `propose`** (`Action::ALL` now has ten entries): granted to `write` and above; never to an anonymous
+  visitor; to any signed-in user only when a repository's new setting `proposals` is `any-authenticated` (default
+  `members`). The database gets a `proposals` column on first start, safely repeatable. No page or API uses it yet.
+  (3) **A lease for each repository** (reads / exports / writes) with bounded waits, and a **record of who holds an
+  exclusive lease**, so a crash is visible at the next start. (4) **Only one server per database:** a second server
+  on the same database file is refused at start (`<database>.lock`; see RELEASING). (5) **An artifact store and an
+  export spool** (`PLANETER_ARTIFACT_DIR`, `PLANETER_SPOOL_DIR`, `PLANETER_SPOOL_BUDGET_MB`; optional, unset by
+  default): content-addressed, written atomically, the spool bounded and evicting its oldest. (6) **The sandbox can
+  take two optional mounts** (accepted artifacts read-only; the export spool read-write); without them the
+  sandbox is byte for byte what it was.
+
 - **A missing file or folder is now said to be missing (IS-45).** In a repository you may read, a file or folder that
   is not there used to show "There is no repository at this address, or you do not have access to it." It now says
   **"This file or folder was not found in this repository. Check the path, or go back to the files."** with a link to
