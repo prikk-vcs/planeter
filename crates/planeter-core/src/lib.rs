@@ -23,7 +23,9 @@ pub mod egress;
 pub mod fetch;
 pub mod hosting;
 pub mod layout;
+pub mod lease;
 pub mod permission;
+pub mod process_lock;
 pub mod read;
 
 pub use audit::{AuditRecord, AuditSink, InMemoryAuditSink, NullAuditSink, audit_if_sensitive};
@@ -38,8 +40,10 @@ pub use egress::{
 pub use fetch::{CurlFetcher, FetchError, FetchLimits, FetchRequest, HttpsFetcher};
 pub use hosting::{HostingError, HostingService};
 pub use layout::{DefaultRepoIdAllocator, RepoIdAllocator, RepoLayout};
+pub use lease::{Lease, LeaseClass, LeaseError, LeaseManager, new_boot_id};
 pub use permission::resolve_repo_role;
 pub use planeter_prikk::CallLimits;
+pub use process_lock::{ProcessLock, ProcessLockError};
 pub use read::{
     Assurance, ChangeView, FileContentView, FileView, Freshness, HistoryView, RawFile, RawTarget,
     ReadError, ReadService, RefsView, Served, TreeEntryView, TreeView, VerifyView,

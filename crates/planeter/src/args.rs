@@ -74,6 +74,7 @@ environment:
                                 application's (default http://<PLANETER_ADDR>, development only: a
                                 non-loopback bind with the same host is refused)
   PLANETER_DB                   the SQLite database file (default ./planeter.db; created if absent)
+                                (one server per database: <file>.lock refuses a second one)
   PLANETER_TRUSTED_PROXIES      comma-separated addresses/CIDRs of the TLS-terminating reverse proxies;
                                 a non-loopback PLANETER_ADDR is refused unless this is set
   PLANETER_PRIKK_CONCURRENCY    most prikk subprocesses at once (default min(CPUs, 8))

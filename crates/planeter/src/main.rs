@@ -19,9 +19,20 @@ use planeter_auth::{
 };
 use planeter_core::{HostingService, NullAuditSink, ReadService};
 use planeter_store::{
-    MembershipStore, RepositoryStore, SqliteDb, SqliteMembershipStore, SqliteRepositoryStore,
+    MembershipStore, RepositoryStore, SqliteDb, SqliteLeaseRecords, SqliteMembershipStore,
+    SqliteRepositoryStore,
 };
 use planeter_web::AppState;
+
+/// The single-process lock (RFC 004 D-7), held for the life of the server. A static so that every refusal to
+/// start after it was taken can remove the file before exiting.
+static PROCESS_LOCK: std::sync::Mutex<Option<planeter_core::ProcessLock>> =
+    std::sync::Mutex::new(None);
+
+fn exit_releasing_lock(code: i32) -> ! {
+    drop(PROCESS_LOCK.lock().ok().and_then(|mut l| l.take()));
+    std::process::exit(code)
+}
 
 #[tokio::main]
 async fn main() {
@@ -98,15 +109,56 @@ async fn main() {
         std::process::exit(1);
     }
 
+    // RFC 004 D-7: the repository lease is in-process, so a second server against one database is refused here,
+    // before the database is opened. The lock file sits next to the database and is removed on a normal exit; a
+    // killed server leaves it, and the next start recognises it as stale.
+    match planeter_core::ProcessLock::acquire(format!("{db_path}.lock")) {
+        Ok(lock) => *PROCESS_LOCK.lock().expect("lock slot") = Some(lock),
+        Err(e) => {
+            eprintln!("planeter: refusing to start: {e}");
+            std::process::exit(1);
+        }
+    }
+
     // One SQLite database for every store; production hashers.
     let db = match SqliteDb::open(&db_path) {
         Ok(db) => db,
         Err(e) => {
             eprintln!("planeter: cannot open database {db_path}: {e}");
-            std::process::exit(1);
+            exit_releasing_lock(1);
         }
     };
     let repo_store: Arc<dyn RepositoryStore> = Arc::new(SqliteRepositoryStore::new(db.clone()));
+
+    // The repository lease (RFC 004 D-7). Nothing takes a lease yet (the transport routes come later); what a
+    // previous process left in the durable holder table is reported, so an operator sees it.
+    match SqliteLeaseRecords::new(db.clone()) {
+        Ok(records) => {
+            let leases = planeter_core::LeaseManager::new(
+                Arc::new(records),
+                planeter_core::new_boot_id(),
+                || {
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|d| d.as_secs())
+                        .unwrap_or(0)
+                },
+                std::time::Duration::from_secs(5),
+            );
+            match leases.orphans() {
+                Ok(o) if o.is_empty() => {}
+                Ok(o) => eprintln!(
+                    "planeter: {} exclusive repository lease(s) were held by a server that stopped without releasing them (listed in the lease_holders table)",
+                    o.len()
+                ),
+                Err(e) => eprintln!("planeter: cannot read the lease records: {e}"),
+            }
+        }
+        Err(e) => {
+            eprintln!("planeter: cannot initialise the lease records: {e}");
+            exit_releasing_lock(1);
+        }
+    }
     let hosting = Arc::new(HostingService::new(repos_root, repo_store));
     let membership: Arc<dyn MembershipStore> = Arc::new(SqliteMembershipStore::new(db.clone()));
     let read = Arc::new(ReadService::new(
@@ -125,7 +177,7 @@ async fn main() {
         Ok(g) => Arc::new(g),
         Err(e) => {
             eprintln!("planeter: {e}");
-            std::process::exit(1);
+            exit_releasing_lock(1);
         }
     };
     eprintln!(
@@ -148,7 +200,7 @@ async fn main() {
                     "planeter: {e}; set {} to the memory budget for reads, in MiB",
                     planeter_web::budget::VAR
                 );
-                std::process::exit(1);
+                exit_releasing_lock(1);
             }
         },
     };
@@ -157,7 +209,7 @@ async fn main() {
             Ok(b) => b,
             Err(e) => {
                 eprintln!("planeter: {e}");
-                std::process::exit(1);
+                exit_releasing_lock(1);
             }
         };
     let gate = Arc::new(
@@ -186,7 +238,7 @@ async fn main() {
         Ok(g) => Arc::new(g),
         Err(e) => {
             eprintln!("planeter: {e}");
-            std::process::exit(1);
+            exit_releasing_lock(1);
         }
     };
     eprintln!(
@@ -202,7 +254,7 @@ async fn main() {
         (Ok(a), Ok(c)) => (a, c),
         (Err(e), _) | (_, Err(e)) => {
             eprintln!("planeter: cannot initialise auth tables: {e}");
-            std::process::exit(1);
+            exit_releasing_lock(1);
         }
     };
     let auth = Arc::new(Authenticator::new(
@@ -216,7 +268,7 @@ async fn main() {
         Ok(s) => s,
         Err(e) => {
             eprintln!("planeter: cannot initialise sessions: {e}");
-            std::process::exit(1);
+            exit_releasing_lock(1);
         }
     };
 
@@ -226,7 +278,7 @@ async fn main() {
                 Ok(v) if !v.is_empty() => v,
                 _ => {
                     eprintln!("planeter: {k} is required when PLANETER_OIDC_ISSUER is set");
-                    std::process::exit(1);
+                    exit_releasing_lock(1);
                 }
             };
             let cfg = planeter_auth::OidcConfig {
@@ -267,6 +319,7 @@ async fn main() {
     eprintln!("planeter listening on http://{addr} (db: {db_path})");
     if let Err(e) = planeter_web::serve(state, addr).await {
         eprintln!("planeter: server error: {e}");
-        std::process::exit(1);
+        exit_releasing_lock(1);
     }
+    drop(PROCESS_LOCK.lock().expect("lock slot").take());
 }
