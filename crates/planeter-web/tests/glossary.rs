@@ -15,7 +15,6 @@ fn glossary() -> String {
 
 struct Row {
     key: String,
-    was: String,
     current: String,
     status: String,
 }
@@ -45,7 +44,6 @@ fn rows(src: &str) -> Vec<Row> {
         );
         out.push(Row {
             key: cells[0].trim_matches('`').to_owned(),
-            was: cells[1].to_owned(),
             current: cells[2].to_owned(),
             status: cells[3].to_owned(),
         });
