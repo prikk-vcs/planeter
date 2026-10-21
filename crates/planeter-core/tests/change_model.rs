@@ -605,7 +605,7 @@ fn usage(open_changes: u64, accepted_mib: u64, pending_mib: u64) -> QuotaUsage {
     QuotaUsage {
         open_changes,
         accepted_bytes: accepted_mib * MIB,
-        repo_pending_bytes: pending_mib * MIB,
+        repo_retained_bytes: pending_mib * MIB,
     }
 }
 
@@ -637,7 +637,7 @@ fn the_defaults_are_the_table_of_rfc_005_q2() {
     );
     for p in [m, a] {
         assert_eq!(
-            p.repo_pending_bytes,
+            p.repo_retained_bytes,
             4 * 1024 * MIB,
             "the repository ceiling is the same in both"
         );
@@ -719,11 +719,11 @@ fn revisions_per_change_the_limit_is_allowed_and_one_over_is_refused() {
 #[test]
 fn the_repository_ceiling_is_allowed_at_the_limit_and_refused_one_over_by_name() {
     let p = QuotaPolicy::defaults_for(ProposalPolicy::Members);
-    let ceiling = p.repo_pending_bytes;
+    let ceiling = p.repo_retained_bytes;
     let at = QuotaUsage {
         open_changes: 0,
         accepted_bytes: 0,
-        repo_pending_bytes: ceiling - 10,
+        repo_retained_bytes: ceiling - 10,
     };
     assert_eq!(
         check_quota(
@@ -754,7 +754,7 @@ fn the_repository_ceiling_is_allowed_at_the_limit_and_refused_one_over_by_name()
 #[test]
 fn a_custom_operator_ceiling_is_honoured() {
     let mut p = QuotaPolicy::defaults_for(ProposalPolicy::Members);
-    p.repo_pending_bytes = 100 * MIB;
+    p.repo_retained_bytes = 100 * MIB;
     assert!(check_quota(&usage(0, 0, 99), &p, &new_change(1)).is_ok());
     assert_eq!(
         check_quota(&usage(0, 0, 99), &p, &new_change(2))
@@ -771,7 +771,7 @@ fn when_two_quotas_would_refuse_the_repository_is_named_first_and_then_the_one_t
     let everything = QuotaUsage {
         open_changes: 3,
         accepted_bytes: 64 * MIB,
-        repo_pending_bytes: p.repo_pending_bytes,
+        repo_retained_bytes: p.repo_retained_bytes,
     };
     assert_eq!(
         check_quota(&everything, &p, &new_change(1))
@@ -782,7 +782,7 @@ fn when_two_quotas_would_refuse_the_repository_is_named_first_and_then_the_one_t
     let person = QuotaUsage {
         open_changes: 3,
         accepted_bytes: 64 * MIB,
-        repo_pending_bytes: 0,
+        repo_retained_bytes: 0,
     };
     assert_eq!(
         check_quota(&person, &p, &new_change(1)).unwrap_err().quota,
@@ -813,7 +813,7 @@ fn a_huge_request_cannot_overflow_its_way_past_a_quota() {
     let full = QuotaUsage {
         open_changes: u64::MAX,
         accepted_bytes: u64::MAX,
-        repo_pending_bytes: 0,
+        repo_retained_bytes: 0,
     };
     assert!(check_quota(&full, &p, &new_change(1)).is_err());
 }

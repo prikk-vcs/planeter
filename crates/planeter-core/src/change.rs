@@ -375,8 +375,9 @@ pub struct QuotaPolicy {
     pub accepted_bytes: u64,
     /// Revisions per change.
     pub revisions_per_change: u64,
-    /// Pending bytes of the whole repository ("repository capacity").
-    pub repo_pending_bytes: u64,
+    /// Bytes of every artifact the repository still retains — open changes and changes within their grace — the
+    /// ceiling ("repository capacity").
+    pub repo_retained_bytes: u64,
     /// How long an accepted artifact is kept after its change leaves `open`.
     pub retention_grace_secs: u64,
 }
@@ -389,14 +390,14 @@ impl QuotaPolicy {
                 open_changes: 10,
                 accepted_bytes: 512 * MIB,
                 revisions_per_change: 20,
-                repo_pending_bytes: 4 * GIB,
+                repo_retained_bytes: 4 * GIB,
                 retention_grace_secs: DEFAULT_RETENTION_GRACE_SECS,
             },
             ProposalPolicy::AnyAuthenticated => Self {
                 open_changes: 3,
                 accepted_bytes: 64 * MIB,
                 revisions_per_change: 10,
-                repo_pending_bytes: 4 * GIB,
+                repo_retained_bytes: 4 * GIB,
                 retention_grace_secs: DEFAULT_RETENTION_GRACE_SECS,
             },
         }
@@ -408,7 +409,7 @@ impl QuotaPolicy {
 pub struct QuotaUsage {
     pub open_changes: u64,
     pub accepted_bytes: u64,
-    pub repo_pending_bytes: u64,
+    pub repo_retained_bytes: u64,
 }
 
 impl From<planeter_store::Usage> for QuotaUsage {
@@ -416,7 +417,7 @@ impl From<planeter_store::Usage> for QuotaUsage {
         Self {
             open_changes: u.open_changes,
             accepted_bytes: u.accepted_bytes,
-            repo_pending_bytes: u.repo_pending_bytes,
+            repo_retained_bytes: u.repo_retained_bytes,
         }
     }
 }
@@ -513,11 +514,11 @@ pub fn check_quota(
     policy: &QuotaPolicy,
     request: &QuotaRequest,
 ) -> Result<(), QuotaRefusal> {
-    if usage.repo_pending_bytes.saturating_add(request.bytes) > policy.repo_pending_bytes {
+    if usage.repo_retained_bytes.saturating_add(request.bytes) > policy.repo_retained_bytes {
         return Err(QuotaRefusal {
             quota: Quota::RepositoryCapacity,
-            limit: policy.repo_pending_bytes,
-            used: usage.repo_pending_bytes,
+            limit: policy.repo_retained_bytes,
+            used: usage.repo_retained_bytes,
             requested: request.bytes,
         });
     }

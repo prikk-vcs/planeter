@@ -51,7 +51,7 @@ about 50 ms (one short transaction on the shared connection).
    and the page will say so.
 6. **Closing needs a reason** and a person already allowed to close. Landed and closed are final.
 7. **Quotas** (members / any-authenticated): open changes 10 / 3, accepted bytes 512 / 64 MiB, revisions per change 20 / 10,
-   and a repository ceiling of 4 GiB of pending bytes. At the limit is allowed; one over is refused, naming the quota, the
+   and a repository ceiling of 4 GiB of **retained** bytes (the artifacts of open changes and of changes still within their 30-day grace: what occupies the disk). At the limit is allowed; one over is refused, naming the quota, the
    limit, the current use and what to do. The per-push bounds belong to the transport edge (part 3b).
 8. **A patch is "signed into the history" only if a block read from `log` contains it**, and "pending" only if `sync pending`
    lists it. `queued` is never read: a pending patch reports `queued: false`.

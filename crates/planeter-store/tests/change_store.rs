@@ -8,6 +8,9 @@ use planeter_store::{
     unpack_ids,
 };
 
+/// The clock of the usage tests.
+const NOW: u64 = 500;
+
 fn pid(n: u64) -> String {
     format!("{n:064x}")
 }
@@ -382,7 +385,7 @@ fn completion_is_atomic_when_a_failure_follows_the_revision_insert(s: &dyn Chang
         None,
         "the change was not created"
     );
-    assert_eq!(s.usage(&repo(), "alice").unwrap().accepted_bytes, 0);
+    assert_eq!(s.usage(&repo(), "alice", NOW).unwrap().accepted_bytes, 0);
     s.inject_failure(FailPoint::AfterRevisionInsert, false);
     s.complete_intent_with_revision(
         "i-1",
@@ -615,19 +618,19 @@ fn usage_is_computed_from_the_records_and_cannot_drift(s: &dyn ChangeStore) {
     let (c1, _) = push_new_change(s, 1, "alice", 100);
     let (_c2, _) = push_new_change(s, 2, "alice", 200);
     let (_c3, _) = push_new_change(s, 3, "bob", 400);
-    let u = s.usage(&repo(), "alice").unwrap();
+    let u = s.usage(&repo(), "alice", NOW).unwrap();
     assert_eq!(
-        (u.open_changes, u.accepted_bytes, u.repo_pending_bytes),
+        (u.open_changes, u.accepted_bytes, u.repo_retained_bytes),
         (2, 300, 700)
     );
-    let u = s.usage(&repo(), "bob").unwrap();
+    let u = s.usage(&repo(), "bob", NOW).unwrap();
     assert_eq!(
-        (u.open_changes, u.accepted_bytes, u.repo_pending_bytes),
+        (u.open_changes, u.accepted_bytes, u.repo_retained_bytes),
         (1, 400, 700)
     );
-    assert_eq!(s.usage(&repo(), "carol").unwrap().open_changes, 0);
+    assert_eq!(s.usage(&repo(), "carol", NOW).unwrap().open_changes, 0);
     assert_eq!(
-        s.usage(&RepoId::new("other"), "alice").unwrap(),
+        s.usage(&RepoId::new("other"), "alice", NOW).unwrap(),
         Default::default()
     );
     // A second revision adds to the bytes, not to the open changes.
@@ -635,19 +638,39 @@ fn usage_is_computed_from_the_records_and_cannot_drift(s: &dyn ChangeStore) {
         .unwrap();
     s.complete_intent_with_revision("i-x", None, &revision("v-x", &c1, 2, 9, 50, "alice"), 31)
         .unwrap();
-    let u = s.usage(&repo(), "alice").unwrap();
+    let u = s.usage(&repo(), "alice", NOW).unwrap();
     assert_eq!(
-        (u.open_changes, u.accepted_bytes, u.repo_pending_bytes),
+        (u.open_changes, u.accepted_bytes, u.repo_retained_bytes),
         (2, 350, 750)
     );
-    // Leaving `open` frees an open-change slot and the repository's pending bytes, but the accepted bytes stay:
-    // an accepted artifact is in the store and cannot be removed (PK-41).
+    // Leaving `open` frees an open-change slot, and an accepted artifact stays in the store (PK-41) so the accepted
+    // bytes stay; the repository's *retained* bytes still count the closed change's artifacts until its grace
+    // (`retain_until`, here 1000) has passed, because that is what occupies the disk.
     s.leave_open(&c1, ChangeState::Closed, Some("withdrawn"), 40, Some(1000))
         .unwrap();
-    let u = s.usage(&repo(), "alice").unwrap();
+    let u = s.usage(&repo(), "alice", NOW).unwrap();
     assert_eq!(
-        (u.open_changes, u.accepted_bytes, u.repo_pending_bytes),
-        (1, 350, 600)
+        (u.open_changes, u.accepted_bytes, u.repo_retained_bytes),
+        (1, 350, 750),
+        "within its grace, a closed change's artifacts are still retained"
+    );
+    let u = s.usage(&repo(), "alice", 1000).unwrap();
+    assert_eq!(
+        u.repo_retained_bytes, 750,
+        "the grace includes its last second"
+    );
+    let u = s.usage(&repo(), "alice", 1001).unwrap();
+    assert_eq!(
+        (u.open_changes, u.accepted_bytes, u.repo_retained_bytes),
+        (1, 350, 600),
+        "past its grace the artifacts of the closed change no longer count"
+    );
+    // A change that left `open` without any retention date retains nothing.
+    s.leave_open("c2", ChangeState::Landed, None, 41, None)
+        .unwrap();
+    assert_eq!(
+        s.usage(&repo(), "alice", NOW).unwrap().repo_retained_bytes,
+        750 - 200
     );
 }
 
@@ -947,7 +970,7 @@ fn concurrent_pushes_on_the_shared_connection_each_get_exactly_one_revision() {
     let all = s.list_changes(&repo(), None).unwrap();
     assert_eq!(all.len(), 80);
     for t in 0..8u64 {
-        let u = s.usage(&repo(), &format!("user{t}")).unwrap();
+        let u = s.usage(&repo(), &format!("user{t}"), NOW).unwrap();
         assert_eq!((u.open_changes, u.accepted_bytes), (10, 100));
     }
     // Racing resumes of one intent: every call counts as an attempt, none overwrites the first list.

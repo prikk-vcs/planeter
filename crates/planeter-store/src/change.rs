@@ -172,8 +172,10 @@ pub struct Usage {
     pub open_changes: u64,
     /// Bytes of every artifact the principal has had accepted in the repository (they stay in the store).
     pub accepted_bytes: u64,
-    /// Bytes of every artifact of an open change in the repository, whoever sent it (the repository's pending bytes).
-    pub repo_pending_bytes: u64,
+    /// Bytes of every artifact the repository **still retains**, whoever sent it: those of its open changes and those
+    /// of changes that left `open` less than their grace ago (`retain_until` not yet passed). That is what occupies
+    /// the disk (RFC 005 D-9; the review of part 3a).
+    pub repo_retained_bytes: u64,
 }
 
 /// A failure point the tests can arm to prove atomicity.
@@ -288,7 +290,7 @@ pub trait ChangeStore: Send + Sync {
     fn clear_needs_recovery(&self, repo_id: &RepoId) -> Result<()>;
 
     // -- usage (for the quotas)
-    fn usage(&self, repo_id: &RepoId, principal: &str) -> Result<Usage>;
+    fn usage(&self, repo_id: &RepoId, principal: &str, now: u64) -> Result<Usage>;
 
     /// Test seam: arm or disarm a failure point.
     #[doc(hidden)]
@@ -600,25 +602,29 @@ impl ChangeStore for InMemoryChangeStore {
         Ok(())
     }
 
-    fn usage(&self, repo: &RepoId, principal: &str) -> Result<Usage> {
+    fn usage(&self, repo: &RepoId, principal: &str, now: u64) -> Result<Usage> {
         let m = self.lock()?;
-        let open: Vec<&ChangeRecord> = m
+        let open = m
             .changes
             .values()
-            .filter(|c| &c.repo_id == repo && c.state == ChangeState::Open)
+            .filter(|c| &c.repo_id == repo && c.state == ChangeState::Open);
+        let retained: Vec<&ChangeRecord> = m
+            .changes
+            .values()
+            .filter(|c| &c.repo_id == repo && retains(c.state, c.retain_until, now))
             .collect();
         Ok(Usage {
-            open_changes: open.iter().filter(|c| c.opened_by == principal).count() as u64,
+            open_changes: open.filter(|c| c.opened_by == principal).count() as u64,
             accepted_bytes: m
                 .revisions
                 .iter()
                 .filter(|r| &r.repo_id == repo && r.submitter == principal)
                 .map(|r| r.artifact_bytes)
                 .sum(),
-            repo_pending_bytes: m
+            repo_retained_bytes: m
                 .revisions
                 .iter()
-                .filter(|r| open.iter().any(|c| c.change_id == r.change_id))
+                .filter(|r| retained.iter().any(|c| c.change_id == r.change_id))
                 .map(|r| r.artifact_bytes)
                 .sum(),
         })
@@ -631,6 +637,12 @@ impl ChangeStore for InMemoryChangeStore {
                 .store(on, std::sync::atomic::Ordering::Relaxed),
         }
     }
+}
+
+/// Whether a change's artifacts are still retained at `now`: while it is open, and after it left `open` until its
+/// `retain_until` (inclusive). A change that left `open` with no `retain_until` retains nothing.
+fn retains(state: ChangeState, retain_until: Option<u64>, now: u64) -> bool {
+    state == ChangeState::Open || retain_until.is_some_and(|t| now <= t)
 }
 
 fn validate_leave(from: ChangeState, to: ChangeState, reason: Option<&str>) -> Result<()> {
@@ -1357,7 +1369,7 @@ impl ChangeStore for SqliteChangeStore {
         Ok(())
     }
 
-    fn usage(&self, repo: &RepoId, principal: &str) -> Result<Usage> {
+    fn usage(&self, repo: &RepoId, principal: &str, now: u64) -> Result<Usage> {
         let conn = self.db.lock()?;
         let open_changes: i64 = conn
             .query_row("SELECT COUNT(*) FROM changes WHERE repo_id = ?1 AND opened_by = ?2 AND state = 'open'", params![repo.as_str(), principal], |r| r.get(0))
@@ -1365,13 +1377,13 @@ impl ChangeStore for SqliteChangeStore {
         let accepted: i64 = conn
             .query_row("SELECT COALESCE(SUM(artifact_bytes), 0) FROM revisions WHERE repo_id = ?1 AND submitter = ?2", params![repo.as_str(), principal], |r| r.get(0))
             .map_err(backend)?;
-        let pending: i64 = conn
-            .query_row("SELECT COALESCE(SUM(r.artifact_bytes), 0) FROM revisions r JOIN changes c ON c.change_id = r.change_id WHERE r.repo_id = ?1 AND c.state = 'open'", params![repo.as_str()], |r| r.get(0))
+        let retained: i64 = conn
+            .query_row("SELECT COALESCE(SUM(r.artifact_bytes), 0) FROM revisions r JOIN changes c ON c.change_id = r.change_id WHERE r.repo_id = ?1 AND (c.state = 'open' OR (c.retain_until IS NOT NULL AND c.retain_until >= ?2))", params![repo.as_str(), now as i64], |r| r.get(0))
             .map_err(backend)?;
         Ok(Usage {
             open_changes: u64::try_from(open_changes).unwrap_or(0),
             accepted_bytes: u64::try_from(accepted).unwrap_or(0),
-            repo_pending_bytes: u64::try_from(pending).unwrap_or(0),
+            repo_retained_bytes: u64::try_from(retained).unwrap_or(0),
         })
     }
 
