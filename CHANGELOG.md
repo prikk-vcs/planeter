@@ -5,6 +5,16 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **A Japanese draft and a language switcher (RFC 012 D-3; IS-27) — Japanese is not shipped yet.** The footer of every
+  page, the sign-in page included, now has a **language switcher**: a button for each available language, written in
+  its own language (English, 日本語), the current one marked; choosing one remembers it in a cookie
+  (`planeter_lang`, a language code only) and returns to the same page; no script. The Japanese catalog is a **draft
+  for its two reviewers** (the owner and a colleague) and is offered **only** when the operator sets
+  `PLANETER_PREVIEW_LANGUAGES=ja` (off by default, logged at start); without it Japanese is not offered and the
+  switcher shows English only. English wording is unchanged. The Japanese typography uses system fonts only. New
+  checks cover Japanese (completeness, placeholders, retired and forbidden terms, the glossary's Japanese tables,
+  every page state), and a test pins that a language not signed off is not shipped.
+
 - **Foundations for the transport (RFC 004, part 1) — nothing is reachable from the network that was not before.**
   (1) **A test that every route authorizes (IS-14).** Every route of the web surface is registered in one table with
   its authorization class — it checks `authorize()` or is on a short list of public routes, each with a written

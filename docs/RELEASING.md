@@ -211,6 +211,13 @@ docker run --rm ghcr.io/prikk-vcs/planeter:X.Y.Z --version
   that a crash left are removed then. Give them a disk of their own or a quota: the spool stays within its
   budget, the artifact store grows with what is accepted. Nothing uses them yet: no route reads or writes
   them, and an unset setting changes nothing.
+- **Preview of a draft language (RFC 012 D-3f).** The Japanese catalog is compiled in but **not shipped** until its
+  reviewers have signed it off. **`PLANETER_PREVIEW_LANGUAGES=ja`** (comma-separated codes; only `ja` exists) offers
+  it — to `Accept-Language: ja`, to the `planeter_lang` cookie and to the switcher in the footer — so the reviewers can
+  see the pages. **Off by default**: without it Japanese is not negotiated and the switcher shows English only. When
+  on, the server logs `PREVIEW languages on (ja): these catalogs are drafts…` once at start; a code that names no
+  draft language is refused at start with the codes that exist. Do not leave it on in production until the release
+  notes say Japanese is signed off.
 - **Sign-in concurrency (IS-24, IS-31):** password verification (Argon2id) runs off the async workers
   behind its own gate, separate from the prikk one. **`PLANETER_AUTH_CONCURRENCY`** is the most
   verifications at once (positive integer; default `min(CPUs, 4)`); **`PLANETER_AUTH_QUEUE_WAIT_SECS`**

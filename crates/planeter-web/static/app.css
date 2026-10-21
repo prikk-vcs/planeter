@@ -24,6 +24,15 @@ th a,td a,.crumbs a{unicode-bidi:plaintext}
 .readme img{max-width:100%;height:auto}
 /* plain words (RFC 012 D-4): the in-place explanations are native <details>, no script */
 details.explain{margin-block:.5rem}details.explain summary{cursor:pointer;min-height:24px;min-width:24px;padding-block:.15rem}details.explain p{margin-block:.4rem;overflow-wrap:anywhere}
+/* language switcher (RFC 012 D-3b): one button per language in the footer, the current one marked by weight and a solid border (not by colour alone) */
+footer .footer-line{margin:0}
+nav.lang ul{list-style:none;display:flex;flex-wrap:wrap;gap:.25rem .5rem;margin:.5rem 0 0;padding:0}
+nav.lang button[aria-current]{font-weight:600;border-color:var(--fg);color:var(--fg)}
+/* Japanese (RFC 012 D-3): system CJK fonts only (no web font, no third-party request) and a looser line height; code keeps its monospace */
+body:lang(ja),button:lang(ja){font-family:system-ui,"Hiragino Sans","Hiragino Kaku Gothic ProN","Yu Gothic UI","Yu Gothic",Meiryo,"Noto Sans CJK JP","Noto Sans JP",sans-serif}
+body:lang(ja){line-height:1.75}
+/* in a narrow table column the catalog's own short words (a status like 問題あり, a heading like チェック) stay whole instead of breaking one character per line; data cells still wrap anywhere */
+body:lang(ja) thead th,body:lang(ja) th[scope=row]+td:not(.muted){overflow-wrap:break-word;word-break:keep-all}
 @media (forced-colors:active){
 .badge{border:1px solid CanvasText}.skip-link{border:1px solid CanvasText}
 :focus-visible{outline:2px solid Highlight}

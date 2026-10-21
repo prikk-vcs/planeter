@@ -97,12 +97,17 @@ impl Out {
     }
 }
 
-/// `STRUCTURE_LANG=qaa` renders every state in the test language (right to left, every message wrapped in
+/// `STRUCTURE_LANG=ja` renders every state in the Japanese draft. `STRUCTURE_LANG=qaa` renders every state in the test language (right to left, every message wrapped in
 /// `‹ ›`), for looking at a page with `dir="rtl"` (with `STRUCTURE_DUMP`); the rules that read English text
 /// (the title pattern) are expected to complain then, so it is never set in a normal run.
 fn test_language() -> Option<&'static str> {
     static ONCE: std::sync::Once = std::sync::Once::new();
     let lang = std::env::var("STRUCTURE_LANG").ok()?;
+    if lang == "ja" {
+        // Every state of every test in the Japanese draft (the previewed catalog), for looking at the pages.
+        planeter_web::catalog::enable_preview_languages("ja").expect("ja is previewable");
+        return Some("ja");
+    }
     if lang != "qaa" {
         return None;
     }
@@ -136,12 +141,20 @@ fn test_language() -> Option<&'static str> {
     Some("qaa")
 }
 
+tokio::task_local! {
+    /// The language the states being built are requested in (`Accept-Language`): set by [`standin_states_ja`] and
+    /// [`real_states_ja`] around a build, so the English and the Japanese builds never share a setting.
+    static REQUEST_LANG: &'static str;
+}
+
 fn req(method: &str, uri: &str, cookie: Option<&str>, form: Option<String>) -> Request<Body> {
     let mut b = Request::builder()
         .method(method)
         .uri(uri)
         .header(header::HOST, "forge.example");
-    if let Some(lang) = test_language() {
+    if let Ok(lang) = REQUEST_LANG.try_with(|l| *l) {
+        b = b.header(header::ACCEPT_LANGUAGE, lang);
+    } else if let Some(lang) = test_language() {
         b = b.header(header::ACCEPT_LANGUAGE, lang);
     }
     if let Some(c) = cookie {
@@ -1040,14 +1053,49 @@ async fn build_real_states() -> Option<Out> {
 
 /// Each subset is rendered once per test process and shared by the tests (they write into the same scratch
 /// directories, so they must not each build their own).
+/// One build at a time: the builds write into the same scratch directories.
+static BUILD_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+
 async fn standin_states() -> &'static Out {
     static CELL: tokio::sync::OnceCell<Out> = tokio::sync::OnceCell::const_new();
-    CELL.get_or_init(build_standin_states).await
+    CELL.get_or_init(|| async {
+        let _one = BUILD_LOCK.lock().await;
+        build_standin_states().await
+    })
+    .await
 }
 
 async fn real_states() -> Option<&'static Out> {
     static CELL: tokio::sync::OnceCell<Option<Out>> = tokio::sync::OnceCell::const_new();
-    CELL.get_or_init(build_real_states).await.as_ref()
+    CELL.get_or_init(|| async {
+        let _one = BUILD_LOCK.lock().await;
+        build_real_states().await
+    })
+    .await
+    .as_ref()
+}
+
+/// The same stand-in states, requested in Japanese (the draft catalog, previewed): every state, every rule.
+async fn standin_states_ja() -> &'static Out {
+    static CELL: tokio::sync::OnceCell<Out> = tokio::sync::OnceCell::const_new();
+    CELL.get_or_init(|| async {
+        planeter_web::catalog::enable_preview_languages("ja").expect("ja is previewable");
+        let _one = BUILD_LOCK.lock().await;
+        REQUEST_LANG.scope("ja", build_standin_states()).await
+    })
+    .await
+}
+
+/// The same real-prikk states, requested in Japanese.
+async fn real_states_ja() -> Option<&'static Out> {
+    static CELL: tokio::sync::OnceCell<Option<Out>> = tokio::sync::OnceCell::const_new();
+    CELL.get_or_init(|| async {
+        planeter_web::catalog::enable_preview_languages("ja").expect("ja is previewable");
+        let _one = BUILD_LOCK.lock().await;
+        REQUEST_LANG.scope("ja", build_real_states()).await
+    })
+    .await
+    .as_ref()
 }
 
 // ---------------------------------------------------------------------------------------------------------
@@ -1245,6 +1293,46 @@ async fn every_standin_state_passes_every_rule() {
         "only {} stand-in states are pages",
         out.states.len()
     );
+}
+
+/// The Japanese draft (previewed) renders every stand-in state with the same structure: `lang="ja"`, one `h1`,
+/// landmarks, labelled controls, the switcher in the footer, the title pattern.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn every_standin_state_passes_every_rule_in_japanese() {
+    let out = standin_states_ja().await;
+    finish("stand-in states (Japanese)", out);
+    assert!(
+        out.states.len() >= 25,
+        "only {} stand-in states are pages",
+        out.states.len()
+    );
+    for s in &out.states {
+        assert!(
+            s.html.contains("<html lang=\"ja\" dir=\"ltr\">"),
+            "{} is not rendered in Japanese",
+            s.id
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn every_real_prikk_state_passes_every_rule_in_japanese() {
+    let Some(out) = real_states_ja().await else {
+        return;
+    };
+    finish("real-prikk states (Japanese)", out);
+    assert!(
+        out.states.len() >= 36,
+        "only {} real-prikk states are pages",
+        out.states.len()
+    );
+    for s in &out.states {
+        assert!(
+            s.html.contains("<html lang=\"ja\" dir=\"ltr\">"),
+            "{} is not rendered in Japanese",
+            s.id
+        );
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

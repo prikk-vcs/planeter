@@ -95,8 +95,18 @@ These are known and planned, not fixed yet:
   and nothing says that queued work exists (the badge is true: an empty sealed history verifies; the history page
   says "no signed changes"). prikk's `branch --format json` has a data field for it (`unpublished_current_branch`);
   the display waits for the queued-state design (IS-45, noted by the architect, not decided).
-- One language (English). Japanese and a language switcher are planned, and with them a reader's review of the
-  wording and of right-to-left layout.
+- **Languages.** English is the shipped language. **Japanese is a draft in preview**: it is compiled in and
+  checked, but it is offered only to an operator who turns on `PLANETER_PREVIEW_LANGUAGES=ja`, until its two
+  reviewers (the owner and a colleague, both fluent) have gone through it and the dev team has integrated their
+  corrections (`JA_REVIEWED`). The language switcher (a button per language in the footer of every page, no script)
+  exists; with the preview off it shows English only. What the checks cover for Japanese: every message exists with
+  the same placeholders as English, no retired or forbidden term, the glossary's Japanese column equals the catalog,
+  every page state passes the structural checker with `lang="ja"` (and the stand-in and real-prikk states alike),
+  and, measured in Chromium, none of the 61 states scrolls sideways at 320 px, with or without the WCAG
+  text-spacing override, and no target is below 24 px. **Whether the Japanese reads naturally and keeps the
+  meaning of every trust label is for the reviewers; no person who uses assistive technology has tried it, in
+  either language**, and a real right-to-left language is still not rendered. This statement is completed when the
+  reviewers have signed off.
 - The focus ring is the same colour as links (it stands off the control by a 2 px gap); a designed ring for the
   few places where that is not enough has not been needed so far.
 

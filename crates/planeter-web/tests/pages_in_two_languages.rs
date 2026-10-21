@@ -92,6 +92,7 @@ fn sealed() -> PathBuf {
 
 fn app(path: PathBuf) -> Router {
     register_qaa();
+    planeter_web::catalog::enable_preview_languages("ja").expect("ja is previewable");
     let store = Arc::new(InMemoryRepositoryStore::new());
     store
         .create(RepositoryRecord {
@@ -315,6 +316,38 @@ async fn every_repository_page_fills_every_placeholder_and_takes_every_word_from
             );
         }
     }
+    // The Japanese draft (previewed), every repository page: left to right, the nav from the catalog, nothing
+    // unfilled, and no English catalog sentence left on the page.
+    for (uri, _) in pages {
+        let (s, j) = get(&r, uri, "ja").await;
+        assert_eq!(s, StatusCode::OK, "{uri}");
+        assert!(j.contains("<html lang=\"ja\" dir=\"ltr\">"), "{uri}: {j}");
+        assert_eq!(unfilled(&j), None, "{uri}: an unfilled placeholder in ja");
+        for nav in ["ファイル", "履歴", "ブランチとタグ", "検証"] {
+            if uri != "/alice/app/blob/README.md" || nav == "ファイル" {
+                assert!(j.contains(&format!(">{nav}</a>")), "{uri}: nav {nav}\n{j}");
+            }
+        }
+        for english in [
+            "Verified",
+            "This file is not text",
+            "There are no signed changes",
+            "Branches and tags",
+            "Sign in",
+            "What does this mean?",
+            "Skip to content",
+        ] {
+            assert!(
+                !j.contains(english),
+                "{uri}: {english:?} on the Japanese page:\n{j}"
+            );
+        }
+    }
+    let (_, j) = get(&r, "/alice/app", "ja").await;
+    assert!(
+        j.contains("<span class=\"badge ok\">検証済み</span>"),
+        "the repository badge in Japanese: {j}"
+    );
     // The change page (a block id), plus the three plain pages and the error pages.
     let (s, en) = get(&r, &format!("/alice/app/change/{block}"), "en").await;
     assert_eq!(s, StatusCode::OK);

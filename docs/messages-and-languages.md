@@ -54,12 +54,30 @@ names; the order and the words around them are the translator's.
 
 ## Add a language
 
-1. A table `xx.rs` with an entry for **every** key (the build's `audit` lists what is missing).
-2. A `LangDef` (tag, endonym, `dir`, plural rule, number separators, table) and a line in `shipped()`.
-3. A fluent speaker reviews it **before** it ships (RFC 012 O-2); the accessibility statement names the
-   reviewer and the language's status.
-4. The language switcher and the setter of the `planeter_lang` cookie arrive with the second language; the
-   cookie holds a language code and nothing else (RFC 012 D-6f). `Accept-Language` already works.
+1. A table `xx.rs` with an entry for **every** key, in the English order (the build's `audit` lists what is
+   missing; the order lets the reviewers' corrections map back one to one).
+2. A `LangDef` (tag, endonym — the language's name in itself, shown on the switcher —, `dir`, plural rule, number
+   separators, table). Japanese is `JA_DEF`: one plural form (`one == other`), `1,200` grouping.
+3. **Sign-off before shipping (RFC 012 D-3f).** A new language is a *draft*: it is **not** in `shipped()`. It is
+   reached only through the operator's preview (`PLANETER_PREVIEW_LANGUAGES=<tag>`, listed in `previewable()`;
+   off by default; logged at start). Steps: write the draft; add the language's section to the glossary (terms,
+   hard terms flagged, a message table that `tests/glossary_ja.rs`-style tests compare with the catalog); give
+   the reviewers **the sheet** — one row per message (key | where it appears | English | draft | placeholders |
+   note | their correction), the trust labels first, then error pages, then the rest, every row `needs-review`;
+   integrate their corrections (the sheet's rows map to catalog keys one to one); then, in one commit, set
+   `JA_REVIEWED = true` **and** record the sign-off in `JA_SIGNOFF` (a test refuses one without the other, and
+   refuses a language in `shipped()` that is not signed off). The accessibility statement names the reviewers.
+4. The checks cover a draft too: the catalog audit, the retired-words test (the English retired words may not
+   appear in a Japanese message, and a short list of forbidden Japanese terms: loan words for *seal*, blaming and
+   gendered wording), the glossary's Japanese tables, the structural checker over every page state (the
+   `…_in_japanese` tests; `STRUCTURE_LANG=ja` renders every state of every structure test in Japanese), and the
+   stylesheet tests.
+5. **The language switcher** is in the footer of every page, the sign-in page included: one `POST /lang` form per
+   available language, no script. It is a CSRF-protected form like the others; it sets the `planeter_lang` cookie
+   (a language code and nothing else; `Path=/; Secure; SameSite=Lax`) and redirects to the page the visitor was on
+   (only a local path is accepted back). A request for a language that is not available is refused. The route is
+   in the IS-14 table as public (it names no repository). `Accept-Language` negotiation (`ja`, `ja-JP`) works as
+   before.
 
 ## What is deliberately not in the catalog (`tests/literals.allow`)
 
