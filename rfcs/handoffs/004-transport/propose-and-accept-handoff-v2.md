@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | Part 3b of the RFC 004 v2 series: the **write side of the transport**. One authenticated request puts an artifact on the forge as a **change revision**: authorize (`Propose`), bound at the edge, check quotas, take the **W lease**, write the **intent**, run `sync accept` in the sandbox **to completion** with its own deadline and memory admission, derive the revision from the intent (the pure model of part 3a), record it in one transaction, retain the artifact, bump the state fingerprint, release. A kill or timeout at any point leaves an open intent and `needs-recovery` (part 4 clears it). Built on part 1 (lease, artifact store, mounts), part 2 (routes, errors, fingerprint) and part 3a (records and rules). |
-| Status | **Assigned** (2026-10-22), after part 3a and the sessions removal were reviewed Approved. |
+| Status | **Done, reviewed Approved (2026-10-22; commits `c107bfe`…`a3996dc`).** One finding (IS-50) is fixed in `recovery-handoff-v2.md` (part 4). |
 | Basis | [`../../accepted/004-transport.md`](../../accepted/004-transport.md) D-3, D-5, D-6, D-7, D-11 and U-11…U-13; [`../../accepted/005-change-review.md`](../../accepted/005-change-review.md) D-1…D-3, D-9; [`../005-change-review/change-model-and-journal-handoff-v2.md`](../005-change-review/change-model-and-journal-handoff-v2.md) and `docs/changes.md`; ledger PK-59 (accept: time per patch, memory 4.2×, resumable), PK-58 (`queued`), PK-60; RFC 011 (admission, ceilings, child lifetime); part 2's `transport` module, `RevisionStore`/fingerprint, error codes and catalog texts. |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 
