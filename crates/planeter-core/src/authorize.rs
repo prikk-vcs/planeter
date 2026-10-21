@@ -366,6 +366,10 @@ fn authorize_repo(
             }
         }
         Action::Push => require(role, Role::Write),
+        // A CI job never proposes a change (part 2 review of RFC 004): whatever its scope, whatever the setting.
+        Action::Propose if matches!(principal, Principal::CiJob { .. }) => {
+            Decision::Deny(DenyReason::NotAuthorized)
+        }
         Action::Propose => {
             let member = role.is_some_and(|r| r >= Role::Write);
             let open = repo.proposals == ProposalPolicy::AnyAuthenticated

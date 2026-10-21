@@ -168,3 +168,35 @@ fn a_proposal_is_audited_allowed_or_denied() {
         [true, false]
     );
 }
+
+/// A job does not propose changes: denied for a `CiJob` with any scope, either setting, any visibility.
+#[test]
+fn a_ci_job_never_proposes() {
+    for access in [ScopeAccess::ReadOnly, ScopeAccess::Write, ScopeAccess::Full] {
+        let job = Principal::CiJob {
+            scope: Scope {
+                access,
+                repos: RepoScope::All,
+                expires_at: None,
+            },
+        };
+        for vis in [
+            Visibility::Public,
+            Visibility::Internal,
+            Visibility::Private,
+        ] {
+            for policy in [ProposalPolicy::Members, ProposalPolicy::AnyAuthenticated] {
+                let res = proposing(vis, policy);
+                for role in [None, Some(Role::Read), Some(Role::Write), Some(Role::Admin)] {
+                    assert!(
+                        !authorize(&job, Action::Propose, &res, &ctx_role(role)).is_allowed(),
+                        "a CI job ({access:?}) must not propose: {vis:?} {policy:?} {role:?}"
+                    );
+                }
+            }
+        }
+        // It still pushes and reads as before (this is not a general restriction).
+        let res = proposing(Visibility::Public, ProposalPolicy::Members);
+        assert!(authorize(&job, Action::Read, &res, &ctx_role(None)).is_allowed());
+    }
+}
