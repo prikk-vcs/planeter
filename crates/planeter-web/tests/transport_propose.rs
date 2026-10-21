@@ -290,6 +290,8 @@ struct Opts {
     /// The forge repositories are real `prikk` repositories; a test that replaces the binary with a stand-in may
     /// still need the real one for its own reads.
     ip_limit: u32,
+    /// The operator configured the export spool but not the artifact store: fetches work, proposals say so.
+    without_propose: bool,
 }
 
 impl Default for Opts {
@@ -303,6 +305,7 @@ impl Default for Opts {
             sandbox: planeter_prikk::Sandbox::Unconfined,
             binary: None,
             ip_limit: 10_000,
+            without_propose: false,
         }
     }
 }
@@ -457,7 +460,7 @@ fn world(name: &str, o: Opts) -> World {
     );
     let transport = Some(Arc::new(TransportRuntime {
         export: export.clone(),
-        propose: Some(propose.clone()),
+        propose: (!o.without_propose).then(|| propose.clone()),
         ip_limit: RateLimiter::new(o.ip_limit, Duration::from_secs(60)),
         principal_limit: RateLimiter::new(o.ip_limit, Duration::from_secs(60)),
     }));
@@ -1636,6 +1639,7 @@ if [ "$1" = sync ] && [ "$2" = accept ]; then
     unreadable) echo "this is not what accept prints"; exit 0 ;;
     refuse) echo "error: the artifact is damaged" >&2; exit 1 ;;
     fail-after-real) "$REAL" "$@" >/dev/null; echo "error: something broke midway" >&2; exit 1 ;;
+    ceiling) echo "memory allocation of 4194304 bytes failed" >&2; exit 134 ;;
     lock) echo "error: lock conflict: container:object-store lock already exists: /x" >&2; exit 1 ;;
     *) exec "$REAL" "$@" ;;
   esac
@@ -2442,4 +2446,82 @@ fn object_exists_in(artifacts_dir: &Path, art: &[u8]) -> bool {
         .join(&d[..2])
         .join(&d)
         .is_file()
+}
+
+// ------------------------------------------------------------------------------------------------ RFC 004 part 4, T0(e)
+
+#[tokio::test]
+async fn without_the_artifact_store_a_proposal_says_so_in_its_own_words() {
+    if skip() {
+        return;
+    }
+    let mut w = world(
+        "propose-off",
+        Opts {
+            without_propose: true,
+            ..Opts::default()
+        },
+    );
+    w.client.commit(1);
+    let art = w.client.artifact(&w.forge, "a1");
+    let r = propose_as(&w, "forge", "tok-alice", titled("x"), &art).await;
+    assert_eq!(
+        (r.status, r.code().as_str()),
+        (StatusCode::SERVICE_UNAVAILABLE, "transport_off")
+    );
+    let v = r.json();
+    assert!(
+        v["message"]
+            .as_str()
+            .unwrap()
+            .contains("Proposals are not set up"),
+        "{v}"
+    );
+    assert!(
+        v["hint"].as_str().unwrap().contains("artifact store"),
+        "{v}"
+    );
+    // The fetch side still works, and says its own thing when it is off.
+    let adv = send(
+        &w.router,
+        Request::builder()
+            .uri("/api/v1/repos/alice/forge/transport/advertise")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(adv.status, StatusCode::OK);
+    // A stranger still learns nothing: the read gate comes first.
+    let hidden = send(
+        &w.router,
+        post_req("private", Some("tok-carol"), frame(&titled("x"), &art), &[]),
+    )
+    .await;
+    assert_eq!(hidden.status, StatusCode::NOT_FOUND);
+}
+
+/// The memory-ceiling case is a test double of the driver: a stand-in `prikk` that fails the way prikk fails when it
+/// hits `RLIMIT_DATA` (exit 134, "memory allocation of … failed"), because making the real prikk hit the ceiling needs
+/// an artifact of gigabytes. The classification (`CeilingExceeded` → incomplete) is what is under test.
+#[tokio::test]
+async fn an_accept_that_hits_its_memory_ceiling_is_incomplete_not_refused() {
+    if skip() {
+        return;
+    }
+    let (mut w, ctrl) = standin_world("ceiling");
+    std::fs::write(&ctrl, "ceiling").unwrap();
+    w.client.commit(1);
+    let art = w.client.artifact(&w.forge, "a1");
+    let repo = RepoId::new("r-forge");
+    let r = propose_as(&w, "forge", "tok-alice", titled("x"), &art).await;
+    assert_eq!(
+        (r.status, r.code().as_str()),
+        (StatusCode::SERVICE_UNAVAILABLE, "incomplete"),
+        "{}",
+        String::from_utf8_lossy(&r.body)
+    );
+    assert_eq!(r.json()["cause"], "accept_ceiling");
+    assert!(w.changes.repo_flags(&repo).unwrap().needs_recovery);
+    assert_eq!(w.changes.open_intents(&repo).unwrap().len(), 1);
+    assert!(object_exists(&w, &art));
 }

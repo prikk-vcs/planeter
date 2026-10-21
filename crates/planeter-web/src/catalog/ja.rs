@@ -413,7 +413,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "error.needs_recovery.hint",
-        "読み取りには影響がなく、理由はこのサーバーの管理者がサーバーのログで確認できるので、しばらくしてからもう一度お試しください。",
+        "しばらくしてからもう一度お試しください。読み取りには影響がなく、理由はこのサーバーの管理者がサーバーのログで確認できます。",
     ),
     msg(
         "error.quota_exceeded.message",
@@ -437,7 +437,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "error.declaration_misses_added.hint",
-        "アーティファクトに含まれるすべてのパッチを一覧に載せて、もう一度送信してください。",
+        "アーティファクトはすでにこのサーバーにあるので、同じアーティファクトを、修正した一覧とともにもう一度送信してください。",
     ),
     msg(
         "error.declared_not_held.message",
@@ -445,7 +445,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "error.declared_not_held.hint",
-        "アーティファクトに含まれるか、すでにリポジトリにあるパッチだけを載せてください。",
+        "アーティファクトはすでにこのサーバーにあるので、同じアーティファクトを、修正した一覧とともにもう一度送信してください。",
     ),
     msg(
         "error.no_new_content.message",
@@ -509,7 +509,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "error.invalid_request.metadata_hint",
-        "reason に示されたフィールドを直してから、提案をもう一度送信してください。",
+        "フィールドの一覧は API ドキュメントにあるので、reason に示されたフィールドを直してから、提案をもう一度送信してください。",
     ),
     msg(
         "error.propose_off.message",

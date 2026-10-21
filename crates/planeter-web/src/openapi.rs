@@ -167,7 +167,7 @@ fn schemas() -> Value {
             "intent": {"type": "string", "description": "Only on `incomplete`: the id of the intent left open; the same artifact, sent again, resumes it."},
             "cause": {"type": "string", "description": "Only on `incomplete`: `accept_deadline`, `accept_ceiling`, `accept_failed`, `accept_unreadable` or `accept_not_recorded`."}
         })),
-        "Assurance": {"type": "string", "enum": ["prikk-verified", "sealed", "forge-approved-unsealed", "unverified"], "description": "`prikk-verified` only where the repository's verification ran and passed; a sealed patch on the change endpoint is `sealed` (signed into the history; nothing was verified for that view); a queued one is `forge-approved-unsealed`."},
+        "Assurance": {"type": "string", "enum": ["prikk-verified", "sealed", "forge-approved-unsealed", "unverified"], "description": "`prikk-verified` only where the repository's verification ran and passed; a sealed patch on the change endpoint is `sealed` (signed into the history; nothing was verified for that view); a queued one is `forge-approved-unsealed`. **In plain words, `forge-approved-unsealed` means: accepted and held by this server, not yet signed into the history; nobody has approved it for merging.** (The word *approved* is part of the machine value, which is in the 0.4.0 contract and does not change; it is not a review decision.)"},
         "PatchMessage": obj(&["patch_id", "message"], json!({"patch_id": string_prop(), "message": string_prop()})),
         "HistoryEntry": obj(
             &["block_id", "ref_state_id", "kind", "rollback_block", "patch_count", "messages"],
@@ -265,7 +265,7 @@ fn schemas() -> Value {
             "patches": {"type": "array", "items": {"$ref": "#/components/schemas/ProposedPatch"}, "description": "The first patches the push added (at most 1,000), each classified from facts (`sync pending`, `log`), never from `queued`."},
             "declared": {"type": "boolean", "description": "Whether the revision carries the submitter's declared patch set."},
             "artifact_bytes": {"type": "integer", "minimum": 0},
-            "assurance": {"$ref": "#/components/schemas/Assurance"},
+            "assurance": {"$ref": "#/components/schemas/Assurance", "description": "For a proposal always `forge-approved-unsealed`: accepted and held by this server, not yet signed into the history; nobody has approved it for merging."},
             "message": {"type": "string", "description": "One plain sentence, in the language negotiated from `Accept-Language`: the work is held for review and no branch has changed."}
         })),
         "FailedCondition": obj(&["id", "message"], json!({"id": string_prop(), "message": string_prop()})),

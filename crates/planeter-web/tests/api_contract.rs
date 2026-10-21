@@ -228,9 +228,12 @@ fn every_code_has_one_plain_sentence_and_the_shape_is_stable() {
                 .chars()
                 .all(|ch| ch.is_ascii_lowercase() || ch == '_')
         );
-        for text in [c.message(), c.hint()] {
+        for (i, text) in [c.message(), c.hint()].into_iter().enumerate() {
             assert!(text.ends_with('.'), "{text:?}");
-            assert_eq!(text.matches(". ").count(), 0, "one sentence: {text:?}");
+            // One sentence each — except the hint of `needs_recovery`, which has two on purpose: what to do, then
+            // what is and is not affected (RFC 004 part 4, T0c).
+            let allowed = usize::from(c == ErrorCode::NeedsRecovery && i == 1);
+            assert_eq!(text.matches(". ").count(), allowed, "sentences: {text:?}");
         }
     }
     assert_eq!(seen.len(), 31);

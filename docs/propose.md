@@ -35,7 +35,7 @@ prikk), `client` (name and version). An existing change takes no `title`, `descr
 The answer is `201` (a change was opened) or `200` (a revision was added, or the artifact was already recorded), with the change
 and revision ids, the claims and what accept said of each, how many patches the push added and the first 1,000 of them with their
 assurance, whether a declaration was kept, and a one-sentence message in the caller's language: the work is held for review and no
-branch has changed. A pending patch is `forge-approved-unsealed`: **never** `sealed` (that needs a block read from `log`), and
+branch has changed. A pending patch is `forge-approved-unsealed` (in plain words: **accepted and held by this server, not yet signed into the history; nobody has approved it for merging** — the word *approved* is part of a machine value that is in the 0.4.0 contract and is not a review decision): **never** `sealed` (that needs a block read from `log`), and
 `queued` is never read (U-10, IS-47).
 
 ## The order of the checks

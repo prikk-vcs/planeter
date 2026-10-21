@@ -388,7 +388,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "error.needs_recovery.hint",
-        "Try again later, because reading is not affected and the person who runs this server can see why in the server log.",
+        "Try again later. Reading is not affected, and the person who runs this server can see why in the server log.",
     ),
     msg(
         "error.quota_exceeded.message",
@@ -412,7 +412,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "error.declaration_misses_added.hint",
-        "List every patch the artifact contains, then send it again.",
+        "Your artifact is already on this server; send the same artifact again with a corrected list.",
     ),
     msg(
         "error.declared_not_held.message",
@@ -420,7 +420,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "error.declared_not_held.hint",
-        "List only patches that are in the artifact or already in the repository.",
+        "Your artifact is already on this server; send the same artifact again with a corrected list.",
     ),
     msg(
         "error.no_new_content.message",
