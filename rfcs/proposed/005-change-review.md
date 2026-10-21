@@ -50,7 +50,7 @@ transport measurement (dev team, prikk 0.53.0 with 0.52.0 side by side, 2026-10-
 | U-7 | A keyed receiver can `sync accept` an artifact built elsewhere and `sync seal --claims <file>` it under its own key; nothing about this needs the forge. | D (sync guide) | PK-2 |
 | U-8 | prikk is considering a read-only command whose point may be **one pending accepted claim** (files = its parent's files plus its patches); 0.54.0 behind a design round, not promised. | D | PK-46 |
 
-| U-9 | **`prikk show <block-id>` fails for a block that edits a file for the third time** (integrity error from a lifecycle replay) while `verify` is clean; prikk confirmed it as its own defect (fix proposed for 0.54.0). `show <patch-id>` works but **names the file by an internal node id** for an edit, a rename or a delete. So neither form can show which file a pending patch edits. | M, R (prikk) | PK-57, PK-64 |
+| U-9 | **`prikk show <block-id>` fails for a block that edits a file for the third time** (integrity error from a lifecycle replay) while `verify` is clean; prikk confirmed it as its own defect (fix proposed for 0.54.0). `show <patch-id>` works but **names the file by an internal node id for a text edit** (renames and deletes carry their paths). So neither form can show which file a pending text edit changes. | M, R (prikk) | PK-57, PK-64 |
 | U-10 | **`show <patch-id>` reports `queued: false` for an accepted-but-unsealed patch.** `queued` means "in this repository's own active queue"; pending versus sealed comes from `sync pending` and `log`, never from `queued`. | M | PK-58 |
 | U-11 | **An interrupted `sync accept` is not atomic** (SIGKILL at 15/40/70/90 % leaves 147/397/706/902 of 1,000 patches pending, locks in place, `verify` and `doctor` clean); a retry resumes and converges. | M | PK-59 |
 | U-12 | **The accept event's output is stable text and complete for the artifact, not for what is new:** a second push of 5 patches, 3 new, gives pending 5, new objects 3, claims file with all claim lines (new first), order stable; a re-accept is idempotent (claims file byte-identical). **Claim lines cannot be mapped to patch ids** (`show <claim-id>` is refused), so the set of patches *inside* an artifact is not recoverable from prikk's output when some are already pending. | M | PK-48, PK-59 |
@@ -127,17 +127,21 @@ the relay into a second repository works (U-13). **Refuted:** that the accept ev
 - **D-4 — The review view: what the change does to the files, from `extract`; the patch list from ids.**
   *(Amended 2026-10-21 on prikk's answer, PK-64.)* Two facts decide it: `prikk show <block-id>` is a prikk defect
   for blocks that edit a file a third time (fix proposed for 0.54.0), and `show <patch-id>`, which works for every
-  patch including pending ones, **names the file by an internal node id for an edit, a rename or a delete**, so
-  it cannot say which file a patch changes. Therefore:
+  patch including pending ones, **names the file by an internal node id for a *text edit*** (a rename and a delete carry
+  their paths; prikk's correction of 2026-10-21, PK-65), so it cannot say which file an edit changes. Therefore:
   1. **The primary review view is file-level.** For a revision the forge materializes two points with
      `prikk extract` (RFC 006 / ledger PK-56): the **claim** (`extract --claim`, i.e. its parent's files plus the
-     claim's patches) and the claim's **parent** (`extract --ref <parent block>`); planeter diffs the two trees
+     claim's patches) and its **parent** (`extract --ref <parent block>`); prikk measured exactly this route
+     (`diff -r before/ after/` shows the edit and the rename, both extracts `provisional: false`; PK-65). **No
+     command prints a claim's parent today**: until prikk adds it to `extract-report-v1` (proposed), the "before"
+     tree is the change's **declared base** (D-3, verified as held) and the page says "compared with the declared
+     base"; a differing real parent would show *extra* differences, never fewer. planeter diffs the two trees
      itself (sanitized, size-bounded by `--max-bytes`/`--max-files`, rendered through RFC 003). This also shows
      exactly "what the change does to the files", the thing a reviewer needs, and uses only prikk's own
      materialization. It requires prikk's `extract` (0.54.0) and the checkpoint refresh of RFC 006 v2; **until
      then the review view does not exist** and the change page says so plainly.
   2. **The patch list is secondary**: ids and, where `show <patch-id>` gives them, operation kinds and the paths it
-     resolves (creates and content show paths; edits, renames and deletes may not). Patch ids are content-addressed
+     resolves (creates, renames and deletes carry their paths; a text edit names only its node). A rename, which a tree diff shows as a removal and an addition, is labelled from the patch's two paths. Patch ids are content-addressed
      and immutable, so caching by patch id is correct forever and does not conflict with INV-6. Nothing is ever read
      through a block id for a pending change; sealed history is read through RFC 003 (and benefits from the prikk fix
      when it ships).
