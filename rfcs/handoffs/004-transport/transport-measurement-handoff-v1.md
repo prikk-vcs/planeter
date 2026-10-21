@@ -6,7 +6,9 @@
 | Status | **Authorized by the owner 2026-10-15 (SCHEDULE D-7).** It inherits RFC 004's state (revision pending); it is startable because it changes nothing: its preconditions are that the advisory lock update (RFC 010's handoff) is pushed and prikk 0.52.0 is installed (met). |
 | Basis | Dependency ledger v1.6 §D (rows marked *prikk-measured* or *ASSUMED*); prikk letters 2026-10-13 and 2026-10-15; prikk RFC 155 §9.3–§9.6; RFC 010 D-8; `docs/dependency-policy.md` rule 1 (no manifest changes). |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`) and the raw logs. |
-| Scope | Part A: the transport measurements A1–A11 below, on prikk 0.52.0, in a scratch directory outside the repository. **Non-change scope:** no file in the repository except the review request; no product code; no manifest change; no prikk patch; no letter to prikk. |
+| Scope | Part A: the transport measurements A1–A11 below, on the installed prikk (0.53.0 since 2026-10-21; 0.52.0 when first written), in a scratch directory outside the repository. **Non-change scope:** no file in the repository except the review request; no product code; no manifest change; no prikk patch; no letter to prikk. |
+
+**Updated 2026-10-21 (D-21):** the measurement binary is now the installed **prikk 0.53.0** (re-baselined: reads, JSON and the matched texts unchanged; the exchange verbs this part measures were not part of that comparison). Every row records `prikk --version`; where a result differs from the corresponding ledger row (measured on 0.52.0), say so in the row. For rows on `sync accept`, `archive` and `bundle`, the 0.52.0 release asset (checksum-verified, extracted into its own scratch directory) may be run side by side to separate a 0.53.0 change from a finding.
 
 ## Ground rules
 
