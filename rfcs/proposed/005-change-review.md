@@ -264,15 +264,37 @@ adds a new inbound flow and a new action: threat model v0.4 and a security audit
 
 ## Open questions
 
-- **Q-1 (owner, OQ-4).** The review feature edge. **Default in this draft:** the core set above only.
-  Suggested changes, draft changes, review-thread resolution, required-reviewer lists and boards would each
-  be additions behind this model; none changes D-1…D-7.
-- **Q-2 (owner, D-9).** `proposals: members` as the default; quota values (set from measurement, not here).
-- **Q-3 (architect → prikk).** The letter is drafted (2026-10-21): the `show <block-id>` defect, the meaning of
-  `queued`, and whether a killed accept is meant to be resumable; the earlier ask (JSON for `sync pending` and
-  `sync accept`: claim → patch ids, parents, signers) stands and would make the declaration of D-1 a cross-check.
-  A claim as a point exists in `prikk extract` (0.54.0, PK-56).
-- **Q-4 (owner, D-8).** Publication. Nothing in D-1…D-10 depends on its answer; "landed" is observed.
+Reviewed 2026-10-21 against the owner's philosophy ("clean, safe and secure, robust and sophisticated; users must not
+be confused"; "less is more"). Decided by the architect unless marked *owner*.
+
+- **Q-1 (OQ-4, the feature edge) — decided: the core set only for the first release**, i.e. exactly D-1…D-11. Suggested
+  changes, draft changes, thread resolution, required-reviewer lists, boards and issues are each their own RFC, added
+  only when wanted; each would sit behind this model without changing D-1…D-7. Fewer features that are true beat more
+  that are half-built.
+- **Q-2 (D-9, the contribution model) — decided as a proposal for the owner's approval with the RFC:** `proposals:
+  members` by default (never anonymous). **Default quotas, operator-configurable per repository, tuned by RFC 004
+  D-12's data** (an accepted patch cannot be removed from a store, so quotas bound disk, not behaviour):
+
+  | | `members` (default) | `any-authenticated` |
+  |---|---|---|
+  | open changes per principal per repository | 10 | 3 |
+  | cumulative accepted bytes per principal per repository | 512 MiB | 64 MiB |
+  | revisions per change | 20 | 10 |
+  | per push | RFC 004 D-5 edge bounds (256 MiB, 20,000 objects) | the same |
+  | repository-wide ceiling on pending bytes | 4 GiB, operator-set; past it proposals are refused with the named reason "repository capacity" | the same |
+  | retention of an accepted artifact after `landed` or `closed` | 30 days, operator-set (while `open`: kept) | the same |
+
+  Every refusal names the quota and what the person can do (close a change, ask a maintainer to raise it).
+- **Q-3 (architect → prikk) — answered 2026-10-21** (ledger PK-64, PK-65): `show <block-id>` is prikk's defect (fix
+  proposed for 0.54.0); `queued` means "in this repository's own queue"; a killed accept is resumable by design; the
+  review route is `extract --claim` against `extract` of the parent (measured by prikk). `sync pending --format
+  json` (claim → patches, signer, parent) is recorded as our first choice, unscheduled; it would turn D-1's
+  declaration into a cross-check.
+- **Q-4 (D-8, publication) — the one owner question left; it does not block accepting this RFC.** Nothing in
+  D-1…D-11 depends on its answer: "landed" is observed. Under model A a change can be proposed, reviewed and
+  downloaded but never lands on this forge's `main`; under the recommended model B (RFC 004, "D-8 in plain words") it
+  lands when the maintainers' sealed history is received and selected by rule. The change page says which is in
+  force, in plain words, so nobody waits for something that cannot happen.
 
 ## Sequencing and handoff
 

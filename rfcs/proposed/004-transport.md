@@ -311,12 +311,39 @@ deployment shape (spool volume, trusted proxy, host OpenSSH) before the release 
 ## Risks and open questions
 
 - **R-1.** ~~The measured *k* or the lock behaviour differs from the documents~~ Measured (U-12, U-16, U-17): *k* ≈ 4.2, locks as drafted, no key directory. Residual: the numbers change per prikk release (re-measured at each re-baseline, RFC 011 D-1); the 100,000-patch point is extrapolated, not measured.
+- **R-2.** Whole-artifact cost proves unacceptable for developer clones: D-13, the owner's call, on D-12's data. Nothing is decided now.
 - **R-3.** Accept time per patch varies about 2× between runs on the same host and doubles under load (U-12): the 600 s default deadline and the 20,000-object bound leave that margin; an operator on slow storage lowers the object bound.
-- **R-2.** Whole-artifact cost proves unacceptable for developer clones: D-13, the owner's call, on D-12's data.
-- **Q-1 (owner, D-8/D-T2).** What a branch is meanwhile; this RFC is correct under any answer.
-- **Q-2 (owner, OQ-4).** Whether the client helper's first clone should offer to skip key adoption for
-  public read-only use (this draft says **no**: a clone without adoption lands under `remotes/` only).
-- **Q-3 (owner).** Quota and bound *values*: set from the measurement handoff.
+
+### Open questions, reviewed 2026-10-21 against the owner's philosophy ("clean, safe and secure, robust and sophisticated; users must not be confused")
+
+- **Q-2 — decided (architect): the first clone never skips key adoption.** A clone made without adopting a key
+  cannot be verified, and a quiet "trust me" for public repositories is exactly the confusion the philosophy
+  forbids. Two explicit, honest options replace the proposed skip: `planeter clone --trust-key <fingerprint>`
+  (non-interactive: the user supplies the fingerprint through their own channel; the helper checks it against
+  the key carried by the archive and adopts only on a match) and `planeter clone --no-adopt` (inspect without
+  trust: everything lands under `remotes/`, and the output says in one sentence that **nothing is verified or
+  trusted**). The default is the interactive adoption of D-10.
+- **Q-3 — decided (architect): initial defaults from the measurements, all operator-configurable and tuned by D-12's
+  data:** the accept edge bound `PRIKK_EXCHANGE_MAX_BYTES` 256 MiB (prikk's own default) and objects 20,000 (D-5);
+  accept deadline 600 s; concurrent exports per host 2; spool budget 25 % of the spool volume with LRU eviction;
+  rate limits per principal per repository: pushes 20 per hour, conditional fetches 120 per minute, 429 with
+  `Retry-After`. The per-principal quotas are RFC 005 D-9's.
+- **Q-1 — the one owner question left (decision D-8, "what a branch is while publication is unavailable"); it does
+  not block accepting this RFC**, which is correct under every answer. See the summary below and RFC 005 Q-4.
+
+#### D-8 in plain words, with the architect's recommendation
+prikk cannot advance a branch that already exists on a keyless receiver (`archive import --adopt` lands only refs that
+are absent; RFC 154, which would, is unscheduled; the forge holds no key and must not). So today a change can be
+**proposed, reviewed, downloaded and sealed by a maintainer elsewhere**, but the forge's own `main` does not move.
+Three honest models: **A (strict)** `main` stays as created; a project that wants a new `main` re-creates the
+repository from a fresh archive. Simple and true, and it makes the forge a review tool, not a home for a project.
+**B (recommended)** the forge also *receives* the maintainers' sealed history as a received ref and **selects it as the
+branch tip by a written rule** (a key adopted by an admin, a fast-forward of the previous tip, verified): no key on the
+forge, the selection is re-derivable and labelled on every page ("received and accepted by this forge by policy;
+verified by prikk"). It keeps OQ-1(a) and makes changes able to *land*. **C** a forge-held signing key: rejected, it
+breaks the keyless forge the whole design stands on. **B needs one measurement first** (does a newer bundle or archive
+update an existing received ref on a keyless forge, and what do `log`, `tree` and `extract --ref remotes/…` then read?)
+and a wording ruling on INV-6/NG-6; that is a short investigation under RFC 008's revision.
 
 ## Sequencing and handoff
 
