@@ -917,6 +917,20 @@ pub(crate) async fn propose_handler(
         can_write,
     };
 
+    // A repository waiting for recovery takes no writes: said before the body is looked at (reads are unaffected).
+    let writable = {
+        let (propose, record) = (Arc::clone(&propose), record.clone());
+        offload(move || propose.ensure_writable(&record)).await
+    };
+    match writable {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => {
+            export.metrics().refusal(e.reason());
+            return propose_failure(&state, &e);
+        }
+        Err(_) => return error_response(&state, Failure::Internal),
+    }
+
     // The framing, from the headers: the length is required and bounded before a byte of the body is read.
     if let Some(ct) = headers
         .get(header::CONTENT_TYPE)

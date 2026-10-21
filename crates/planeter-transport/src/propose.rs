@@ -532,6 +532,22 @@ impl ProposeService {
 
     // -------------------------------------------------------------------------------- 1. the checks before the upload
 
+    /// The repository takes writes: it is not waiting for recovery. Refused with the named reason otherwise (reads
+    /// are unaffected). The edge asks this before it looks at the body; [`ProposeService::check`] asks it again,
+    /// because the flag can be set while a body is being read.
+    pub fn ensure_writable(&self, record: &RepositoryRecord) -> Result<(), ProposeError> {
+        let flags = self
+            .changes
+            .repo_flags(&record.repo_id)
+            .map_err(|e| Self::unavailable("cannot read the repository flags", e))?;
+        if flags.needs_recovery {
+            return Err(ProposeError::NeedsRecovery {
+                reason: flags.reason.unwrap_or_default(),
+            });
+        }
+        Ok(())
+    }
+
     /// Everything that can be decided before the artifact is read, in the order a person can act on it:
     /// the `needs-recovery` flag → the quota → the metadata → the change the push names → the declared base.
     /// `artifact_bytes` is the size the request declares (the framing makes it exact). Nothing is written.
@@ -546,15 +562,7 @@ impl ProposeService {
         artifact_bytes: u64,
     ) -> Result<Plan, ProposeError> {
         let repo = &record.repo_id;
-        let flags = self
-            .changes
-            .repo_flags(repo)
-            .map_err(|e| Self::unavailable("cannot read the repository flags", e))?;
-        if flags.needs_recovery {
-            return Err(ProposeError::NeedsRecovery {
-                reason: flags.reason.unwrap_or_default(),
-            });
-        }
+        self.ensure_writable(record)?;
         // The change the push names (looked up now; its refusals come after the metadata's).
         let existing = match &meta.change {
             Some(id) if id_is_plain(id) => self

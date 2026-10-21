@@ -2108,3 +2108,191 @@ async fn under_the_real_sandbox_with_real_prikk_a_proposal_is_taken_in_and_an_ov
     assert_eq!(r.json()["added_count"], 2);
     assert_eq!(pending(&ok.forge).len(), 2);
 }
+
+// ------------------------------------------------------------------------------------------------ the order of the checks
+
+fn open_change(id: &str, repo: &str, by: &str) -> planeter_store::ChangeRecord {
+    planeter_store::ChangeRecord {
+        change_id: id.to_owned(),
+        repo_id: RepoId::new(repo),
+        title: "t".to_owned(),
+        description: String::new(),
+        target_ref: None,
+        state: ChangeState::Open,
+        closed_reason: None,
+        opened_by: by.to_owned(),
+        opened_at: 1,
+        updated_at: 1,
+        retain_until: None,
+    }
+}
+
+/// Each row: a request that breaks two rules at once, and the one named. The earlier check wins, and a refusal
+/// never says more than the caller is entitled to know.
+#[tokio::test]
+async fn the_checks_run_in_the_documented_order_and_each_refusal_is_the_earlier_rule() {
+    if skip() {
+        return;
+    }
+    let mut w = world("order", Opts::default());
+    w.client.commit(1);
+    let art = w.client.artifact(&w.forge, "a1");
+    let garbage = b"this is not a proposal at all".to_vec();
+    let good = frame(&titled("x"), &art);
+    let code = |r: &Reply| (r.status.as_u16(), r.code());
+
+    // 1. The read gate comes before everything about the body: a stranger and a garbage body for a private repository.
+    let r = send(
+        &w.router,
+        post_req("private", Some("tok-carol"), garbage.clone(), &[]),
+    )
+    .await;
+    assert_eq!(code(&r), (404, "not_found".into()));
+    // 2. Authorization comes before the recovery flag and the body: a reader, a flagged repository, garbage.
+    w.changes
+        .set_needs_recovery(&RepoId::new("r-forge"), "x", now())
+        .unwrap();
+    let r = send(
+        &w.router,
+        post_req("forge", Some("tok-bob"), garbage.clone(), &[]),
+    )
+    .await;
+    assert_eq!(code(&r), (403, "forbidden".into()));
+    // 3. The recovery flag comes before the framing: a writer, a flagged repository, garbage.
+    let r = send(
+        &w.router,
+        post_req("forge", Some("tok-alice"), garbage.clone(), &[]),
+    )
+    .await;
+    assert_eq!(code(&r), (503, "needs_recovery".into()));
+    w.changes
+        .clear_needs_recovery(&RepoId::new("r-forge"))
+        .unwrap();
+    // 4. The framing comes before the metadata: garbage is a framing error, not a metadata one.
+    let r = send(
+        &w.router,
+        post_req("forge", Some("tok-alice"), garbage.clone(), &[]),
+    )
+    .await;
+    assert_eq!(
+        (r.status.as_u16(), r.json()["reason"].clone()),
+        (400, "magic".into())
+    );
+    // 5. Size comes before the body is read: a declared length over the bound, with a body that is garbage.
+    let mut req = post_req("forge", Some("tok-alice"), garbage.clone(), &[]);
+    req.headers_mut()
+        .insert("content-length", "99999999999".parse().unwrap());
+    assert_eq!(
+        code(&send(&w.router, req).await),
+        (413, "payload_too_large".into())
+    );
+    // 6. The metadata comes before the change it names: an unknown change id together with a title is a metadata
+    //    error (an existing change takes no title), not "unknown change".
+    let r = propose_as(
+        &w,
+        "forge",
+        "tok-alice",
+        serde_json::json!({"change": "c-nope", "title": "x"}),
+        &art,
+    )
+    .await;
+    assert_eq!(
+        (r.status.as_u16(), r.json()["reason"].clone()),
+        (400, "fields_for_existing_change".into())
+    );
+    // 7. The change comes before the base: an unknown change and an unknown base name the change.
+    let r = propose_as(
+        &w,
+        "forge",
+        "tok-alice",
+        serde_json::json!({"change": "c-nope", "base": "9".repeat(64)}),
+        &art,
+    )
+    .await;
+    assert_eq!(code(&r), (422, "unknown_change".into()));
+    // 8. The base comes before the quota: with the quota used up, an unknown base is still named.
+    for i in 0..3 {
+        w.changes
+            .create_change(&open_change(&format!("c-q{i}"), "r-anyauth", "carol"))
+            .unwrap();
+    }
+    let anyauth_art = {
+        let a = w.base.join("anyauth");
+        w.client.artifact(&a, "qa")
+    };
+    let r = propose_as(
+        &w,
+        "anyauth",
+        "tok-carol",
+        serde_json::json!({"title": "x", "base": "9".repeat(64)}),
+        &anyauth_art,
+    )
+    .await;
+    assert_eq!(code(&r), (422, "base_unknown".into()));
+    // 9. The metadata comes before the quota (the quota is held back until the artifact's digest is known):
+    //    with the quota used up, a missing title is the metadata error.
+    let r = propose_as(
+        &w,
+        "anyauth",
+        "tok-carol",
+        serde_json::json!({}),
+        &anyauth_art,
+    )
+    .await;
+    assert_eq!(
+        (r.status.as_u16(), r.json()["reason"].clone()),
+        (400, "title_required".into())
+    );
+    // 10. With nothing else wrong, the quota is named.
+    let r = propose_as(&w, "anyauth", "tok-carol", titled("x"), &anyauth_art).await;
+    assert_eq!(code(&r), (422, "quota_exceeded".into()));
+    // Nothing above accepted anything.
+    assert!(pending(&w.forge).is_empty());
+    let _ = good;
+}
+
+#[tokio::test]
+async fn the_rate_limit_comes_before_the_read_gate_and_says_nothing_about_any_repository() {
+    if skip() {
+        return;
+    }
+    let w = world(
+        "ratelimit",
+        Opts {
+            ip_limit: 2,
+            ..Opts::default()
+        },
+    );
+    let garbage = b"x".to_vec();
+    let a = send(
+        &w.router,
+        post_req("no-such-repo", Some("tok-carol"), garbage.clone(), &[]),
+    )
+    .await;
+    let b = send(
+        &w.router,
+        post_req("private", Some("tok-carol"), garbage.clone(), &[]),
+    )
+    .await;
+    assert_eq!(
+        (a.status, b.status),
+        (StatusCode::NOT_FOUND, StatusCode::NOT_FOUND)
+    );
+    // The third, for a repository that exists and one that does not, is limited the same way.
+    let c = send(
+        &w.router,
+        post_req("no-such-repo", Some("tok-carol"), garbage.clone(), &[]),
+    )
+    .await;
+    let d = send(
+        &w.router,
+        post_req("private", Some("tok-carol"), garbage, &[]),
+    )
+    .await;
+    assert_eq!(
+        (c.status, c.code()),
+        (StatusCode::TOO_MANY_REQUESTS, "rate_limited".into())
+    );
+    assert_eq!(c.body, d.body);
+    assert!(c.h("retry-after").parse::<u64>().unwrap() >= 1);
+}
