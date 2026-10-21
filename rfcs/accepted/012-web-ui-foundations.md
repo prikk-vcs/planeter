@@ -160,8 +160,9 @@ checklist result and the accessibility statement.
 ## Owner decisions
 
 - **O-1.** Accept the direction (D-1 to D-8) and place theme T14 before RFC 005's UI.
-- **O-2 (settled 2026-10-20).** English plus Japanese. A language ships only when a fluent speaker has reviewed
-  it; the reviewer for Japanese is to be named by the owner before it ships.
+- **O-2 (settled 2026-10-20; reviewers named 2026-10-21).** English plus Japanese. A language ships only when a fluent speaker has reviewed
+  it; **the Japanese reviewers are the owner and a colleague of the owner** (2026-10-21). They review a sheet the dev team prepares
+  and may see the pages in a preview mode; Japanese is not offered to anyone else until they sign it off.
 - **O-3 (settled 2026-10-20).** No outside readers and no assistive-technology user are available now. The
   project proceeds with tool-based measurement and the labelled statement of D-1/D-5, and revisits when a person
   is available (U3 stays open).
