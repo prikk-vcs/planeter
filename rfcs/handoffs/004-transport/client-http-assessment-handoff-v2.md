@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | RFC 004 D-10 calls for a client helper that talks HTTPS to the forge (advertise, conditional and ranged fetch, a framed streamed upload). The workspace has **no TLS stack and no HTTP client** (TLS ends at the operator's proxy). A new network-facing dependency set is the project's most security-sensitive addition so far, so this handoff **measures and reports; it adds nothing to the workspace**. The architect decides from the report, then writes the helper's handoff. |
-| Status | **Assigned** (2026-10-22). Independent of part 4a; may run beside it. |
+| Status | **Done, reviewed Approved (2026-10-22).** Decision: `ureq` 3 + `rustls` (`aws-lc-rs`) + `webpki-roots`; the helper's handoff waits for the owner's authorization of the `CDLA-Permissive-2.0` licence line (see `.git-exclude/reviewed/followups-and-client-assessment-review-v1.md`). |
 | Basis | [`../../accepted/004-transport.md`](../../accepted/004-transport.md) D-10, D-11, Q-2; the dependency policy (a new dependency needs a justification; `unsafe` only inside reviewed crates; `forbid(unsafe_code)` in ours); `deny.toml`; RFC 010 (MSRV 1.88.0, signed releases, the container build); the propose framing in `docs/propose.md`. |
 | Audience | Dev team. Return a report as a review-request package. |
 

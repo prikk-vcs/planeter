@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | Small follow-up to part 4: **the administrator's repair step must be reachable and tested**, **the foreign-process witness must see a person's prikk by its working directory and open files**, and **the accept-time-per-patch growth must be measured against the object bound** so the deadline and the bound can be set on facts. |
-| Status | **Assigned** (2026-10-22), after part 4 was reviewed Approved. |
+| Status | **Done, reviewed Approved (2026-10-22; commits `5d9d614`…`b90189c`).** IS-51 closed. T3's result changed the cost model: `accept-cost-model-handoff-v2.md` (part 4b). |
 | Basis | [`recovery-handoff-v2.md`](recovery-handoff-v2.md) and its review; `crates/planeter-transport/src/recovery.rs` (`evaluate`, `run_steps`, `ProcessTable`); `crates/planeter-web/tests/recovery.rs` (`doctor_problems_stop_the_unattended_run_and_an_administrator_may_run_only_the_repairs_doctor_names`); [`../../accepted/004-transport.md`](../../accepted/004-transport.md) D-5.4, D-6, R-3; ledger PK-59, PK-68 (the new row). |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 
