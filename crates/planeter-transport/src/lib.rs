@@ -26,7 +26,7 @@ pub use propose::{
     Proposed, Submitter, Upload, Uploaded,
 };
 pub use recovery::{
-    Blocker, Cause, Outcome as RecoveryOutcome, Plan as RecoveryPlan, ProcFs, ProcessInfo,
-    ProcessTable, RecoveryConfig, RecoveryError, RecoveryResult, RecoveryService, classify_cause,
-    inside_repository,
+    Blocker, Cause, Inspection, Outcome as RecoveryOutcome, Plan as RecoveryPlan, ProcFs,
+    ProcessInfo, ProcessTable, RecoveryConfig, RecoveryError, RecoveryResult, RecoveryService,
+    classify_cause, inside_repository,
 };

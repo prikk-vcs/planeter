@@ -317,18 +317,19 @@ fn recovery_schemas() -> Value {
             "repair_refusal": {"type": "string", "nullable": true, "description": "Why planeter repairs nothing here, when the report has problems that are not all covered that way (a problem with no named repair, or one that names a repair off the list): a person decides."}
         })),
         "RecoveryBlocker": obj(&["code", "text", "detail", "overridable"], json!({
-            "code": {"type": "string", "enum": ["cause_not_ours", "lease_held", "foreign_process", "doctor_problems", "output_unreadable", "unexpected_lock", "too_many_open_intents"]},
+            "code": {"type": "string", "enum": ["cause_not_ours", "lease_held", "foreign_process", "processes_uninspected", "doctor_problems", "output_unreadable", "unexpected_lock", "too_many_open_intents"]},
             "text": string_prop(),
             "detail": {"type": "string", "description": "What was seen, verbatim where it is prikk's text (English)."},
             "overridable": {"type": "boolean", "description": "An administrator's run goes on despite it; the others always stop."}
         })),
     });
     let b = json!({
-        "RecoveryPlan": obj(&["flagged", "flag_reason", "flag_since", "cause", "holders", "processes", "intents", "locks", "doctor", "blockers", "commands", "may_run_unattended", "steps"], json!({
+        "RecoveryPlan": obj(&["flagged", "flag_reason", "flag_since", "cause", "holders", "processes", "processes_uninspected", "intents", "locks", "doctor", "blockers", "commands", "may_run_unattended", "steps"], json!({
             "flagged": {"type": "boolean"}, "flag_reason": nullable_string(),
             "flag_since": {"type": "integer", "minimum": 0, "nullable": true},
             "cause": {"$ref": "#/components/schemas/RecoveryCause"},
-            "holders": array_of("RecoveryHolder"), "processes": array_of("RecoveryProcess"), "intents": array_of("RecoveryIntent"),
+            "holders": array_of("RecoveryHolder"), "processes": array_of("RecoveryProcess"),
+            "processes_uninspected": {"type": "integer", "minimum": 0, "description": "How many `prikk` or `bwrap` processes (or processes that could not be identified) could not be inspected: another user's, or hidden. A warning that stops an unattended run and not an administrator's."}, "intents": array_of("RecoveryIntent"),
             "locks": array_of("RecoveryLock"),
             "doctor": {"allOf": [{"$ref": "#/components/schemas/RecoveryDoctor"}], "nullable": true},
             "blockers": array_of("RecoveryBlocker"),

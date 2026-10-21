@@ -562,6 +562,10 @@ pub const CATALOG: &[Entry] = &[
         "More proposals are waiting than the lease records account for.",
     ),
     msg(
+        "recovery.blocker.processes_uninspected",
+        "Some processes could not be inspected, so it cannot be ruled out that one of them is using the repository.",
+    ),
+    msg(
         "recovery.outcome.recovered",
         "The repository is writable again.",
     ),

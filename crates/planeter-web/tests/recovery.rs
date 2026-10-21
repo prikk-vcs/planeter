@@ -750,15 +750,11 @@ struct OurChild(u32);
 impl ProcessTable for OurChild {
     fn processes(&self) -> Vec<ProcessInfo> {
         vec![
-            ProcessInfo {
-                pid: std::process::id(),
-                parent: 1,
-                argv: vec!["planeter".into()],
-            },
-            ProcessInfo {
-                pid: 90_001,
-                parent: std::process::id(),
-                argv: vec![
+            ProcessInfo::new(std::process::id(), 1, vec!["planeter".into()]),
+            ProcessInfo::new(
+                90_001,
+                std::process::id(),
+                vec![
                     "bwrap".into(),
                     "--bind".into(),
                     self.0.to_string(),
@@ -766,7 +762,7 @@ impl ProcessTable for OurChild {
                     "prikk".into(),
                     "log".into(),
                 ],
-            },
+            ),
         ]
     }
 }
@@ -784,10 +780,10 @@ fn the_servers_own_processes_are_not_foreign_and_a_stranger_command_line_naming_
             let me = std::process::id();
             vec![
                 // ours: a child of this process
-                ProcessInfo {
-                    pid: 91_001,
-                    parent: me,
-                    argv: vec![
+                ProcessInfo::new(
+                    91_001,
+                    me,
+                    vec![
                         "bwrap".into(),
                         "--bind".into(),
                         dir.clone(),
@@ -796,37 +792,37 @@ fn the_servers_own_processes_are_not_foreign_and_a_stranger_command_line_naming_
                         "/x/prikk".into(),
                         "log".into(),
                     ],
-                },
+                ),
                 // ours: a grandchild
-                ProcessInfo {
-                    pid: 91_002,
-                    parent: 91_001,
-                    argv: vec!["/x/prikk".into(), "log".into(), dir.clone()],
-                },
+                ProcessInfo::new(
+                    91_002,
+                    91_001,
+                    vec!["/x/prikk".into(), "log".into(), dir.clone()],
+                ),
                 // not a prikk or bwrap command line, though it names the directory
-                ProcessInfo {
-                    pid: 91_003,
-                    parent: 1,
-                    argv: vec!["tail".into(), "-f".into(), format!("{dir}/log")],
-                },
+                ProcessInfo::new(
+                    91_003,
+                    1,
+                    vec!["tail".into(), "-f".into(), format!("{dir}/log")],
+                ),
                 // prikk, but of another repository
-                ProcessInfo {
-                    pid: 91_004,
-                    parent: 1,
-                    argv: vec!["prikk".into(), "log".into(), "/somewhere/else".into()],
-                },
+                ProcessInfo::new(
+                    91_004,
+                    1,
+                    vec!["prikk".into(), "log".into(), "/somewhere/else".into()],
+                ),
                 // foreign, when asked for
-                ProcessInfo {
-                    pid: 91_005,
-                    parent: if self.1 { 1 } else { me },
-                    argv: vec![
+                ProcessInfo::new(
+                    91_005,
+                    if self.1 { 1 } else { me },
+                    vec![
                         "/usr/bin/prikk".into(),
                         "sync".into(),
                         "accept".into(),
                         "a".into(),
                         dir,
                     ],
-                },
+                ),
             ]
         }
     }
@@ -1655,4 +1651,224 @@ fn a_lock_that_is_a_link_to_somewhere_else_is_not_the_repositorys_and_a_reposito
     let plan = w.svc.plan(&record).unwrap();
     assert!(plan.blockers.is_empty(), "{plan:?}");
     assert!(plan.locks.iter().all(|l| l.expected));
+}
+
+// ------------------------------------------------------------------------------------------------ RFC 004 part 4a, T2
+
+/// Start `sh <script> status` detached (a shell starts it and exits, so the system adopts it: it is **not** a
+/// descendant of this process). The script is named `prikk`, so the command line is a prikk's, and its body is what the
+/// test needs it to do; the command line itself never names the repository.
+fn spawn_adopted_prikk(base: &Path, name: &str, body: &str) -> u32 {
+    let dir = base.join(name);
+    std::fs::create_dir_all(&dir).unwrap();
+    let script = dir.join("prikk");
+    std::fs::write(&script, format!("#!/bin/sh\n{body}\nsleep 60\n")).unwrap();
+    let pidfile = dir.join("pid");
+    let st = Command::new("sh")
+        .arg("-c")
+        .arg(format!(
+            "setsid sh {} status >/dev/null 2>&1 & echo $! > {}",
+            script.display(),
+            pidfile.display()
+        ))
+        .status()
+        .unwrap();
+    assert!(st.success());
+    std::thread::sleep(Duration::from_millis(300));
+    std::fs::read_to_string(pidfile)
+        .unwrap()
+        .trim()
+        .parse()
+        .unwrap()
+}
+
+#[test]
+fn a_prikk_that_only_changed_into_the_repository_is_found_by_its_working_directory() {
+    if skip() {
+        return;
+    }
+    let w = world("cwd", Opts::default());
+    w.killed_accept();
+    let pid = spawn_adopted_prikk(&w.base, "cd", &format!("cd {}", w.repo_path.display()));
+    let plan = w.svc.plan(&w.record).unwrap();
+    let found = plan
+        .processes
+        .iter()
+        .find(|p| p.pid == pid)
+        .expect("found by its cwd");
+    assert!(
+        !found.command.contains(w.repo_path.to_str().unwrap()),
+        "its command line names no path: {}",
+        found.command
+    );
+    assert_eq!(
+        plan.blockers
+            .iter()
+            .map(|b| (b.code, b.overridable))
+            .collect::<Vec<_>>(),
+        vec![("foreign_process", false)]
+    );
+    assert!(w.svc.auto(&w.record).is_none());
+    assert_eq!(
+        w.svc.recover(&w.record, "alice", &[]).unwrap().outcome,
+        RecoveryOutcome::Stopped
+    );
+    assert_eq!(
+        locks_listed(&w.repo_path),
+        2,
+        "nothing was cleared while it ran"
+    );
+    kill(pid);
+    std::thread::sleep(Duration::from_millis(300));
+    assert_eq!(
+        w.svc.auto(&w.record).unwrap().outcome,
+        RecoveryOutcome::Recovered
+    );
+}
+
+#[test]
+fn a_prikk_holding_a_file_of_the_store_open_is_found_by_its_open_files() {
+    if skip() {
+        return;
+    }
+    let w = world("fd", Opts::default());
+    w.killed_accept();
+    let held = w.repo_path.join(".prikk/active/default/active.lock");
+    let pid = spawn_adopted_prikk(&w.base, "fd", &format!("cd /\nexec 3< {}", held.display()));
+    let plan = w.svc.plan(&w.record).unwrap();
+    assert!(
+        plan.processes.iter().any(|p| p.pid == pid),
+        "{:?}",
+        plan.processes
+    );
+    assert_eq!(
+        plan.blockers.iter().map(|b| b.code).collect::<Vec<_>>(),
+        vec!["foreign_process"]
+    );
+    assert!(w.svc.auto(&w.record).is_none());
+    kill(pid);
+}
+
+#[test]
+fn the_servers_own_children_are_not_foreign_wherever_they_are_and_a_foreign_tool_elsewhere_is_not_either()
+ {
+    if skip() {
+        return;
+    }
+    let w = world("own-children", Opts::default());
+    w.killed_accept();
+    // A child of this process (what the server's own read in the sandbox is) that sits in the repository.
+    let dir = w.base.join("own");
+    std::fs::create_dir_all(&dir).unwrap();
+    let script = dir.join("prikk");
+    std::fs::write(
+        &script,
+        format!("#!/bin/sh\ncd {}\nsleep 60\n", w.repo_path.display()),
+    )
+    .unwrap();
+    let mut child = Command::new("sh")
+        .arg(&script)
+        .arg("status")
+        .spawn()
+        .unwrap();
+    // A foreign prikk that is nowhere near the repository and holds none of its files.
+    let elsewhere = spawn_adopted_prikk(&w.base, "elsewhere", "cd /");
+    std::thread::sleep(Duration::from_millis(300));
+    let plan = w.svc.plan(&w.record).unwrap();
+    assert!(plan.processes.is_empty(), "{:?}", plan.processes);
+    assert_eq!(
+        plan.processes_uninspected, 0,
+        "every one of them could be read"
+    );
+    assert!(
+        plan.blockers.is_empty() && plan.may_run_unattended,
+        "{plan:?}"
+    );
+    let _ = child.kill();
+    let _ = child.wait();
+    kill(elsewhere);
+}
+
+/// A table with fixed entries: the process table is behind a trait so that what a test needs to see can be shown.
+struct Fixed(Vec<ProcessInfo>);
+impl ProcessTable for Fixed {
+    fn processes(&self) -> Vec<ProcessInfo> {
+        self.0.clone()
+    }
+}
+
+#[test]
+fn a_process_that_cannot_be_inspected_is_a_stated_warning_that_stops_an_unattended_run_but_not_an_administrators()
+ {
+    if skip() {
+        return;
+    }
+    use planeter_transport::Inspection;
+    let unreadable = Inspection {
+        cwd: None,
+        open_files: Vec::new(),
+        complete: false,
+    };
+    let table = Fixed(vec![
+        // another user's prikk: we may not look at its directory or files
+        ProcessInfo {
+            pid: 92_001,
+            parent: 1,
+            argv: vec!["/usr/bin/prikk".into(), "status".into()],
+            inspection: unreadable.clone(),
+        },
+        // something we cannot even identify
+        ProcessInfo {
+            pid: 92_002,
+            parent: 1,
+            argv: Vec::new(),
+            inspection: unreadable.clone(),
+        },
+        // an unreadable process that is not a tool: it cannot hold the repository, and is not counted
+        ProcessInfo {
+            pid: 92_003,
+            parent: 1,
+            argv: vec!["/usr/sbin/sshd".into(), "-D".into()],
+            inspection: unreadable,
+        },
+        // a readable tool elsewhere: fine
+        ProcessInfo::new(92_004, 1, vec!["prikk".into(), "log".into()]),
+    ]);
+    let w = world(
+        "uninspected",
+        Opts {
+            processes: Some(Arc::new(table)),
+            ..Opts::default()
+        },
+    );
+    w.killed_accept();
+    let plan = w.svc.plan(&w.record).unwrap();
+    assert_eq!(
+        plan.processes_uninspected, 2,
+        "the unreadable tool and the unidentifiable one"
+    );
+    assert_eq!(
+        plan.blockers
+            .iter()
+            .map(|b| (b.code, b.overridable))
+            .collect::<Vec<_>>(),
+        vec![("processes_uninspected", true)]
+    );
+    assert!(plan.blockers[0].detail.contains("2 process"));
+    assert!(!plan.may_run_unattended);
+    assert!(w.svc.auto(&w.record).is_none(), "the server does not guess");
+    assert_eq!(
+        w.svc.recover(&w.record, "automatic", &[]).unwrap().outcome,
+        RecoveryOutcome::Stopped
+    );
+    assert!(w.flagged());
+    // An administrator who knows the host goes on.
+    let r = w.svc.recover(&w.record, "alice", &[]).unwrap();
+    assert_eq!(r.outcome, RecoveryOutcome::Recovered, "{r:?}");
+    let rec = &w.recoveries.recent(&repo_id(), 1).unwrap()[0];
+    assert!(
+        rec.steps[0].detail.contains("processes_uninspected"),
+        "{}",
+        rec.steps[0].detail
+    );
 }

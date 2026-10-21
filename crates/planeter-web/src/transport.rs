@@ -1239,6 +1239,7 @@ pub struct PlanJson {
     cause: CauseView,
     holders: Vec<HolderJson>,
     processes: Vec<ProcJson>,
+    processes_uninspected: usize,
     intents: Vec<IntentJson>,
     locks: Vec<LockJson>,
     doctor: Option<DoctorJson>,
@@ -1305,6 +1306,7 @@ fn blocker_key(code: &str) -> crate::catalog::Key {
         "doctor_problems" => Key::RecoveryBlockerDoctorProblems,
         "unexpected_lock" => Key::RecoveryBlockerUnexpectedLock,
         "too_many_open_intents" => Key::RecoveryBlockerTooManyOpenIntents,
+        "processes_uninspected" => Key::RecoveryBlockerProcessesUninspected,
         _ => Key::RecoveryBlockerOutputUnreadable,
     }
 }
@@ -1349,6 +1351,7 @@ fn plan_json(p: &planeter_transport::RecoveryPlan, lang: crate::catalog::Lang) -
                 command: x.command.clone(),
             })
             .collect(),
+        processes_uninspected: p.processes_uninspected,
         intents: p
             .intents
             .iter()

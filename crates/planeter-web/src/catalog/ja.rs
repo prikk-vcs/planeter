@@ -593,6 +593,10 @@ pub const CATALOG: &[Entry] = &[
         "リースの記録で説明できる数より多くの提案が待機しています。",
     ),
     msg(
+        "recovery.blocker.processes_uninspected",
+        "一部のプロセスを調べられなかったため、そのどれかがリポジトリを使用している可能性を除外できません。",
+    ),
+    msg(
         "recovery.outcome.recovered",
         "リポジトリは再び書き込めるようになりました。",
     ),

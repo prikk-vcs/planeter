@@ -49,12 +49,48 @@ pub const KNOWN_LOCK_KINDS: [&str; 2] = ["active", "container:object-store"];
 
 // ------------------------------------------------------------------------------------------------ the process table
 
+/// What was read of a process's working directory and open files (RFC 004 part 4a, T2).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Inspection {
+    /// Where the process is (`/proc/<pid>/cwd`), if it could be read.
+    pub cwd: Option<String>,
+    /// What its open file descriptors point at (`/proc/<pid>/fd/*`).
+    pub open_files: Vec<String>,
+    /// Everything that was asked could be read. `false` for a process of another user (or any entry the system would
+    /// not let us read): it is **not** treated as safe, and it is counted and said.
+    pub complete: bool,
+}
+
+impl Inspection {
+    /// Nothing to read (the process is not a candidate), or nothing known: complete, empty.
+    pub fn none() -> Self {
+        Inspection {
+            cwd: None,
+            open_files: Vec::new(),
+            complete: true,
+        }
+    }
+}
+
 /// One process of the host.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProcessInfo {
     pub pid: u32,
     pub parent: u32,
     pub argv: Vec<String>,
+    pub inspection: Inspection,
+}
+
+impl ProcessInfo {
+    /// A process with a command line and nothing read of its directory and files.
+    pub fn new(pid: u32, parent: u32, argv: Vec<String>) -> Self {
+        ProcessInfo {
+            pid,
+            parent,
+            argv,
+            inspection: Inspection::none(),
+        }
+    }
 }
 
 /// The host's process table, behind a trait so a test can show a disagreeing witness.
@@ -75,8 +111,23 @@ impl ProcessTable for ProcFs {
             let Some(pid) = e.file_name().to_str().and_then(|n| n.parse::<u32>().ok()) else {
                 continue;
             };
-            let Ok(raw) = std::fs::read(e.path().join("cmdline")) else {
-                continue; // gone while we looked
+            let raw = match std::fs::read(e.path().join("cmdline")) {
+                Ok(raw) => raw,
+                Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
+                    // Cannot even see what it is: counted as not inspected (never as safe).
+                    out.push(ProcessInfo {
+                        pid,
+                        parent: 0,
+                        argv: Vec::new(),
+                        inspection: Inspection {
+                            cwd: None,
+                            open_files: Vec::new(),
+                            complete: false,
+                        },
+                    });
+                    continue;
+                }
+                Err(_) => continue, // gone while we looked
             };
             let argv: Vec<String> = raw
                 .split(|b| *b == 0)
@@ -84,8 +135,14 @@ impl ProcessTable for ProcFs {
                 .map(|a| String::from_utf8_lossy(a).into_owned())
                 .collect();
             if argv.is_empty() {
-                continue;
+                continue; // a kernel thread, or a process that is exiting
             }
+            // Only the tools can hold the repository: read where they are and what they hold.
+            let inspection = if is_tool(&argv) {
+                inspect(&e.path())
+            } else {
+                Inspection::none()
+            };
             // `/proc/<pid>/stat`: "pid (comm) state ppid …"; comm may hold spaces and parentheses, so cut at the last ')'.
             let parent = std::fs::read_to_string(e.path().join("stat"))
                 .ok()
@@ -94,20 +151,80 @@ impl ProcessTable for ProcFs {
                     rest.split_whitespace().nth(1)?.parse::<u32>().ok()
                 })
                 .unwrap_or(0);
-            out.push(ProcessInfo { pid, parent, argv });
+            out.push(ProcessInfo {
+                pid,
+                parent,
+                argv,
+                inspection,
+            });
         }
         out
     }
 }
 
+/// Is `argv` the command line of a `prikk` or `bwrap` (the tools that can hold a repository)?
+fn is_tool(argv: &[String]) -> bool {
+    let base = |a: &str| a.rsplit('/').next().unwrap_or(a).to_owned();
+    argv.iter()
+        .take(8)
+        .any(|a| matches!(base(a).as_str(), "prikk" | "bwrap"))
+}
+
 /// Is `argv` a `prikk` or `bwrap` command line that names `dir`?
 fn names_repository(argv: &[String], dir: &str) -> bool {
-    let base = |a: &str| a.rsplit('/').next().unwrap_or(a).to_owned();
-    let is_tool = argv
-        .iter()
-        .take(8)
-        .any(|a| matches!(base(a).as_str(), "prikk" | "bwrap"));
-    is_tool && argv.iter().any(|a| a.contains(dir))
+    is_tool(argv) && argv.iter().any(|a| a.contains(dir))
+}
+
+/// Read `/proc/<pid>/cwd` and `/proc/<pid>/fd/*` of a process. Whatever cannot be read (another user's process) makes
+/// the inspection incomplete.
+fn inspect(proc_dir: &std::path::Path) -> Inspection {
+    let mut complete = true;
+    let cwd = match std::fs::read_link(proc_dir.join("cwd")) {
+        Ok(p) => Some(p.to_string_lossy().into_owned()),
+        Err(err) => {
+            // A process that is gone is not unreadable; one we may not look at is.
+            if err.kind() == std::io::ErrorKind::PermissionDenied {
+                complete = false;
+            }
+            None
+        }
+    };
+    let mut open_files = Vec::new();
+    match std::fs::read_dir(proc_dir.join("fd")) {
+        Ok(fds) => {
+            for fd in fds.flatten() {
+                match std::fs::read_link(fd.path()) {
+                    Ok(p) => open_files.push(p.to_string_lossy().into_owned()),
+                    Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => {
+                        complete = false
+                    }
+                    Err(_) => {}
+                }
+            }
+        }
+        Err(err) if err.kind() == std::io::ErrorKind::PermissionDenied => complete = false,
+        Err(_) => {}
+    }
+    Inspection {
+        cwd,
+        open_files,
+        complete,
+    }
+}
+
+/// Does this tool process hold the repository: its directory is in it, or it has a file of its `.prikk` open?
+fn holds_repository(info: &ProcessInfo, repo_real: &std::path::Path) -> bool {
+    use std::path::Path;
+    let store = repo_real.join(".prikk");
+    info.inspection
+        .cwd
+        .as_deref()
+        .is_some_and(|c| Path::new(c).starts_with(repo_real))
+        || info
+            .inspection
+            .open_files
+            .iter()
+            .any(|f| Path::new(f).starts_with(&store))
 }
 
 /// Is the lock at `lock` inside the repository's own `.prikk` directory? Both sides are resolved, so a repository
@@ -268,6 +385,8 @@ pub struct Plan {
     pub cause: Cause,
     pub holders: Vec<HolderView>,
     pub processes: Vec<ProcView>,
+    /// How many processes could not be inspected (a warning; it stops an unattended run, not an administrator's).
+    pub processes_uninspected: usize,
     pub intents: Vec<IntentView>,
     pub locks: Vec<LockView>,
     pub doctor: Option<DoctorView>,
@@ -335,6 +454,8 @@ struct Gathered {
     /// A lease this process holds right now (an accept, an export, a recovery) other than the one the run took.
     live_lease: bool,
     processes: Vec<ProcView>,
+    /// Tool processes (or unidentifiable ones) whose directory and files could not be read.
+    uninspected: usize,
     intents: Vec<IntentRecord>,
     doctor: Result<(DoctorReport, String), String>,
     locks: Result<(Vec<LockInfo>, String), String>,
@@ -409,6 +530,17 @@ fn evaluate(
                 .collect::<Vec<_>>()
                 .join("; "),
             overridable: false,
+        });
+    }
+    if g.uninspected > 0 {
+        out.push(Blocker {
+            code: "processes_uninspected",
+            detail: format!(
+                "{} process(es) could not be inspected (another user's, or hidden): it cannot be ruled out that one of them is using the repository",
+                g.uninspected
+            ),
+            // A person who knows the host may go on; the server does not guess.
+            overridable: true,
         });
     }
     match &g.doctor {
@@ -588,14 +720,24 @@ impl RecoveryService {
             }
             false
         };
-        let processes: Vec<ProcView> = table
-            .iter()
-            .filter(|p| p.pid != me && names_repository(&p.argv, &dir) && !ours(p.pid))
-            .map(|p| ProcView {
-                pid: p.pid,
-                command: p.argv.join(" ").chars().take(300).collect(),
-            })
-            .collect();
+        let repo_real = std::fs::canonicalize(&record.path).unwrap_or_else(|_| record.path.clone());
+        let mut uninspected = 0usize;
+        let mut processes: Vec<ProcView> = Vec::new();
+        for p in table.iter().filter(|p| p.pid != me && !ours(p.pid)) {
+            let tool = is_tool(&p.argv);
+            let foreign =
+                tool && (names_repository(&p.argv, &dir) || holds_repository(p, &repo_real));
+            if foreign {
+                processes.push(ProcView {
+                    pid: p.pid,
+                    command: p.argv.join(" ").chars().take(300).collect(),
+                });
+            } else if !p.inspection.complete && (tool || p.argv.is_empty()) {
+                // A tool (or something we cannot even identify) that we were not allowed to look into: not safe,
+                // not unsafe — counted, and said.
+                uninspected += 1;
+            }
+        }
         let intents = self
             .changes
             .open_intents(repo)
@@ -636,6 +778,7 @@ impl RecoveryService {
             holders,
             live_lease,
             processes,
+            uninspected,
             intents,
             doctor,
             locks,
@@ -721,6 +864,7 @@ impl RecoveryService {
             cause,
             holders: g.holders.clone(),
             processes: g.processes.clone(),
+            processes_uninspected: g.uninspected,
             intents: g
                 .intents
                 .iter()

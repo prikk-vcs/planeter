@@ -118,5 +118,5 @@ exact :: transport.rs :: bytes :: the Accept-Ranges unit
 exact :: transport.rs :: bytes {first}-{}/{size} :: the Content-Range of a partial response
 
 # --- recovery (RFC 004 part 4)
-re :: transport.rs :: ^(accept_deadline|accept_ceiling|accept_failed|accept_unreadable|accept_not_recorded|server_stopped|cause_not_ours|lease_held|foreign_process|doctor_problems|output_unreadable|unexpected_lock|too_many_open_intents)$ :: a stable machine-readable code of the recovery plan (the words are catalog messages)
+re :: transport.rs :: ^(accept_deadline|accept_ceiling|accept_failed|accept_unreadable|accept_not_recorded|server_stopped|cause_not_ours|lease_held|foreign_process|doctor_problems|output_unreadable|unexpected_lock|too_many_open_intents|processes_uninspected)$ :: a stable machine-readable code of the recovery plan (the words are catalog messages)
 exact :: lib.rs :: GET, POST :: the value of the `Allow` header of the recovery path

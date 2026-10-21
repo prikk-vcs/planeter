@@ -521,6 +521,7 @@ keys! {
     RecoveryBlockerOutputUnreadable => "recovery.blocker.output_unreadable",
     RecoveryBlockerUnexpectedLock => "recovery.blocker.unexpected_lock",
     RecoveryBlockerTooManyOpenIntents => "recovery.blocker.too_many_open_intents",
+    RecoveryBlockerProcessesUninspected => "recovery.blocker.processes_uninspected",
     RecoveryOutcomeRecovered => "recovery.outcome.recovered",
     RecoveryOutcomeStopped => "recovery.outcome.stopped",
     RecoveryOutcomeNotNow => "recovery.outcome.not_now",
