@@ -313,7 +313,6 @@ struct World {
     client: Client,
     /// `alice/forge` (public): the repository most tests propose to.
     forge: PathBuf,
-    propose: Arc<ProposeService>,
     changes: Arc<InMemoryChangeStore>,
     export: Arc<ExportService>,
     leases: Arc<LeaseManager>,
@@ -482,7 +481,6 @@ fn world(name: &str, o: Opts) -> World {
         base,
         client,
         forge: forge_path,
-        propose,
         changes,
         export,
         leases,
