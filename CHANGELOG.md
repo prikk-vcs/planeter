@@ -5,6 +5,25 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **Recovery: a repository left unfinished by a write becomes writable again by a written, recorded procedure (RFC 004 part 4),
+  and an accepted-but-unrecorded artifact is now counted (IS-50).** A repository that proposals flagged `needs_recovery` is
+  recovered **by the server itself** — at start and right after the write that did not finish — only when every witness agrees:
+  the flag is one of ours, the lease table has only dead holders, no process that is not the server's names the repository,
+  `doctor` reports nothing, `unlock` lists only the locks an accept leaves inside the repository, and the open proposals are the
+  ones the lease table accounts for. It then clears the stale locks (never on prikk's own liveness line, which is wrong inside our
+  sandbox), requires a fresh `verify` to pass, removes the dead lease records and clears the flag. Anything else stays flagged for
+  an administrator: `GET /api/v1/repos/{owner}/{name}/recovery` shows the plan (the flag and its cause, the holders, the processes,
+  the locks, `doctor`'s verdict, what disagrees, and the exact commands); `POST` of the same path runs it (and may abandon named
+  open proposals). Both need the repository-administration action and a bearer token of the `full` scope. Every run writes a
+  **recovery record** (new tables `recoveries` and `recovery_steps`: who, when, each step and the text of each prikk call), each
+  step before it is taken. New setting: `PLANETER_AUTOMATIC_RECOVERY` (`on` by default; `off` leaves recovery to an administrator),
+  and `PLANETER_PROPOSER_QUOTA_MB`. **A quota's meaning changed:** an artifact whose declaration was refused is already accepted by
+  prikk and cannot be removed, so it is now **kept and owed** — while its proposal is open its bytes count against the submitter's
+  accepted bytes and the repository's retained bytes (the `intents` table gains `artifact_bytes`; existing rows read as 0); a
+  corrected re-send records the revision and the bytes are counted once. The hints of three API errors are reworded (the
+  `needs_recovery` hint is now two sentences) and the OpenAPI document says in plain words what `forge-approved-unsealed` means.
+  Runbook: `docs/propose.md`.
+
 - **Propose: a change can be put on the forge (RFC 004 part 3b).** With `PLANETER_ARTIFACT_DIR` set (and the export spool), an
   authenticated principal who may propose (`write` and above; any signed-in reader if the repository's `proposals` setting is
   `any-authenticated`) can `POST …/transport/propose` an artifact built by `prikk sync build`: it is checked, accepted under the

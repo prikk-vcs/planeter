@@ -132,3 +132,67 @@ operator raises the budget or lowers the bound if it does not.
   what bound a hostile repeat of this.
 * Two proposals of the same artifact by different people while one is unfinished: the second gets `409 intent_pending`.
 * The accept's wall time follows the number of patches, not the bytes (about 14 s for 1,000 patches on the test machine).
+
+## Recovery: the runbook (RFC 004 part 4)
+
+A repository the write side flagged `needs_recovery` refuses writes (`503 needs_recovery`) and still answers reads. The server
+recovers it **by itself** when every witness agrees, at start and right after an accept that did not finish; otherwise an
+administrator does, through `GET` and `POST /api/v1/repos/{owner}/{name}/recovery` (the `RepoAdmin` action: the owner and
+administrators of the repository; a token must have the `full` scope; bearer token only). `PLANETER_AUTOMATIC_RECOVERY=off`
+turns the unattended runs off; the door works either way.
+
+### The witnesses
+
+| Witness | What it reads | What disagreement looks like | Unattended | Administrator's run |
+|---|---|---|---|---|
+| the flag's **cause** | the reason stored with the flag | anything but `accept_deadline`, `accept_ceiling`, `accept_failed`, `accept_unreadable`, `accept_not_recorded`, `server_stopped` (blocker `cause_not_ours`) | stops | may go on |
+| the **lease table** | the durable holder records of the repository; a record written by another boot of the server is a dead holder (the server runs once per database, so that process is gone), a record of this boot is a lease held now | a live holder (`lease_held`); the run is *not now* and may be tried again | stops | stops |
+| **other processes** | `/proc`: any `prikk` or `bwrap` command line that names the repository's directory and does not descend from the server | `foreign_process` (a second server, an operator's own `prikk`, a survivor of the killed one) | stops | stops |
+| **`doctor`** | its report (strictly read: it must add up to its own summary) | any error or warning (`doctor_problems`); an unknown shape (`output_unreadable`, prikk's text kept) | stops | stops (it runs a repair only if the report *names* an idempotent one: `--repair-wal-tail`, `--repair-index`, `--repair-pointer-index-tail`, `--repair-tails`) |
+| **`unlock`** | the listing (strictly read); only locks of the kinds an accept leaves (`active`, `container:object-store`) that resolve to a `.lock` file inside the repository's own `.prikk` directory | any other kind or place (`unexpected_lock`); an unknown shape (`output_unreadable`) | stops | stops |
+| the **open intents** | the repository's unfinished proposals | more than the dead accepts the lease table accounts for plus 8 (`too_many_open_intents`; a refused declaration leaves an open intent that is not a crash) | stops | may go on |
+
+`unlock`'s own liveness line ("does not appear to be running") is **kept in the record and never trusted**: inside our PID
+namespace it is wrong (U-16). The decision rests on the table above.
+
+### What a run does, in order
+
+1. read the witnesses (**step `witnesses`**); 2. take the repository's **write lease** (`lease`; a live holder ends the run as
+*not now*, and two runs at once are serialized by it: the second finds the flag cleared and does nothing); 3. read the witnesses
+again under the lease (`witnesses-under-lease`) and `doctor` and `unlock`'s listing (`doctor`, `unlock-list`); 4. an
+administrator's run only: the repairs `doctor` names (`repair`, then `doctor` again, which must be clean); 5. `unlock --lock
+<path> --force` for each listed lock (`unlock-force`, then `unlock-list`, which must be empty); 6. a **fresh `verify`**, which
+must pass (`verify`): **no flag is cleared without it**; 7. the intents an administrator named are abandoned
+(`abandon-intent`; their accepted patches stay in the repository and their bytes stop counting); 8. the dead lease records are
+removed, the flag is cleared and the state fingerprint moves (`clear-lease-records`, `clear-flag`). A healthy flagged
+repository goes through the same steps with nothing to unlock. A step that fails stops the run, leaves the flag set, and the
+plan names the commands to run by hand.
+
+### The record
+
+Every run has a **recovery record** (table `recoveries`, one row per step in `recovery_steps`): who ran it (`automatic` or the
+administrator), when, the steps with their outcomes and the **text of each prikk call**. A step is written *before* it is taken
+and completed after, so a record whose last step has no end shows where a run that was itself interrupted stopped. `GET …/recovery`
+shows the last ten. Outcomes: `recovered`, `stopped`, `not_now`, `nothing_to_do`.
+
+### When it stays flagged: the commands
+
+`GET …/recovery` returns the plan: the flag and its cause in words, the lease holders (`dead` or not), the foreign processes, the
+open intents (id, submitter, age, bytes, attempts, `expired` past 30 days), the locks, `doctor`'s verdict, the **blockers** (what
+disagrees, and whether an administrator's run may go on regardless), the commands, and whether the server could run it by itself.
+By hand, in the repository's directory: look for processes (`ps -eo pid,args | grep -E 'prikk|bwrap'`), read `prikk doctor`,
+list with `prikk unlock`, clear a lock you have confirmed is stale with `prikk unlock --lock <path> --force`, and check with
+`prikk verify`; then `POST …/recovery` to clear the flag (it repeats the witnesses and the `verify`).
+
+### After a wrong repair
+
+`prikk doctor --recovery-list` lists the saved entries grouped by repair run; `prikk doctor --recovery-restore <run id>
+[--plan-only]` undoes one run (it refuses unless every file still holds what the run left). The run id of a repair planeter ran
+is in the text of its `repair` step.
+
+### What an open intent costs
+
+An accept whose declaration is refused has already put its patches in the repository, and they cannot be removed. **Its artifact
+is kept, and its bytes are owed**: while the intent is open (and has no revision) they count against the submitter's accepted
+bytes and the repository's retained bytes, so different artifacts with bad declarations reach the limit. A corrected re-send
+records its revision and the bytes are counted once; an administrator may abandon the intent (it then stops counting).
