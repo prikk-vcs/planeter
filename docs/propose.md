@@ -147,8 +147,9 @@ turns the unattended runs off; the door works either way.
 |---|---|---|---|---|
 | the flag's **cause** | the reason stored with the flag | anything but `accept_deadline`, `accept_ceiling`, `accept_failed`, `accept_unreadable`, `accept_not_recorded`, `server_stopped` (blocker `cause_not_ours`) | stops | may go on |
 | the **lease table** | the durable holder records of the repository; a record written by another boot of the server is a dead holder (the server runs once per database, so that process is gone), a record of this boot is a lease held now | a live holder (`lease_held`); the run is *not now* and may be tried again | stops | stops |
-| **other processes** | `/proc`: any `prikk` or `bwrap` command line that names the repository's directory and does not descend from the server | `foreign_process` (a second server, an operator's own `prikk`, a survivor of the killed one) | stops | stops |
-| **`doctor`** | its report (strictly read: it must add up to its own summary) | any error or warning (`doctor_problems`); an unknown shape (`output_unreadable`, prikk's text kept) | stops | stops (it runs a repair only if the report *names* an idempotent one: `--repair-wal-tail`, `--repair-index`, `--repair-pointer-index-tail`, `--repair-tails`) |
+| **other processes** | `/proc`: any `prikk` or `bwrap` process that is not a descendant of the server and that (a) names the repository's directory on its command line, **or (b) has its working directory in the repository, or (c) holds a file of the repository's `.prikk` open** (a person who `cd`s into the repository and runs `prikk status` is found by (b)) | `foreign_process` (a second server, an operator's own `prikk`, a survivor of the killed one) | stops | stops |
+| **processes it may not inspect** | the same tools whose working directory or open files the system would not let the server read (another user's), and any process it cannot even identify | `processes_uninspected`: stated as a warning with the count; it is neither "safe" nor "unsafe" | stops | may go on (a person who knows the host decides) |
+| **`doctor`** | its report (strictly read: it must add up to its own summary) | any error or warning (`doctor_problems`); an unknown shape (`output_unreadable`, prikk's text kept) | stops | stops, **except** when *every* problem the report lists names a repair on the idempotent allow-list (`--repair-wal-tail`, `--repair-index`, `--repair-pointer-index-tail`, `--repair-tails`): then the run executes exactly those repairs, and `doctor` must be clean afterwards. One problem that names no repair, or names any repair off the list (even beside an allowed one: `--discard-damaged-commits`, `--restore-queue-target`, `--cancel-import`, `--rebuild-pointer-index`, `--repair-main-ref`), stops everyone and no repair is run; it shows only as text in the plan |
 | **`unlock`** | the listing (strictly read); only locks of the kinds an accept leaves (`active`, `container:object-store`) that resolve to a `.lock` file inside the repository's own `.prikk` directory | any other kind or place (`unexpected_lock`); an unknown shape (`output_unreadable`) | stops | stops |
 | the **open intents** | the repository's unfinished proposals | more than the dead accepts the lease table accounts for plus 8 (`too_many_open_intents`; a refused declaration leaves an open intent that is not a crash) | stops | may go on |
 
@@ -160,13 +161,22 @@ namespace it is wrong (U-16). The decision rests on the table above.
 1. read the witnesses (**step `witnesses`**); 2. take the repository's **write lease** (`lease`; a live holder ends the run as
 *not now*, and two runs at once are serialized by it: the second finds the flag cleared and does nothing); 3. read the witnesses
 again under the lease (`witnesses-under-lease`) and `doctor` and `unlock`'s listing (`doctor`, `unlock-list`); 4. an
-administrator's run only: the repairs `doctor` names (`repair`, then `doctor` again, which must be clean); 5. `unlock --lock
+administrator's run only, and only when every problem `doctor` lists names an allow-listed repair: those repairs, each in a step written before it is taken, with prikk's output (and any run id) in its text (`repair`), then `doctor` again, which must be clean; 5. `unlock --lock
 <path> --force` for each listed lock (`unlock-force`, then `unlock-list`, which must be empty); 6. a **fresh `verify`**, which
 must pass (`verify`): **no flag is cleared without it**; 7. the intents an administrator named are abandoned
 (`abandon-intent`; their accepted patches stay in the repository and their bytes stop counting); 8. the dead lease records are
 removed, the flag is cleared and the state fingerprint moves (`clear-lease-records`, `clear-flag`). A healthy flagged
 repository goes through the same steps with nothing to unlock. A step that fails stops the run, leaves the flag set, and the
 plan names the commands to run by hand.
+
+### What the process witness can and cannot see
+
+It reads `/proc` of the host the server runs on. It **can** see a `prikk` or `bwrap` process of the same host that names the
+repository, sits in it, or holds one of its store's files, unless it descends from the server (the server's own reads). It **cannot**
+see a process in **another PID namespace** (another container that mounts the same directory), a process on **another host** that
+shares the directory over a network file system (prikk documents nothing about shared file systems; the server is meant to be the
+repository's only writer), or the inside of another user's process (that case is counted and stated as `processes_uninspected`, not
+guessed). Where the directory is shared, the operator's own check, under "When it stays flagged", is the one that counts.
 
 ### The record
 
