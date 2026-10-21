@@ -5,6 +5,17 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **Recovery follow-ups (RFC 004 part 4a).** An administrator's recovery run can now actually repair: when `doctor` lists problems
+  and **every one of them names** one of the idempotent repairs (`--repair-wal-tail`, `--repair-index`,
+  `--repair-pointer-index-tail`, `--repair-tails`), the run executes exactly those repairs (each step written first, with prikk's
+  output), requires `doctor` to be clean afterwards, and goes on; one problem that names no repair, or any repair off the list,
+  stops everyone and the repair appears only as text in the plan. Before this the repair step could not be reached (IS-51). An
+  unattended run still never repairs. The process check for recovery now also finds a `prikk` that merely sits in the repository's
+  directory or holds a file of its store open (not only one whose command line names it); processes it is not allowed to inspect are
+  counted and stated in the plan (`processes_uninspected`), which stops an unattended run and not an administrator's. The plan's
+  JSON gains `processes_uninspected` and `doctor.repair_refusal`. `docs/glossary.md` has a section of plain definitions for the
+  words an operator meets (flag, lease, accept, intent, lock, recovery).
+
 - **Recovery: a repository left unfinished by a write becomes writable again by a written, recorded procedure (RFC 004 part 4),
   and an accepted-but-unrecorded artifact is now counted (IS-50).** A repository that proposals flagged `needs_recovery` is
   recovered **by the server itself** — at start and right after the write that did not finish — only when every witness agrees:

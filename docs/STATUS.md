@@ -8,7 +8,11 @@
 
 ## Where we are
 
-- **RFC 004 part 4 built 2026-10-22, awaiting review** (`rfcs/handoffs/004-transport/recovery-handoff-v2.md`): recovery — the
+- **RFC 004 part 4a built 2026-10-22, awaiting review** (`rfcs/handoffs/004-transport/recovery-followups-handoff-v2.md`): IS-51 (the
+  repair step is reachable, with its negative tests); the process witness reads working directories and open files; the glossary's
+  words for the person who runs the server; the accept-time-per-patch measurement (PK-68) is a report, not a change. Part 4 was
+  **reviewed Approved (2026-10-22)**; IS-50 closed.
+- **RFC 004 part 4 built 2026-10-22, reviewed Approved** (`rfcs/handoffs/004-transport/recovery-handoff-v2.md`): recovery — the
   procedure with its witnesses, plan and records (`recoveries`, `recovery_steps`); unattended runs at start and after an unfinished
   accept, only when every witness agrees; the administrator's door (`GET`/`POST …/recovery`, `RepoAdmin`); the test hook of part 3b
   replaced by the real procedure in the kill tests (a real server SIGKILLed at four points of a 300-patch accept, and once in a
