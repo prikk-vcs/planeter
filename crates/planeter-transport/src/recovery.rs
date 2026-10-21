@@ -112,7 +112,7 @@ fn names_repository(argv: &[String], dir: &str) -> bool {
 
 /// Is the lock at `lock` inside the repository's own `.prikk` directory? Both sides are resolved, so a repository
 /// reached through a symbolic link is still recognised, and a lock that is a link to somewhere else is not.
-fn inside_repository(repo_dir: &str, lock: &str) -> bool {
+pub fn inside_repository(repo_dir: &str, lock: &str) -> bool {
     use std::path::Path;
     let root = Path::new(repo_dir).join(".prikk");
     let (Ok(root), Ok(lock_real)) = (std::fs::canonicalize(&root), std::fs::canonicalize(lock))
@@ -435,12 +435,9 @@ fn evaluate(
             overridable: false,
         }),
         Ok((locks, _)) => {
-            let prefix = format!("{}/.prikk/", repo_dir.trim_end_matches('/'));
             for l in locks {
                 let known = KNOWN_LOCK_KINDS.contains(&l.kind.as_str());
-                let inside = l.path.starts_with(&prefix)
-                    && !l.path.contains("/../")
-                    && l.path.ends_with(".lock");
+                let inside = inside_repository(repo_dir, &l.path);
                 if !known || !inside {
                     out.push(Blocker {
                         code: "unexpected_lock",
@@ -652,16 +649,13 @@ impl RecoveryService {
         let locks: Vec<LockView> = match &g.locks {
             Ok((locks, _)) => locks
                 .iter()
-                .map(|l| {
-                    let prefix = format!("{}/.prikk/", dir.trim_end_matches('/'));
-                    LockView {
-                        path: l.path.clone(),
-                        kind: l.kind.clone(),
-                        recorded_pid: l.recorded_pid,
-                        liveness: l.liveness.clone(),
-                        expected: KNOWN_LOCK_KINDS.contains(&l.kind.as_str())
-                            && l.path.starts_with(&prefix),
-                    }
+                .map(|l| LockView {
+                    path: l.path.clone(),
+                    kind: l.kind.clone(),
+                    recorded_pid: l.recorded_pid,
+                    liveness: l.liveness.clone(),
+                    expected: KNOWN_LOCK_KINDS.contains(&l.kind.as_str())
+                        && inside_repository(&dir, &l.path),
                 })
                 .collect(),
             Err(_) => Vec::new(),

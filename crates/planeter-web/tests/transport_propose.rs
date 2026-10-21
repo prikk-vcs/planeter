@@ -27,11 +27,13 @@ use planeter_core::{
 use planeter_prikk::PrikkRepo;
 use planeter_store::{
     ChangeState, ChangeStore, InMemoryChangeStore, InMemoryLeaseRecords, InMemoryMembershipStore,
-    InMemoryRepositoryStore, InMemoryRevisions, MembershipStore, Owner, ProposalPolicy, RepoId,
-    RepositoryRecord, RepositoryStore, RevisionStore, Role, Subject, UserId, Visibility,
+    InMemoryRecoveries, InMemoryRepositoryStore, InMemoryRevisions, MembershipStore, Owner,
+    ProposalPolicy, RecoveryStore, RepoId, RepositoryRecord, RepositoryStore, RevisionStore, Role,
+    Subject, UserId, Visibility,
 };
 use planeter_transport::{
-    ArtifactStore, ExportConfig, ExportService, Metrics, ProposeConfig, ProposeService, Spool,
+    ArtifactStore, ExportConfig, ExportService, Metrics, ProposeConfig, ProposeService,
+    RecoveryConfig, RecoveryService, Spool,
 };
 use planeter_web::{AppState, ContentOrigin, RateLimiter, TransportRuntime, router};
 
@@ -292,6 +294,8 @@ struct Opts {
     ip_limit: u32,
     /// The operator configured the export spool but not the artifact store: fetches work, proposals say so.
     without_propose: bool,
+    /// Recovery tries by itself right after an accept that did not finish (as the server's does).
+    auto_recovery: bool,
 }
 
 impl Default for Opts {
@@ -306,6 +310,7 @@ impl Default for Opts {
             binary: None,
             ip_limit: 10_000,
             without_propose: false,
+            auto_recovery: false,
         }
     }
 }
@@ -325,6 +330,8 @@ struct World {
     hosting: Arc<HostingService>,
     store: Arc<InMemoryRepositoryStore>,
     sessions: Arc<planeter_auth::InMemorySessionStore>,
+    recovery: Arc<RecoveryService>,
+    recoveries: Arc<InMemoryRecoveries>,
 }
 
 fn world(name: &str, o: Opts) -> World {
@@ -446,22 +453,40 @@ fn world(name: &str, o: Opts) -> World {
         metrics.clone(),
     ));
     let changes = Arc::new(InMemoryChangeStore::new());
-    let propose = Arc::new(
-        ProposeService::new(
+    let recoveries = Arc::new(InMemoryRecoveries::new());
+    let recovery = Arc::new(
+        RecoveryService::new(
             hosting.clone(),
-            artifacts,
             leases.clone(),
             changes.clone() as Arc<dyn ChangeStore>,
+            recoveries.clone() as Arc<dyn RecoveryStore>,
             export.clone(),
-            o.config,
+            RecoveryConfig {
+                lease_wait: Duration::from_secs(20),
+                ..RecoveryConfig::default()
+            },
             metrics.clone(),
         )
         .with_clock(now),
     );
+    let mut propose = ProposeService::new(
+        hosting.clone(),
+        artifacts,
+        leases.clone(),
+        changes.clone() as Arc<dyn ChangeStore>,
+        export.clone(),
+        o.config,
+        metrics.clone(),
+    )
+    .with_clock(now);
+    if o.auto_recovery {
+        propose = propose.with_recovery(recovery.clone());
+    }
+    let propose = Arc::new(propose);
     let transport = Some(Arc::new(TransportRuntime {
         export: export.clone(),
         propose: (!o.without_propose).then(|| propose.clone()),
-        recovery: None,
+        recovery: Some(recovery.clone()),
         ip_limit: RateLimiter::new(o.ip_limit, Duration::from_secs(60)),
         principal_limit: RateLimiter::new(o.ip_limit, Duration::from_secs(60)),
     }));
@@ -494,6 +519,8 @@ fn world(name: &str, o: Opts) -> World {
         hosting,
         store,
         sessions,
+        recovery,
+        recoveries,
     }
 }
 
@@ -1769,9 +1796,16 @@ async fn a_run_that_dies_after_changing_the_repository_is_incomplete_and_a_resen
     let blocked = propose_as(&w, "forge", "tok-alice", titled("y"), &other).await;
     assert_eq!(blocked.code(), "needs_recovery");
 
-    // The hook that recovery (part 4) replaces: clear the flag. Re-sending the SAME artifact resumes the intent,
+    // The real procedure (RFC 004 part 4) clears the flag. Re-sending the SAME artifact resumes the intent,
     // completes, and records exactly one revision, derived from the first attempt's list.
-    w.changes.clear_needs_recovery(&repo).unwrap();
+    let record = w.store.get(&repo).unwrap().unwrap();
+    let recovered = w.recovery.recover(&record, "alice", &[]).unwrap();
+    assert_eq!(
+        recovered.outcome,
+        planeter_transport::RecoveryOutcome::Recovered,
+        "{recovered:?}"
+    );
+    assert!(!w.changes.repo_flags(&repo).unwrap().needs_recovery);
     std::fs::write(&ctrl, "pass").unwrap();
     let ok = propose_as(&w, "forge", "tok-alice", titled("x"), &art).await;
     assert_eq!(
@@ -2525,4 +2559,72 @@ async fn an_accept_that_hits_its_memory_ceiling_is_incomplete_not_refused() {
     assert!(w.changes.repo_flags(&repo).unwrap().needs_recovery);
     assert_eq!(w.changes.open_intents(&repo).unwrap().len(), 1);
     assert!(object_exists(&w, &art));
+}
+
+/// After an accept that did not finish the server tries recovery by itself (on its own thread, once the child is
+/// gone); when every witness agrees the flag is cleared without anyone being asked, and the same artifact then
+/// records exactly one revision.
+#[tokio::test]
+async fn after_an_unfinished_accept_recovery_runs_by_itself_and_the_same_artifact_then_records_one_revision()
+ {
+    if skip() {
+        return;
+    }
+    let base = std::env::temp_dir().join(format!("planeter-standin-auto-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).unwrap();
+    let (script, ctrl) = standin(&base);
+    let mut w = world(
+        "auto-recovery",
+        Opts {
+            binary: Some(script),
+            auto_recovery: true,
+            ..Opts::default()
+        },
+    );
+    std::fs::write(&ctrl, "die-after-real").unwrap();
+    w.client.commit(2);
+    let art = w.client.artifact(&w.forge, "a1");
+    let repo = RepoId::new("r-forge");
+    let r = propose_as(&w, "forge", "tok-alice", titled("x"), &art).await;
+    assert_eq!(
+        (r.status, r.code().as_str()),
+        (StatusCode::SERVICE_UNAVAILABLE, "incomplete")
+    );
+    // The flag was set before the answer; recovery clears it on its own thread.
+    let end = std::time::Instant::now() + Duration::from_secs(30);
+    while w.changes.repo_flags(&repo).unwrap().needs_recovery {
+        assert!(
+            std::time::Instant::now() < end,
+            "recovery did not clear the flag by itself"
+        );
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let runs = w.recoveries.recent(&repo, 5).unwrap();
+    assert_eq!(runs.len(), 1);
+    assert_eq!(
+        (runs[0].actor.as_str(), runs[0].outcome.as_deref()),
+        ("automatic", Some("recovered"))
+    );
+    assert_eq!(
+        w.changes.open_intents(&repo).unwrap().len(),
+        1,
+        "it never abandons an intent"
+    );
+    std::fs::write(&ctrl, "pass").unwrap();
+    let ok = propose_as(&w, "forge", "tok-alice", titled("x"), &art).await;
+    assert_eq!(
+        ok.status,
+        StatusCode::CREATED,
+        "{}",
+        String::from_utf8_lossy(&ok.body)
+    );
+    assert_eq!(ok.json()["added_count"], 2);
+    assert_eq!(
+        w.changes
+            .revisions_of(ok.json()["change_id"].as_str().unwrap())
+            .unwrap()
+            .len(),
+        1
+    );
 }

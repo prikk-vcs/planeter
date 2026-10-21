@@ -333,7 +333,31 @@ async fn main() {
                         planeter_transport::RecoveryConfig::default(),
                         metrics.clone(),
                     ));
-                    let service = planeter_transport::ProposeService::new(
+                    // Unattended recovery is on unless the operator turns it off: the administrator's door
+                    // (GET/POST …/recovery) works either way.
+                    let unattended = match std::env::var("PLANETER_AUTOMATIC_RECOVERY")
+                        .ok()
+                        .filter(|v| !v.is_empty())
+                        .as_deref()
+                    {
+                        None | Some("on") => true,
+                        Some("off") => false,
+                        Some(other) => {
+                            eprintln!(
+                                "planeter: PLANETER_AUTOMATIC_RECOVERY must be `on` or `off` (got {other:?})"
+                            );
+                            exit_releasing_lock(1);
+                        }
+                    };
+                    eprintln!(
+                        "planeter: recovery of a repository left unfinished by a write: {}",
+                        if unattended {
+                            "unattended when every witness agrees, otherwise by an administrator"
+                        } else {
+                            "by an administrator only (PLANETER_AUTOMATIC_RECOVERY=off)"
+                        }
+                    );
+                    let mut service = planeter_transport::ProposeService::new(
                         hosting.clone(),
                         artifacts.clone(),
                         leases.clone(),
@@ -341,28 +365,32 @@ async fn main() {
                         export.clone(),
                         pcfg,
                         metrics,
-                    )
-                    .with_recovery(recovery.clone());
+                    );
+                    if unattended {
+                        service = service.with_recovery(recovery.clone());
+                    }
                     // A server that was killed in the middle of a write comes back with the repository flagged ...
                     service.reconcile_at_start();
                     // ... and every flagged repository gets one unattended try, on a thread of its own so that the
                     // server is listening meanwhile (a flagged repository refuses writes and still answers reads).
                     let at_start = recovery.clone();
-                    std::thread::spawn(move || {
-                        for (repo, outcome) in at_start.recover_flagged_at_start() {
-                            match outcome {
-                                Some(o) => eprintln!(
-                                    "planeter: recovery at start: repository {} {}",
-                                    repo.as_str(),
-                                    o.code()
-                                ),
-                                None => eprintln!(
-                                    "planeter: recovery at start: repository {} is left to an administrator (GET …/recovery)",
-                                    repo.as_str()
-                                ),
+                    if unattended {
+                        std::thread::spawn(move || {
+                            for (repo, outcome) in at_start.recover_flagged_at_start() {
+                                match outcome {
+                                    Some(o) => eprintln!(
+                                        "planeter: recovery at start: repository {} {}",
+                                        repo.as_str(),
+                                        o.code()
+                                    ),
+                                    None => eprintln!(
+                                        "planeter: recovery at start: repository {} is left to an administrator (GET …/recovery)",
+                                        repo.as_str()
+                                    ),
+                                }
                             }
-                        }
-                    });
+                        });
+                    }
                     recovery_service = Some(recovery);
                     Some(Arc::new(service))
                 }

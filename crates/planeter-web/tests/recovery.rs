@@ -1291,3 +1291,43 @@ async fn a_run_that_stops_answers_200_with_the_plan_and_the_commands() {
     );
     assert!(w.flagged());
 }
+
+#[test]
+fn a_lock_that_is_a_link_to_somewhere_else_is_not_the_repositorys_and_a_repository_behind_a_link_still_is()
+ {
+    if skip() {
+        return;
+    }
+    let w = world("symlink", Opts::default());
+    w.killed_accept();
+    // A lock that is a link to a file outside the repository.
+    let outside = w.base.join("outside.lock");
+    std::fs::write(&outside, "pid=4000000\nkind=active\nnote=elsewhere\n").unwrap();
+    let link = w.repo_path.join(".prikk/active/other/active.lock");
+    std::fs::create_dir_all(link.parent().unwrap()).unwrap();
+    std::os::unix::fs::symlink(&outside, &link).unwrap();
+    // prikk itself refuses to list a lock that is a link (its own i/o error), which stops the procedure as an
+    // unreadable output; our own check (the lock resolved must be inside the repository) is the second fence.
+    let plan = w.svc.plan(&w.record).unwrap();
+    assert!(
+        !plan.blockers.is_empty() && plan.blockers.iter().all(|b| !b.overridable),
+        "{plan:?}"
+    );
+    assert!(!plan.may_run_unattended);
+    assert_eq!(
+        w.svc.recover(&w.record, "alice", &[]).unwrap().outcome,
+        RecoveryOutcome::Stopped
+    );
+    assert!(w.flagged());
+    assert!(w.records.list().unwrap().len() == 1, "nothing was cleared");
+    std::fs::remove_file(&link).unwrap();
+
+    // The repository is registered by a path that goes through a symbolic link: the same locks are recognised.
+    let alias = w.base.join("alias");
+    std::os::unix::fs::symlink(&w.repo_path, &alias).unwrap();
+    let mut record = w.record.clone();
+    record.path = alias;
+    let plan = w.svc.plan(&record).unwrap();
+    assert!(plan.blockers.is_empty(), "{plan:?}");
+    assert!(plan.locks.iter().all(|l| l.expected));
+}
