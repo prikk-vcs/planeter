@@ -500,6 +500,8 @@ keys! {
     ErrIncompleteHint => "error.incomplete.hint",
     ErrFramingHint => "error.invalid_request.framing_hint",
     ErrMetadataHint => "error.invalid_request.metadata_hint",
+    ErrForbiddenAdminMessage => "error.forbidden_admin.message",
+    ErrForbiddenAdminHint => "error.forbidden_admin.hint",
     ErrProposeOffMessage => "error.propose_off.message",
     ErrProposeOffHint => "error.propose_off.hint",
     ProposeHeld => "propose.held",

@@ -512,6 +512,14 @@ pub const CATALOG: &[Entry] = &[
         "フィールドの一覧は API ドキュメントにあるので、reason に示されたフィールドを直してから、提案をもう一度送信してください。",
     ),
     msg(
+        "error.forbidden_admin.message",
+        "このリポジトリは読めますが、管理する権限はありません。",
+    ),
+    msg(
+        "error.forbidden_admin.hint",
+        "リポジトリの管理者に依頼してください。",
+    ),
+    msg(
         "error.propose_off.message",
         "このサーバーでは、提案の受け付けは設定されていません。",
     ),

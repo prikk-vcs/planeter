@@ -110,6 +110,18 @@ fn names_repository(argv: &[String], dir: &str) -> bool {
     is_tool && argv.iter().any(|a| a.contains(dir))
 }
 
+/// Is the lock at `lock` inside the repository's own `.prikk` directory? Both sides are resolved, so a repository
+/// reached through a symbolic link is still recognised, and a lock that is a link to somewhere else is not.
+fn inside_repository(repo_dir: &str, lock: &str) -> bool {
+    use std::path::Path;
+    let root = Path::new(repo_dir).join(".prikk");
+    let (Ok(root), Ok(lock_real)) = (std::fs::canonicalize(&root), std::fs::canonicalize(lock))
+    else {
+        return false;
+    };
+    lock_real.starts_with(&root) && lock_real.extension().is_some_and(|e| e == "lock")
+}
+
 // ------------------------------------------------------------------------------------------------ settings
 
 /// Operator settings of recovery.
@@ -862,7 +874,14 @@ impl RecoveryService {
             return Ok((Outcome::NothingToDo, plan, None));
         }
         if let Some(b) = stopping(&plan, admin) {
-            return Ok((Outcome::Stopped, plan, Some(b)));
+            // A live holder (an accept in flight) is "not now", not a disagreement: it may be about to finish.
+            let only_a_holder = plan.blockers.iter().all(|b| b.code == "lease_held");
+            let outcome = if only_a_holder {
+                Outcome::NotNow
+            } else {
+                Outcome::Stopped
+            };
+            return Ok((outcome, plan, Some(b)));
         }
 
         // 2. the repository's write lease: a run cannot race an accept.

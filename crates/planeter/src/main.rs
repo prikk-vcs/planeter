@@ -225,6 +225,7 @@ async fn main() {
 
     // The admission cost of the largest accept the configured bound allows (for the start-up message).
     let mut propose_cost: Option<u64> = None;
+    let mut recovery_service: Option<Arc<planeter_transport::RecoveryService>> = None;
     // RFC 004 part 2: advertise and fetch need the export spool; without it the routes answer `transport_off`
     // to a reader of the repository. Every setting is a positive whole number, refused at start otherwise.
     let transport = match &dirs.spool {
@@ -314,6 +315,24 @@ async fn main() {
                     propose_cost = Some(planeter_transport::ProposeConfig::accept_cost(
                         pcfg.max_artifact_bytes,
                     ));
+                    // Recovery (RFC 004 part 4): the records of its runs, and the procedure itself.
+                    let recoveries: Arc<dyn planeter_store::RecoveryStore> =
+                        match planeter_store::SqliteRecoveries::new(db.clone()) {
+                            Ok(r) => Arc::new(r),
+                            Err(e) => {
+                                eprintln!("planeter: cannot initialise the recovery records: {e}");
+                                exit_releasing_lock(1);
+                            }
+                        };
+                    let recovery = Arc::new(planeter_transport::RecoveryService::new(
+                        hosting.clone(),
+                        leases.clone(),
+                        changes.clone(),
+                        recoveries,
+                        export.clone(),
+                        planeter_transport::RecoveryConfig::default(),
+                        metrics.clone(),
+                    ));
                     let service = planeter_transport::ProposeService::new(
                         hosting.clone(),
                         artifacts.clone(),
@@ -322,15 +341,36 @@ async fn main() {
                         export.clone(),
                         pcfg,
                         metrics,
-                    );
-                    // A server that was killed in the middle of a write comes back with the repository flagged.
+                    )
+                    .with_recovery(recovery.clone());
+                    // A server that was killed in the middle of a write comes back with the repository flagged ...
                     service.reconcile_at_start();
+                    // ... and every flagged repository gets one unattended try, on a thread of its own so that the
+                    // server is listening meanwhile (a flagged repository refuses writes and still answers reads).
+                    let at_start = recovery.clone();
+                    std::thread::spawn(move || {
+                        for (repo, outcome) in at_start.recover_flagged_at_start() {
+                            match outcome {
+                                Some(o) => eprintln!(
+                                    "planeter: recovery at start: repository {} {}",
+                                    repo.as_str(),
+                                    o.code()
+                                ),
+                                None => eprintln!(
+                                    "planeter: recovery at start: repository {} is left to an administrator (GET …/recovery)",
+                                    repo.as_str()
+                                ),
+                            }
+                        }
+                    });
+                    recovery_service = Some(recovery);
                     Some(Arc::new(service))
                 }
             };
             Some(Arc::new(planeter_web::TransportRuntime {
                 export,
                 propose,
+                recovery: recovery_service,
                 ip_limit: planeter_web::RateLimiter::new(rate, std::time::Duration::from_secs(60)),
                 principal_limit: planeter_web::RateLimiter::new(
                     rate,

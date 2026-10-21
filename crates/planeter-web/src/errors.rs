@@ -288,6 +288,12 @@ impl ErrorCode {
         hint: Key::ErrRefRequiredHint,
     };
 
+    /// `forbidden` on the administrator's door: the caller can read the repository but may not administer it.
+    pub const FORBIDDEN_ADMIN: ErrorKeys = ErrorKeys {
+        message: Key::ErrForbiddenAdminMessage,
+        hint: Key::ErrForbiddenAdminHint,
+    };
+
     /// `transport_off` for a proposal: fetches may be set up while the artifact store, which proposals need, is not.
     pub const PROPOSE_OFF: ErrorKeys = ErrorKeys {
         message: Key::ErrProposeOffMessage,

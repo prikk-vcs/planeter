@@ -1474,7 +1474,13 @@ async fn admin_gate(
                 Failure::Read(planeter_core::ReadError::NotFound),
             ));
         }
-        Ok(Err(_)) => return Err(code_response(state, ErrorCode::Forbidden)),
+        Ok(Err(_)) => {
+            return Err(code_response_with_keys(
+                state,
+                ErrorCode::Forbidden,
+                ErrorCode::FORBIDDEN_ADMIN,
+            ));
+        }
         Ok(Ok(r)) => r,
     };
     let Some(rt) = runtime else {
@@ -1566,7 +1572,7 @@ pub(crate) async fn recovery_run_handler(
         return error_response(&state, Failure::Invalid);
     }
     let Some(actor) = principal.user().map(|u| u.as_str().to_owned()) else {
-        return code_response(&state, ErrorCode::Forbidden);
+        return code_response_with_keys(&state, ErrorCode::Forbidden, ErrorCode::FORBIDDEN_ADMIN);
     };
     let lang = crate::catalog::negotiate_from_headers(&headers);
     let ran = {

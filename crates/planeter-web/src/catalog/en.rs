@@ -484,6 +484,14 @@ pub const CATALOG: &[Entry] = &[
         "Fix the field named in the reason and send the proposal again, as the API document lists the fields.",
     ),
     msg(
+        "error.forbidden_admin.message",
+        "You can read this repository, but you may not administer it.",
+    ),
+    msg(
+        "error.forbidden_admin.hint",
+        "Ask an administrator of the repository.",
+    ),
+    msg(
         "error.propose_off.message",
         "Proposals are not set up on this server.",
     ),
