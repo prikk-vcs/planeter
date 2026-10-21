@@ -5,6 +5,19 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **The transport's read side: advertise and fetch (RFC 004 part 2), and a graceful shutdown.** With an export spool
+  configured (`PLANETER_SPOOL_DIR`), a reader of a repository can ask what it holds
+  (`GET /api/v1/repos/{owner}/{name}/transport/advertise`) and fetch it as one whole, **verified** artifact
+  (`…/transport/fetch?kind=archive|bundle[&ref=…]`): `200`, `304` for an unchanged state, `206`/`416` for byte ranges,
+  `503 busy` with `Retry-After` when exports are at capacity, `429` past the rate limit, and named refusals (unknown ref
+  or kind, a bundle of a received ref, an artifact that did not verify — never served —, an export that failed or hit its
+  deadline or memory ceiling). New operator settings: `PLANETER_EXPORT_CONCURRENCY`, `PLANETER_EXPORT_LEASE_WAIT_SECS`,
+  `PLANETER_EXPORT_DEADLINE_SECS`, `PLANETER_EXPORT_MEMORY_MB`, `PLANETER_TRANSPORT_RATE_PER_MIN`. Reads of a repository
+  are never blocked by an export. **The server now stops gracefully on SIGTERM and SIGINT**: it finishes the requests in
+  flight (at most `PLANETER_SHUTDOWN_DRAIN_SECS`, default 30), removes its lock file and exits 0; a second signal stops it at
+  once. **A CI job is never allowed to propose a change.** The dependency tree gains two small crates for the signals
+  (`signal-hook-registry`, `errno`; deny and audit clean; see `docs/dependency-policy.md`).
+
 - **A Japanese draft and a language switcher (RFC 012 D-3; IS-27) — Japanese is not shipped yet.** The footer of every
   page, the sign-in page included, now has a **language switcher**: a button for each available language, written in
   its own language (English, 日本語), the current one marked; choosing one remembers it in a cookie

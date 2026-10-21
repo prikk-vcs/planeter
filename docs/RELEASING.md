@@ -197,9 +197,9 @@ docker run --rm ghcr.io/prikk-vcs/planeter:X.Y.Z --version
   lease that keeps a write and an export from touching one repository at once lives **in the server process**,
   so **only one planeter server per database is supported**. The server enforces it at start: it takes a lock
   file `<PLANETER_DB>.lock` (holding its process id) before it opens the database, and **refuses to start** — exit
-  1, with the other process's id and what to do — if a running server holds it. The file is removed on a normal exit
-  and on any refused start; a server that is killed (`SIGKILL`, `SIGTERM`, power loss) leaves it, and the next start
-  sees that the process named in it is gone and replaces it. If the process id was reused by an unrelated process
+  1, with the other process's id and what to do — if a running server holds it. The file is removed on a normal exit,
+  on a graceful shutdown (below) and on any refused start; a server that is killed (`SIGKILL`, power loss) leaves it,
+  and the next start sees that the process named in it is gone and replaces it. If the process id was reused by an unrelated process
   after a crash, the start is refused and the message names the file to delete. Do not run two servers on one
   database file, and do not delete the lock file of a running server. Two settings name the directories the
   transport (not built yet) will use; both are optional and unset means *none*:
@@ -211,6 +211,36 @@ docker run --rm ghcr.io/prikk-vcs/planeter:X.Y.Z --version
   that a crash left are removed then. Give them a disk of their own or a quota: the spool stays within its
   budget, the artifact store grows with what is accepted. Nothing uses them yet: no route reads or writes
   them, and an unset setting changes nothing.
+- **Graceful shutdown (RFC 004 part 2).** On **SIGTERM** or **SIGINT** the server stops accepting connections, lets the
+  requests in flight finish for at most **`PLANETER_SHUTDOWN_DRAIN_SECS`** (default 30), removes its lock file and its own
+  lease records, and **exits 0**. A **second signal**, or the end of the drain with requests still running, stops it
+  at once and exits **1** (a request cut off by that is the client's to retry; the sandbox's children die with the server).
+  Set your supervisor's stop timeout above the drain. `SIGKILL` and power loss are not graceful: the lock file stays and the
+  next start replaces it (above).
+- **Artifact fetches: advertise and fetch (RFC 004 part 2).** With **`PLANETER_SPOOL_DIR`** set, two routes serve a repository
+  to a reader of it: `GET /api/v1/repos/{owner}/{name}/transport/advertise` (the refs, the state fingerprint and the fetches on
+  offer) and `…/transport/fetch?kind=archive|bundle[&ref=…]` (a whole artifact: `200`, `304` for a matching `If-None-Match`,
+  `206`/`416` for a `Range` within the one current artifact). **The cost of a changed-state fetch is the artifact's size**; the
+  mitigations are, in the order a request meets them: the `ETag` (a `304` costs no export); the **cache** (an artifact is
+  exported once per repository state, verified, spooled, and served from the spool file); **single flight** (concurrent
+  requests for one state share one export, and its failure); **a bound on concurrent exports** (`PLANETER_EXPORT_CONCURRENCY`,
+  default 2, with `PLANETER_EXPORT_LEASE_WAIT_SECS`, default 5: past it a request is `503 busy` with `Retry-After`); a **deadline**
+  (`PLANETER_EXPORT_DEADLINE_SECS`, default 600, for each prikk call of an export: the export and its verification) and a
+  **memory ceiling** (`PLANETER_EXPORT_MEMORY_MB`, default 2048) per call, a breach being a named refusal and never a served
+  artifact; the **spool budget** with least-recently-used eviction (`PLANETER_SPOOL_BUDGET_MB`); and **rate limits**
+  (`PLANETER_TRANSPORT_RATE_PER_MIN`, default 120 requests a minute per client address and per signed-in user, `429` with
+  `Retry-After`; behind a proxy the client address needs `PLANETER_TRUSTED_PROXIES`). Without `PLANETER_SPOOL_DIR` the routes
+  answer a reader `503 transport_off` (a stranger still gets the same `404` as for a repository that is not there). Notes for
+  the operator: the spool should have **a volume of its own** (or a quota); an archive is read in full to be verified and
+  hashed, so a fetch of a large changed repository takes the export's time (about 1 s per 100 MiB measured on the transport
+  spike); **an archive that does not verify is never served** and the artifact that was exported is deleted; the
+  **state fingerprint** is a per-repository revision counter that planeter bumps when a write completes (the primary signal; nothing
+  writes through planeter yet) plus a digest of the lengths and modification times of the files under `.prikk`, so a write made
+  out of band invalidates the cache too — except one that keeps every length and lands in the same file-system timestamp, which
+  only the counter would catch. A reader of a repository is never blocked by an export; a writer (part 3) will wait for it.
+  Each fetch logs one line (`planeter: transport fetch repo=<opaque id> kind=… result=changed|unchanged cache=hit|miss|shared
+  bytes=… wall_ms=… lease_wait_ms=…`); the counters (changed vs unchanged, kind, bytes, cache, lease wait, per-repository export
+  count and hit rate, refusals by reason) are kept in memory for a future metrics endpoint.
 - **Preview of a draft language (RFC 012 D-3f).** The Japanese catalog is compiled in but **not shipped** until its
   reviewers have signed it off. **`PLANETER_PREVIEW_LANGUAGES=ja`** (comma-separated codes; only `ja` exists) offers
   it — to `Accept-Language: ja`, to the `planeter_lang` cookie and to the switcher in the footer — so the reviewers can

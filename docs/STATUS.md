@@ -8,6 +8,11 @@
 
 ## Where we are
 
+- **RFC 004 part 2 built 2026-10-21, awaiting review** (`rfcs/handoffs/004-transport/advertise-and-fetch-handoff-v2.md`): the
+  transport's read side — `GET …/transport/advertise` and `…/transport/fetch` (whole, verified, spooled, cached,
+  conditional artifacts; single flight; ranges; rate limits; counters) — plus a graceful shutdown on SIGTERM/SIGINT and the
+  rule that a CI job never proposes. Nothing writes through the transport yet (part 3). Lock 212 → 214 crates (the signal
+  registry, reviewed; `docs/dependency-policy.md`).
 - **0.4.0 released (2026-10-20).** Signed tag `0.4.0` on `e13102b`; Release run 39324966875 green; GitHub release
   with both tarballs, checksums and build-info; the nine crates published in order. The content is RFC 011 in full:
   reads admitted by estimated memory in two pools, a per-call ceiling, `prlimit` as a required program, `422
