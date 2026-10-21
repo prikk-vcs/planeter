@@ -679,6 +679,13 @@ async fn the_fetch_matrix_200_304_206_416_and_the_named_refusals() {
     .await;
     assert_eq!(clamped.status, StatusCode::PARTIAL_CONTENT);
     assert_eq!(clamped.body, a.body[size - 5..]);
+    assert_eq!(
+        clamped.h("content-range"),
+        format!("bytes {}-{}/{size}", size - 5, size - 1)
+    );
+    assert_eq!(clamped.h("content-length"), "5");
+    assert_eq!(open_ended.h("content-length"), (size - 100).to_string());
+    assert_eq!(part.h("content-length"), "90");
     let beyond = call(
         &fx.router,
         FETCH_ARCHIVE,
