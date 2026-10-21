@@ -1166,10 +1166,18 @@ async fn n_concurrent_requests_for_one_state_run_one_export() {
     }
     let dir = scratch("flight-bin");
     let (bin, counter) = slow_prikk(&dir, 1);
+    // One export slot and a lease wait far shorter than the export: only requests that share the leader's export
+    // (rather than queue for a slot of their own) can all succeed.
+    let cfg = ExportConfig {
+        max_concurrent: 1,
+        lease_wait: Duration::from_millis(200),
+        ..ExportConfig::default()
+    };
     let fx = fixture(
         "flight",
         Opts {
             binary: Some(bin),
+            config: cfg,
             ..Opts::default()
         },
     );
