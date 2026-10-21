@@ -322,6 +322,7 @@ struct World {
     revisions: Arc<InMemoryRevisions>,
     hosting: Arc<HostingService>,
     store: Arc<InMemoryRepositoryStore>,
+    sessions: Arc<planeter_auth::InMemorySessionStore>,
 }
 
 fn world(name: &str, o: Opts) -> World {
@@ -461,13 +462,14 @@ fn world(name: &str, o: Opts) -> World {
         ip_limit: RateLimiter::new(o.ip_limit, Duration::from_secs(60)),
         principal_limit: RateLimiter::new(o.ip_limit, Duration::from_secs(60)),
     }));
+    let sessions = Arc::new(planeter_auth::InMemorySessionStore::new());
     let router = router(AppState {
         read,
         gate: Arc::new(planeter_web::PrikkGate::default()),
         auth_gate: Arc::new(planeter_web::BlockingGate::auth_default()),
         auth,
         content_origin: ContentOrigin::new("https://raw.planeter.example"),
-        sessions: Arc::new(planeter_auth::InMemorySessionStore::new()),
+        sessions: sessions.clone(),
         now_unix: now,
         login_throttle: Arc::new(planeter_auth::LoginThrottle::default()),
         ip_throttle: Arc::new(planeter_auth::LoginThrottle::new(20, 15 * 60)),
@@ -489,6 +491,7 @@ fn world(name: &str, o: Opts) -> World {
         revisions,
         hosting,
         store,
+        sessions,
     }
 }
 
@@ -1003,17 +1006,32 @@ async fn a_stranger_a_reader_a_read_only_token_a_cookie_and_the_anonymous_are_re
         (StatusCode::FORBIDDEN, "forbidden")
     );
     // A session cookie is not looked at (another site could make that request): without a bearer token, anonymous.
-    let cookie = send(
+    // The control: the same cookie is a perfectly good session for a read.
+    use planeter_auth::SessionStore;
+    let session = w
+        .sessions
+        .create(UserId::new("alice"), now(), now() + 3600)
+        .unwrap();
+    let cookie = format!("planeter_session={}", session.id.0);
+    let read = send(
         &w.router,
-        post_req(
-            "forge",
-            None,
-            body.clone(),
-            &[("cookie", "planeter_session=whatever")],
-        ),
+        Request::builder()
+            .uri("/api/v1/repos/alice/private/transport/advertise")
+            .header("cookie", &cookie)
+            .body(Body::empty())
+            .unwrap(),
     )
     .await;
-    assert_eq!(cookie.status, StatusCode::FORBIDDEN);
+    assert_eq!(read.status, StatusCode::OK, "the cookie is a valid session");
+    let by_cookie = send(
+        &w.router,
+        post_req("forge", None, body.clone(), &[("cookie", &cookie)]),
+    )
+    .await;
+    assert_eq!(
+        (by_cookie.status, by_cookie.code().as_str()),
+        (StatusCode::FORBIDDEN, "forbidden")
+    );
     // Nothing was accepted by any of them.
     assert!(pending(&w.forge).is_empty());
     assert!(
@@ -1406,7 +1424,29 @@ async fn a_proposal_over_the_bound_is_refused_before_its_body_is_read() {
             ..Opts::default()
         },
     );
-    // The declared length alone decides: the body that follows is a few bytes.
+    // The declared length alone decides, before a byte of the body is read: this body never produces one.
+    struct Never;
+    impl futures_core::Stream for Never {
+        type Item = Result<axum::body::Bytes, std::io::Error>;
+        fn poll_next(
+            self: std::pin::Pin<&mut Self>,
+            _: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<Option<Self::Item>> {
+            std::task::Poll::Pending
+        }
+    }
+    let mut hang = post_req("forge", Some("tok-alice"), Vec::new(), &[]);
+    *hang.body_mut() = Body::from_stream(Never);
+    hang.headers_mut()
+        .insert("content-length", "5000000000".parse().unwrap());
+    let r = tokio::time::timeout(Duration::from_secs(5), send(&w.router, hang))
+        .await
+        .expect("refused without waiting for the body");
+    assert_eq!(
+        (r.status, r.code().as_str()),
+        (StatusCode::PAYLOAD_TOO_LARGE, "payload_too_large")
+    );
+    // And with a short body behind the same declaration.
     let mut req = post_req(
         "forge",
         Some("tok-alice"),
