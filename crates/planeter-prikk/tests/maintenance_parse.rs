@@ -1,7 +1,9 @@
 //! The readers of `prikk doctor` and `prikk unlock` (RFC 004 part 4): output captured from prikk 0.53.0, and every
 //! way the shape can be wrong. Recovery removes locks on what these say, so the readers refuse what they do not know.
 
-use planeter_prikk::maintenance::{Repair, Severity, parse_doctor_output, parse_unlock_output};
+use planeter_prikk::maintenance::{
+    Repair, RepairPlan, Severity, parse_doctor_output, parse_unlock_output,
+};
 
 const DOCTOR_OK: &str = "\
 doctor repository: /srv/r/.prikk
@@ -63,7 +65,12 @@ issue summary: errors=0, warnings=1, info=1
     assert_eq!((r.errors, r.warnings, r.info), (0, 1, 1));
     assert_eq!(
         r.named_repairs(),
-        vec!["--repair-wal-tail", "--repair-tails", "--plan-only"]
+        vec!["--repair-wal-tail", "--repair-tails"],
+        "`--plan-only` is a preview modifier, not a repair"
+    );
+    assert_eq!(
+        r.repair_plan(),
+        RepairPlan::Allowed(vec![Repair::WalTail, Repair::Tails])
     );
     // Only the known idempotent repairs have a name here; `--plan-only` is not one.
     assert_eq!(
@@ -145,4 +152,72 @@ fn an_unlock_listing_of_an_unknown_shape_is_refused() {
     ] {
         assert!(parse_unlock_output(bad).is_err(), "{bad:?}");
     }
+}
+
+fn report(diagnostics: &str, counts: &str) -> planeter_prikk::maintenance::DoctorReport {
+    parse_doctor_output(&format!(
+        "doctor repository: /x\n{diagnostics}issue summary: {counts}\n"
+    ))
+    .unwrap()
+}
+
+#[test]
+fn the_repair_plan_covers_every_problem_or_refuses_the_whole_report() {
+    // clean
+    assert_eq!(
+        report("info [A]: ok\n", "errors=0, warnings=0, info=1").repair_plan(),
+        RepairPlan::Nothing
+    );
+    // every problem names an allow-listed repair
+    let both = report(
+        "warning [W1]: tail\n  recommendation: run `prikk doctor --repair-wal-tail`\nerror [E1]: index\n  recommendation: run `prikk doctor --repair-index`\n",
+        "errors=1, warnings=1, info=0",
+    );
+    assert_eq!(
+        both.repair_plan(),
+        RepairPlan::Allowed(vec![Repair::WalTail, Repair::Index])
+    );
+    // the same repair named by two problems is run once
+    let twice = report(
+        "warning [W1]: a\n  recommendation: `--repair-tails`\nwarning [W2]: b\n  recommendation: `--repair-tails`\n",
+        "errors=0, warnings=2, info=0",
+    );
+    assert_eq!(
+        twice.repair_plan(),
+        RepairPlan::Allowed(vec![Repair::Tails])
+    );
+    // one problem with no named repair refuses the whole report, though the other one is repairable
+    let one_unnamed = report(
+        "warning [W1]: tail\n  recommendation: `--repair-wal-tail`\nerror [E1]: damage\n  recommendation: restore from a backup\n",
+        "errors=1, warnings=1, info=0",
+    );
+    assert!(
+        matches!(one_unnamed.repair_plan(), RepairPlan::Refused(why) if why.contains("E1") && why.contains("no repair"))
+    );
+    // a problem naming a repair that is off the list refuses the whole report
+    let forbidden = report(
+        "error [E1]: lost commit\n  recommendation: `prikk doctor --discard-damaged-commits`\n",
+        "errors=1, warnings=0, info=0",
+    );
+    assert!(
+        matches!(forbidden.repair_plan(), RepairPlan::Refused(why) if why.contains("--discard-damaged-commits"))
+    );
+    // ... even when it also names an allowed one
+    let mixed = report(
+        "error [E1]: x\n  recommendation: `--repair-index` or else `--rebuild-pointer-index`\n",
+        "errors=1, warnings=0, info=0",
+    );
+    assert!(matches!(mixed.repair_plan(), RepairPlan::Refused(_)));
+    // an unknown flag is off the list too
+    let unknown = report(
+        "warning [W1]: x\n  recommendation: `--repair-something-new`\n",
+        "errors=0, warnings=1, info=0",
+    );
+    assert!(matches!(unknown.repair_plan(), RepairPlan::Refused(_)));
+    // `--plan-only` alone is not a repair
+    let plan_only = report(
+        "warning [W1]: x\n  recommendation: preview with `--plan-only`\n",
+        "errors=0, warnings=1, info=0",
+    );
+    assert!(matches!(plan_only.repair_plan(), RepairPlan::Refused(_)));
 }

@@ -309,11 +309,12 @@ fn recovery_schemas() -> Value {
             "liveness": {"type": "string", "description": "prikk's own words, kept for the record and never trusted (inside our PID namespace they are wrong)."},
             "expected": {"type": "boolean", "description": "Of a kind an accept leaves, inside the repository's own `.prikk` directory."}
         })),
-        "RecoveryDoctor": obj(&["errors", "warnings", "info", "clean", "repairs_named", "repairs_allowed"], json!({
+        "RecoveryDoctor": obj(&["errors", "warnings", "info", "clean", "repairs_named", "repairs_allowed", "repair_refusal"], json!({
             "errors": {"type": "integer", "minimum": 0}, "warnings": {"type": "integer", "minimum": 0}, "info": {"type": "integer", "minimum": 0},
             "clean": {"type": "boolean"},
             "repairs_named": {"type": "array", "items": {"type": "string"}, "description": "Flags the report's recommendations name."},
-            "repairs_allowed": {"type": "array", "items": {"type": "string"}, "description": "Those an administrator's run may run: the idempotent tail and index repairs."}
+            "repairs_allowed": {"type": "array", "items": {"type": "string"}, "description": "The repairs an administrator's run would run: only when **every** problem is covered by a repair the report names that is on the idempotent allow-list (`--repair-wal-tail`, `--repair-index`, `--repair-pointer-index-tail`, `--repair-tails`)."},
+            "repair_refusal": {"type": "string", "nullable": true, "description": "Why planeter repairs nothing here, when the report has problems that are not all covered that way (a problem with no named repair, or one that names a repair off the list): a person decides."}
         })),
         "RecoveryBlocker": obj(&["code", "text", "detail", "overridable"], json!({
             "code": {"type": "string", "enum": ["cause_not_ours", "lease_held", "foreign_process", "doctor_problems", "output_unreadable", "unexpected_lock", "too_many_open_intents"]},

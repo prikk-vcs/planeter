@@ -28,7 +28,7 @@ use std::time::Duration;
 use planeter_core::admission::{ReadVerb, ceiling_for, store_size};
 use planeter_core::{CallLimits, HostingService, LeaseClass, LeaseError, LeaseManager};
 use planeter_prikk::PrikkRepo;
-use planeter_prikk::maintenance::{DoctorReport, LockInfo, Repair};
+use planeter_prikk::maintenance::{DoctorReport, LockInfo, Repair, RepairPlan};
 use planeter_store::{ChangeStore, IntentRecord, RecoveryStore, RepoId, RepositoryRecord};
 
 use crate::export::ExportService;
@@ -251,8 +251,11 @@ pub struct DoctorView {
     pub clean: bool,
     /// Flags its recommendations name.
     pub repairs_named: Vec<String>,
-    /// Those of them that an administrator's run may run (the idempotent tail and index repairs).
+    /// The repairs an administrator's run would run: there are some only when **every** problem is covered by a named,
+    /// allow-listed, idempotent repair (the tail and index repairs).
     pub repairs_allowed: Vec<String>,
+    /// Why planeter repairs nothing here, when the report has problems that are not all covered that way.
+    pub repair_refusal: Option<String>,
 }
 
 /// What recovery would do and why — read-only.
@@ -424,7 +427,10 @@ fn evaluate(
                     .find(|l| l.starts_with("error [") || l.starts_with("warning ["))
                     .unwrap_or("")
             ),
-            overridable: false,
+            // An administrator's run may go on only when every problem is covered by a named, allow-listed,
+            // idempotent repair (RFC 004 part 4a). One problem without such a repair keeps it a stop for everyone,
+            // and an unattended run is never given the override (see `stopping`).
+            overridable: matches!(report.repair_plan(), RepairPlan::Allowed(_)),
         }),
         Ok(_) => {}
     }
@@ -661,18 +667,19 @@ impl RecoveryService {
             Err(_) => Vec::new(),
         };
         let doctor = g.doctor.as_ref().ok().map(|(r, _)| {
-            let named = r.named_repairs();
+            let (repairs_allowed, repair_refusal) = match r.repair_plan() {
+                RepairPlan::Allowed(v) => (v.iter().map(|x| x.flag().to_owned()).collect(), None),
+                RepairPlan::Refused(why) => (Vec::new(), Some(why)),
+                RepairPlan::Nothing => (Vec::new(), None),
+            };
             DoctorView {
                 errors: r.errors,
                 warnings: r.warnings,
                 info: r.info,
                 clean: r.is_clean(),
-                repairs_allowed: named
-                    .iter()
-                    .filter(|f| Repair::from_flag(f).is_some())
-                    .cloned()
-                    .collect(),
-                repairs_named: named,
+                repairs_named: r.named_repairs(),
+                repairs_allowed,
+                repair_refusal,
             }
         });
         let mut commands = vec![
@@ -963,18 +970,17 @@ impl RecoveryService {
 
         // 4. repairs: only what `doctor` names, only the idempotent ones, only when a person asked.
         if !doctor.is_clean() {
-            let wanted: Vec<Repair> = doctor
-                .named_repairs()
-                .iter()
-                .filter_map(|f| Repair::from_flag(f))
-                .collect();
-            if !admin || wanted.is_empty() {
-                return Ok((
-                    Outcome::Stopped,
-                    plan,
-                    Some("doctor reports problems that only an administrator's run, or a person, may repair".to_owned()),
-                ));
-            }
+            // Only when every problem is covered by a named, allow-listed, idempotent repair, and only for a person.
+            let wanted: Vec<Repair> = match doctor.repair_plan() {
+                RepairPlan::Allowed(v) if admin => v,
+                _ => {
+                    return Ok((
+                        Outcome::Stopped,
+                        plan,
+                        Some("doctor reports problems that only a person may repair".to_owned()),
+                    ));
+                }
+            };
             for repair in wanted {
                 let s = rec.begin("repair")?;
                 match driver.doctor_repair(repair) {

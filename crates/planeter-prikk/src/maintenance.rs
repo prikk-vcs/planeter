@@ -56,22 +56,90 @@ impl DoctorReport {
                 .all(|d| d.severity == Severity::Info)
     }
 
-    /// The repair flags (`--repair-…`, `--cancel-import`, …) that the diagnostics' recommendations name, in order of
-    /// appearance and without repeats. Only these may ever be run, and only if the caller also allows them.
+    /// The flags (`--repair-…`, `--cancel-import`, …) that the diagnostics' recommendations name, in order of
+    /// appearance and without repeats. `--plan-only` is a preview modifier, not a repair, and is not listed. This is
+    /// **text for the plan**: what may be *run* is decided by [`DoctorReport::repair_plan`].
     pub fn named_repairs(&self) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
         for d in &self.diagnostics {
-            let text = format!(
-                "{} {}",
-                d.message,
-                d.recommendation.as_deref().unwrap_or("")
-            );
-            for tok in text.split(|c: char| {
-                c.is_whitespace() || matches!(c, '`' | ',' | ';' | '(' | ')' | '\'' | '"')
-            }) {
-                if tok.starts_with("--") && tok.len() > 2 && !out.iter().any(|t| t == tok) {
-                    out.push(tok.trim_end_matches('.').to_owned());
+            for f in d.named_flags() {
+                if !out.contains(&f) {
+                    out.push(f);
                 }
+            }
+        }
+        out
+    }
+
+    /// What recovery may do about this report (RFC 004 part 4a, T1): nothing when it is clean; **the repairs it names,
+    /// in order**, when *every* problem (every error and every warning) names at least one flag and **every flag it names
+    /// is on the idempotent allow-list** ([`Repair`]); otherwise a refusal with the reason. One problem with no named
+    /// repair, or naming any repair off the list (even beside an allowed one), makes the whole report unrepairable by
+    /// planeter: a person decides.
+    pub fn repair_plan(&self) -> RepairPlan {
+        if self.is_clean() {
+            return RepairPlan::Nothing;
+        }
+        let mut repairs: Vec<Repair> = Vec::new();
+        for d in self
+            .diagnostics
+            .iter()
+            .filter(|d| d.severity != Severity::Info)
+        {
+            let flags = d.named_flags();
+            if flags.is_empty() {
+                return RepairPlan::Refused(format!("[{}] names no repair", d.code));
+            }
+            for f in flags {
+                match Repair::from_flag(&f) {
+                    Some(r) => {
+                        if !repairs.contains(&r) {
+                            repairs.push(r);
+                        }
+                    }
+                    None => {
+                        return RepairPlan::Refused(format!(
+                            "[{}] names {f}, which is not an idempotent repair planeter runs",
+                            d.code
+                        ));
+                    }
+                }
+            }
+        }
+        RepairPlan::Allowed(repairs)
+    }
+}
+
+/// What recovery may do about a `doctor` report ([`DoctorReport::repair_plan`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RepairPlan {
+    /// Nothing to repair.
+    Nothing,
+    /// Every problem is covered by these allow-listed, idempotent repairs.
+    Allowed(Vec<Repair>),
+    /// planeter repairs nothing here; the reason.
+    Refused(String),
+}
+
+impl Diagnostic {
+    /// The `--flags` this diagnostic's message and recommendation name (without `--plan-only`), in order, without repeats.
+    pub fn named_flags(&self) -> Vec<String> {
+        let text = format!(
+            "{} {}",
+            self.message,
+            self.recommendation.as_deref().unwrap_or("")
+        );
+        let mut out: Vec<String> = Vec::new();
+        for tok in text.split(|c: char| {
+            c.is_whitespace() || matches!(c, '`' | ',' | ';' | '(' | ')' | '\'' | '"')
+        }) {
+            let tok = tok.trim_end_matches('.');
+            if tok.starts_with("--")
+                && tok.len() > 2
+                && tok != "--plan-only"
+                && !out.iter().any(|t| t == tok)
+            {
+                out.push(tok.to_owned());
             }
         }
         out

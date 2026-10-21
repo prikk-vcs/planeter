@@ -121,6 +121,71 @@ const FLAG: &str = "a write did not finish (accept_failed)";
 struct Opts {
     binary: Option<PathBuf>,
     processes: Option<Arc<dyn ProcessTable>>,
+    /// A file that gets a line `BEGIN <step>` whenever the recovery store is told a step of that name begins (the
+    /// stand-in prikk writes its own lines to the same file: the order of the two shows a step is written first).
+    step_log: Option<PathBuf>,
+}
+
+/// A recovery store that notes, in a shared file, when a `repair` step is written.
+struct LoggingStore {
+    inner: Arc<InMemoryRecoveries>,
+    log: PathBuf,
+}
+
+impl RecoveryStore for LoggingStore {
+    fn begin(
+        &self,
+        id: &str,
+        repo: &RepoId,
+        actor: &str,
+        now: u64,
+    ) -> planeter_store::store::Result<()> {
+        self.inner.begin(id, repo, actor, now)
+    }
+    fn begin_step(
+        &self,
+        id: &str,
+        seq: u32,
+        name: &str,
+        now: u64,
+    ) -> planeter_store::store::Result<()> {
+        if name == "repair" {
+            use std::io::Write;
+            let mut f = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&self.log)
+                .unwrap();
+            writeln!(f, "BEGIN repair").unwrap();
+        }
+        self.inner.begin_step(id, seq, name, now)
+    }
+    fn end_step(
+        &self,
+        id: &str,
+        seq: u32,
+        outcome: &str,
+        detail: &str,
+        now: u64,
+    ) -> planeter_store::store::Result<()> {
+        self.inner.end_step(id, seq, outcome, detail, now)
+    }
+    fn end(&self, id: &str, outcome: &str, now: u64) -> planeter_store::store::Result<()> {
+        self.inner.end(id, outcome, now)
+    }
+    fn get(
+        &self,
+        id: &str,
+    ) -> planeter_store::store::Result<Option<planeter_store::RecoveryRecord>> {
+        self.inner.get(id)
+    }
+    fn recent(
+        &self,
+        repo: &RepoId,
+        limit: usize,
+    ) -> planeter_store::store::Result<Vec<planeter_store::RecoveryRecord>> {
+        self.inner.recent(repo, limit)
+    }
 }
 
 struct W {
@@ -240,7 +305,13 @@ fn world(name: &str, o: Opts) -> W {
         hosting.clone(),
         leases.clone(),
         changes.clone() as Arc<dyn ChangeStore>,
-        recoveries.clone() as Arc<dyn RecoveryStore>,
+        match &o.step_log {
+            Some(log) => Arc::new(LoggingStore {
+                inner: recoveries.clone(),
+                log: log.clone(),
+            }) as Arc<dyn RecoveryStore>,
+            None => recoveries.clone() as Arc<dyn RecoveryStore>,
+        },
         export.clone(),
         RecoveryConfig {
             lease_wait: Duration::from_secs(20),
@@ -355,20 +426,35 @@ fn standin(base: &Path) -> (PathBuf, PathBuf) {
 REAL={real}
 MODE="$(cat {ctrl})"
 if [ "$1" = unlock ] && [ -z "$2" ] && [ "$MODE" = unlock-garbage ]; then echo "this is not what unlock prints"; exit 0; fi
-if [ "$1" = doctor ] && [ "$2" = --repair-wal-tail ] && [ "$MODE" = doctor-warn ]; then touch {repaired}; echo "repair run id: fake-run-1"; exit 0; fi
+if [ "$1" = doctor ] && [ -n "$2" ] && [ "${{2#--}}" != "$2" ]; then
+  echo "REPAIR $2" >> {log}
+  if [ "$2" = --repair-wal-tail ]; then touch {repaired}; fi
+  echo "repair run id: fake-run-1"; exit 0
+fi
 if [ "$1" = doctor ] && [ -z "$2" ]; then
-  if [ "$MODE" = doctor-warn ] && [ ! -f {repaired} ]; then
-    printf 'doctor repository: %s/.prikk\nwarning [PRIKK-DOCTOR-WAL-TAIL]: trailing partial WAL bytes: 12\n  recommendation: run `prikk doctor --repair-wal-tail`\nissue summary: errors=0, warnings=1, info=0\n' "$PWD"; exit 0
-  fi
-  if [ "$MODE" = doctor-error ]; then
-    printf 'doctor repository: %s/.prikk\nerror [PRIKK-DOCTOR-DAMAGE]: an object container is damaged\n  recommendation: restore from a backup\nissue summary: errors=1, warnings=0, info=0\n' "$PWD"; exit 1
-  fi
+  case "$MODE" in
+    doctor-warn)
+      if [ ! -f {repaired} ]; then
+        printf 'doctor repository: %s/.prikk\nwarning [PRIKK-DOCTOR-WAL-TAIL]: trailing partial WAL bytes: 12\n  recommendation: run `prikk doctor --repair-wal-tail`\nissue summary: errors=0, warnings=1, info=0\n' "$PWD"; exit 0
+      fi ;;
+    doctor-warn-stuck)
+      printf 'doctor repository: %s/.prikk\nwarning [PRIKK-DOCTOR-WAL-TAIL]: trailing partial WAL bytes: 12\n  recommendation: run `prikk doctor --repair-wal-tail`\nissue summary: errors=0, warnings=1, info=0\n' "$PWD"; exit 0 ;;
+    doctor-forbidden)
+      printf 'doctor repository: %s/.prikk\nerror [PRIKK-DOCTOR-LOST]: an acknowledged commit is gone\n  recommendation: run `prikk doctor --discard-damaged-commits --plan-only` first\nissue summary: errors=1, warnings=0, info=0\n' "$PWD"; exit 1 ;;
+    doctor-mixed)
+      printf 'doctor repository: %s/.prikk\nwarning [PRIKK-DOCTOR-WAL-TAIL]: trailing partial WAL bytes: 12\n  recommendation: run `prikk doctor --repair-wal-tail`\nerror [PRIKK-DOCTOR-DAMAGE]: an object container is damaged\n  recommendation: restore from a backup\nissue summary: errors=1, warnings=1, info=0\n' "$PWD"; exit 1 ;;
+    doctor-both)
+      printf 'doctor repository: %s/.prikk\nerror [PRIKK-DOCTOR-INDEX]: the pointer index disagrees\n  recommendation: `--repair-index`, or else `--rebuild-pointer-index`\nissue summary: errors=1, warnings=0, info=0\n' "$PWD"; exit 1 ;;
+    doctor-error)
+      printf 'doctor repository: %s/.prikk\nerror [PRIKK-DOCTOR-DAMAGE]: an object container is damaged\n  recommendation: restore from a backup\nissue summary: errors=1, warnings=0, info=0\n' "$PWD"; exit 1 ;;
+  esac
 fi
 if [ "$1" = verify ] && [ "$MODE" = verify-fails ]; then echo "verify went wrong" >&2; exit 1; fi
 exec "$REAL" "$@"
 "#,
             ctrl = ctrl.display(),
-            repaired = repaired.display()
+            repaired = repaired.display(),
+            log = base.join("standin.log").display()
         ),
     )
     .unwrap();
@@ -392,11 +478,21 @@ fn standin_world(name: &str) -> (W, PathBuf) {
             name,
             Opts {
                 binary: Some(script),
+                step_log: Some(base.join("standin.log")),
                 ..Opts::default()
             },
         ),
         ctrl,
     )
+}
+
+/// What the stand-in and the recovery store wrote, in order (`BEGIN repair`, `REPAIR --repair-wal-tail`, …).
+fn standin_log(ctrl: &Path) -> Vec<String> {
+    std::fs::read_to_string(ctrl.with_file_name("standin.log"))
+        .unwrap_or_default()
+        .lines()
+        .map(str::to_owned)
+        .collect()
 }
 
 // ------------------------------------------------------------------------------------------------ the happy path
@@ -961,43 +1057,258 @@ fn too_many_open_intents_are_left_to_an_administrator_and_a_run_never_abandons_o
     );
 }
 
+/// A warning that names one idempotent repair, `doctor` clean once it was run.
+fn warned(name: &str) -> (W, PathBuf) {
+    let (w, ctrl) = standin_world(name);
+    w.killed_accept();
+    std::fs::write(&ctrl, "doctor-warn").unwrap();
+    (w, ctrl)
+}
+
 #[test]
-fn doctor_problems_stop_the_unattended_run_and_an_administrator_may_run_only_the_repairs_doctor_names()
- {
+fn doctor_problems_covered_by_a_named_idempotent_repair_are_overridable_by_an_administrator_only() {
     if skip() {
         return;
     }
-    let (w, ctrl) = standin_world("doctor");
-    w.killed_accept();
-    // A warning that names an idempotent repair.
-    std::fs::write(&ctrl, "doctor-warn").unwrap();
+    let (w, ctrl) = warned("doctor-plan");
     let plan = w.svc.plan(&w.record).unwrap();
     assert_eq!(
-        plan.blockers.iter().map(|b| b.code).collect::<Vec<_>>(),
-        vec!["doctor_problems"]
+        plan.blockers
+            .iter()
+            .map(|b| (b.code, b.overridable))
+            .collect::<Vec<_>>(),
+        vec![("doctor_problems", true)]
     );
     let d = plan.doctor.as_ref().unwrap();
     assert!(!d.clean);
     assert_eq!(d.repairs_allowed, vec!["--repair-wal-tail"]);
+    assert_eq!(d.repair_refusal, None);
+    assert!(
+        !plan.may_run_unattended,
+        "overridable is for a person: the plan says it cannot run by itself"
+    );
+    let _ = ctrl;
+}
+
+#[test]
+fn an_unattended_run_never_repairs_and_stays_flagged() {
+    if skip() {
+        return;
+    }
+    let (w, ctrl) = warned("doctor-unattended");
     assert!(
         w.svc.auto(&w.record).is_none(),
-        "an unattended run never repairs"
+        "the server leaves it to an administrator"
     );
+    // Even asked to run as the server's own actor, the run stops before any repair.
+    let r = w.svc.recover(&w.record, "automatic", &[]).unwrap();
+    assert_eq!(r.outcome, RecoveryOutcome::Stopped);
     assert!(w.flagged());
-    // An administrator's run still stops: doctor_problems is not overridable ...
+    assert_eq!(locks_listed(&w.repo_path), 2, "no lock was cleared");
+    assert!(
+        standin_log(&ctrl).iter().all(|l| !l.starts_with("REPAIR")),
+        "{:?}",
+        standin_log(&ctrl)
+    );
+    assert_eq!(
+        w.steps_of_last(),
+        vec![("witnesses".to_owned(), Some("disagree".to_owned()))]
+    );
+}
+
+#[test]
+fn an_administrators_run_executes_exactly_the_named_repair_writes_its_step_first_and_completes() {
+    if skip() {
+        return;
+    }
+    let (w, ctrl) = warned("doctor-admin");
+    let r = w.svc.recover(&w.record, "alice", &[]).unwrap();
+    assert_eq!(r.outcome, RecoveryOutcome::Recovered, "{r:?}");
+    assert!(!w.flagged());
+    assert_eq!(locks_listed(&w.repo_path), 0);
+    // Exactly the named repair, once, and its step was written before it was taken.
+    assert_eq!(
+        standin_log(&ctrl),
+        vec![
+            "BEGIN repair".to_owned(),
+            "REPAIR --repair-wal-tail".to_owned()
+        ],
+        "the step is in the store before prikk is called"
+    );
+    let steps = w.steps_of_last();
+    let names: Vec<&str> = steps.iter().map(|(n, _)| n.as_str()).collect();
+    assert_eq!(
+        names,
+        vec![
+            "witnesses",
+            "lease",
+            "witnesses-under-lease",
+            "doctor",
+            "unlock-list",
+            "repair",
+            "doctor",
+            "unlock-force",
+            "unlock-force",
+            "unlock-list",
+            "verify",
+            "clear-lease-records",
+            "clear-flag",
+        ]
+    );
+    // Every step succeeded; the two witness steps say `disagree` because doctor's warning was a disagreement that the
+    // administrator's run is allowed to go on despite (it is covered by an allow-listed repair).
+    for (name, outcome) in &steps {
+        let expected = if name.starts_with("witnesses") {
+            "disagree"
+        } else {
+            "ok"
+        };
+        assert_eq!(outcome.as_deref(), Some(expected), "{name}: {steps:?}");
+    }
+    let rec = &w.recoveries.recent(&repo_id(), 1).unwrap()[0];
+    assert_eq!(rec.actor, "alice");
+    let repair = rec.steps.iter().find(|s| s.name == "repair").unwrap();
+    assert!(
+        repair.detail.contains("prikk doctor --repair-wal-tail"),
+        "{}",
+        repair.detail
+    );
+    assert!(
+        repair.detail.contains("repair run id: fake-run-1"),
+        "the run id is in the step: {}",
+        repair.detail
+    );
+    let again = rec
+        .steps
+        .iter()
+        .filter(|s| s.name == "doctor")
+        .nth(1)
+        .unwrap();
+    assert!(
+        again.detail.contains("clean after the repairs"),
+        "{}",
+        again.detail
+    );
+}
+
+#[test]
+fn a_doctor_that_is_still_dirty_after_the_repair_stops_with_the_flag_set_and_the_locks_untouched() {
+    if skip() {
+        return;
+    }
+    let (w, ctrl) = standin_world("doctor-stuck");
+    w.killed_accept();
+    std::fs::write(&ctrl, "doctor-warn-stuck").unwrap();
     let r = w.svc.recover(&w.record, "alice", &[]).unwrap();
     assert_eq!(r.outcome, RecoveryOutcome::Stopped);
-    assert_eq!(locks_listed(&w.repo_path), 2);
-    // ... an error doctor names no repair for stops everyone, with doctor's text.
-    std::fs::write(&ctrl, "doctor-error").unwrap();
-    let plan = w.svc.plan(&w.record).unwrap();
-    assert_eq!(plan.blockers[0].code, "doctor_problems");
-    assert!(plan.doctor.as_ref().unwrap().repairs_allowed.is_empty());
+    assert!(r.stopped.unwrap().contains("not clean after the repairs"));
+    assert!(w.flagged());
     assert_eq!(
-        w.svc.recover(&w.record, "alice", &[]).unwrap().outcome,
-        RecoveryOutcome::Stopped
+        locks_listed(&w.repo_path),
+        2,
+        "it stopped before any lock was cleared"
+    );
+    assert_eq!(
+        standin_log(&ctrl)
+            .iter()
+            .filter(|l| l.starts_with("REPAIR"))
+            .count(),
+        1,
+        "the repair ran once"
+    );
+    let steps = w.steps_of_last();
+    assert_eq!(
+        steps.last().unwrap(),
+        &("doctor".to_owned(), Some("stopped".to_owned())),
+        "{steps:?}"
+    );
+    assert!(
+        !steps
+            .iter()
+            .any(|(n, _)| n == "unlock-force" || n == "verify" || n == "clear-flag")
+    );
+}
+
+#[test]
+fn a_repair_off_the_allow_list_is_never_run_and_shows_only_as_text() {
+    if skip() {
+        return;
+    }
+    let (w, ctrl) = standin_world("doctor-forbidden");
+    w.killed_accept();
+    std::fs::write(&ctrl, "doctor-forbidden").unwrap();
+    let plan = w.svc.plan(&w.record).unwrap();
+    let d = plan.doctor.as_ref().unwrap();
+    assert_eq!(
+        d.repairs_named,
+        vec!["--discard-damaged-commits"],
+        "it shows, as text"
+    );
+    assert!(d.repairs_allowed.is_empty());
+    assert!(
+        d.repair_refusal
+            .as_deref()
+            .unwrap()
+            .contains("--discard-damaged-commits")
+    );
+    assert_eq!(
+        plan.blockers
+            .iter()
+            .map(|b| (b.code, b.overridable))
+            .collect::<Vec<_>>(),
+        vec![("doctor_problems", false)]
+    );
+    let r = w.svc.recover(&w.record, "alice", &[]).unwrap();
+    assert_eq!(r.outcome, RecoveryOutcome::Stopped);
+    assert!(
+        standin_log(&ctrl).iter().all(|l| !l.starts_with("REPAIR")),
+        "never run: {:?}",
+        standin_log(&ctrl)
     );
     assert!(w.flagged());
+}
+
+#[test]
+fn one_problem_without_a_repair_or_a_forbidden_repair_beside_an_allowed_one_refuses_the_whole_report()
+ {
+    if skip() {
+        return;
+    }
+    for mode in ["doctor-error", "doctor-mixed", "doctor-both"] {
+        let (w, ctrl) = standin_world(&format!("doctor-{mode}"));
+        w.killed_accept();
+        std::fs::write(&ctrl, mode).unwrap();
+        let plan = w.svc.plan(&w.record).unwrap();
+        assert_eq!(
+            plan.blockers
+                .iter()
+                .map(|b| (b.code, b.overridable))
+                .collect::<Vec<_>>(),
+            vec![("doctor_problems", false)],
+            "{mode}"
+        );
+        assert!(
+            plan.doctor.as_ref().unwrap().repairs_allowed.is_empty(),
+            "{mode}: nothing is run even of the allowed repair"
+        );
+        assert!(
+            plan.doctor.as_ref().unwrap().repair_refusal.is_some(),
+            "{mode}"
+        );
+        assert!(w.svc.auto(&w.record).is_none(), "{mode}");
+        assert_eq!(
+            w.svc.recover(&w.record, "alice", &[]).unwrap().outcome,
+            RecoveryOutcome::Stopped,
+            "{mode}"
+        );
+        assert!(
+            standin_log(&ctrl).iter().all(|l| !l.starts_with("REPAIR")),
+            "{mode}: {:?}",
+            standin_log(&ctrl)
+        );
+        assert!(w.flagged(), "{mode}");
+        assert_eq!(locks_listed(&w.repo_path), 2, "{mode}");
+    }
 }
 
 // ------------------------------------------------------------------------------------------------ twice at once

@@ -1220,6 +1220,7 @@ struct DoctorJson {
     clean: bool,
     repairs_named: Vec<String>,
     repairs_allowed: Vec<String>,
+    repair_refusal: Option<String>,
 }
 
 #[derive(Serialize)]
@@ -1378,6 +1379,7 @@ fn plan_json(p: &planeter_transport::RecoveryPlan, lang: crate::catalog::Lang) -
             clean: d.clean,
             repairs_named: d.repairs_named.clone(),
             repairs_allowed: d.repairs_allowed.clone(),
+            repair_refusal: d.repair_refusal.clone(),
         }),
         blockers: p
             .blockers
