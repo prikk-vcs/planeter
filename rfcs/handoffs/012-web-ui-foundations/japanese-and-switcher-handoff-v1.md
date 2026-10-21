@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | Implements RFC 012 **D-3** (a second shipped language, the visible switcher) and D-7 steps (5) and (6). The English wording is final (plain-words work, approved); the reviewers named by the owner on 2026-10-21 (RFC 012 O-2) are **the owner and a colleague**, both fluent. Two phases: (1) the dev team builds the Japanese catalog **as a draft for the reviewers**, the switcher and the checks; (2) after the reviewers return their corrections, the dev team integrates them. A Japanese catalog never ships without the reviewers' pass (RFC 012 D-3f). Issue IS-27. |
-| Status | **Assigned** (2026-10-21), phase 1. Phase 2 is a small follow-up the architect writes when the reviewed sheet comes back. |
+| Status | **Phase 1 done, reviewed Approved (2026-10-21; commits `5358129`, `4a28b05`, `da5fe1f`).** Waiting for the reviewers (the owner and a colleague) to return the sheet; phase 2 is a small follow-up the architect writes then. |
 | Basis | [`../../accepted/012-web-ui-foundations.md`](../../accepted/012-web-ui-foundations.md) D-3, D-4, D-5, D-6; `docs/glossary.md` (the English words in force; certainty column; the trust labels); `docs/messages-and-languages.md`; `docs/accessibility.md`; `crates/planeter-web/src/catalog/{mod,en}.rs`, `tests/{catalog_checks,i18n,pages_in_two_languages,glossary,retired_words,structure,stylesheet}`; the baseline review request (private), B6 (the string inventory). |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`) **and the reviewer's sheet** (T3). |
 

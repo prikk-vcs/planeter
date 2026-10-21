@@ -343,9 +343,13 @@ repository from a fresh archive. Simple and true, and it makes the forge a revie
 branch tip by a written rule** (a key adopted by an admin, a fast-forward of the previous tip, verified): no key on the
 forge, the selection is re-derivable and labelled on every page ("received and accepted by this forge by policy;
 verified by prikk"). It keeps OQ-1(a) and makes changes able to *land*. **C** a forge-held signing key: rejected, it
-breaks the keyless forge the whole design stands on. **B needs one measurement first** (does a newer bundle or archive
-update an existing received ref on a keyless forge, and what do `log`, `tree` and `extract --ref remotes/…` then read?)
-and a wording ruling on INV-6/NG-6; that is a short investigation under RFC 008's revision.
+breaks the keyless forge the whole design stands on. **B needed one measurement first, and it was done (2026-10-21, ledger PK-67): a newer
+delivery **does** replace the received ref (last-writer-wins, even for a rollback, a divergent history or another signer, with
+no warning), prikk offers no ancestry guard, so B means planeter **owns a canonical tip pointer** (a recorded block id
+re-derivable from retained deliveries), applies the written rule after each import from `log`, serves reads pinned to that
+tip, and restores a bad pointer by re-importing the previous retained delivery. Feasible, larger than first described, and it
+needs a wording ruling on INV-6/NG-6 and one more small measurement (do read verbs accept a block id?); a design for RFC 008's
+revision.
 
 ## Sequencing and handoff
 

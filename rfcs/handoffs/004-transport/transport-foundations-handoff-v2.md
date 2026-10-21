@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | The first of the RFC 004 v2 series (sequence below). It builds the **foundations every later part stands on and none of the user-visible transport**: the handler-enumeration test that must exist before any write handler (IS-14, ENF-4), the `propose` action (RFC 004 D-3, RFC 005 D-9), the repository lease (D-7), the artifact store and spool primitives (D-2), and the two extra sandbox mounts (D-6). Nothing here is reachable from the network; no route is added. |
-| Status | **Assigned** (2026-10-21), after the owner accepted RFC 004 and RFC 005 (third editions). |
+| Status | **Done, reviewed Approved (2026-10-21; commits `83f8696`…`d9c6ec9`).** IS-14 closed. Part 2: `advertise-and-fetch-handoff-v2.md`. |
 | Basis | [`../../accepted/004-transport.md`](../../accepted/004-transport.md) D-2, D-6, D-7 and its measured facts U-12…U-17; [`../../accepted/005-change-review.md`](../../accepted/005-change-review.md) D-9; RFC 002 (`authorize()`, default-deny, `Action::ALL` property test); RFC 011 (admission, `CallLimits`, child lifetime: done); `docs/src/planeter-04-internal-design-v0.1.md` ENF-4; `crates/planeter-core/src/{authorize,hosting,layout,admission}.rs`, `crates/planeter-prikk/src/sandbox.rs`, `crates/planeter-store`, `crates/planeter-transport` (a skeleton), `crates/planeter-web/src/{gate,budget}.rs`; ledger PK-37, PK-39, PK-59, PK-60; IS-14. |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 
