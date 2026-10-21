@@ -298,6 +298,10 @@ async fn main() {
                         max_concurrent: positive_env("PLANETER_PROPOSE_CONCURRENCY", 2) as usize,
                         repo_capacity_bytes: positive_env("PLANETER_PROPOSAL_CAPACITY_MB", 4096)
                             << 20,
+                        proposer_bytes_limit: std::env::var("PLANETER_PROPOSER_QUOTA_MB")
+                            .ok()
+                            .filter(|v| !v.is_empty())
+                            .map(|_| positive_env("PLANETER_PROPOSER_QUOTA_MB", 1) << 20),
                     };
                     eprintln!(
                         "planeter: proposals on: artifacts up to {} MiB and {} objects, {} s accept deadline, at most {} at once, repository capacity {} MiB",

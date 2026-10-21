@@ -67,6 +67,9 @@ pub struct ProposeConfig {
     pub max_concurrent: usize,
     /// The operator's ceiling on the artifacts a repository retains (RFC 005 Q-2: 4 GiB by default).
     pub repo_capacity_bytes: u64,
+    /// The operator's limit on the artifacts one principal may have accepted in one repository, replacing the
+    /// RFC 005 Q-2 default of the repository's `proposals` setting (512 MiB / 64 MiB). `None`: the default.
+    pub proposer_bytes_limit: Option<u64>,
 }
 
 impl Default for ProposeConfig {
@@ -78,6 +81,7 @@ impl Default for ProposeConfig {
             lease_wait: Duration::from_secs(5),
             max_concurrent: 2,
             repo_capacity_bytes: 4096 << 20,
+            proposer_bytes_limit: None,
         }
     }
 }
@@ -332,6 +336,9 @@ pub struct Plan {
     /// A quota refusal that is held back until the artifact's digest is known: a repeat of an artifact that is
     /// already recorded is answered with its revision, whatever the quotas now say.
     deferred_quota: Option<QuotaRefusal>,
+    /// What the quota check was made against, to be made again without the debt of the same artifact.
+    usage: QuotaUsage,
+    request: QuotaRequest,
     /// The policy the checks used.
     pub policy: QuotaPolicy,
 }
@@ -582,6 +589,9 @@ impl ProposeService {
         };
         let mut policy = QuotaPolicy::defaults_for(record.proposals);
         policy.repo_retained_bytes = self.config.repo_capacity_bytes;
+        if let Some(limit) = self.config.proposer_bytes_limit {
+            policy.accepted_bytes = limit;
+        }
         let usage: QuotaUsage = self
             .changes
             .usage(repo, &who.id, (self.now_unix)())
@@ -591,15 +601,11 @@ impl ProposeService {
             Some(_) => QuotaTarget::ExistingChange { revisions },
             None => QuotaTarget::NewChange,
         };
-        let deferred_quota = check_quota(
-            &usage,
-            &policy,
-            &QuotaRequest {
-                bytes: artifact_bytes,
-                target,
-            },
-        )
-        .err();
+        let request = QuotaRequest {
+            bytes: artifact_bytes,
+            target,
+        };
+        let deferred_quota = check_quota(&usage, &policy, &request).err();
         meta.validate().map_err(ProposeError::Meta)?;
         if meta.change.is_some() {
             let c = existing.as_ref().ok_or(ProposeError::UnknownChange)?;
@@ -620,6 +626,8 @@ impl ProposeService {
             existing,
             next_seq,
             deferred_quota,
+            usage,
+            request,
             policy,
         })
     }
@@ -733,7 +741,24 @@ impl ProposeService {
             return Ok(self.already_recorded(&existing));
         }
         if let Some(refusal) = plan.deferred_quota {
-            return Err(ProposeError::Quota(refusal));
+            // An artifact whose earlier attempt is still an open intent is already owed (IS-50): the corrected
+            // re-send must not be charged for it twice.
+            let owed = self
+                .changes
+                .open_intents(repo)
+                .map_err(|e| Self::unavailable("cannot read the open intents", e))?
+                .into_iter()
+                .find(|i| i.artifact_digest == record_key && i.principal == who.id)
+                .map_or(0, |i| i.artifact_bytes);
+            if owed == 0 {
+                return Err(ProposeError::Quota(refusal));
+            }
+            let mut usage = plan.usage;
+            usage.accepted_bytes = usage.accepted_bytes.saturating_sub(owed);
+            usage.repo_retained_bytes = usage.repo_retained_bytes.saturating_sub(owed);
+            if let Err(refusal) = check_quota(&usage, &plan.policy, &plan.request) {
+                return Err(ProposeError::Quota(refusal));
+            }
         }
 
         // The write lease: a conflict is a queue, never prikk's error (RFC 004 D-7).
@@ -787,6 +812,7 @@ impl ProposeService {
                 &new_id('i'),
                 repo,
                 &record_key,
+                up.size,
                 &pending_before,
                 &who.id,
                 (self.now_unix)(),
@@ -857,6 +883,13 @@ impl ProposeService {
                 e @ (DeriveError::DeclarationMissesAdded { .. }
                 | DeriveError::DeclaredNotHeld { .. }),
             ) => {
+                // The patches are in the repository and cannot be removed: the artifact is kept, and the open intent
+                // owes its bytes to the quotas until a re-send records a revision or recovery abandons it (IS-50).
+                if let Err(store) = self.artifacts.retain(&up.dir, &up.digest) {
+                    eprintln!(
+                        "planeter: propose: cannot keep the artifact of a refused declaration: {store}"
+                    );
+                }
                 return Err(ProposeError::Declaration(e));
             }
             Err(e) => {

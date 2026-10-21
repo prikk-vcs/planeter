@@ -38,6 +38,7 @@ fn intent(before: std::ops::Range<u64>, state: IntentState) -> IntentRecord {
         state,
         completed_at: None,
         revision_id: None,
+        artifact_bytes: 0,
     }
 }
 
@@ -125,7 +126,7 @@ fn a_killed_accept_records_nothing_and_the_resumed_one_records_exactly_one_from_
     let repo = RepoId::new("r1");
     // 1. the intent is journaled with the pending set as it was; 2. the accept dies after storing a prefix
     let first = store
-        .open_or_resume_intent("i1", &repo, "sha256:aa", &list(0..3), "alice", 10)
+        .open_or_resume_intent("i1", &repo, "sha256:aa", 0, &list(0..3), "alice", 10)
         .unwrap();
     let pending_after_kill = set(0..6); // 3 of 5 patches reached pending
     assert!(
@@ -141,6 +142,7 @@ fn a_killed_accept_records_nothing_and_the_resumed_one_records_exactly_one_from_
             "i2",
             &repo,
             "sha256:aa",
+            0,
             &pending_after_kill.iter().cloned().collect::<Vec<_>>(),
             "alice",
             20,

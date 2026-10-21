@@ -71,7 +71,7 @@ fn revision(id: &str, change_id: &str, seq: u32, dig: u64, bytes: u64, by: &str)
 /// Journal an intent for `dig`, then complete it with a revision that opens `change_id` (seq 1).
 fn push_new_change(s: &dyn ChangeStore, n: u64, by: &str, bytes: u64) -> (String, String) {
     let (cid, rid, iid) = (format!("c{n}"), format!("v{n}"), format!("i{n}"));
-    s.open_or_resume_intent(&iid, &repo(), &digest(n), &[], by, 10)
+    s.open_or_resume_intent(&iid, &repo(), &digest(n), 0, &[], by, 10)
         .unwrap();
     s.complete_intent_with_revision(
         &iid,
@@ -116,6 +116,8 @@ suite!(
     usage_is_computed_from_the_records_and_cannot_drift,
     changes_are_listed_per_repository_and_state_newest_first,
     an_intent_can_only_be_abandoned_while_open,
+    an_open_intent_owes_its_bytes_until_a_revision_or_an_abandonment_replaces_it,
+    flagged_repositories_are_listed,
 );
 
 fn changes_are_created_read_and_listed(s: &dyn ChangeStore) {
@@ -147,7 +149,7 @@ fn a_revision_round_trips_every_field(s: &dyn ChangeStore) {
 
 fn a_second_revision_is_numbered_two_and_touches_the_change(s: &dyn ChangeStore) {
     let (cid, _) = push_new_change(s, 1, "alice", 10);
-    s.open_or_resume_intent("i-2", &repo(), &digest(2), &pids(1..4), "alice", 20)
+    s.open_or_resume_intent("i-2", &repo(), &digest(2), 0, &pids(1..4), "alice", 20)
         .unwrap();
     s.complete_intent_with_revision("i-2", None, &revision("v-2", &cid, 2, 2, 20, "alice"), 25)
         .unwrap();
@@ -160,7 +162,7 @@ fn a_second_revision_is_numbered_two_and_touches_the_change(s: &dyn ChangeStore)
     assert_eq!(seqs, vec![1, 2]);
     assert_eq!(s.get_change(&cid).unwrap().unwrap().updated_at, 25);
     // A declared set of none and of "empty" are two different facts and stay different.
-    s.open_or_resume_intent("i-3", &repo(), &digest(3), &[], "alice", 30)
+    s.open_or_resume_intent("i-3", &repo(), &digest(3), 0, &[], "alice", 30)
         .unwrap();
     let mut r3 = revision("v-3", &cid, 3, 3, 1, "alice");
     r3.declared_patch_ids = Some(vec![]);
@@ -171,7 +173,7 @@ fn a_second_revision_is_numbered_two_and_touches_the_change(s: &dyn ChangeStore)
     s.complete_intent_with_revision("i-3", None, &r3, 31)
         .unwrap();
     assert_eq!(s.revisions_of(&cid).unwrap()[2], r3);
-    s.open_or_resume_intent("i-4", &repo(), &digest(4), &[], "alice", 40)
+    s.open_or_resume_intent("i-4", &repo(), &digest(4), 0, &[], "alice", 40)
         .unwrap();
     let mut r4 = r3.clone();
     r4.revision_id = "v-4".to_owned();
@@ -186,7 +188,7 @@ fn a_second_revision_is_numbered_two_and_touches_the_change(s: &dyn ChangeStore)
 fn an_identical_artifact_is_one_revision(s: &dyn ChangeStore) {
     push_new_change(s, 1, "alice", 10);
     // A second intent for the same digest can be opened once the first is complete (a race, a repeated push) ...
-    s.open_or_resume_intent("i-again", &repo(), &digest(1), &[], "bob", 50)
+    s.open_or_resume_intent("i-again", &repo(), &digest(1), 0, &[], "bob", 50)
         .unwrap();
     // ... but its revision is refused by the store, in a typed way, and the intent stays open.
     let err = s
@@ -214,7 +216,7 @@ fn an_identical_artifact_is_one_revision(s: &dyn ChangeStore) {
 
 fn a_revision_number_is_used_once_per_change(s: &dyn ChangeStore) {
     let (cid, _) = push_new_change(s, 1, "alice", 10);
-    s.open_or_resume_intent("i-2", &repo(), &digest(2), &[], "alice", 20)
+    s.open_or_resume_intent("i-2", &repo(), &digest(2), 0, &[], "alice", 20)
         .unwrap();
     let err = s
         .complete_intent_with_revision("i-2", None, &revision("v-2", &cid, 1, 2, 10, "alice"), 21)
@@ -232,13 +234,13 @@ fn a_revision_number_is_used_once_per_change(s: &dyn ChangeStore) {
 
 fn resuming_keeps_the_first_attempts_pending_before(s: &dyn ChangeStore) {
     let first = s
-        .open_or_resume_intent("i-1", &repo(), &digest(1), &pids(0..3), "alice", 10)
+        .open_or_resume_intent("i-1", &repo(), &digest(1), 0, &pids(0..3), "alice", 10)
         .unwrap();
     assert_eq!((first.attempts, first.state), (1, IntentState::Open));
     assert_eq!(first.pending_before, pids(0..3));
     // The retry sees a longer pending list (the killed run left a prefix) and a new intent id: neither is used.
     let again = s
-        .open_or_resume_intent("i-2", &repo(), &digest(1), &pids(0..9), "alice", 20)
+        .open_or_resume_intent("i-2", &repo(), &digest(1), 0, &pids(0..9), "alice", 20)
         .unwrap();
     assert_eq!(again.intent_id, "i-1", "same digest, same open intent");
     assert_eq!(again.attempts, 2);
@@ -250,7 +252,7 @@ fn resuming_keeps_the_first_attempts_pending_before(s: &dyn ChangeStore) {
     assert_eq!(again.started_at, 10);
     assert_eq!(s.get_intent("i-2").unwrap(), None);
     let third = s
-        .open_or_resume_intent("i-3", &repo(), &digest(1), &pids(0..12), "alice", 30)
+        .open_or_resume_intent("i-3", &repo(), &digest(1), 0, &pids(0..12), "alice", 30)
         .unwrap();
     assert_eq!((third.attempts, third.pending_before), (3, pids(0..3)));
     assert_eq!(s.get_intent("i-1").unwrap().unwrap().attempts, 3);
@@ -259,11 +261,11 @@ fn resuming_keeps_the_first_attempts_pending_before(s: &dyn ChangeStore) {
 fn an_intent_for_another_artifact_is_a_separate_intent(s: &dyn ChangeStore) {
     // Two open intents in one repository are possible at this layer; that they never run at once is the W lease's
     // job (part 3b). The query exposes them so a caller can refuse or recover.
-    s.open_or_resume_intent("i-1", &repo(), &digest(1), &[], "alice", 10)
+    s.open_or_resume_intent("i-1", &repo(), &digest(1), 0, &[], "alice", 10)
         .unwrap();
-    s.open_or_resume_intent("i-2", &repo(), &digest(2), &[], "bob", 11)
+    s.open_or_resume_intent("i-2", &repo(), &digest(2), 0, &[], "bob", 11)
         .unwrap();
-    s.open_or_resume_intent("i-x", &RepoId::new("other"), &digest(1), &[], "bob", 12)
+    s.open_or_resume_intent("i-x", &RepoId::new("other"), &digest(1), 0, &[], "bob", 12)
         .unwrap();
     let open: Vec<String> = s
         .open_intents(&repo())
@@ -279,7 +281,7 @@ fn an_intent_for_another_artifact_is_a_separate_intent(s: &dyn ChangeStore) {
 }
 
 fn an_abandoned_intent_does_not_block_a_fresh_one(s: &dyn ChangeStore) {
-    s.open_or_resume_intent("i-1", &repo(), &digest(1), &pids(0..2), "alice", 10)
+    s.open_or_resume_intent("i-1", &repo(), &digest(1), 0, &pids(0..2), "alice", 10)
         .unwrap();
     s.abandon_intent("i-1", 15).unwrap();
     let old = s.get_intent("i-1").unwrap().unwrap();
@@ -288,7 +290,7 @@ fn an_abandoned_intent_does_not_block_a_fresh_one(s: &dyn ChangeStore) {
         (IntentState::Abandoned, Some(15))
     );
     let fresh = s
-        .open_or_resume_intent("i-2", &repo(), &digest(1), &pids(0..5), "alice", 20)
+        .open_or_resume_intent("i-2", &repo(), &digest(1), 0, &pids(0..5), "alice", 20)
         .unwrap();
     assert_eq!((fresh.intent_id.as_str(), fresh.attempts), ("i-2", 1));
     assert_eq!(
@@ -301,7 +303,7 @@ fn an_abandoned_intent_does_not_block_a_fresh_one(s: &dyn ChangeStore) {
 /// The whole story of RFC 004 D-6 at the record level: open the intent, a prefix lands in `pending`, the process
 /// dies (nothing is completed), the repository is flagged, the retry resumes, and exactly one revision results.
 fn a_killed_accept_records_nothing_and_the_resumed_one_records_exactly_one(s: &dyn ChangeStore) {
-    s.open_or_resume_intent("i-1", &repo(), &digest(7), &pids(0..3), "alice", 10)
+    s.open_or_resume_intent("i-1", &repo(), &digest(7), 0, &pids(0..3), "alice", 10)
         .unwrap();
     // -- the accept is killed here; after the restart the forge flags the repository and finds an open intent --
     s.set_needs_recovery(&repo(), "accept did not finish", 12)
@@ -315,7 +317,7 @@ fn a_killed_accept_records_nothing_and_the_resumed_one_records_exactly_one(s: &d
     assert_eq!(s.open_intents(&repo()).unwrap().len(), 1);
     // -- the retry --
     let resumed = s
-        .open_or_resume_intent("i-retry", &repo(), &digest(7), &pids(0..8), "alice", 20)
+        .open_or_resume_intent("i-retry", &repo(), &digest(7), 0, &pids(0..8), "alice", 20)
         .unwrap();
     assert_eq!((resumed.intent_id.as_str(), resumed.attempts), ("i-1", 2));
     assert_eq!(
@@ -356,7 +358,7 @@ fn a_killed_accept_records_nothing_and_the_resumed_one_records_exactly_one(s: &d
 }
 
 fn completion_is_atomic_when_a_failure_follows_the_revision_insert(s: &dyn ChangeStore) {
-    s.open_or_resume_intent("i-1", &repo(), &digest(1), &pids(0..2), "alice", 10)
+    s.open_or_resume_intent("i-1", &repo(), &digest(1), 0, &pids(0..2), "alice", 10)
         .unwrap();
     s.inject_failure(FailPoint::AfterRevisionInsert, true);
     let err = s
@@ -404,7 +406,7 @@ fn completion_is_atomic_when_a_failure_follows_the_revision_insert(s: &dyn Chang
 fn a_failed_completion_of_an_existing_change_leaves_it_untouched(s: &dyn ChangeStore) {
     let (cid, _) = push_new_change(s, 1, "alice", 10);
     let before = s.get_change(&cid).unwrap().unwrap();
-    s.open_or_resume_intent("i-2", &repo(), &digest(2), &[], "alice", 20)
+    s.open_or_resume_intent("i-2", &repo(), &digest(2), 0, &[], "alice", 20)
         .unwrap();
     s.inject_failure(FailPoint::AfterRevisionInsert, true);
     assert!(
@@ -425,7 +427,7 @@ fn a_failed_completion_of_an_existing_change_leaves_it_untouched(s: &dyn ChangeS
 }
 
 fn completion_refuses_what_does_not_belong_together(s: &dyn ChangeStore) {
-    s.open_or_resume_intent("i-1", &repo(), &digest(1), &[], "alice", 10)
+    s.open_or_resume_intent("i-1", &repo(), &digest(1), 0, &[], "alice", 10)
         .unwrap();
     let ok = revision("v1", "c1", 1, 1, 10, "alice");
     // unknown intent
@@ -497,6 +499,7 @@ fn malformed_ids_are_refused_and_nothing_is_written(s: &dyn ChangeStore) {
                     "i-bad",
                     &repo(),
                     &digest(1),
+                    0,
                     &[bad.to_owned()],
                     "alice",
                     1
@@ -507,7 +510,7 @@ fn malformed_ids_are_refused_and_nothing_is_written(s: &dyn ChangeStore) {
         );
     }
     assert_eq!(s.get_intent("i-bad").unwrap(), None);
-    s.open_or_resume_intent("i-1", &repo(), &digest(1), &[], "alice", 1)
+    s.open_or_resume_intent("i-1", &repo(), &digest(1), 0, &[], "alice", 1)
         .unwrap();
     let mut r = revision("v1", "c1", 1, 1, 1, "alice");
     r.added_patch_ids.push("not-hex".to_owned());
@@ -634,7 +637,7 @@ fn usage_is_computed_from_the_records_and_cannot_drift(s: &dyn ChangeStore) {
         Default::default()
     );
     // A second revision adds to the bytes, not to the open changes.
-    s.open_or_resume_intent("i-x", &repo(), &digest(9), &[], "alice", 30)
+    s.open_or_resume_intent("i-x", &repo(), &digest(9), 0, &[], "alice", 30)
         .unwrap();
     s.complete_intent_with_revision("i-x", None, &revision("v-x", &c1, 2, 9, 50, "alice"), 31)
         .unwrap();
@@ -708,13 +711,78 @@ fn an_intent_can_only_be_abandoned_while_open(s: &dyn ChangeStore) {
         s.abandon_intent("nope", 1),
         Err(StoreError::NotFound)
     ));
-    s.open_or_resume_intent("i-1", &repo(), &digest(1), &[], "alice", 1)
+    s.open_or_resume_intent("i-1", &repo(), &digest(1), 0, &[], "alice", 1)
         .unwrap();
     s.abandon_intent("i-1", 2).unwrap();
     assert!(matches!(
         s.abandon_intent("i-1", 3),
         Err(StoreError::Invalid(_))
     ));
+}
+
+/// IS-50: an accepted-but-unrecorded artifact is a debt. Its patches are in the repository and cannot be removed, so
+/// while its intent is open (and has no revision) its bytes count against the submitter's accepted bytes and the
+/// repository's retained bytes; a revision or an abandonment replaces the debt, and the bytes are counted **once**.
+fn an_open_intent_owes_its_bytes_until_a_revision_or_an_abandonment_replaces_it(
+    s: &dyn ChangeStore,
+) {
+    s.open_or_resume_intent("i-1", &repo(), &digest(1), 100, &[], "alice", 10)
+        .unwrap();
+    s.open_or_resume_intent("i-2", &repo(), &digest(2), 40, &[], "bob", 10)
+        .unwrap();
+    let a = s.usage(&repo(), "alice", NOW).unwrap();
+    let b = s.usage(&repo(), "bob", NOW).unwrap();
+    assert_eq!(
+        (a.accepted_bytes, a.repo_retained_bytes, a.open_changes),
+        (100, 140, 0)
+    );
+    assert_eq!(
+        (b.accepted_bytes, b.repo_retained_bytes),
+        (40, 140),
+        "each pays for their own; the repository for both"
+    );
+    // A resume does not owe it twice.
+    s.open_or_resume_intent("i-1b", &repo(), &digest(1), 100, &[], "alice", 11)
+        .unwrap();
+    assert_eq!(s.usage(&repo(), "alice", NOW).unwrap().accepted_bytes, 100);
+    // The corrected re-send records its revision: the bytes are counted once, now as the revision's.
+    s.complete_intent_with_revision(
+        "i-1",
+        Some(&change("c1", "alice", 12)),
+        &revision("v1", "c1", 1, 1, 100, "alice"),
+        12,
+    )
+    .unwrap();
+    let a = s.usage(&repo(), "alice", NOW).unwrap();
+    assert_eq!(
+        (a.accepted_bytes, a.repo_retained_bytes, a.open_changes),
+        (100, 140, 1)
+    );
+    // An abandonment clears the debt (the artifact leaves the retained set; the patches stay in the repository).
+    s.abandon_intent("i-2", 13).unwrap();
+    let b = s.usage(&repo(), "bob", NOW).unwrap();
+    assert_eq!((b.accepted_bytes, b.repo_retained_bytes), (0, 100));
+    // Another repository is not charged.
+    assert_eq!(
+        s.usage(&RepoId::new("other"), "alice", NOW).unwrap(),
+        Default::default()
+    );
+}
+
+fn flagged_repositories_are_listed(s: &dyn ChangeStore) {
+    assert!(s.flagged_repos().unwrap().is_empty());
+    s.set_needs_recovery(&RepoId::new("b"), "x", 1).unwrap();
+    s.set_needs_recovery(&RepoId::new("a"), "y", 1).unwrap();
+    s.set_needs_recovery(&RepoId::new("c"), "z", 1).unwrap();
+    s.clear_needs_recovery(&RepoId::new("c")).unwrap();
+    let mut flagged: Vec<String> = s
+        .flagged_repos()
+        .unwrap()
+        .into_iter()
+        .map(|r| r.as_str().to_owned())
+        .collect();
+    flagged.sort();
+    assert_eq!(flagged, vec!["a", "b"]);
 }
 
 // ------------------------------------------------------------------------------------------------ id packing
@@ -752,6 +820,55 @@ fn packed_ids_round_trip_and_a_malformed_one_is_refused() {
 }
 
 // ------------------------------------------------------------------------------------------------ SQLite only
+
+/// The `intents` table as part 3a created it (no `artifact_bytes`).
+const INTENTS_3A: &str = "
+CREATE TABLE intents (
+    intent_id TEXT PRIMARY KEY, repo_id TEXT NOT NULL, artifact_digest TEXT NOT NULL, pending_before BLOB NOT NULL,
+    principal TEXT NOT NULL, started_at INTEGER NOT NULL, attempts INTEGER NOT NULL CHECK (attempts >= 1),
+    state TEXT NOT NULL CHECK (state IN ('open', 'complete', 'abandoned')), completed_at INTEGER,
+    revision_id TEXT
+);
+INSERT INTO intents VALUES ('old-1','r1','sha256:old',x'','alice',1,1,'open',NULL,NULL);
+";
+
+#[test]
+fn a_part_3a_database_gains_the_intent_size_and_three_reopens_change_nothing() {
+    let (dir, path) = temp_db("migrate-intents");
+    {
+        let c = rusqlite::Connection::open(&path).unwrap();
+        c.execute_batch(INTENTS_3A).unwrap();
+    }
+    for round in 0..3 {
+        let db = SqliteDb::open(&path).unwrap();
+        let s = SqliteChangeStore::new(db.clone()).unwrap();
+        let old = s.get_intent("old-1").unwrap().unwrap();
+        assert_eq!(
+            old.artifact_bytes, 0,
+            "round {round}: a row made before the column reads as 0"
+        );
+        assert_eq!(
+            s.usage(&repo(), "alice", NOW).unwrap().accepted_bytes,
+            if round == 0 { 0 } else { 70 },
+            "round {round}"
+        );
+        if round == 0 {
+            s.open_or_resume_intent("new-1", &repo(), &digest(5), 70, &[], "alice", 2)
+                .unwrap();
+        }
+        let cols: i64 = db
+            .lock()
+            .unwrap()
+            .query_row(
+                "SELECT COUNT(*) FROM pragma_table_info('intents') WHERE name = 'artifact_bytes'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(cols, 1, "round {round}: the column exists once");
+    }
+    let _ = std::fs::remove_dir_all(&dir);
+}
 
 fn temp_db(name: &str) -> (std::path::PathBuf, std::path::PathBuf) {
     let dir = std::env::temp_dir().join(format!("planeter-changes-{name}-{}", std::process::id()));
@@ -931,7 +1048,7 @@ fn an_open_intent_survives_a_restart_and_the_retry_resumes_it() {
     let (dir, path) = temp_db("restart");
     {
         let s = SqliteChangeStore::new(SqliteDb::open(&path).unwrap()).unwrap();
-        s.open_or_resume_intent("i-1", &repo(), &digest(1), &pids(0..40), "alice", 10)
+        s.open_or_resume_intent("i-1", &repo(), &digest(1), 0, &pids(0..40), "alice", 10)
             .unwrap();
         s.set_needs_recovery(&repo(), "accept did not finish", 11)
             .unwrap();
@@ -943,7 +1060,7 @@ fn an_open_intent_survives_a_restart_and_the_retry_resumes_it() {
     assert_eq!(open.len(), 1);
     assert_eq!(open[0].pending_before, pids(0..40));
     let r = s
-        .open_or_resume_intent("i-2", &repo(), &digest(1), &pids(0..60), "alice", 20)
+        .open_or_resume_intent("i-2", &repo(), &digest(1), 0, &pids(0..60), "alice", 20)
         .unwrap();
     assert_eq!(
         (r.intent_id.as_str(), r.attempts, r.pending_before.len()),
@@ -974,8 +1091,16 @@ fn concurrent_pushes_on_the_shared_connection_each_get_exactly_one_revision() {
         assert_eq!((u.open_changes, u.accepted_bytes), (10, 100));
     }
     // Racing resumes of one intent: every call counts as an attempt, none overwrites the first list.
-    s.open_or_resume_intent("i-race", &repo(), &digest(99_999), &pids(0..5), "alice", 1)
-        .unwrap();
+    s.open_or_resume_intent(
+        "i-race",
+        &repo(),
+        &digest(99_999),
+        0,
+        &pids(0..5),
+        "alice",
+        1,
+    )
+    .unwrap();
     std::thread::scope(|sc| {
         for _ in 0..8 {
             sc.spawn(|| {
@@ -985,6 +1110,7 @@ fn concurrent_pushes_on_the_shared_connection_each_get_exactly_one_revision() {
                             "i-other",
                             &repo(),
                             &digest(99_999),
+                            0,
                             &pids(0..9),
                             "alice",
                             2,
@@ -1009,7 +1135,7 @@ fn an_intent_at_the_object_bound_is_640_kilobytes_of_ids_and_survives_a_round_tr
     let db = SqliteDb::open(&path).unwrap();
     let s = SqliteChangeStore::new(db.clone()).unwrap();
     let t = std::time::Instant::now();
-    s.open_or_resume_intent("i-big", &repo(), &digest(1), &ids, "alice", 1)
+    s.open_or_resume_intent("i-big", &repo(), &digest(1), 0, &ids, "alice", 1)
         .unwrap();
     let write = t.elapsed();
     let t = std::time::Instant::now();

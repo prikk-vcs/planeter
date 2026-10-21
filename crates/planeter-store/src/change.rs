@@ -154,6 +154,10 @@ pub struct IntentRecord {
     pub state: IntentState,
     pub completed_at: Option<u64>,
     pub revision_id: Option<String>,
+    /// The size of the artifact being accepted, written when the intent is opened. While the intent is open and has
+    /// no revision, this many bytes are **owed**: the patches are in the repository and cannot be removed, and the
+    /// usage queries count them (RFC 004 part 4, IS-50). Rows made before this column existed read as 0.
+    pub artifact_bytes: u64,
 }
 
 /// The repository's recovery flag (RFC 004 D-6).
@@ -263,6 +267,7 @@ pub trait ChangeStore: Send + Sync {
         intent_id: &str,
         repo_id: &RepoId,
         artifact_digest: &str,
+        artifact_bytes: u64,
         pending_before: &[String],
         principal: &str,
         now: u64,
@@ -288,6 +293,8 @@ pub trait ChangeStore: Send + Sync {
     fn repo_flags(&self, repo_id: &RepoId) -> Result<RepoFlags>;
     fn set_needs_recovery(&self, repo_id: &RepoId, reason: &str, now: u64) -> Result<()>;
     fn clear_needs_recovery(&self, repo_id: &RepoId) -> Result<()>;
+    /// Every repository whose recovery flag is set, in a stable order.
+    fn flagged_repos(&self) -> Result<Vec<RepoId>>;
 
     // -- usage (for the quotas)
     fn usage(&self, repo_id: &RepoId, principal: &str, now: u64) -> Result<Usage>;
@@ -418,6 +425,7 @@ impl ChangeStore for InMemoryChangeStore {
         intent_id: &str,
         repo: &RepoId,
         digest: &str,
+        artifact_bytes: u64,
         before: &[String],
         principal: &str,
         now: u64,
@@ -444,6 +452,7 @@ impl ChangeStore for InMemoryChangeStore {
             state: IntentState::Open,
             completed_at: None,
             revision_id: None,
+            artifact_bytes,
         };
         m.intents.push(rec.clone());
         Ok(rec)
@@ -602,8 +611,31 @@ impl ChangeStore for InMemoryChangeStore {
         Ok(())
     }
 
+    fn flagged_repos(&self) -> Result<Vec<RepoId>> {
+        Ok(self
+            .lock()?
+            .flags
+            .iter()
+            .filter(|(_, f)| f.needs_recovery)
+            .map(|(r, _)| RepoId::new(r.clone()))
+            .collect())
+    }
+
     fn usage(&self, repo: &RepoId, principal: &str, now: u64) -> Result<Usage> {
         let m = self.lock()?;
+        // An open intent has no revision: its artifact is owed (IS-50), counted until a revision or an
+        // abandonment replaces it.
+        let owed = |who: Option<&str>| -> u64 {
+            m.intents
+                .iter()
+                .filter(|i| {
+                    &i.repo_id == repo
+                        && i.state == IntentState::Open
+                        && who.is_none_or(|w| i.principal == w)
+                })
+                .map(|i| i.artifact_bytes)
+                .sum()
+        };
         let open = m
             .changes
             .values()
@@ -620,13 +652,15 @@ impl ChangeStore for InMemoryChangeStore {
                 .iter()
                 .filter(|r| &r.repo_id == repo && r.submitter == principal)
                 .map(|r| r.artifact_bytes)
-                .sum(),
+                .sum::<u64>()
+                + owed(Some(principal)),
             repo_retained_bytes: m
                 .revisions
                 .iter()
                 .filter(|r| retained.iter().any(|c| c.change_id == r.change_id))
                 .map(|r| r.artifact_bytes)
-                .sum(),
+                .sum::<u64>()
+                + owed(None),
         })
     }
 
@@ -712,7 +746,8 @@ CREATE TABLE IF NOT EXISTS intents (
     attempts        INTEGER NOT NULL CHECK (attempts >= 1),
     state           TEXT NOT NULL CHECK (state IN ('open', 'complete', 'abandoned')),
     completed_at    INTEGER,
-    revision_id     TEXT REFERENCES revisions (revision_id)
+    revision_id     TEXT REFERENCES revisions (revision_id),
+    artifact_bytes  INTEGER NOT NULL DEFAULT 0   -- owed while the intent is open (IS-50); 0 for rows made before
 );
 CREATE UNIQUE INDEX IF NOT EXISTS intents_one_open_per_artifact ON intents (repo_id, artifact_digest) WHERE state = 'open';
 
@@ -736,6 +771,8 @@ impl SqliteChangeStore {
     /// Open over `db`, creating the tables and indexes if they are not there (idempotent).
     pub fn new(db: SqliteDb) -> Result<Self> {
         db.apply_schema(CHANGE_SCHEMA)?;
+        // A database made before the column existed gets it now (idempotent).
+        db.ensure_column("intents", "artifact_bytes", "INTEGER NOT NULL DEFAULT 0")?;
         Ok(Self {
             db,
             fail_after_revision: Default::default(),
@@ -1012,12 +1049,13 @@ fn intent_from(r: &rusqlite::Row<'_>) -> rusqlite::Result<Result<IntentRecord>> 
                 .map_err(backend)?
                 .map(|v| u64::try_from(v).unwrap_or(0)),
             revision_id: r.get(9).map_err(backend)?,
+            artifact_bytes: u64::try_from(r.get::<_, i64>(10).map_err(backend)?).unwrap_or(0),
         })
     })();
     Ok(rec)
 }
 
-const SELECT_INTENT: &str = "SELECT intent_id, repo_id, artifact_digest, pending_before, principal, started_at, attempts, state, completed_at, revision_id FROM intents";
+const SELECT_INTENT: &str = "SELECT intent_id, repo_id, artifact_digest, pending_before, principal, started_at, attempts, state, completed_at, revision_id, artifact_bytes FROM intents";
 
 impl ChangeStore for SqliteChangeStore {
     fn create_change(&self, c: &ChangeRecord) -> Result<()> {
@@ -1121,6 +1159,7 @@ impl ChangeStore for SqliteChangeStore {
         intent_id: &str,
         repo: &RepoId,
         digest: &str,
+        artifact_bytes: u64,
         before: &[String],
         principal: &str,
         now: u64,
@@ -1143,8 +1182,8 @@ impl ChangeStore for SqliteChangeStore {
             }
             None => {
                 tx.execute(
-                    "INSERT INTO intents (intent_id, repo_id, artifact_digest, pending_before, principal, started_at, attempts, state) VALUES (?1,?2,?3,?4,?5,?6,1,'open')",
-                    params![intent_id, repo.as_str(), digest, blob, principal, now as i64],
+                    "INSERT INTO intents (intent_id, repo_id, artifact_digest, pending_before, principal, started_at, attempts, state, artifact_bytes) VALUES (?1,?2,?3,?4,?5,?6,1,'open',?7)",
+                    params![intent_id, repo.as_str(), digest, blob, principal, now as i64, artifact_bytes as i64],
                 )
                 .map_err(|e| if unique_violation(&e) { StoreError::Conflict("intent id".to_owned()) } else { backend(e) })?;
                 intent_id.to_owned()
@@ -1369,8 +1408,25 @@ impl ChangeStore for SqliteChangeStore {
         Ok(())
     }
 
+    fn flagged_repos(&self) -> Result<Vec<RepoId>> {
+        let conn = self.db.lock()?;
+        let mut stmt = conn
+            .prepare("SELECT repo_id FROM repo_flags WHERE needs_recovery = 1 ORDER BY repo_id")
+            .map_err(backend)?;
+        let rows = stmt
+            .query_map([], |r| r.get::<_, String>(0))
+            .map_err(backend)?;
+        rows.map(|r| r.map(RepoId::new).map_err(backend)).collect()
+    }
+
     fn usage(&self, repo: &RepoId, principal: &str, now: u64) -> Result<Usage> {
         let conn = self.db.lock()?;
+        let owed_by: i64 = conn
+            .query_row("SELECT COALESCE(SUM(artifact_bytes), 0) FROM intents WHERE repo_id = ?1 AND state = 'open' AND principal = ?2", params![repo.as_str(), principal], |r| r.get(0))
+            .map_err(backend)?;
+        let owed_all: i64 = conn
+            .query_row("SELECT COALESCE(SUM(artifact_bytes), 0) FROM intents WHERE repo_id = ?1 AND state = 'open'", params![repo.as_str()], |r| r.get(0))
+            .map_err(backend)?;
         let open_changes: i64 = conn
             .query_row("SELECT COUNT(*) FROM changes WHERE repo_id = ?1 AND opened_by = ?2 AND state = 'open'", params![repo.as_str(), principal], |r| r.get(0))
             .map_err(backend)?;
@@ -1382,8 +1438,8 @@ impl ChangeStore for SqliteChangeStore {
             .map_err(backend)?;
         Ok(Usage {
             open_changes: u64::try_from(open_changes).unwrap_or(0),
-            accepted_bytes: u64::try_from(accepted).unwrap_or(0),
-            repo_retained_bytes: u64::try_from(retained).unwrap_or(0),
+            accepted_bytes: u64::try_from(accepted.saturating_add(owed_by)).unwrap_or(0),
+            repo_retained_bytes: u64::try_from(retained.saturating_add(owed_all)).unwrap_or(0),
         })
     }
 

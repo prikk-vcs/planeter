@@ -2334,3 +2334,112 @@ async fn the_rate_limit_comes_before_the_read_gate_and_says_nothing_about_any_re
     assert_eq!(c.body, d.body);
     assert!(c.h("retry-after").parse::<u64>().unwrap() >= 1);
 }
+
+// ------------------------------------------------------------------------------------------------ IS-50: the debt
+
+/// Each artifact whose declaration is refused is already accepted by prikk and cannot be taken back: its bytes are
+/// owed. Different artifacts with bad declarations therefore reach the cumulative limit; a corrected re-send of one of
+/// them records its revision and its bytes are counted once.
+#[tokio::test]
+async fn artifacts_whose_declarations_are_refused_are_counted_and_the_limit_is_reached() {
+    if skip() {
+        return;
+    }
+    let mut w = world(
+        "owed",
+        Opts {
+            config: ProposeConfig {
+                proposer_bytes_limit: Some(25_000),
+                ..Opts::default().config
+            },
+            ..Opts::default()
+        },
+    );
+    let repo = RepoId::new("r-forge");
+    let mut sizes: Vec<u64> = Vec::new();
+    let mut first_artifact = Vec::new();
+    let mut refused_at = None;
+    for i in 0..30 {
+        w.client.commit(1);
+        let art = w.client.artifact(&w.forge, &format!("o{i}"));
+        let r = propose_as(
+            &w,
+            "forge",
+            "tok-alice",
+            serde_json::json!({"title": format!("bad declaration {i}"), "declared_patches": []}),
+            &art,
+        )
+        .await;
+        if r.code() == "quota_exceeded" {
+            let v = r.json();
+            assert_eq!(v["quota"], "accepted_bytes", "{v}");
+            assert_eq!(v["unit"], "mebibytes");
+            refused_at = Some(i);
+            // The refusal left nothing: no new intent, nothing accepted by this push.
+            assert_eq!(w.changes.open_intents(&repo).unwrap().len(), sizes.len());
+            break;
+        }
+        assert_eq!(
+            r.code(),
+            "declaration_misses_added",
+            "push {i}: {}",
+            String::from_utf8_lossy(&r.body)
+        );
+        if i == 0 {
+            first_artifact = art.clone();
+        }
+        sizes.push(art.len() as u64);
+        assert!(
+            object_exists_in(&w.artifacts_dir, &art),
+            "the artifact of a refused declaration is kept"
+        );
+    }
+    let at = refused_at.expect("the limit was reached");
+    assert!(
+        at >= 3,
+        "several different artifacts were refused for their declarations first ({at})"
+    );
+    let owed: u64 = sizes.iter().sum();
+    let usage = w.changes.usage(&repo, "alice", now()).unwrap();
+    assert_eq!(usage.accepted_bytes, owed, "every open intent is a debt");
+    assert_eq!(usage.repo_retained_bytes, owed);
+    assert!(
+        w.changes.list_changes(&repo, None).unwrap().is_empty(),
+        "no revision exists"
+    );
+
+    // A corrected re-send of the first records its revision; its bytes are counted once.
+    let all_pending = pending(&w.forge);
+    let ok = propose_as(
+        &w,
+        "forge",
+        "tok-alice",
+        serde_json::json!({"title": "corrected", "declared_patches": all_pending}),
+        &first_artifact,
+    )
+    .await;
+    assert_eq!(
+        ok.status,
+        StatusCode::CREATED,
+        "{}",
+        String::from_utf8_lossy(&ok.body)
+    );
+    let usage = w.changes.usage(&repo, "alice", now()).unwrap();
+    assert_eq!(
+        usage.accepted_bytes, owed,
+        "counted once: the revision replaced the debt"
+    );
+    assert_eq!(
+        w.changes.open_intents(&repo).unwrap().len(),
+        sizes.len() - 1
+    );
+}
+
+fn object_exists_in(artifacts_dir: &Path, art: &[u8]) -> bool {
+    let d = planeter_auth::sha256_hex(art);
+    artifacts_dir
+        .join("objects")
+        .join(&d[..2])
+        .join(&d)
+        .is_file()
+}

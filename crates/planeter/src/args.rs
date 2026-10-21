@@ -109,6 +109,8 @@ environment:
                                 before 503 busy (default 5)
   PLANETER_PROPOSAL_CAPACITY_MB  most megabytes of artifacts a repository retains for open and recently
                                 finished changes before proposals are refused for repository capacity (default 4096)
+  PLANETER_PROPOSER_QUOTA_MB    most megabytes of artifacts one person may have accepted in one repository, in all
+                                (default 512, or 64 where proposals are open to any signed-in user)
   PLANETER_PREVIEW_LANGUAGES    comma-separated draft languages to offer for review (only ja exists); a
                                 draft is not signed off, so it is off by default and logged at start
   PLANETER_OIDC_ISSUER, PLANETER_OIDC_CLIENT_ID, PLANETER_OIDC_REDIRECT_URI
