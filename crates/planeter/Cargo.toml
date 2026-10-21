@@ -17,4 +17,4 @@ planeter-prikk = { path = "../planeter-prikk", version = "0.4.0" }
 planeter-transport = { path = "../planeter-transport", version = "0.4.0" }
 planeter-ci = { path = "../planeter-ci", version = "0.4.0" }
 planeter-registry = { path = "../planeter-registry", version = "0.4.0" }
-tokio = { version = "1", features = ["rt-multi-thread", "macros", "net"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
