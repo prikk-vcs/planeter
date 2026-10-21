@@ -144,6 +144,35 @@ pub fn sha256_hex(bytes: &[u8]) -> String {
     hex
 }
 
+/// A SHA-256 computed over a stream of bytes, for content that is too large to hold in memory (the artifact
+/// store, RFC 004 D-2). Same digest as [`sha256_hex`] over the concatenation of the pieces.
+#[derive(Default)]
+pub struct Sha256Stream {
+    inner: sha2::Sha256,
+}
+
+impl Sha256Stream {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Feed the next piece.
+    pub fn update(&mut self, bytes: &[u8]) {
+        use sha2::Digest as _;
+        self.inner.update(bytes);
+    }
+
+    /// The lowercase hex digest (64 characters) of everything fed.
+    pub fn finish_hex(self) -> String {
+        use sha2::Digest as _;
+        let mut hex = String::with_capacity(64);
+        for b in self.inner.finalize() {
+            hex.push_str(&format!("{b:02x}"));
+        }
+        hex
+    }
+}
+
 /// SHA-256 token hashing with constant-time verification. Stored form: `sha256$<hex digest>`.
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Sha256TokenHasher;
@@ -254,5 +283,27 @@ mod production_tests {
         assert!(!TokenHasher::verify(&h, &tok, &TokenHash("md5$00".into())));
         // Two mints differ.
         assert_ne!(mint_token(), mint_token());
+    }
+}
+
+#[cfg(test)]
+mod stream_tests {
+    use super::*;
+
+    #[test]
+    fn the_streamed_digest_equals_the_whole_buffer_digest_at_any_split() {
+        let data: Vec<u8> = (0..10_000u32).map(|i| (i % 251) as u8).collect();
+        let whole = sha256_hex(&data);
+        for split in [0, 1, 63, 64, 65, 5_000, 9_999, 10_000] {
+            let mut s = Sha256Stream::new();
+            s.update(&data[..split]);
+            s.update(&data[split..]);
+            assert_eq!(s.finish_hex(), whole, "split at {split}");
+        }
+        // The well-known digest of the empty input.
+        assert_eq!(
+            Sha256Stream::new().finish_hex(),
+            "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        );
     }
 }

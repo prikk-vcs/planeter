@@ -168,3 +168,56 @@ fn a_start_refused_for_another_reason_does_not_leave_its_lock_behind() {
         "a refused start must not leave the lock file"
     );
 }
+
+#[test]
+fn the_spool_and_the_artifact_store_are_validated_at_start_and_created_when_valid() {
+    if !runs("prlimit") {
+        eprintln!("skipping: needs prlimit (util-linux)");
+        return;
+    }
+    let dir = scratch("dirs");
+    let bin_dir = stand_in_bin(&dir);
+    let repos = dir.join("repos");
+    // A spool inside the repository root is refused, and the lock does not stay behind.
+    let inside = repos.join("spool");
+    let (code, stderr) = start_refused(
+        &dir,
+        &bin_dir,
+        &[("PLANETER_SPOOL_DIR", &inside.to_string_lossy())],
+    );
+    assert_eq!(code, Some(1), "{stderr}");
+    assert!(stderr.contains("PLANETER_SPOOL_DIR"), "{stderr}");
+    assert!(stderr.contains("outside the repositories"), "{stderr}");
+    assert!(!inside.exists(), "nothing is created for a refused setting");
+    assert!(!lock_file(&dir).exists());
+    // A relative path is refused with the reason.
+    let (code, stderr) = start_refused(&dir, &bin_dir, &[("PLANETER_ARTIFACT_DIR", "artifacts")]);
+    assert_eq!(code, Some(1), "{stderr}");
+    assert!(stderr.contains("must be an absolute path"), "{stderr}");
+    // Valid settings: the directories are created and logged.
+    let (art, spool) = (dir.join("art"), dir.join("spool"));
+    let port = free_port();
+    let mut c = command(&dir, &bin_dir, port);
+    c.env("PLANETER_ARTIFACT_DIR", &art)
+        .env("PLANETER_SPOOL_DIR", &spool)
+        .env("PLANETER_SPOOL_BUDGET_MB", "64");
+    let mut server = c.spawn().expect("spawn planeter");
+    let lines = BufReader::new(server.stderr.take().unwrap());
+    let mut seen = Vec::new();
+    for line in lines.lines().map_while(Result::ok) {
+        let up = line.starts_with("planeter listening on ");
+        seen.push(line);
+        if up {
+            break;
+        }
+    }
+    let _ = server.kill();
+    let _ = server.wait();
+    let log = seen.join("\n");
+    assert!(log.contains("artifact store at"), "{log}");
+    assert!(
+        log.contains("export spool at") && log.contains("budget 64 MiB"),
+        "{log}"
+    );
+    assert!(art.join("objects").is_dir() && spool.join("incoming").is_dir());
+}

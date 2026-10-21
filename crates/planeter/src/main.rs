@@ -120,6 +120,43 @@ async fn main() {
         }
     }
 
+    // RFC 004 D-2: the artifact store and the export spool. Unset means not configured (nothing uses them yet).
+    // A directory inside the repository root, or two that overlap, is refused here.
+    match planeter_transport::DirsConfig::from_vars(
+        std::env::var("PLANETER_ARTIFACT_DIR").ok().as_deref(),
+        std::env::var("PLANETER_SPOOL_DIR").ok().as_deref(),
+        std::env::var("PLANETER_SPOOL_BUDGET_MB").ok().as_deref(),
+        std::path::Path::new(&repos_root),
+    )
+    .map_err(|e| e.to_string())
+    .and_then(|c| {
+        planeter_transport::TransportDirs::open(&c)
+            .map(|d| (c, d))
+            .map_err(|e| e.to_string())
+    }) {
+        Ok((config, dirs)) => {
+            if let Some(a) = &dirs.artifacts {
+                eprintln!(
+                    "planeter: artifact store at {} ({} orphaned partial file(s) removed)",
+                    a.root().display(),
+                    a.cleaned_partials()
+                );
+            }
+            if let Some(s) = &dirs.spool {
+                eprintln!(
+                    "planeter: export spool at {} (budget {} MiB, {} orphaned partial file(s) removed)",
+                    s.root().display(),
+                    config.spool_budget_bytes >> 20,
+                    s.cleaned_partials()
+                );
+            }
+        }
+        Err(e) => {
+            eprintln!("planeter: {e}");
+            exit_releasing_lock(1);
+        }
+    }
+
     // One SQLite database for every store; production hashers.
     let db = match SqliteDb::open(&db_path) {
         Ok(db) => db,

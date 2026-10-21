@@ -75,6 +75,12 @@ environment:
                                 non-loopback bind with the same host is refused)
   PLANETER_DB                   the SQLite database file (default ./planeter.db; created if absent)
                                 (one server per database: <file>.lock refuses a second one)
+  PLANETER_ARTIFACT_DIR         directory for accepted artifacts (content-addressed; never evicted);
+                                an absolute path outside PLANETER_REPOS_ROOT; unset: none (nothing uses it yet)
+  PLANETER_SPOOL_DIR            directory for exports being served (content-addressed; the oldest are
+                                evicted to stay within the budget); absolute, outside PLANETER_REPOS_ROOT,
+                                and not overlapping PLANETER_ARTIFACT_DIR; unset: none
+  PLANETER_SPOOL_BUDGET_MB      the spool's disk budget in MiB (default 1024; needs PLANETER_SPOOL_DIR)
   PLANETER_TRUSTED_PROXIES      comma-separated addresses/CIDRs of the TLS-terminating reverse proxies;
                                 a non-loopback PLANETER_ADDR is refused unless this is set
   PLANETER_PRIKK_CONCURRENCY    most prikk subprocesses at once (default min(CPUs, 8))

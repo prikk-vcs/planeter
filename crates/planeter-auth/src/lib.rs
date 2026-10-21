@@ -29,8 +29,8 @@ pub use credential::{
     CredentialStore, DeployKeyRecord, InMemoryCredentialStore, SshKeyRecord, TokenRecord,
 };
 pub use hashing::{
-    Argon2idHasher, InsecureStubHasher, PasswordHash, PasswordHasher, Sha256TokenHasher, TokenHash,
-    TokenHasher, mint_token, sha256_hex,
+    Argon2idHasher, InsecureStubHasher, PasswordHash, PasswordHasher, Sha256Stream,
+    Sha256TokenHasher, TokenHash, TokenHasher, mint_token, sha256_hex,
 };
 pub use identity::{Account, AccountStore, AuthError, InMemoryAccountStore};
 pub use oidc::{
