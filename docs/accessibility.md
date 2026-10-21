@@ -91,6 +91,10 @@ These are known and planned, not fixed yet:
   *patch* and *rollback* are explained in place by a native expand/collapse block. No reader has tested whether the
   words are understood. One message is held unchanged until prikk confirms its meaning (the "N of M sessions
   verified" count).
+- A repository whose only content is queued (unsigned) work shows an **empty page under a green "Verified" badge**,
+  and nothing says that queued work exists (the badge is true: an empty sealed history verifies; the history page
+  says "no signed changes"). prikk's `branch --format json` has a data field for it (`unpublished_current_branch`);
+  the display waits for the queued-state design (IS-45, noted by the architect, not decided).
 - One language (English). Japanese and a language switcher are planned, and with them a reader's review of the
   wording and of right-to-left layout.
 - The focus ring is the same colour as links (it stands off the control by a 2 px gap); a designed ring for the

@@ -5,6 +5,14 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **A missing file or folder is now said to be missing (IS-45).** In a repository you may read, a file or folder that
+  is not there used to show "There is no repository at this address, or you do not have access to it." It now says
+  **"This file or folder was not found in this repository. Check the path, or go back to the files."** with a link to
+  the files. A repository that is missing, private or unreadable still gets the old sentence, and **nobody who may not
+  read a repository can tell it apart from one that is not there**. **The API is unchanged**: a missing path is the
+  same `404 not_found` (same headers and body) as a missing or hidden repository, and `GET …/tree` with a prefix that
+  has nothing under it still answers `200` with no entries.
+
 - **The change page no longer says "Verified" for a sealed patch (IS-44) — and the change API's `assurance`
   changes with it.** The change page showed the badge **Verified** for any patch that is signed into the history,
   although no verification runs on that page. A sealed patch is now labelled **Signed into the history** in a plain

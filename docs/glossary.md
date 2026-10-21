@@ -21,7 +21,7 @@ choice* = a wording decision.
 
 **Status column (section 2).** *Approved* = the text the owner approved, or a sentence the dev team wrote where this
 page gave none and the architect's review accepted (including the one-sentence form of the raw-route hint, which an
-API test requires). *Derived* = the approved case rule applied to a label this page did not list. *Held* = unchanged
+API test requires). *Derived* = the approved case rule applied to a label this page did not list, or a sentence a handoff specified (IS-45). *Held* = unchanged
 on purpose.
 
 **Case.** Standalone labels, headings, titles, links and badges in a heading are in sentence case ("Sign in",
@@ -51,6 +51,7 @@ labels of their own.
 | `User` field label | "User" | **Username** | It is the account name | Owner's choice |
 | Raw file download address (`content origin`) | operator hints only | no user message names it; operator hints keep "content origin" | The user never needs the term | Owner's choice |
 | `read memory budget` | operator hint | the operator hint keeps it (`error.too_large.hint`, the API); the page says "This is too large for this server to show." | Operator vocabulary stays with the operator | Confirmed |
+| A file or folder that is **not in a repository the reader may read** | "There is no repository at this address, or you do not have access to it." (the repository-level sentence, for everyone) | to a reader of the repository: "This file or folder was not found in this repository. Check the path, or go back to the files." with a link to the files; the repository-level sentence stays for a repository that is missing, hidden or unreadable | Existence-neutrality protects the **repository**; once the reader may read it, a missing path is not a secret (IS-45). The API answers both exactly alike. | Architect's decision (IS-45) |
 | `Retry-After`, `OpenAPI`, `GET` | API hints | unchanged (developer-facing) | The API's readers are developers | Owner's choice |
 
 ## 2. Messages
@@ -90,6 +91,8 @@ whether a private repository exists. Messages not listed here did not change (fo
 | `unavailable.body` | "The repository could not be read right now. Nothing is shown rather than something stale or invented." | "This repository could not be read right now. Try again in a little while. If it keeps happening, tell the person who runs this server." | Approved |
 | `too_large.heading` | "Too large" | "Too large to show here" | Approved |
 | `too_large.body` | — | "This is too large for this server to show. You can download it, or ask the person who runs this server to raise the limit." | Approved |
+| `no_such_path.body` | — | "This file or folder was not found in this repository. Check the path, or go back to the files." | Derived |
+| `no_such_path.link` | — | "Go to the files" | Derived |
 | `error.too_large.raw_hint` | "This server does not serve files that large; ask the operator." | "This server does not serve files that large; ask the person who runs this server." | Approved |
 | `repo.location` | "at {point}" | "Showing {point}" | Approved |
 | `repo.location_branch` | "at {point} · branch {branch}" | "Showing {point} · branch {branch}" | Approved |
