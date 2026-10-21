@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | The dated brief a new session reads **first**: where the project is, what is held and why, what is pending on whom, and the issue register. Updated at every release, RFC disposition and owner ruling. |
-| As of | 2026-10-20 — planeter **0.4.0 released** (tag on `e13102b`, GitHub release, nine crates on crates.io); 0.3.0 was released 2026-10-18; 0.2.0 was released 2026-09-24; prikk is at **0.52.0**; upstream facts folded into ledger v1.5 |
+| As of | 2026-10-20 — planeter **0.4.0 released** (tag on `e13102b`, GitHub release, nine crates on crates.io); 0.3.0 was released 2026-10-18; 0.2.0 was released 2026-09-24; prikk is at **0.53.0** (installed 2026-10-21; **re-baselined, no drift, floor stays 0.52.0**: `rfcs/handoffs/010-upstream-and-supply-chain-maintenance/prikk-0-53-0-rebaseline-handoff-v1.md`, built 2026-10-21, awaiting review); upstream facts folded into ledger v1.5 |
 | Read next | [`src/planeter-00-project-charter.md`](src/planeter-00-project-charter.md) (background, goals, governance) → [`../ROADMAP.md`](../ROADMAP.md) → [`SCHEDULE.md`](SCHEDULE.md) (themes, plans, concerns) → [`../rfcs/README.md`](../rfcs/README.md) → [`../rfcs/handoffs/README.md`](../rfcs/handoffs/README.md) and the active handoff → [`src/planeter-prikk-dependency-ledger.md`](src/planeter-prikk-dependency-ledger.md) → [`src/planeter-03-threat-model-v0.1.md`](src/planeter-03-threat-model-v0.1.md) (v0.3) → [`UPSTREAM.md`](UPSTREAM.md) → [`dependency-policy.md`](dependency-policy.md) |
 
 ## Where we are
@@ -39,7 +39,7 @@
   form is **not planned**. The owner's ruling on what M2 becomes is pending; the scoping notes are
   private working material (`.git-exclude/specs/`), not decisions.
 - **Supply chain:** `cargo deny` / `cargo audit` **green as of 2026-10-15** (IS-22 closed: `ammonia` 4.2.3, `yoke-derive` 0.8.4, lock-only). Checked at every push, release, re-baseline and RFC disposition (RFC 010 D-3).
-- **Runtime floor:** prikk ≥ 0.52.0 (`MIN_PRIKK_VERSION`, raised at the 0.52.0 re-baseline, 2026-10-15 — implemented and **conditionally approved by the architect**; to be pushed after the advisory lock update), bubblewrap, curl for SSO. Local binary: 0.52.0.
+- **Runtime floor:** prikk ≥ 0.52.0 (`MIN_PRIKK_VERSION`, raised at the 0.52.0 re-baseline, 2026-10-15 — implemented and **conditionally approved by the architect**; to be pushed after the advisory lock update), bubblewrap, curl for SSO. Local binary: 0.53.0 (the floor was **not** bumped at the 0.53.0 re-baseline: nothing in the release changes what planeter reads).
 - **Team:** migrating to a two-agent team (high-capability architect/reviewer + mid-capability
   implementer) under the owner's workflow (owner-directed 2026-09-24). **First assignment (owner ruling):
   the prikk 0.47.0 re-baseline** — [`../rfcs/handoffs/010-upstream-and-supply-chain-maintenance/prikk-0-47-0-rebaseline-handoff-v1.md`](../rfcs/handoffs/010-upstream-and-supply-chain-maintenance/prikk-0-47-0-rebaseline-handoff-v1.md),
@@ -65,7 +65,7 @@
 | **0.47.0–0.50.0** (released) | PK-30 fix, `PRIKK_EXCHANGE_MAX_BYTES` (0.47.0); recovery and cost at depth (0.48.0); crash-state recovery, import refusals, dependency-ordered writes, `ref complete` (0.49.0); corrections (0.50.0) | one re-baseline handoff v2 against **0.52.0** (the 0.47.0 handoff is overtaken); floor decision (PK-42) |
 | **0.51.0** (released 2026-10-13) | RFC 155 as `prikk archive`; closure defect for repositories that accepted a push | do not serve archives from 0.51.0 |
 | **0.52.0** (released) | archive closure fix; export refuses over-256 MiB objects; `verify` names a failed received ref; `trust maintainer check` exit code | re-baseline target; spike M1–M11 (RFC 004 scoping); `trust_check` exit-status handling |
-| **0.53.0 / 0.54.0 / 0.55.0** (prikk owner's plan, 2026-10-15; PK-46) | 0.53.0 commit cost; 0.54.0 the read-only "files at a point" command (design round first, shown to us) and removal of unreachable received content; 0.55.0 `bundle import` memory | requirements note before the 0.54.0 design round; CI snapshots use copy/overlay until the command exists |
+| **0.53.0 / 0.54.0 / 0.55.0** (prikk owner's plan, 2026-10-15; PK-46) | 0.53.0 commit cost (**released 2026-10-18, installed and re-baselined 2026-10-21: the 14 `schema_version` ids identical in shape to 0.52.0, every prikk text planeter matches equal, the cost table unchanged**); 0.54.0 the read-only "files at a point" command (design round first, shown to us) and removal of unreachable received content; 0.55.0 `bundle import` memory | requirements note before the 0.54.0 design round; CI snapshots use copy/overlay until the command exists |
 | **unscheduled** | RFC 154 adoption act; a keyless delta archive and the append-only promise (**not scheduled; decided with our first-deployment numbers, not before 0.55.0**, PK-47); RFC 158 Stages B–D incl. format 8 | plan as unavailable; instrument fetches from the first deployment; revisit on prikk's word (PK-35, PK-47) |
 
 ## Issue register
