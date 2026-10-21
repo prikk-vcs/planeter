@@ -272,6 +272,7 @@ fn fixture(name: &str, o: Opts) -> Fx {
     let transport = o.transport.then(|| {
         Arc::new(TransportRuntime {
             export: export.clone(),
+            propose: None,
             ip_limit: RateLimiter::new(o.ip_limit, Duration::from_secs(60)),
             principal_limit: RateLimiter::new(o.principal_limit, Duration::from_secs(60)),
         })

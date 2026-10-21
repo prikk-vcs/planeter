@@ -223,6 +223,8 @@ async fn main() {
         Arc::new(NullAuditSink),
     ));
 
+    // The admission cost of the largest accept the configured bound allows (for the start-up message).
+    let mut propose_cost: Option<u64> = None;
     // RFC 004 part 2: advertise and fetch need the export spool; without it the routes answer `transport_off`
     // to a reader of the repository. Every setting is a positive whole number, refused at start otherwise.
     let transport = match &dirs.spool {
@@ -258,16 +260,73 @@ async fn main() {
                 cfg.data_ceiling >> 20,
                 rate
             );
+            let metrics = Arc::new(planeter_transport::Metrics::new());
             let export = Arc::new(planeter_transport::ExportService::new(
                 hosting.clone(),
                 spool.clone(),
                 leases.clone(),
                 revisions,
                 cfg,
-                Arc::new(planeter_transport::Metrics::new()),
+                metrics.clone(),
             ));
+            // RFC 004 part 3b: proposals need the artifact store (accepted artifacts are retained there).
+            let propose = match &dirs.artifacts {
+                None => {
+                    eprintln!("planeter: proposals are off (no PLANETER_ARTIFACT_DIR)");
+                    None
+                }
+                Some(artifacts) => {
+                    let changes: Arc<dyn planeter_store::ChangeStore> =
+                        match planeter_store::SqliteChangeStore::new(db.clone()) {
+                            Ok(c) => Arc::new(c),
+                            Err(e) => {
+                                eprintln!("planeter: cannot initialise the change records: {e}");
+                                exit_releasing_lock(1);
+                            }
+                        };
+                    let pcfg = planeter_transport::ProposeConfig {
+                        max_artifact_bytes: positive_env("PRIKK_EXCHANGE_MAX_BYTES", 256 << 20),
+                        max_objects: positive_env("PRIKK_EXCHANGE_MAX_OBJECTS", 20_000),
+                        accept_deadline: std::time::Duration::from_secs(positive_env(
+                            "PLANETER_ACCEPT_DEADLINE_SECS",
+                            600,
+                        )),
+                        lease_wait: std::time::Duration::from_secs(positive_env(
+                            "PLANETER_PROPOSE_LEASE_WAIT_SECS",
+                            5,
+                        )),
+                        max_concurrent: positive_env("PLANETER_PROPOSE_CONCURRENCY", 2) as usize,
+                        repo_capacity_bytes: positive_env("PLANETER_PROPOSAL_CAPACITY_MB", 4096)
+                            << 20,
+                    };
+                    eprintln!(
+                        "planeter: proposals on: artifacts up to {} MiB and {} objects, {} s accept deadline, at most {} at once, repository capacity {} MiB",
+                        pcfg.max_artifact_bytes >> 20,
+                        pcfg.max_objects,
+                        pcfg.accept_deadline.as_secs(),
+                        pcfg.max_concurrent,
+                        pcfg.repo_capacity_bytes >> 20
+                    );
+                    propose_cost = Some(planeter_transport::ProposeConfig::accept_cost(
+                        pcfg.max_artifact_bytes,
+                    ));
+                    let service = planeter_transport::ProposeService::new(
+                        hosting.clone(),
+                        artifacts.clone(),
+                        leases.clone(),
+                        changes,
+                        export.clone(),
+                        pcfg,
+                        metrics,
+                    );
+                    // A server that was killed in the middle of a write comes back with the repository flagged.
+                    service.reconcile_at_start();
+                    Some(Arc::new(service))
+                }
+            };
             Some(Arc::new(planeter_web::TransportRuntime {
                 export,
+                propose,
                 ip_limit: planeter_web::RateLimiter::new(rate, std::time::Duration::from_secs(60)),
                 principal_limit: planeter_web::RateLimiter::new(
                     rate,
@@ -337,6 +396,23 @@ async fn main() {
         heavy_bytes / planeter_web::budget::MIB,
         planeter_web::budget::VAR
     );
+
+    // A write draws from the heavy pool too (RFC 004 D-5.3): say whether the budget admits the largest accept.
+    if let Some(cost) = propose_cost {
+        if cost > heavy_bytes && budget_bytes > 0 {
+            eprintln!(
+                "planeter: WARNING: an accept of the largest allowed artifact needs about {} MiB of the memory budget, and the heavy pool is {} MiB, so such a proposal is refused as too large; raise {} or lower PRIKK_EXCHANGE_MAX_BYTES",
+                cost / planeter_web::budget::MIB,
+                heavy_bytes / planeter_web::budget::MIB,
+                planeter_web::budget::VAR
+            );
+        } else {
+            eprintln!(
+                "planeter: the memory budget admits an accept of the largest allowed artifact (about {} MiB)",
+                cost / planeter_web::budget::MIB
+            );
+        }
+    }
 
     // The separate, small bound on password verification (IS-24). Logged once.
     let auth_gate = match planeter_web::BlockingGate::auth_from_vars(

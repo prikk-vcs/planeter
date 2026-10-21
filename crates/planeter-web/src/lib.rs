@@ -70,7 +70,15 @@ pub fn router(state: AppState) -> axum::Router {
             let state = for_405.clone();
             async move {
                 if uri.path().starts_with("/api/") {
-                    return api::code_response(&state, errors::ErrorCode::MethodNotAllowed);
+                    let mut resp = api::code_response(&state, errors::ErrorCode::MethodNotAllowed);
+                    // The one write route answers POST (and nothing else); every other API route answers GET.
+                    if uri.path().ends_with("/transport/propose") {
+                        resp.headers_mut().insert(
+                            axum::http::header::ALLOW,
+                            axum::http::HeaderValue::from_static("POST"),
+                        );
+                    }
+                    return resp;
                 }
                 axum::http::Response::builder()
                     .status(axum::http::StatusCode::METHOD_NOT_ALLOWED)

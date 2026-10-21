@@ -35,7 +35,7 @@ use planeter_web::errors::ErrorCode;
 use planeter_web::{AppState, BlockingGate, ContentOrigin, PrikkGate, TrustedProxies, router};
 
 /// The routes the API is meant to have, written down independently of `api::paths`.
-const EXPECTED_PATHS: [&str; 10] = [
+const EXPECTED_PATHS: [&str; 11] = [
     "/api/v1/repos/{owner}/{name}/history",
     "/api/v1/repos/{owner}/{name}/change/{target}",
     "/api/v1/repos/{owner}/{name}/file",
@@ -45,6 +45,7 @@ const EXPECTED_PATHS: [&str; 10] = [
     "/api/v1/repos/{owner}/{name}/verify",
     "/api/v1/repos/{owner}/{name}/transport/advertise",
     "/api/v1/repos/{owner}/{name}/transport/fetch",
+    "/api/v1/repos/{owner}/{name}/transport/propose",
     "/api/v1/openapi.json",
 ];
 
@@ -232,7 +233,7 @@ fn every_code_has_one_plain_sentence_and_the_shape_is_stable() {
             assert_eq!(text.matches(". ").count(), 0, "one sentence: {text:?}");
         }
     }
-    assert_eq!(seen.len(), 16);
+    assert_eq!(seen.len(), 31);
 }
 
 #[test]
@@ -372,7 +373,22 @@ async fn the_document_describes_parameters_responses_security_and_the_error_sche
             .collect();
         // The additive fields: declared, documented, and not `required` because a view omits them when they
         // do not apply (RFC 012 D-4). Every other property is required.
-        let additive: &[(&str, &str)] = &[("Stage", "blocked_by"), ("Stage", "after")];
+        let additive: &[(&str, &str)] = &[
+            ("Stage", "blocked_by"),
+            ("Stage", "after"),
+            // The error body's extra fields: each is present for one code only (RFC 004 part 3b).
+            ("Error", "reason"),
+            ("Error", "quota"),
+            ("Error", "limit"),
+            ("Error", "used"),
+            ("Error", "unit"),
+            ("Error", "state"),
+            ("Error", "count"),
+            ("Error", "patch_ids"),
+            ("Error", "detail"),
+            ("Error", "intent"),
+            ("Error", "cause"),
+        ];
         props.retain(|p| !additive.contains(&(name.as_str(), *p)));
         props.sort_unstable();
         required.sort_unstable();
@@ -808,7 +824,7 @@ fn api_routes_are_registered_only_through_the_shared_paths() {
         .map(str::trim)
         .filter(|l| l.contains(".route("))
         .collect();
-    assert_eq!(route_lines.len(), 10, "{route_lines:?}");
+    assert_eq!(route_lines.len(), 11, "{route_lines:?}");
     assert!(
         route_lines.iter().all(|l| l.contains("paths::")),
         "a route is registered with a literal path: {route_lines:?}"
@@ -895,7 +911,8 @@ async fn every_operation_documents_method_not_allowed_with_allow() {
         if path.ends_with("openapi.json") {
             continue;
         }
-        let resp = &item["get"]["responses"]["405"];
+        let op = item.get("get").or_else(|| item.get("post")).unwrap();
+        let resp = &op["responses"]["405"];
         assert!(
             resp["description"]
                 .as_str()

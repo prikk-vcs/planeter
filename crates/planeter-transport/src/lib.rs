@@ -9,12 +9,18 @@ pub mod artifacts;
 pub mod export;
 pub mod fingerprint;
 pub mod metrics;
+pub mod propose;
 
 pub use artifacts::{
-    ArtifactStore, Digest, DirsConfig, DirsConfigError, Spool, StoreError, TransportDirs,
+    AcceptDir, ArtifactStore, Digest, DirsConfig, DirsConfigError, Spool, StoreError,
+    TransportDirs, UploadWriter,
 };
 pub use export::{
     Advertisement, Artifact, ExportConfig, ExportService, FetchError, Kind, Offer, RefClass,
     RefInfo,
 };
-pub use metrics::{CacheStatus, FetchRecord, Metrics, Outcome};
+pub use metrics::{CacheStatus, FetchRecord, Metrics, Outcome, ProposeOutcome, ProposeRecord};
+pub use propose::{
+    IncompleteCause, MetaError, Plan, ProposeConfig, ProposeError, ProposeMeta, ProposeService,
+    Proposed, Submitter, Upload, Uploaded,
+};

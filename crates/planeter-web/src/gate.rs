@@ -517,9 +517,40 @@ impl BlockingGate {
         F: FnOnce() -> T + Send + 'static,
         T: Send + 'static,
     {
+        self.run_weighted_in(None, cost_bytes, what, job).await
+    }
+
+    /// [`BlockingGate::run_weighted`] for a **write** (RFC 004 D-5.3): the same byte budget, but always the
+    /// **heavy** pool, whatever the cost — a write is never "light" and never queues behind, or ahead of, the
+    /// floor-class reads.
+    pub async fn run_weighted_heavy<T, F>(
+        &self,
+        cost_bytes: u64,
+        what: &str,
+        job: F,
+    ) -> Result<T, AdmitError>
+    where
+        F: FnOnce() -> T + Send + 'static,
+        T: Send + 'static,
+    {
+        self.run_weighted_in(Some(Pool::Heavy), cost_bytes, what, job)
+            .await
+    }
+
+    async fn run_weighted_in<T, F>(
+        &self,
+        force: Option<Pool>,
+        cost_bytes: u64,
+        what: &str,
+        job: F,
+    ) -> Result<T, AdmitError>
+    where
+        F: FnOnce() -> T + Send + 'static,
+        T: Send + 'static,
+    {
         let units64 = cost_bytes.div_ceil(MIB).max(1);
         let bytes = units64.saturating_mul(MIB);
-        let pool = Pool::of(cost_bytes);
+        let pool = force.unwrap_or_else(|| Pool::of(cost_bytes));
         let pool_size = self.pools.as_ref().map(|p| p.get(pool).bytes());
         if let Some(size) = pool_size
             && bytes > size

@@ -31,7 +31,7 @@ use crate::errors::{ErrorBody, ErrorCode};
 use crate::gate::{AdmitError, PrikkGate, offload};
 use crate::routes::{Action, Class, Routes};
 use crate::security::{ContentOrigin, app_security_headers, raw_content_headers};
-use crate::transport::{advertise_handler, fetch_handler};
+use crate::transport::{advertise_handler, fetch_handler, propose_handler};
 
 /// Default and maximum history page size (bounded — `STD-3`).
 const DEFAULT_LIMIT: usize = 50;
@@ -79,9 +79,10 @@ pub mod paths {
     pub const VERIFY: &str = "/api/v1/repos/{owner}/{name}/verify";
     pub const TRANSPORT_ADVERTISE: &str = "/api/v1/repos/{owner}/{name}/transport/advertise";
     pub const TRANSPORT_FETCH: &str = "/api/v1/repos/{owner}/{name}/transport/fetch";
+    pub const TRANSPORT_PROPOSE: &str = "/api/v1/repos/{owner}/{name}/transport/propose";
     pub const OPENAPI: &str = "/api/v1/openapi.json";
     /// Every route, in document order.
-    pub const ALL: [&str; 10] = [
+    pub const ALL: [&str; 11] = [
         HISTORY,
         CHANGE,
         FILE,
@@ -91,6 +92,7 @@ pub mod paths {
         VERIFY,
         TRANSPORT_ADVERTISE,
         TRANSPORT_FETCH,
+        TRANSPORT_PROPOSE,
         OPENAPI,
     ];
 }
@@ -105,6 +107,9 @@ pub fn routes() -> Routes {
     );
     // The transport's two reads (RFC 004 part 2).
     let (advertise, fetch) = (get(advertise_handler), get(fetch_handler));
+    // The write side (RFC 004 part 3b): authorized for `Propose`, which the handler checks after the read gate.
+    let propose_class = Class::Authorized(Action::Propose);
+    let propose = axum::routing::post(propose_handler);
     Routes::new()
         .route(paths::HISTORY, read, &["GET"], get(history_handler))
         .route(paths::CHANGE, read, &["GET"], get(change_handler))
@@ -115,6 +120,7 @@ pub fn routes() -> Routes {
         .route(paths::VERIFY, read, &["GET"], get(verify_handler))
         .route(paths::TRANSPORT_ADVERTISE, read, &["GET"], advertise)
         .route(paths::TRANSPORT_FETCH, read, &["GET"], fetch)
+        .route(paths::TRANSPORT_PROPOSE, propose_class, &["POST"], propose)
         .route(paths::OPENAPI, description, &["GET"], get(openapi_handler))
 }
 
@@ -617,6 +623,20 @@ pub(crate) fn code_response_with_keys(
     builder
         .body(Body::from(code.body_for(keys, crate::catalog::EN)))
         .unwrap_or_else(|_| StatusCode::INTERNAL_SERVER_ERROR.into_response_fallback())
+}
+
+/// [`code_response_with_keys`] with a `detail`: values for the sentences and extra fields in the body, kept on the
+/// response so the response layer writes them again in the caller's language.
+pub(crate) fn code_response_detailed(
+    state: &AppState,
+    code: ErrorCode,
+    keys: crate::errors::ErrorKeys,
+    detail: crate::errors::ErrorDetail,
+) -> Response {
+    let mut resp = code_response_with_keys(state, code, keys);
+    *resp.body_mut() = Body::from(code.body_with(keys, crate::catalog::EN, &detail));
+    resp.extensions_mut().insert(detail);
+    resp
 }
 
 /// The `Retry-After` value for a refused request: the configured wait, at least one second.

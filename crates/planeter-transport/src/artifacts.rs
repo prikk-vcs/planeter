@@ -258,8 +258,42 @@ pub struct ArtifactStore {
 impl ArtifactStore {
     /// Open (creating) the store at `root`, removing orphaned `.partial` files.
     pub fn open(root: impl AsRef<Path>) -> Result<ArtifactStore, StoreError> {
-        let (dir, cleaned) = Dir::open(root.as_ref())?;
+        let (dir, mut cleaned) = Dir::open(root.as_ref())?;
+        // Working directories left by a crashed proposal: removed whole (they hold only uploads and outputs that
+        // were never recorded; whatever was retained is in `objects/`).
+        let work = dir.root.join("work");
+        fs::create_dir_all(&work).map_err(io_err("cannot create the work directory"))?;
+        for e in fs::read_dir(&work).map_err(io_err("cannot read the work directory"))? {
+            let e = e.map_err(io_err("cannot read the work directory"))?;
+            let _ = fs::remove_dir_all(e.path());
+            cleaned += 1;
+        }
         Ok(ArtifactStore { dir, cleaned })
+    }
+
+    /// A fresh **working area for one proposal** (`<root>/work/<id>/{in,out}`), removed with everything in it when
+    /// the guard is dropped. The upload is written to `in/artifact`; prikk is given `in` read-only and `out`
+    /// read-write, and nothing else of the store (RFC 004 D-6: no whole-directory mount).
+    pub fn new_accept_dir(&self) -> Result<AcceptDir, StoreError> {
+        let n = UNIQUE.fetch_add(1, Ordering::Relaxed);
+        let path = self
+            .dir
+            .root
+            .join("work")
+            .join(format!("{}-{n}", std::process::id()));
+        fs::create_dir(&path).map_err(io_err("cannot create a proposal working directory"))?;
+        let dir = AcceptDir { path };
+        fs::create_dir(dir.in_dir()).map_err(io_err("cannot create a proposal input directory"))?;
+        fs::create_dir(dir.out_dir())
+            .map_err(io_err("cannot create a proposal output directory"))?;
+        Ok(dir)
+    }
+
+    /// Keep the uploaded artifact of `accept` as the object `digest` (never evicted): the file is **moved** into
+    /// place (an atomic rename on the same volume). Keeping bytes that are already there changes nothing. The
+    /// caller vouches for the digest, which [`UploadWriter::finish`] computed while the bytes were written.
+    pub fn retain(&self, accept: &AcceptDir, digest: &Digest) -> Result<bool, StoreError> {
+        self.dir.publish(&accept.artifact(), digest)
     }
 
     /// How many orphaned `.partial` files opening removed.
@@ -307,6 +341,90 @@ struct SpoolState {
     entries: HashMap<Digest, (u64, u64)>,
     total: u64,
     tick: u64,
+}
+
+/// One proposal's working area (see [`ArtifactStore::new_accept_dir`]); removed, with everything in it, on drop.
+#[derive(Debug)]
+pub struct AcceptDir {
+    path: PathBuf,
+}
+
+impl AcceptDir {
+    /// The directory prikk reads (mounted read-only): it holds the artifact.
+    pub fn in_dir(&self) -> PathBuf {
+        self.path.join("in")
+    }
+
+    /// The directory prikk writes (mounted read-write): the claims file.
+    pub fn out_dir(&self) -> PathBuf {
+        self.path.join("out")
+    }
+
+    /// The uploaded artifact.
+    pub fn artifact(&self) -> PathBuf {
+        self.in_dir().join("artifact")
+    }
+
+    /// The file `sync accept --claims-out` writes (it does not exist yet: prikk refuses to overwrite one).
+    pub fn claims(&self) -> PathBuf {
+        self.out_dir().join("claims")
+    }
+
+    /// Start writing the upload to [`AcceptDir::artifact`]: at most `limit` bytes, hashed as they are written.
+    pub fn begin_upload(&self, limit: u64) -> Result<UploadWriter, StoreError> {
+        let file = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(self.artifact())
+            .map_err(io_err("cannot create the upload file"))?;
+        Ok(UploadWriter {
+            file,
+            hash: Sha256Stream::new(),
+            size: 0,
+            limit,
+        })
+    }
+}
+
+impl Drop for AcceptDir {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
+/// The streaming writer of an upload: bytes are hashed as they are written and never held in memory.
+pub struct UploadWriter {
+    file: File,
+    hash: Sha256Stream,
+    size: u64,
+    limit: u64,
+}
+
+impl UploadWriter {
+    /// Append `chunk`. More than the limit in all is [`StoreError::TooLarge`].
+    pub fn write(&mut self, chunk: &[u8]) -> Result<(), StoreError> {
+        self.size += chunk.len() as u64;
+        if self.size > self.limit {
+            return Err(StoreError::TooLarge { limit: self.limit });
+        }
+        self.hash.update(chunk);
+        self.file
+            .write_all(chunk)
+            .map_err(io_err("cannot write the upload file"))
+    }
+
+    /// Bytes written so far.
+    pub fn written(&self) -> u64 {
+        self.size
+    }
+
+    /// Flush to disk and return the digest and size of everything written.
+    pub fn finish(self) -> Result<(Digest, u64), StoreError> {
+        self.file
+            .sync_all()
+            .map_err(io_err("cannot sync the upload file"))?;
+        Ok((Digest(self.hash.finish_hex()), self.size))
+    }
 }
 
 /// One export's working directory (see [`Spool::new_work_dir`]); removed, with everything in it, on drop.
@@ -817,7 +935,7 @@ fn lexical(p: &Path) -> PathBuf {
 
 /// The opened store and spool of a running server.
 pub struct TransportDirs {
-    pub artifacts: Option<ArtifactStore>,
+    pub artifacts: Option<Arc<ArtifactStore>>,
     pub spool: Option<Arc<Spool>>,
 }
 
@@ -827,7 +945,7 @@ impl TransportDirs {
         let artifacts = config
             .artifact_dir
             .as_deref()
-            .map(ArtifactStore::open)
+            .map(|d| ArtifactStore::open(d).map(Arc::new))
             .transpose()?;
         let spool = config
             .spool_dir

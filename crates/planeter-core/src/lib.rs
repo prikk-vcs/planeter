@@ -46,6 +46,7 @@ pub use permission::resolve_repo_role;
 pub use planeter_prikk::CallLimits;
 pub use process_lock::{ProcessLock, ProcessLockError};
 pub use read::{
-    Assurance, ChangeView, FileContentView, FileView, Freshness, HistoryView, RawFile, RawTarget,
-    ReadError, ReadService, RefsView, Served, TreeEntryView, TreeView, VerifyView,
+    Assurance, ChangeView, FileContentView, FileView, Freshness, HistoryView, ProposeAccess,
+    RawFile, RawTarget, ReadError, ReadService, RefsView, Served, TreeEntryView, TreeView,
+    VerifyView,
 };

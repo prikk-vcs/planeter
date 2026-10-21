@@ -62,6 +62,14 @@ exact :: authn.rs :: Bearer  :: the Authorization scheme prefix
 # --- errors.rs: the stable machine codes and the OpenAPI prose (developer-facing, English by decision)
 re :: errors.rs :: ^(not_found|unavailable|busy|invalid_request|method_not_allowed|raw_elsewhere|too_large|internal|transport_off|unknown_ref|unknown_kind|bundle_of_received_ref|not_verified|export_failed|rate_limited|range_not_satisfiable)$ :: a stable machine-readable error code
 exact :: errors.rs :: document :: a placeholder name
+re :: errors.rs :: ^(forbidden|length_required|payload_too_large|needs_recovery|quota_exceeded|base_unknown|declaration_misses_added|declared_not_held|no_new_content|unknown_change|change_not_open|not_your_change|accept_refused|intent_pending|incomplete)$ :: a stable machine-readable error code (RFC 004 part 3b)
+re :: errors.rs :: ^(the caller can read the repository but|a proposal must declare|the proposal is larger than|the repository is waiting for recovery|a limit on proposals was reached|the declared base is not|the declared patches leave|the declared patches name|the artifact added nothing|the repository has no change|the change is landed|the change was opened by somebody|prikk refused the artifact and|somebody else has begun|the accept did not finish).* :: ErrorCode::description: OpenAPI prose for developers, English by decision (D-3d)
+re :: transport.rs :: ^(reason|state|limit|used|quota|unit|count|patch_ids|detail|intent|cause|mebibytes)$ :: a JSON field name or value of the propose response (machine-readable)
+re :: transport.rs :: ^(bad_framing|forbidden|content_type|length_required|payload_too_large|too_short|magic|no_artifact|truncated|unknown_field|not_json|bad_metadata|length|propose|over_budget)$ :: a stable machine-readable reason code or a metrics key
+exact :: transport.rs :: unknown field :: the text of serde's error, matched to tell an unknown field from invalid JSON
+exact :: transport.rs :: PLANETER-PROPOSE-1n :: the magic bytes that start a proposal's body (a protocol token, not text)
+exact :: transport.rs :: application/json :: a media type
+exact :: transport.rs :: no-store :: a Cache-Control value
 exact :: quota.rs :: limit :: a placeholder name
 exact :: quota.rs :: used :: a placeholder name
 exact :: errors.rs :: code :: a JSON field name

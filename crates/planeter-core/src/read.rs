@@ -70,6 +70,18 @@ impl std::error::Error for ReadError {}
 
 type Result<T> = std::result::Result<T, ReadError>;
 
+/// Why a principal cannot propose to a repository ([`ReadService::propose_access`]).
+#[derive(Debug)]
+#[non_exhaustive]
+pub enum ProposeAccess {
+    /// The repository does not exist **or** the principal may not read it (indistinguishable, T-7).
+    NotFound,
+    /// The principal can read the repository but may not propose a change to it.
+    NotPermitted,
+    /// A backend failure.
+    Backend(String),
+}
+
 /// Whether a served view was re-derived from prikk now, or is a cached fallback prikk could not refresh.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize)]
 #[serde(rename_all = "kebab-case")]
@@ -522,6 +534,42 @@ impl ReadService {
         name: &str,
     ) -> Result<RepositoryRecord> {
         self.authorize_read(principal, owner, name)
+    }
+
+    /// The record of a repository the principal may **propose** a change to (RFC 004 part 3b, T2), and whether they
+    /// hold `write` or above. The one read gate comes first: a repository the principal may not read, or that does
+    /// not exist, is [`ProposeAccess::NotFound`], the same for both (T-7). Only a principal who **can read** the
+    /// repository learns that they may not propose ([`ProposeAccess::NotPermitted`]), which tells them nothing
+    /// they did not know.
+    pub fn propose_access(
+        &self,
+        principal: &Principal,
+        owner: &Owner,
+        name: &str,
+    ) -> std::result::Result<(RepositoryRecord, bool), ProposeAccess> {
+        let record = match self.authorize_read(principal, owner, name) {
+            Ok(r) => r,
+            Err(ReadError::NotFound | ReadError::NoSuchPath) => {
+                return Err(ProposeAccess::NotFound);
+            }
+            Err(e) => return Err(ProposeAccess::Backend(e.to_string())),
+        };
+        let ctx = self
+            .access_context(principal, &record)
+            .map_err(|e| ProposeAccess::Backend(e.to_string()))?;
+        let resource = Resource::Repo(RepoResource {
+            repo_id: record.repo_id.clone(),
+            owner: record.owner.clone(),
+            visibility: record.visibility,
+            proposals: record.proposals,
+        });
+        if !authorize(principal, Action::Propose, &resource, &ctx).is_allowed() {
+            return Err(ProposeAccess::NotPermitted);
+        }
+        let writer = ctx
+            .repo_role
+            .is_some_and(|r| r >= planeter_store::Role::Write);
+        Ok((record, writer))
     }
 
     /// Resolve + authorize a read, returning the record only if the principal may read it. A denied or

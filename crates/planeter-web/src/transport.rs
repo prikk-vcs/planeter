@@ -25,12 +25,13 @@ use serde::Serialize;
 
 use planeter_core::Principal;
 use planeter_transport::{
-    CacheStatus, ExportService, FetchError, FetchRecord, Kind, Offer, Outcome, RefClass,
+    CacheStatus, ExportService, FetchError, FetchRecord, Kind, Offer, Outcome, ProposeError,
+    ProposeMeta, ProposeService, RefClass, Submitter,
 };
 
 use crate::api::{
-    AppState, Failure, code_response, code_response_with_keys, error_response, respond,
-    try_both_owners, with_security_headers,
+    AppState, Failure, code_response, code_response_detailed, code_response_with_keys,
+    error_response, respond, try_both_owners, with_security_headers,
 };
 use crate::errors::ErrorCode;
 use crate::gate::offload;
@@ -39,6 +40,8 @@ use crate::gate::offload;
 /// operator configured no export spool, and an authorized reader is told so (`transport_off`).
 pub struct TransportRuntime {
     pub export: Arc<ExportService>,
+    /// The write side (propose), when the operator also configured the artifact store; `None` otherwise.
+    pub propose: Option<Arc<ProposeService>>,
     pub ip_limit: RateLimiter,
     pub principal_limit: RateLimiter,
 }
@@ -605,4 +608,548 @@ pub(crate) async fn fetch_handler(
     builder
         .body(body)
         .unwrap_or_else(|_| code_response(&state, ErrorCode::Internal))
+}
+
+// ------------------------------------------------------------------------------------------------ propose
+
+/// The first bytes of a proposal's body (RFC 004 part 3b T1).
+const MAGIC: &[u8] = b"PLANETER-PROPOSE-1\n";
+/// The magic and the 8-byte big-endian metadata length.
+const PREFIX_LEN: u64 = MAGIC.len() as u64 + 8;
+/// How long a client may be silent in the middle of an upload before it is cut off.
+const UPLOAD_IDLE: Duration = Duration::from_secs(30);
+/// The longest an upload may take in all.
+const UPLOAD_TOTAL: Duration = Duration::from_secs(15 * 60);
+
+/// The metadata of a proposal as it arrives. Unknown fields are refused.
+#[derive(Debug, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct MetaWire {
+    change: Option<String>,
+    title: Option<String>,
+    description: Option<String>,
+    target_ref: Option<String>,
+    base: Option<String>,
+    declared_patches: Option<Vec<String>>,
+    client: Option<String>,
+}
+
+impl From<MetaWire> for ProposeMeta {
+    fn from(w: MetaWire) -> Self {
+        ProposeMeta {
+            change: w.change,
+            title: w.title,
+            description: w.description,
+            target_ref: w.target_ref,
+            base: w.base,
+            declared_patches: w.declared_patches,
+            client: w.client,
+        }
+    }
+}
+
+type BodyStream = axum::body::BodyDataStream;
+
+/// The next chunk of the body, or `None` at its end; an idle client is cut off.
+async fn next_chunk(stream: &mut BodyStream, deadline: Instant) -> Result<Option<Bytes>, ()> {
+    let remaining = deadline.saturating_duration_since(Instant::now());
+    let wait = UPLOAD_IDLE.min(remaining);
+    if wait.is_zero() {
+        return Err(());
+    }
+    let next = std::future::poll_fn(|cx| Pin::new(&mut *stream).poll_next(cx));
+    match tokio::time::timeout(wait, next).await {
+        Ok(Some(Ok(b))) => Ok(Some(b)),
+        Ok(Some(Err(_))) => Err(()),
+        Ok(None) => Ok(None),
+        Err(_) => Err(()),
+    }
+}
+
+fn bad_framing(state: &AppState, export: &ExportService, reason: &'static str) -> Response {
+    export.metrics().refusal("bad_framing");
+    detailed(
+        state,
+        ErrorCode::InvalidRequest,
+        ErrorCode::BAD_FRAMING,
+        Vec::new(),
+        vec![("reason", reason.into())],
+    )
+}
+
+fn detailed(
+    state: &AppState,
+    code: ErrorCode,
+    keys: crate::errors::ErrorKeys,
+    params: Vec<(&'static str, String)>,
+    fields: Vec<(&'static str, serde_json::Value)>,
+) -> Response {
+    code_response_detailed(
+        state,
+        code,
+        keys,
+        crate::errors::ErrorDetail { params, fields },
+    )
+}
+
+/// A refusal of the propose service, as a response: the named code, the hint that is true for the cause, and
+/// `Retry-After` for `busy`. Refusals that came out of the accept were counted by the service; the ones from the
+/// checks are counted here.
+fn propose_failure(state: &AppState, e: &ProposeError) -> Response {
+    use planeter_core::change::DeriveError;
+    let code = |c: ErrorCode| code_response(state, c);
+    match e {
+        ProposeError::Busy { retry_after } => {
+            let mut resp = code_response(state, ErrorCode::Busy);
+            if let Ok(v) = HeaderValue::from_str(&retry_after.as_secs().max(1).to_string()) {
+                resp.headers_mut().insert(header::RETRY_AFTER, v);
+            }
+            resp
+        }
+        ProposeError::NeedsRecovery { .. } => code(ErrorCode::NeedsRecovery),
+        ProposeError::Meta(m) => detailed(
+            state,
+            ErrorCode::InvalidRequest,
+            ErrorCode::BAD_METADATA,
+            Vec::new(),
+            vec![("reason", m.reason().into())],
+        ),
+        ProposeError::UnknownChange => code(ErrorCode::UnknownChange),
+        ProposeError::ChangeNotOpen(s) => detailed(
+            state,
+            ErrorCode::ChangeNotOpen,
+            ErrorCode::ChangeNotOpen.keys(),
+            Vec::new(),
+            vec![("state", s.as_str().into())],
+        ),
+        ProposeError::NotYourChange => code(ErrorCode::NotYourChange),
+        ProposeError::Quota(r) => {
+            let (limit, used) = r.figures();
+            let (message, hint) = crate::quota::keys(r);
+            detailed(
+                state,
+                ErrorCode::QuotaExceeded,
+                crate::errors::ErrorKeys { message, hint },
+                vec![("limit", limit.to_string()), ("used", used.to_string())],
+                vec![
+                    ("quota", r.quota.name().into()),
+                    ("limit", limit.into()),
+                    ("used", used.into()),
+                    (
+                        "unit",
+                        match r.quota {
+                            planeter_core::change::Quota::OpenChanges
+                            | planeter_core::change::Quota::RevisionsPerChange => "count",
+                            _ => "mebibytes",
+                        }
+                        .into(),
+                    ),
+                ],
+            )
+        }
+        ProposeError::BaseUnknown => code(ErrorCode::BaseUnknown),
+        ProposeError::IntentHeldByAnother => code(ErrorCode::IntentPending),
+        ProposeError::NoNewContent => code(ErrorCode::NoNewContent),
+        ProposeError::Declaration(DeriveError::DeclarationMissesAdded { missing }) => detailed(
+            state,
+            ErrorCode::DeclarationMissesAdded,
+            ErrorCode::DeclarationMissesAdded.keys(),
+            Vec::new(),
+            vec![
+                ("count", missing.len().into()),
+                (
+                    "patch_ids",
+                    missing.iter().take(100).cloned().collect::<Vec<_>>().into(),
+                ),
+            ],
+        ),
+        ProposeError::Declaration(DeriveError::DeclaredNotHeld { ids }) => detailed(
+            state,
+            ErrorCode::DeclaredNotHeld,
+            ErrorCode::DeclaredNotHeld.keys(),
+            Vec::new(),
+            vec![
+                ("count", ids.len().into()),
+                (
+                    "patch_ids",
+                    ids.iter().take(100).cloned().collect::<Vec<_>>().into(),
+                ),
+            ],
+        ),
+        ProposeError::Declaration(_) => code(ErrorCode::Internal),
+        ProposeError::Refused { text } => detailed(
+            state,
+            ErrorCode::AcceptRefused,
+            ErrorCode::AcceptRefused.keys(),
+            Vec::new(),
+            vec![(
+                "detail",
+                text.trim().chars().take(2000).collect::<String>().into(),
+            )],
+        ),
+        ProposeError::Incomplete { intent_id, cause } => detailed(
+            state,
+            ErrorCode::Incomplete,
+            ErrorCode::Incomplete.keys(),
+            Vec::new(),
+            vec![
+                ("intent", intent_id.clone().into()),
+                ("cause", cause.reason().into()),
+            ],
+        ),
+        ProposeError::Unavailable => code(ErrorCode::Unavailable),
+    }
+}
+
+#[derive(Serialize)]
+struct RevisionView {
+    id: String,
+    seq: u32,
+}
+
+#[derive(Serialize)]
+struct ClaimView {
+    claim_id: String,
+    outcome: String,
+}
+
+#[derive(Serialize)]
+struct PatchAssuranceView {
+    patch_id: String,
+    assurance: planeter_core::Assurance,
+}
+
+#[derive(Serialize)]
+pub struct ProposedView {
+    change_id: String,
+    revision: RevisionView,
+    created_change: bool,
+    already_recorded: bool,
+    claims: Vec<ClaimView>,
+    added_count: u64,
+    /// The first patches the push added, each classified from facts (`sync pending`, `log`), never from `queued`.
+    patches: Vec<PatchAssuranceView>,
+    declared: bool,
+    artifact_bytes: u64,
+    /// What this work is on the server: held, not sealed, not verified.
+    assurance: planeter_core::Assurance,
+    /// One plain sentence, in the caller's language: the work is held for review and no branch has changed.
+    message: String,
+}
+
+/// [`planeter_core::ReadService::propose_access`] for a handle that may name a user or an organization: the two are
+/// one namespace, so a `NotFound` for the user is retried as an org (as the reads do).
+fn propose_access_both(
+    read: &planeter_core::ReadService,
+    principal: &Principal,
+    handle: &str,
+    name: &str,
+) -> Result<(planeter_store::RepositoryRecord, bool), planeter_core::ProposeAccess> {
+    match read.propose_access(
+        principal,
+        &planeter_store::Owner::User(handle.to_owned()),
+        name,
+    ) {
+        Err(planeter_core::ProposeAccess::NotFound) => read.propose_access(
+            principal,
+            &planeter_store::Owner::Org(handle.to_owned()),
+            name,
+        ),
+        other => other,
+    }
+}
+
+pub(crate) async fn propose_handler(
+    State(state): State<AppState>,
+    Path((owner, name)): Path<(String, String)>,
+    peer: crate::client_ip::PeerAddr,
+    headers: HeaderMap,
+    body: Body,
+) -> Response {
+    // A proposal is authenticated by a bearer token only. A session cookie is what a browser attaches to a request
+    // another site makes, so it is not looked at here (the same door as everywhere else, without the cookie).
+    let mut bearer_only = headers.clone();
+    bearer_only.remove(header::COOKIE);
+    let principal = crate::principal::principal_from_request(&bearer_only, &state).await;
+    let runtime = state.transport.clone();
+    if let Some(rt) = &runtime
+        && let Some(refused) = limits(&state, rt, peer, &headers, &principal)
+    {
+        return refused;
+    }
+    // The one read gate and the one propose check: a hidden repository is `404` to a stranger, before the body, the
+    // framing or the configuration is looked at; a reader who may not propose learns only that (`403`).
+    let access = {
+        let (read, principal, owner, name) = (
+            Arc::clone(&state.read),
+            principal.clone(),
+            owner.clone(),
+            name.clone(),
+        );
+        offload(move || propose_access_both(&read, &principal, &owner, &name)).await
+    };
+    let (record, can_write) = match access {
+        Err(_) => return error_response(&state, Failure::Internal),
+        Ok(Err(planeter_core::ProposeAccess::NotFound)) => {
+            return error_response(&state, Failure::Read(planeter_core::ReadError::NotFound));
+        }
+        Ok(Err(planeter_core::ProposeAccess::NotPermitted)) => {
+            if let Some(rt) = &runtime {
+                rt.export.metrics().refusal("forbidden");
+            }
+            return code_response(&state, ErrorCode::Forbidden);
+        }
+        Ok(Err(_)) => return error_response(&state, Failure::Internal),
+        Ok(Ok(found)) => found,
+    };
+    let Some(rt) = runtime else {
+        return code_response(&state, ErrorCode::TransportOff);
+    };
+    let Some(propose) = rt.propose.clone() else {
+        return code_response_with_keys(&state, ErrorCode::TransportOff, ErrorCode::PROPOSE_OFF);
+    };
+    let export = Arc::clone(&rt.export);
+    let Some(user) = principal.user() else {
+        return code_response(&state, ErrorCode::Forbidden);
+    };
+    let who = Submitter {
+        id: user.as_str().to_owned(),
+        can_write,
+    };
+
+    // The framing, from the headers: the length is required and bounded before a byte of the body is read.
+    if let Some(ct) = headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|v| v.to_str().ok())
+        && !ct.trim().eq_ignore_ascii_case("application/octet-stream")
+    {
+        return bad_framing(&state, &export, "content_type");
+    }
+    let Some(total) = headers
+        .get(header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.trim().parse::<u64>().ok())
+    else {
+        export.metrics().refusal("length_required");
+        return code_response(&state, ErrorCode::LengthRequired);
+    };
+    let cfg = propose.config();
+    let too_large = |export: &ExportService| {
+        export.metrics().refusal("payload_too_large");
+        code_response(&state, ErrorCode::PayloadTooLarge)
+    };
+    if total > cfg.max_artifact_bytes + planeter_transport::propose::METADATA_MAX_BYTES + PREFIX_LEN
+    {
+        return too_large(&export);
+    }
+    if total < PREFIX_LEN {
+        return bad_framing(&state, &export, "too_short");
+    }
+
+    // The prefix and the metadata, read as they arrive. Whatever follows the metadata in the last chunk read is the
+    // start of the artifact (`carry`); the metadata itself is capped, so this buffer is too.
+    let deadline = Instant::now() + UPLOAD_TOTAL;
+    let mut stream = body.into_data_stream();
+    let mut buf: Vec<u8> = Vec::new();
+    let mut meta_len: Option<u64> = None;
+    loop {
+        let needed = PREFIX_LEN + meta_len.unwrap_or(0);
+        if buf.len() as u64 >= needed {
+            if meta_len.is_some() {
+                break;
+            }
+            if &buf[..MAGIC.len()] != MAGIC {
+                return bad_framing(&state, &export, "magic");
+            }
+            let mut n = [0u8; 8];
+            n.copy_from_slice(&buf[MAGIC.len()..PREFIX_LEN as usize]);
+            let m = u64::from_be_bytes(n);
+            if m > planeter_transport::propose::METADATA_MAX_BYTES {
+                return too_large(&export);
+            }
+            if PREFIX_LEN + m >= total {
+                return bad_framing(&state, &export, "no_artifact");
+            }
+            meta_len = Some(m);
+            continue;
+        }
+        match next_chunk(&mut stream, deadline).await {
+            Ok(Some(chunk)) => buf.extend_from_slice(&chunk),
+            Ok(None) | Err(()) => return bad_framing(&state, &export, "truncated"),
+        }
+    }
+    let carry = buf.split_off((PREFIX_LEN + meta_len.unwrap_or(0)) as usize);
+    let m = meta_len.unwrap_or(0);
+    let artifact_len = total - PREFIX_LEN - m;
+    if artifact_len > cfg.max_artifact_bytes {
+        return too_large(&export);
+    }
+    let wire: MetaWire = match serde_json::from_slice(&buf[PREFIX_LEN as usize..]) {
+        Ok(w) => w,
+        Err(e) => {
+            let reason = if e.to_string().contains("unknown field") {
+                "unknown_field"
+            } else {
+                "not_json"
+            };
+            export.metrics().refusal("bad_metadata");
+            return detailed(
+                &state,
+                ErrorCode::InvalidRequest,
+                ErrorCode::BAD_METADATA,
+                Vec::new(),
+                vec![("reason", reason.into())],
+            );
+        }
+    };
+    let meta: ProposeMeta = wire.into();
+
+    // The checks that need no artifact byte.
+    let plan = {
+        let (propose, record, who, meta) = (
+            Arc::clone(&propose),
+            record.clone(),
+            who.clone(),
+            meta.clone(),
+        );
+        state
+            .gate
+            .run(move || propose.check(&record, &who, &meta, artifact_len))
+            .await
+    };
+    let plan = match plan {
+        Ok(Ok(p)) => p,
+        Ok(Err(e)) => {
+            export.metrics().refusal(e.reason());
+            return propose_failure(&state, &e);
+        }
+        Err(_) => {
+            export.metrics().refusal("busy");
+            return error_response(&state, Failure::Busy);
+        }
+    };
+
+    // The upload: streamed to disk and hashed, never held in memory.
+    let started = {
+        let propose = Arc::clone(&propose);
+        offload(move || propose.start_upload(artifact_len)).await
+    };
+    let mut upload = match started {
+        Ok(Ok(u)) => u,
+        Ok(Err(e)) => {
+            export.metrics().refusal(e.reason());
+            return propose_failure(&state, &e);
+        }
+        Err(_) => return error_response(&state, Failure::Internal),
+    };
+    let mut pending_bytes = carry;
+    loop {
+        if !pending_bytes.is_empty() {
+            let chunk = std::mem::take(&mut pending_bytes);
+            let wrote = tokio::task::spawn_blocking(move || {
+                let r = upload.write(&chunk);
+                (upload, r)
+            })
+            .await;
+            match wrote {
+                Ok((u, Ok(()))) => upload = u,
+                Ok((_, Err(_))) => return bad_framing(&state, &export, "length"),
+                Err(_) => return error_response(&state, Failure::Internal),
+            }
+        }
+        if upload.written() >= artifact_len {
+            break;
+        }
+        match next_chunk(&mut stream, deadline).await {
+            Ok(Some(chunk)) => pending_bytes = chunk.to_vec(),
+            Ok(None) | Err(()) => return bad_framing(&state, &export, "truncated"),
+        }
+    }
+    if upload.written() != artifact_len {
+        return bad_framing(&state, &export, "length");
+    }
+    let uploaded = match offload(move || upload.finish()).await {
+        Ok(Ok(u)) => u,
+        _ => return error_response(&state, Failure::Internal),
+    };
+
+    // The accept: admitted against the same byte budget as reads (a write is never light), under the write lease.
+    let cost = planeter_transport::ProposeConfig::accept_cost(artifact_len);
+    let result = {
+        let (propose, record, who, meta, plan) = (
+            Arc::clone(&propose),
+            record.clone(),
+            who.clone(),
+            meta.clone(),
+            plan,
+        );
+        state
+            .gate
+            .run_weighted_heavy(cost, "propose", move || {
+                propose.accept(&record, &who, &meta, &plan, uploaded)
+            })
+            .await
+    };
+    let proposed = match result {
+        Ok(Ok(p)) => p,
+        Ok(Err(e)) => return propose_failure(&state, &e),
+        Err(crate::gate::AdmitError::TooLarge { .. }) => {
+            export.metrics().refusal("over_budget");
+            return error_response(&state, Failure::OverBudget);
+        }
+        Err(crate::gate::AdmitError::Busy) => {
+            export.metrics().refusal("busy");
+            return error_response(&state, Failure::Busy);
+        }
+        Err(crate::gate::AdmitError::Aborted) => return error_response(&state, Failure::Internal),
+    };
+    let lang = crate::catalog::negotiate_from_headers(&headers);
+    let key = if proposed.already_recorded {
+        crate::catalog::Key::ProposeAlreadyRecorded
+    } else {
+        crate::catalog::Key::ProposeHeld
+    };
+    let view = ProposedView {
+        change_id: proposed.change_id,
+        revision: RevisionView {
+            id: proposed.revision_id,
+            seq: proposed.seq,
+        },
+        created_change: proposed.created_change,
+        already_recorded: proposed.already_recorded,
+        claims: proposed
+            .claims
+            .into_iter()
+            .map(|c| ClaimView {
+                claim_id: c.claim_id,
+                outcome: c.outcome,
+            })
+            .collect(),
+        added_count: proposed.added_count,
+        patches: proposed
+            .patches
+            .into_iter()
+            .map(|(patch_id, assurance)| PatchAssuranceView {
+                patch_id,
+                assurance,
+            })
+            .collect(),
+        declared: proposed.declared,
+        artifact_bytes: proposed.artifact_bytes,
+        assurance: planeter_core::Assurance::ForgeApprovedUnsealed,
+        message: crate::catalog::T::new(lang).msg(key).text(),
+    };
+    let status = if proposed.already_recorded || !proposed.created_change && proposed.seq > 1 {
+        StatusCode::OK
+    } else {
+        StatusCode::CREATED
+    };
+    let json = serde_json::to_vec(&view).unwrap_or_default();
+    let mut resp = with_security_headers(&state, Response::builder().status(status))
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::CACHE_CONTROL, "no-store")
+        .body(Body::from(json))
+        .unwrap_or_else(|_| code_response(&state, ErrorCode::Internal));
+    resp.extensions_mut().insert(crate::catalog::LanguageVaries);
+    resp
 }

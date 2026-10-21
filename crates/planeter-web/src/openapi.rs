@@ -114,9 +114,19 @@ fn json_get(id: &str, summary: &str, params: Vec<Value>, schema: &str) -> Value 
 
 fn with_errors(mut op: Value, extra: &[ErrorCode]) -> Value {
     let errs = errors(extra);
-    let responses = op["get"]["responses"].as_object_mut().expect("responses");
+    let method = op
+        .as_object()
+        .and_then(|o| o.keys().next().cloned())
+        .expect("an operation has a method");
+    let responses = op[method.as_str()]["responses"]
+        .as_object_mut()
+        .expect("responses");
     for (k, v) in errs.as_object().expect("errors") {
         responses.insert(k.clone(), v.clone());
+    }
+    if method == "post" {
+        responses["405"]["headers"]["Allow"]["description"] =
+            json!("The methods this route supports: always `POST`.");
     }
     op
 }
@@ -144,7 +154,18 @@ fn schemas() -> Value {
             "code": {"type": "string", "enum": ErrorCode::ALL.iter().map(|c| c.code()).collect::<Vec<_>>(),
                      "description": "A stable, machine-readable code."},
             "message": {"type": "string", "description": "One plain sentence, in the language negotiated from `Accept-Language` (English by default). Never a path, a repository's existence, or tool output."},
-            "hint": {"type": "string", "description": "What the caller can do next, in the same language."}
+            "hint": {"type": "string", "description": "What the caller can do next, in the same language."},
+            "reason": {"type": "string", "description": "Only on `invalid_request` for a proposal: which part of the framing or the metadata was refused (for example `magic`, `truncated`, `title_required`, `unknown_field`)."},
+            "quota": {"type": "string", "enum": ["open_changes", "accepted_bytes", "revisions_per_change", "repository_capacity"], "description": "Only on `quota_exceeded`: which limit."},
+            "limit": {"type": "integer", "minimum": 0, "description": "Only on `quota_exceeded`: the limit, in `unit`."},
+            "used": {"type": "integer", "minimum": 0, "description": "Only on `quota_exceeded`: the current use, in `unit`."},
+            "unit": {"type": "string", "enum": ["count", "mebibytes"], "description": "Only on `quota_exceeded`: the unit of `limit` and `used`."},
+            "state": {"type": "string", "enum": ["landed", "closed"], "description": "Only on `change_not_open`."},
+            "count": {"type": "integer", "minimum": 0, "description": "Only on `declaration_misses_added` and `declared_not_held`: how many patches."},
+            "patch_ids": {"type": "array", "items": {"type": "string"}, "description": "Only on `declaration_misses_added` and `declared_not_held`: the first patch ids concerned."},
+            "detail": {"type": "string", "description": "Only on `accept_refused`: prikk's own text, verbatim (English, not translated)."},
+            "intent": {"type": "string", "description": "Only on `incomplete`: the id of the intent left open; the same artifact, sent again, resumes it."},
+            "cause": {"type": "string", "description": "Only on `incomplete`: `accept_deadline`, `accept_ceiling`, `accept_failed`, `accept_unreadable` or `accept_not_recorded`."}
         })),
         "Assurance": {"type": "string", "enum": ["prikk-verified", "sealed", "forge-approved-unsealed", "unverified"], "description": "`prikk-verified` only where the repository's verification ran and passed; a sealed patch on the change endpoint is `sealed` (signed into the history; nothing was verified for that view); a queued one is `forge-approved-unsealed`."},
         "PatchMessage": obj(&["patch_id", "message"], json!({"patch_id": string_prop(), "message": string_prop()})),
@@ -225,6 +246,27 @@ fn schemas() -> Value {
             "fingerprint": {"type": "string", "description": "The repository's state fingerprint."},
             "refs": array_of("AdvertisedRef"),
             "archive": {"$ref": "#/components/schemas/Offer"}
+        })),
+        "ProposedRevision": obj(&["id", "seq"], json!({"id": string_prop(), "seq": {"type": "integer", "minimum": 1}})),
+        "ProposedClaim": obj(&["claim_id", "outcome"], json!({
+            "claim_id": string_prop(),
+            "outcome": {"type": "string", "description": "What accept said of the claim, as it said it (stored, not re-asserted)."}
+        })),
+        "ProposedPatch": obj(&["patch_id", "assurance"], json!({
+            "patch_id": string_prop(), "assurance": {"$ref": "#/components/schemas/Assurance"}
+        })),
+        "Proposed": obj(&["change_id", "revision", "created_change", "already_recorded", "claims", "added_count", "patches", "declared", "artifact_bytes", "assurance", "message"], json!({
+            "change_id": string_prop(),
+            "revision": {"$ref": "#/components/schemas/ProposedRevision"},
+            "created_change": {"type": "boolean", "description": "This push opened the change."},
+            "already_recorded": {"type": "boolean", "description": "The artifact was already a revision; nothing was recorded."},
+            "claims": array_of("ProposedClaim"),
+            "added_count": {"type": "integer", "minimum": 0, "description": "How many patches the push added."},
+            "patches": {"type": "array", "items": {"$ref": "#/components/schemas/ProposedPatch"}, "description": "The first patches the push added (at most 1,000), each classified from facts (`sync pending`, `log`), never from `queued`."},
+            "declared": {"type": "boolean", "description": "Whether the revision carries the submitter's declared patch set."},
+            "artifact_bytes": {"type": "integer", "minimum": 0},
+            "assurance": {"$ref": "#/components/schemas/Assurance"},
+            "message": {"type": "string", "description": "One plain sentence, in the language negotiated from `Accept-Language`: the work is held for review and no branch has changed."}
         })),
         "FailedCondition": obj(&["id", "message"], json!({"id": string_prop(), "message": string_prop()})),
         "Stage": obj(&["stage", "status", "detail"], json!({
@@ -463,6 +505,53 @@ pub fn document(content_origin: &str) -> Value {
                 ErrorCode::NotVerified,
                 ErrorCode::ExportFailed,
                 ErrorCode::RangeNotSatisfiable,
+            ],
+        ),
+    );
+    paths_obj.insert(
+        paths::TRANSPORT_PROPOSE.into(),
+        with_errors(
+            json!({"post": {
+                "operationId": "postTransportPropose",
+                "summary": "Propose a change: put an artifact on the forge as a revision",
+                "description": "Authorized for **propose** (`write` and above; any signed-in reader if the repository's `proposals` setting is `any-authenticated`; never a CI job) and authenticated by a **bearer token only** (a session cookie is not looked at, so another site cannot make this request on a browser's behalf). The body is framed, without multipart: `PLANETER-PROPOSE-1\\n`, an 8-byte big-endian length `M`, `M` bytes of JSON metadata, then the artifact (`sync build` output, `PEXCH002`) to the end of the body. `Content-Length` is required; `M` is at most 4 MiB and the artifact at most `PRIKK_EXCHANGE_MAX_BYTES` (`413` before the body is read); the artifact is streamed to disk and hashed, never held in memory. Metadata fields: `change` (an existing change id to add a revision to; absent opens a change), `title` (required for a new change, at most 200 characters), `description` (at most 64 KiB), `target_ref` (advisory), `base` (the block id the artifact was built on; it must be listed by `log` of a ref the repository holds), `declared_patches` (the 64-hex patch ids the artifact contains; absent for a push by plain prikk), `client` (name and version). Unknown fields are refused. The checks run in this order, all before any write: rate limit, read gate, propose authorization, `needs_recovery`, framing and size, quota (a refusal is held back only until the artifact's digest shows it is a repeat of one already recorded), metadata, the change named (open; opened by the caller or the caller holds `write`), the declared base. Then the artifact is accepted under the repository's write lease, with an intent journaled first. **Nothing here seals, merges or publishes**: the work is held for review and no branch changes. If the accept does not finish, the answer is `503 incomplete` with the intent's id, and sending the same artifact again once the repository has recovered resumes it and records exactly one revision. A repeat of an artifact already recorded answers `200` with its revision.",
+                "parameters": owner_name(),
+                "security": [{"bearerToken": []}],
+                "requestBody": {
+                    "required": true,
+                    "description": "`PLANETER-PROPOSE-1\\n` + 8-byte big-endian metadata length + metadata JSON + artifact bytes.",
+                    "content": {"application/octet-stream": {"schema": {"type": "string", "format": "binary"}}}
+                },
+                "responses": {
+                    "201": {
+                        "description": "A change was opened (or revision 1 of it recorded).",
+                        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Proposed"}}}
+                    },
+                    "200": {
+                        "description": "A revision was added to an existing change, or the artifact was already recorded.",
+                        "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Proposed"}}}
+                    }
+                },
+            }}),
+            &[
+                ErrorCode::Busy,
+                ErrorCode::TransportOff,
+                ErrorCode::RateLimited,
+                ErrorCode::Forbidden,
+                ErrorCode::LengthRequired,
+                ErrorCode::PayloadTooLarge,
+                ErrorCode::NeedsRecovery,
+                ErrorCode::QuotaExceeded,
+                ErrorCode::BaseUnknown,
+                ErrorCode::DeclarationMissesAdded,
+                ErrorCode::DeclaredNotHeld,
+                ErrorCode::NoNewContent,
+                ErrorCode::UnknownChange,
+                ErrorCode::ChangeNotOpen,
+                ErrorCode::NotYourChange,
+                ErrorCode::AcceptRefused,
+                ErrorCode::IntentPending,
+                ErrorCode::Incomplete,
             ],
         ),
     );

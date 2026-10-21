@@ -357,6 +357,148 @@ pub const CATALOG: &[Entry] = &[
         "quota.capacity.hint",
         "Ask a maintainer to close finished changes, or ask the person who runs this server to raise the capacity.",
     ),
+    // proposing a change (RFC 004 part 3b)
+    msg(
+        "error.forbidden.message",
+        "You can read this repository, but you may not propose changes to it.",
+    ),
+    msg(
+        "error.forbidden.hint",
+        "Ask a maintainer for write access, or to open proposals to every signed-in user.",
+    ),
+    msg(
+        "error.length_required.message",
+        "The proposal did not say how long it is.",
+    ),
+    msg(
+        "error.length_required.hint",
+        "Send the proposal with a Content-Length header.",
+    ),
+    msg(
+        "error.payload_too_large.message",
+        "That proposal is larger than this server accepts.",
+    ),
+    msg(
+        "error.payload_too_large.hint",
+        "Send a smaller artifact, or ask the person who runs this server to raise the limit.",
+    ),
+    msg(
+        "error.needs_recovery.message",
+        "This repository is waiting for recovery after a write that did not finish, so it takes no new proposals right now.",
+    ),
+    msg(
+        "error.needs_recovery.hint",
+        "Try again later, because reading is not affected and the person who runs this server can see why in the server log.",
+    ),
+    msg(
+        "error.quota_exceeded.message",
+        "A limit on proposals to this repository was reached.",
+    ),
+    msg(
+        "error.quota_exceeded.hint",
+        "The details are in this response, so close a change or ask a maintainer to raise the limit.",
+    ),
+    msg(
+        "error.base_unknown.message",
+        "The base you named is not in this repository's history.",
+    ),
+    msg(
+        "error.base_unknown.hint",
+        "Send the base first, or leave it out.",
+    ),
+    msg(
+        "error.declaration_misses_added.message",
+        "Your list of patches leaves out patches that this artifact added.",
+    ),
+    msg(
+        "error.declaration_misses_added.hint",
+        "List every patch the artifact contains, then send it again.",
+    ),
+    msg(
+        "error.declared_not_held.message",
+        "Your list of patches names patches this repository does not hold.",
+    ),
+    msg(
+        "error.declared_not_held.hint",
+        "List only patches that are in the artifact or already in the repository.",
+    ),
+    msg(
+        "error.no_new_content.message",
+        "This artifact adds nothing that the repository did not already hold.",
+    ),
+    msg(
+        "error.no_new_content.hint",
+        "There is nothing to propose, so if you changed something, build the artifact again.",
+    ),
+    msg(
+        "error.unknown_change.message",
+        "This repository has no change with that id.",
+    ),
+    msg(
+        "error.unknown_change.hint",
+        "Take the id from an earlier response, or leave it out to open a new change.",
+    ),
+    msg(
+        "error.change_not_open.message",
+        "That change has landed or been closed, so it takes no more revisions.",
+    ),
+    msg("error.change_not_open.hint", "Open a new change instead."),
+    msg(
+        "error.not_your_change.message",
+        "That change was opened by somebody else.",
+    ),
+    msg(
+        "error.not_your_change.hint",
+        "Open a change of your own, or ask a maintainer.",
+    ),
+    msg(
+        "error.accept_refused.message",
+        "prikk refused this artifact, and nothing was added to the repository.",
+    ),
+    msg(
+        "error.accept_refused.hint",
+        "Read the reason in the detail field, then fix the artifact and send it again.",
+    ),
+    msg(
+        "error.intent_pending.message",
+        "Somebody else has already started sending this exact artifact and it has not finished.",
+    ),
+    msg(
+        "error.intent_pending.hint",
+        "Try again once the repository has recovered.",
+    ),
+    msg(
+        "error.incomplete.message",
+        "The repository did not finish taking in your artifact.",
+    ),
+    msg(
+        "error.incomplete.hint",
+        "Send the same artifact again once the repository has recovered.",
+    ),
+    msg(
+        "error.invalid_request.framing_hint",
+        "Start the body with PLANETER-PROPOSE-1, then the metadata length, the metadata and the artifact, as the API document describes.",
+    ),
+    msg(
+        "error.invalid_request.metadata_hint",
+        "Fix the field named in the reason and send the proposal again, as the API document lists the fields.",
+    ),
+    msg(
+        "error.propose_off.message",
+        "Proposals are not set up on this server.",
+    ),
+    msg(
+        "error.propose_off.hint",
+        "Ask the person who runs this server to configure the artifact store.",
+    ),
+    msg(
+        "propose.held",
+        "Your work is held for review on this server, and no branch has changed.",
+    ),
+    msg(
+        "propose.already_recorded",
+        "This exact artifact was already recorded, so nothing was added, and no branch has changed.",
+    ),
     // pages that used to be bare strings (T7): a heading, one sentence, one link
     msg("page.link.sign_in", "Go to the sign-in page"),
     msg("page.link.home", "Go to the home page"),

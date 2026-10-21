@@ -448,6 +448,18 @@ pub enum Quota {
     RepositoryCapacity,
 }
 
+impl Quota {
+    /// The stable name (the API's `quota` field).
+    pub fn name(self) -> &'static str {
+        match self {
+            Quota::OpenChanges => "open_changes",
+            Quota::AcceptedBytes => "accepted_bytes",
+            Quota::RevisionsPerChange => "revisions_per_change",
+            Quota::RepositoryCapacity => "repository_capacity",
+        }
+    }
+}
+
 /// A refusal that names the quota, the limit, the current use and (through the catalog keys) what to do.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct QuotaRefusal {

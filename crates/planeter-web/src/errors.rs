@@ -26,6 +26,15 @@ pub struct ErrorBody {
     pub keys: ErrorKeys,
 }
 
+/// What an error body carries beyond its code and its two sentences: the values the sentences name (`params`, filled
+/// into the catalog message by name) and extra machine-readable `fields`. Attached to the response next to
+/// [`ErrorBody`], so the response layer can write the body again in the caller's language.
+#[derive(Debug, Clone, Default, PartialEq)]
+pub struct ErrorDetail {
+    pub params: Vec<(&'static str, String)>,
+    pub fields: Vec<(&'static str, serde_json::Value)>,
+}
+
 /// A stable, machine-readable error code of the API.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ErrorCode {
@@ -64,11 +73,41 @@ pub enum ErrorCode {
     RateLimited,
     /// 416: a `Range` that cannot be satisfied by the one current artifact; carries `Content-Range: bytes */size`.
     RangeNotSatisfiable,
+    /// 403: the caller can read the repository but may not propose changes to it.
+    Forbidden,
+    /// 411: a proposal must declare its length (`Content-Length`).
+    LengthRequired,
+    /// 413: the proposal is larger than this server accepts; refused before the artifact is read.
+    PayloadTooLarge,
+    /// 503: the repository is waiting for recovery after an unfinished write; reads are not affected.
+    NeedsRecovery,
+    /// 422: a limit on proposals was reached (the body names which one, its limit and the current use).
+    QuotaExceeded,
+    /// 422: the declared base is not a block this repository holds.
+    BaseUnknown,
+    /// 422: the declared patches leave out patches the artifact added.
+    DeclarationMissesAdded,
+    /// 422: the declared patches name patches the repository does not hold.
+    DeclaredNotHeld,
+    /// 422: the artifact added nothing the repository did not already hold.
+    NoNewContent,
+    /// 422: the repository has no change with that id.
+    UnknownChange,
+    /// 422: the change is landed or closed and takes no more revisions.
+    ChangeNotOpen,
+    /// 403: the change was opened by somebody else, and the caller does not hold `write`.
+    NotYourChange,
+    /// 422: prikk refused the artifact and left nothing behind (its text is in the `detail` field).
+    AcceptRefused,
+    /// 409: somebody else has begun sending this exact artifact and it has not finished.
+    IntentPending,
+    /// 503: the accept did not finish; the body names the intent, and the same artifact can be sent again once the repository has recovered.
+    Incomplete,
 }
 
 impl ErrorCode {
     /// Every code, in a fixed order (the OpenAPI enum).
-    pub const ALL: [ErrorCode; 16] = [
+    pub const ALL: [ErrorCode; 31] = [
         ErrorCode::NotFound,
         ErrorCode::Unavailable,
         ErrorCode::Busy,
@@ -85,6 +124,21 @@ impl ErrorCode {
         ErrorCode::ExportFailed,
         ErrorCode::RateLimited,
         ErrorCode::RangeNotSatisfiable,
+        ErrorCode::Forbidden,
+        ErrorCode::LengthRequired,
+        ErrorCode::PayloadTooLarge,
+        ErrorCode::NeedsRecovery,
+        ErrorCode::QuotaExceeded,
+        ErrorCode::BaseUnknown,
+        ErrorCode::DeclarationMissesAdded,
+        ErrorCode::DeclaredNotHeld,
+        ErrorCode::NoNewContent,
+        ErrorCode::UnknownChange,
+        ErrorCode::ChangeNotOpen,
+        ErrorCode::NotYourChange,
+        ErrorCode::AcceptRefused,
+        ErrorCode::IntentPending,
+        ErrorCode::Incomplete,
     ];
 
     /// The stable snake_case code.
@@ -106,6 +160,21 @@ impl ErrorCode {
             ErrorCode::ExportFailed => "export_failed",
             ErrorCode::RateLimited => "rate_limited",
             ErrorCode::RangeNotSatisfiable => "range_not_satisfiable",
+            ErrorCode::Forbidden => "forbidden",
+            ErrorCode::LengthRequired => "length_required",
+            ErrorCode::PayloadTooLarge => "payload_too_large",
+            ErrorCode::NeedsRecovery => "needs_recovery",
+            ErrorCode::QuotaExceeded => "quota_exceeded",
+            ErrorCode::BaseUnknown => "base_unknown",
+            ErrorCode::DeclarationMissesAdded => "declaration_misses_added",
+            ErrorCode::DeclaredNotHeld => "declared_not_held",
+            ErrorCode::NoNewContent => "no_new_content",
+            ErrorCode::UnknownChange => "unknown_change",
+            ErrorCode::ChangeNotOpen => "change_not_open",
+            ErrorCode::NotYourChange => "not_your_change",
+            ErrorCode::AcceptRefused => "accept_refused",
+            ErrorCode::IntentPending => "intent_pending",
+            ErrorCode::Incomplete => "incomplete",
         }
     }
 
@@ -125,6 +194,21 @@ impl ErrorCode {
             | ErrorCode::ExportFailed => StatusCode::SERVICE_UNAVAILABLE,
             ErrorCode::RateLimited => StatusCode::TOO_MANY_REQUESTS,
             ErrorCode::RangeNotSatisfiable => StatusCode::RANGE_NOT_SATISFIABLE,
+            ErrorCode::Forbidden => StatusCode::FORBIDDEN,
+            ErrorCode::LengthRequired => StatusCode::LENGTH_REQUIRED,
+            ErrorCode::PayloadTooLarge => StatusCode::PAYLOAD_TOO_LARGE,
+            ErrorCode::NeedsRecovery => StatusCode::SERVICE_UNAVAILABLE,
+            ErrorCode::QuotaExceeded => StatusCode::UNPROCESSABLE_ENTITY,
+            ErrorCode::BaseUnknown => StatusCode::UNPROCESSABLE_ENTITY,
+            ErrorCode::DeclarationMissesAdded => StatusCode::UNPROCESSABLE_ENTITY,
+            ErrorCode::DeclaredNotHeld => StatusCode::UNPROCESSABLE_ENTITY,
+            ErrorCode::NoNewContent => StatusCode::UNPROCESSABLE_ENTITY,
+            ErrorCode::UnknownChange => StatusCode::UNPROCESSABLE_ENTITY,
+            ErrorCode::ChangeNotOpen => StatusCode::UNPROCESSABLE_ENTITY,
+            ErrorCode::NotYourChange => StatusCode::FORBIDDEN,
+            ErrorCode::AcceptRefused => StatusCode::UNPROCESSABLE_ENTITY,
+            ErrorCode::IntentPending => StatusCode::CONFLICT,
+            ErrorCode::Incomplete => StatusCode::SERVICE_UNAVAILABLE,
             ErrorCode::InvalidRequest => StatusCode::BAD_REQUEST,
             ErrorCode::Internal => StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -157,6 +241,30 @@ impl ErrorCode {
             ErrorCode::ExportFailed => (Key::ErrExportFailedMessage, Key::ErrExportFailedHint),
             ErrorCode::RateLimited => (Key::ErrRateLimitedMessage, Key::ErrRateLimitedHint),
             ErrorCode::RangeNotSatisfiable => (Key::ErrRangeMessage, Key::ErrRangeHint),
+            ErrorCode::Forbidden => (Key::ErrForbiddenMessage, Key::ErrForbiddenHint),
+            ErrorCode::LengthRequired => {
+                (Key::ErrLengthRequiredMessage, Key::ErrLengthRequiredHint)
+            }
+            ErrorCode::PayloadTooLarge => {
+                (Key::ErrPayloadTooLargeMessage, Key::ErrPayloadTooLargeHint)
+            }
+            ErrorCode::NeedsRecovery => (Key::ErrNeedsRecoveryMessage, Key::ErrNeedsRecoveryHint),
+            ErrorCode::QuotaExceeded => (Key::ErrQuotaExceededMessage, Key::ErrQuotaExceededHint),
+            ErrorCode::BaseUnknown => (Key::ErrBaseUnknownMessage, Key::ErrBaseUnknownHint),
+            ErrorCode::DeclarationMissesAdded => (
+                Key::ErrDeclarationMissesAddedMessage,
+                Key::ErrDeclarationMissesAddedHint,
+            ),
+            ErrorCode::DeclaredNotHeld => {
+                (Key::ErrDeclaredNotHeldMessage, Key::ErrDeclaredNotHeldHint)
+            }
+            ErrorCode::NoNewContent => (Key::ErrNoNewContentMessage, Key::ErrNoNewContentHint),
+            ErrorCode::UnknownChange => (Key::ErrUnknownChangeMessage, Key::ErrUnknownChangeHint),
+            ErrorCode::ChangeNotOpen => (Key::ErrChangeNotOpenMessage, Key::ErrChangeNotOpenHint),
+            ErrorCode::NotYourChange => (Key::ErrNotYourChangeMessage, Key::ErrNotYourChangeHint),
+            ErrorCode::AcceptRefused => (Key::ErrAcceptRefusedMessage, Key::ErrAcceptRefusedHint),
+            ErrorCode::IntentPending => (Key::ErrIntentPendingMessage, Key::ErrIntentPendingHint),
+            ErrorCode::Incomplete => (Key::ErrIncompleteMessage, Key::ErrIncompleteHint),
         };
         ErrorKeys { message, hint }
     }
@@ -172,6 +280,24 @@ impl ErrorCode {
     pub const REF_REQUIRED: ErrorKeys = ErrorKeys {
         message: Key::ErrInvalidRequestMessage,
         hint: Key::ErrRefRequiredHint,
+    };
+
+    /// `transport_off` for a proposal: fetches may be set up while the artifact store, which proposals need, is not.
+    pub const PROPOSE_OFF: ErrorKeys = ErrorKeys {
+        message: Key::ErrProposeOffMessage,
+        hint: Key::ErrProposeOffHint,
+    };
+
+    /// `invalid_request` for a proposal whose body is not framed as the API document describes.
+    pub const BAD_FRAMING: ErrorKeys = ErrorKeys {
+        message: Key::ErrInvalidRequestMessage,
+        hint: Key::ErrFramingHint,
+    };
+
+    /// `invalid_request` for a proposal whose metadata is not valid (the `reason` field says which part).
+    pub const BAD_METADATA: ErrorKeys = ErrorKeys {
+        message: Key::ErrInvalidRequestMessage,
+        hint: Key::ErrMetadataHint,
     };
 
     /// `export_failed` because an export or verify call hit its wall-time bound.
@@ -244,6 +370,45 @@ impl ErrorCode {
             ErrorCode::RangeNotSatisfiable => {
                 "a byte range the current artifact cannot satisfy (carries `Content-Range: bytes */size`)"
             }
+            ErrorCode::Forbidden => {
+                "the caller can read the repository but may not propose changes to it"
+            }
+            ErrorCode::LengthRequired => "a proposal must declare its length with `Content-Length`",
+            ErrorCode::PayloadTooLarge => {
+                "the proposal is larger than this server accepts (refused before the artifact is read)"
+            }
+            ErrorCode::NeedsRecovery => {
+                "the repository is waiting for recovery after an unfinished write (reads are not affected)"
+            }
+            ErrorCode::QuotaExceeded => {
+                "a limit on proposals was reached (the body also names the quota, its limit and the current use)"
+            }
+            ErrorCode::BaseUnknown => "the declared base is not in the repository's history",
+            ErrorCode::DeclarationMissesAdded => {
+                "the declared patches leave out patches the artifact added (the body lists them)"
+            }
+            ErrorCode::DeclaredNotHeld => {
+                "the declared patches name patches the repository does not hold (the body lists them)"
+            }
+            ErrorCode::NoNewContent => {
+                "the artifact added nothing the repository did not already hold"
+            }
+            ErrorCode::UnknownChange => "the repository has no change with that id",
+            ErrorCode::ChangeNotOpen => {
+                "the change is landed or closed and takes no more revisions"
+            }
+            ErrorCode::NotYourChange => {
+                "the change was opened by somebody else and the caller does not hold `write`"
+            }
+            ErrorCode::AcceptRefused => {
+                "prikk refused the artifact and left nothing behind (its own text is in the `detail` field)"
+            }
+            ErrorCode::IntentPending => {
+                "somebody else has begun sending this exact artifact and it has not finished"
+            }
+            ErrorCode::Incomplete => {
+                "the accept did not finish (the body names the intent; send the same artifact again once the repository has recovered)"
+            }
         }
     }
 
@@ -255,11 +420,30 @@ impl ErrorCode {
     /// The JSON body for these keys in `lang`. One code, one status; the message and hint are the
     /// language-dependent fields.
     pub fn body_for(self, keys: ErrorKeys, lang: Lang) -> String {
-        serde_json::json!({
-            "code": self.code(),
-            "message": Self::text(keys.message, lang),
-            "hint": Self::text(keys.hint, lang),
-        })
-        .to_string()
+        self.body_with(keys, lang, &ErrorDetail::default())
+    }
+
+    /// [`ErrorCode::body_for`] with a `detail`: its `params` fill the message and hint, and its `fields` are added to
+    /// the object next to `code`, `message` and `hint` (never in place of them).
+    pub fn body_with(self, keys: ErrorKeys, lang: Lang, detail: &ErrorDetail) -> String {
+        let say = |key: Key| {
+            let mut m = crate::catalog::T::new(lang)
+                .msg(key)
+                .with("document", crate::api::paths::OPENAPI);
+            for (name, value) in &detail.params {
+                m = m.with(name, value);
+            }
+            m.text()
+        };
+        let mut object = serde_json::Map::new();
+        object.insert("code".to_owned(), self.code().into());
+        object.insert("message".to_owned(), say(keys.message).into());
+        object.insert("hint".to_owned(), say(keys.hint).into());
+        for (name, value) in &detail.fields {
+            object
+                .entry((*name).to_owned())
+                .or_insert_with(|| value.clone());
+        }
+        serde_json::Value::Object(object).to_string()
     }
 }

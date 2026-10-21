@@ -47,7 +47,12 @@ pub async fn response_policy(State(state): State<AppState>, req: Request, next: 
         .get::<crate::catalog::LanguageVaries>()
         .is_some();
     if let Some(eb) = resp.extensions().get::<crate::errors::ErrorBody>().copied() {
-        let body = eb.code.body_for(eb.keys, lang);
+        let detail = resp
+            .extensions()
+            .get::<crate::errors::ErrorDetail>()
+            .cloned()
+            .unwrap_or_default();
+        let body = eb.code.body_with(eb.keys, lang, &detail);
         *resp.body_mut() = axum::body::Body::from(body);
         resp.headers_mut().remove(header::CONTENT_LENGTH);
     }
