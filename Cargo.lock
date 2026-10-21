@@ -1210,6 +1210,8 @@ version = "0.4.0"
 dependencies = [
  "planeter-auth",
  "planeter-core",
+ "planeter-prikk",
+ "planeter-store",
 ]
 
 [[package]]
@@ -1219,12 +1221,14 @@ dependencies = [
  "ammonia",
  "askama",
  "axum",
+ "futures-core",
  "html5ever",
  "jsonwebtoken",
  "planeter-auth",
  "planeter-core",
  "planeter-prikk",
  "planeter-store",
+ "planeter-transport",
  "pulldown-cmark",
  "serde",
  "serde_json",

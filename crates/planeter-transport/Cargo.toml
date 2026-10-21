@@ -13,3 +13,7 @@ planeter-core = { path = "../planeter-core", version = "0.4.0" }
 # The streaming SHA-256 of the artifact store (RFC 004 D-2). An in-workspace edge (transport is an upper crate,
 # auth a lower one): no external crate is added.
 planeter-auth = { path = "../planeter-auth", version = "0.4.0" }
+# The export service drives the repository store's records and prikk through core's hosting service (in-workspace
+# edges; upper -> lower, allowed by the layering gate).
+planeter-store = { path = "../planeter-store", version = "0.4.0" }
+planeter-prikk = { path = "../planeter-prikk", version = "0.4.0" }
