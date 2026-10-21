@@ -11,11 +11,13 @@
 
 pub mod cli;
 pub mod error;
+pub mod exchange;
 pub mod model;
 pub mod repo;
 pub mod sandbox;
 
 pub use cli::CliPrikkRepo;
 pub use error::{PrikkError, Result};
+pub use exchange::{AcceptReport, ClaimLine};
 pub use repo::PrikkRepo;
 pub use sandbox::{CallLimits, Sandbox};

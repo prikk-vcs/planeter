@@ -285,6 +285,34 @@ impl Sandbox {
         }
     }
 
+    /// This policy with the **artifact-in** directory mounted read-only (RFC 004 D-6): where `sync accept` reads the
+    /// artifact it is given. The unconfined dev mode is returned as it is.
+    #[must_use]
+    pub fn with_artifact_in(&self, dir: impl Into<PathBuf>) -> Sandbox {
+        match self {
+            Sandbox::Unconfined => Sandbox::Unconfined,
+            Sandbox::Bwrap(cfg) => {
+                let mut cfg = cfg.clone();
+                cfg.mounts.artifact_in = Some(dir.into());
+                Sandbox::Bwrap(cfg)
+            }
+        }
+    }
+
+    /// This policy with the incoming-artifact `bounds` set in prikk's environment (RFC 004 D-5). The unconfined dev
+    /// mode is returned as it is: it has no environment of its own, and is never used to host untrusted input.
+    #[must_use]
+    pub fn with_incoming_bounds(&self, bounds: IncomingBounds) -> Sandbox {
+        match self {
+            Sandbox::Unconfined => Sandbox::Unconfined,
+            Sandbox::Bwrap(cfg) => {
+                let mut cfg = cfg.clone();
+                cfg.bounds = bounds;
+                Sandbox::Bwrap(cfg)
+            }
+        }
+    }
+
     /// The wall-time bound of one call: [`BwrapConfig::timeout_secs`] when sandboxed; none for the
     /// dev-only unconfined mode.
     pub fn deadline(&self) -> Option<Duration> {

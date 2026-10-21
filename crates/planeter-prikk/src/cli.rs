@@ -573,6 +573,40 @@ impl super::repo::PrikkRepo for CliPrikkRepo {
         self.run_lines(&["sync", "pending"])
     }
 
+    fn sync_accept_report(
+        &self,
+        artifact: &Path,
+        claims_out: &Path,
+    ) -> Result<crate::exchange::AcceptReport> {
+        let a = artifact.to_string_lossy();
+        let c = claims_out.to_string_lossy();
+        let stdout = self.run(&["sync", "accept", &a, "--claims-out", &c])?;
+        let report = crate::exchange::parse_accept_output(&stdout)?;
+        let file = std::fs::read_to_string(claims_out).map_err(|e| {
+            PrikkError::Parse(format!("unreadable `sync` output: the claims file: {e}"))
+        })?;
+        let mut from_file = crate::exchange::parse_claims_file(&file)?;
+        let mut from_stdout: Vec<String> = report
+            .claim_lines
+            .iter()
+            .map(|c| c.claim_id.clone())
+            .collect();
+        from_file.sort_unstable();
+        from_stdout.sort_unstable();
+        if from_file != from_stdout {
+            return Err(PrikkError::Parse(
+                "unreadable `sync` output: the claims file and the report name different claims"
+                    .to_owned(),
+            ));
+        }
+        Ok(report)
+    }
+
+    fn sync_pending_patches(&self) -> Result<Vec<String>> {
+        let stdout = self.run(&["sync", "pending"])?;
+        crate::exchange::parse_pending_output(&stdout)
+    }
+
     fn sync_seal(&self, ref_name: &str, claim: &str) -> Result<()> {
         self.run(&["sync", "seal", ref_name, "--claim", claim])
             .map(drop)

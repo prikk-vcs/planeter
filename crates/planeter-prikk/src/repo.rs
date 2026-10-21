@@ -110,6 +110,20 @@ pub trait PrikkRepo {
     /// `sync pending` → accepted-but-unsealed claim/patch ids.
     fn sync_pending(&self) -> Result<Vec<String>>;
 
+    /// `sync accept <artifact> --claims-out <claims_out>` → what a **completed** accept reported (RFC 004 D-3). The
+    /// output is read strictly ([`crate::exchange::parse_accept_output`]): an unreadable report, or a claims file that
+    /// disagrees with it, is [`crate::PrikkError::Parse`] and no revision may be derived from it. A refusal or a
+    /// failed run is the usual typed error with prikk's text.
+    fn sync_accept_report(
+        &self,
+        artifact: &Path,
+        claims_out: &Path,
+    ) -> Result<crate::exchange::AcceptReport>;
+
+    /// `sync pending` → the pending **patch ids**, in the order printed (strict: the header's count must equal the
+    /// number of ids, [`crate::exchange::parse_pending_output`]).
+    fn sync_pending_patches(&self) -> Result<Vec<String>>;
+
     /// `sync seal <ref> --claim <id>` → seal an accepted claim (needs a maintainer key in this repo;
     /// a keyless forge cannot call this — RFC 001 §0a / dependency-ledger PK-3).
     fn sync_seal(&self, ref_name: &str, claim: &str) -> Result<()>;
