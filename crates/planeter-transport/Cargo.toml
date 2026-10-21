@@ -10,3 +10,6 @@ description = "planeter's transport ferry for keyless clone and push over prikk'
 
 [dependencies]
 planeter-core = { path = "../planeter-core", version = "0.4.0" }
+# The streaming SHA-256 of the artifact store (RFC 004 D-2). An in-workspace edge (transport is an upper crate,
+# auth a lower one): no external crate is added.
+planeter-auth = { path = "../planeter-auth", version = "0.4.0" }
