@@ -90,6 +90,8 @@ environment:
                                 is never capped; a read above it is refused with 422 too_large)
   PLANETER_AUTH_CONCURRENCY     most password verifications at once (default min(CPUs, 4))
   PLANETER_AUTH_QUEUE_WAIT_SECS seconds a sign-in waits for a slot before 503 (default 5)
+  PLANETER_PREVIEW_LANGUAGES    comma-separated draft languages to offer for review (only ja exists); a
+                                draft is not signed off, so it is off by default and logged at start
   PLANETER_OIDC_ISSUER, PLANETER_OIDC_CLIENT_ID, PLANETER_OIDC_REDIRECT_URI
                                 all three enable OpenID Connect sign-in
   PLANETER_OIDC_CLIENT_SECRET   optional OpenID Connect client secret

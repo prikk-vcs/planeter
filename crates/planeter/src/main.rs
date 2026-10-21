@@ -157,6 +157,23 @@ async fn main() {
         }
     }
 
+    // RFC 012 D-3f: a draft language (Japanese, not yet signed off by its reviewers) is offered only when the
+    // operator asks for it. Off by default; logged once.
+    match planeter_web::catalog::enable_preview_languages(
+        &std::env::var("PLANETER_PREVIEW_LANGUAGES").unwrap_or_default(),
+    ) {
+        Ok(tags) if tags.is_empty() => {}
+        Ok(tags) => eprintln!(
+            "planeter: PREVIEW languages on ({}): these catalogs are drafts that their reviewers have not signed off; \
+             turn them off by unsetting PLANETER_PREVIEW_LANGUAGES",
+            tags.join(", ")
+        ),
+        Err(e) => {
+            eprintln!("planeter: PLANETER_PREVIEW_LANGUAGES: {e}");
+            exit_releasing_lock(1);
+        }
+    }
+
     // One SQLite database for every store; production hashers.
     let db = match SqliteDb::open(&db_path) {
         Ok(db) => db,

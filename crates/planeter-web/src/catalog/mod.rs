@@ -22,6 +22,7 @@ use std::sync::{Mutex, OnceLock};
 use askama::filters::HtmlSafe;
 
 pub mod en;
+pub mod ja;
 
 /// The product name: the same in every language, so it is a value, not a message.
 pub const PRODUCT: &str = "planeter";
@@ -114,10 +115,71 @@ impl Eq for Lang {}
 /// English.
 pub const EN: Lang = Lang(&EN_DEF);
 
-/// The languages this build ships. (Only these are checked for completeness.)
+/// Japanese has no grammatical plural: every count takes the `other` form.
+fn plural_ja(_: u64) -> Plural {
+    Plural::Other
+}
+
+/// Japanese (RFC 012 D-3, handoff `japanese-and-switcher-handoff-v1`): **a draft for the reviewers**. Compiled
+/// in, checked by the tests, and **not shipped** until [`JA_REVIEWED`] is `true`.
+pub static JA_DEF: LangDef = LangDef {
+    tag: "ja",
+    endonym: "日本語",
+    dir: Dir::Ltr,
+    plural: plural_ja,
+    group_separator: ',',
+    decimal_separator: '.',
+    entries: ja::CATALOG,
+};
+
+/// Whether the Japanese catalog has been **signed off** by its reviewers (the owner and a colleague; RFC 012
+/// D-3f). `false` until the reviewed sheet comes back and phase 2 integrates it; `shipped()` lists Japanese only
+/// when this is `true`. A test pins both halves of the rule.
+pub const JA_REVIEWED: bool = false;
+
+/// The record of the sign-off: who reviewed the Japanese catalog and when, set together with [`JA_REVIEWED`]
+/// (a test refuses one without the other). `None` while the catalog is a draft.
+pub const JA_SIGNOFF: Option<&str> = None;
+
+/// The languages this build ships. (Only these are checked for completeness; a language that is not signed off
+/// is not here.)
 pub fn shipped() -> &'static [&'static LangDef] {
-    static SHIPPED: [&LangDef; 1] = [&EN_DEF];
-    &SHIPPED
+    static WITH_JA: [&LangDef; 2] = [&EN_DEF, &JA_DEF];
+    static WITHOUT_JA: [&LangDef; 1] = [&EN_DEF];
+    if JA_REVIEWED { &WITH_JA } else { &WITHOUT_JA }
+}
+
+/// The languages that exist as drafts and can be previewed by the operator
+/// (`PLANETER_PREVIEW_LANGUAGES`, handoff T7): compiled in, checked, but not signed off.
+pub fn previewable() -> &'static [&'static LangDef] {
+    static DRAFTS: [&LangDef; 1] = [&JA_DEF];
+    &DRAFTS
+}
+
+/// Turn on the preview of draft languages for this process: `spec` is a comma-separated list of language codes
+/// (`ja`); an empty value changes nothing. Returns the codes now previewable. An unknown code is an error that
+/// names the ones that exist, so a typo does not silently do nothing.
+pub fn enable_preview_languages(spec: &str) -> Result<Vec<&'static str>, String> {
+    let mut enabled = Vec::new();
+    for tag in spec.split(',').map(str::trim).filter(|t| !t.is_empty()) {
+        match previewable()
+            .iter()
+            .find(|d| d.tag.eq_ignore_ascii_case(tag))
+        {
+            Some(def) => {
+                register_test_language(def);
+                enabled.push(def.tag);
+            }
+            None => {
+                let known: Vec<&str> = previewable().iter().map(|d| d.tag).collect();
+                return Err(format!(
+                    "unknown language {tag:?}; the languages that can be previewed are: {}",
+                    known.join(", ")
+                ));
+            }
+        }
+    }
+    Ok(enabled)
 }
 
 static EXTRA: OnceLock<Mutex<Vec<&'static LangDef>>> = OnceLock::new();
@@ -140,6 +202,14 @@ fn available() -> Vec<&'static LangDef> {
         v.extend(extra.lock().unwrap().iter());
     }
     v
+}
+
+/// One entry of the language switcher: the code, the language's name in itself, and whether it is the page's.
+#[derive(Clone, Debug)]
+pub struct LangChoice {
+    pub tag: &'static str,
+    pub endonym: &'static str,
+    pub current: bool,
 }
 
 impl Lang {
@@ -236,6 +306,7 @@ keys! {
     LayoutSkip => "layout.skip",
     LayoutNavRepository => "layout.nav_repository",
     LayoutFooter => "layout.footer",
+    LayoutLanguage => "layout.language",
     NavCode => "nav.code",
     NavHistory => "nav.history",
     NavRefs => "nav.refs",
@@ -410,7 +481,7 @@ keys! {
 pub struct LanguageVaries;
 
 /// The cookie that carries the visitor's language code (and nothing else): `SameSite=Lax`, not `HttpOnly`
-/// (nothing secret), a year long. The switcher that sets it arrives with the second language.
+/// (nothing secret), a year long. The footer switcher (`POST /lang`) sets it.
 pub const LANG_COOKIE: &str = "planeter_lang";
 
 /// A `Set-Cookie` value for the language cookie.
@@ -658,6 +729,22 @@ impl T {
     }
     pub fn lang_tag(&self) -> &'static str {
         self.lang.tag()
+    }
+    /// The languages the switcher offers (every language this process can serve), the page's marked current.
+    pub fn languages(&self) -> Vec<LangChoice> {
+        available()
+            .into_iter()
+            .map(|d| LangChoice {
+                tag: d.tag,
+                endonym: d.endonym,
+                current: d.tag == self.lang.tag(),
+            })
+            .collect()
+    }
+    /// Where the switcher sends the visitor back to: the path of the page being rendered (see
+    /// [`crate::lang_switch`]), `/` when there is none.
+    pub fn switch_back(&self) -> String {
+        crate::lang_switch::back()
     }
     pub fn dir(&self) -> &'static str {
         self.lang.dir()

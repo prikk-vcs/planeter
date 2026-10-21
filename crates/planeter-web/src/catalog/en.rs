@@ -11,6 +11,7 @@ pub const CATALOG: &[Entry] = &[
     msg("layout.skip", "Skip to content"),
     msg("layout.nav_repository", "Repository"),
     msg("layout.footer", "{product} {version}"),
+    msg("layout.language", "Language"),
     msg("nav.code", "Files"),
     msg("nav.history", "History"),
     msg("nav.refs", "Branches and tags"),

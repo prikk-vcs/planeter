@@ -61,7 +61,8 @@ fn without_placeholders(text: &str) -> String {
 
 fn contains_word(text: &str, word: &str) -> bool {
     let (text, word) = (text.to_lowercase(), word.to_lowercase());
-    let is_word_char = |c: char| c.is_alphanumeric() || c == '_';
+    // Only ASCII letters and digits join a word: Japanese text has no spaces, so `SSOでログイン` still contains `SSO`.
+    let is_word_char = |c: char| c.is_ascii_alphanumeric() || c == '_';
     text.match_indices(&word).any(|(at, _)| {
         let before = text[..at].chars().next_back();
         let after = text[at + word.len()..].chars().next();
@@ -228,4 +229,140 @@ fn an_allowlist_entry_silences_exactly_its_message_and_term_and_a_dead_one_fails
     // An entry without a reason is refused.
     assert!(parse_allow("planted.a :: refs\n").is_err());
     assert!(parse_allow("planted.a :: refs :: \n").is_err());
+}
+
+// ---------------------------------------------------------------------------------------------------------
+// Japanese (handoff `japanese-and-switcher-handoff-v1` T6): the English retired words may not come back inside a
+// Japanese message either, and a short list of Japanese terms is forbidden — the draft's own proposal, for the
+// reviewers to amend. Japanese has no word boundaries, so these are substring matches outside placeholders.
+
+/// (term, why it is forbidden). Proposed by the dev team; the reviewers amend it with their sheet.
+const JA_FORBIDDEN: &[(&str, &str)] = &[
+    // The retired private words, in their Japanese forms: the interface does not say "seal".
+    (
+        "シール",
+        "the loan word for seal / sealed: the glossary retired `sealed`; say \"signed into the history\" (署名して履歴に記録)",
+    ),
+    ("封印", "the literal translation of seal: same reason"),
+    ("未封印", "the literal translation of unsealed: same reason"),
+    (
+        "フォージ",
+        "forge-approved is retired; say \"approved on this server\" (このサーバーで承認)",
+    ),
+    (
+        "評価済み",
+        "`evaluated` is retired because it does not mean \"passed\"; the status is 完了 (completed)",
+    ),
+    ("ブロック", "a block is a \"change\" (変更) for the reader"),
+    (
+        "リファレンス",
+        "refs are \"branches and tags\" (ブランチとタグ)",
+    ),
+    // RFC 012 D-6: no blaming, no gendered wording.
+    (
+        "あなたの間違い",
+        "blames the reader: say what happened and what to do",
+    ),
+    ("あなたが間違", "blames the reader"),
+    ("ユーザーの過ち", "blames the reader"),
+    (
+        "不正な",
+        "implies wrongdoing; say \"not correct\" / \"not recognised\"",
+    ),
+    ("彼女", "gendered wording (D-6)"),
+    ("彼は", "gendered wording (D-6)"),
+    ("男性", "gendered wording (D-6)"),
+    ("女性", "gendered wording (D-6)"),
+];
+
+/// The forbidden Japanese terms one message form uses.
+fn ja_terms_in(text: &str) -> Vec<&'static str> {
+    let text = without_placeholders(text);
+    JA_FORBIDDEN
+        .iter()
+        .filter(|(term, _)| text.contains(term))
+        .map(|(term, _)| *term)
+        .collect()
+}
+
+fn ja_check(langs: &[&LangDef]) -> Vec<String> {
+    let mut problems = Vec::new();
+    for lang in langs {
+        for e in lang.entries {
+            for form in [e.one, e.other] {
+                for term in ja_terms_in(form) {
+                    problems.push(format!(
+                        "{} `{}` uses the forbidden {term:?}: {form:?}",
+                        lang.tag, e.key
+                    ));
+                }
+            }
+        }
+    }
+    problems
+}
+
+#[test]
+fn the_japanese_draft_uses_no_retired_english_word_and_no_forbidden_japanese_term() {
+    let (problems, _) = check(&[&planeter_web::catalog::JA_DEF], &[]);
+    assert_eq!(problems, Vec::<String>::new());
+    assert_eq!(
+        ja_check(&[&planeter_web::catalog::JA_DEF]),
+        Vec::<String>::new()
+    );
+}
+
+#[test]
+fn every_forbidden_japanese_term_is_found_and_ordinary_words_are_not_mistaken_for_one() {
+    for (term, reason) in JA_FORBIDDEN {
+        assert!(!reason.trim().is_empty());
+        let l = planted(vec![message(
+            "planted.key",
+            Box::leak(format!("これは{term}です。").into_boxed_str()),
+        )]);
+        let found = ja_check(&[l]);
+        assert!(
+            found.iter().any(|p| p.contains(&format!("{term:?}"))),
+            "{term:?} should be found: {found:?}"
+        );
+    }
+    // The words the glossary does use, and placeholder names, are fine.
+    for text in [
+        "検証済み",
+        "署名して履歴に記録済み",
+        "承認済み・署名待ち",
+        "完了",
+        "変更 {target}",
+        "{ref}",
+        "ブランチとタグ",
+        "シングルサインオンでログイン",
+        "このサーバーで承認されました。",
+    ] {
+        let l = planted(vec![message("planted.key", text)]);
+        assert_eq!(ja_check(&[l]), Vec::<String>::new(), "{text:?}");
+    }
+    // A term hidden in the other form only.
+    let l = planted(vec![Entry {
+        key: "planted.count",
+        one: "{count} 件",
+        other: "{count} 件の封印",
+    }]);
+    assert_eq!(ja_check(&[l]).len(), 1);
+}
+
+#[test]
+fn the_english_retired_words_are_found_in_a_japanese_message_too() {
+    for (text, term) in [
+        ("これは unsealed です", "unsealed"),
+        ("SSO でログイン", "SSO"),
+        ("SSOでログイン", "SSO"),
+        ("prikk-verified の変更", "prikk-verified"),
+    ] {
+        let l = planted(vec![message("planted.key", text)]);
+        let (problems, _) = check(&[l], &[]);
+        assert!(
+            problems.iter().any(|p| p.contains(&format!("{term:?}"))),
+            "{text:?}: {problems:?}"
+        );
+    }
 }

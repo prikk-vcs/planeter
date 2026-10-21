@@ -150,7 +150,7 @@ whether a private repository exists. Messages not listed here did not change (fo
 1. ~~The owner's reading of sections 1 and 2~~ — done, approved (2026-10-21).
 2. **Confirm with prikk** (next letter): that `active_sessions` in the verify report means queued, not-yet-signed
    work, and the right user-facing name for it. Until then `verify.sessions` is held.
-3. Who reads the Japanese (RFC 012 O-2): the wording is settled in English **before** translation starts.
+3. ~~Who reads the Japanese (RFC 012 O-2)~~ — **the owner and a colleague** (named by the owner, 2026-10-21); the Japanese draft is section 5 and the reviewers' sheet.
 
 ## 4. How this is used
 
@@ -159,3 +159,93 @@ catalog, in the same commit); `tests/glossary.rs` fails if a *Current* cell and 
 `tests/retired_words.rs` fails if a retired word (`unsealed`, `forge-approved`, `prikk-verified`, `not_evaluated`,
 `evaluated`, `refs`, `SSO`, or the old navigation labels) comes back. The Japanese translation starts from this
 English.
+
+## 5. Japanese (a draft for the reviewers)
+
+**Status.** A **draft** (handoff `japanese-and-switcher-handoff-v1`, 2026-10-21). The reviewers are **the owner and a
+colleague**, both fluent; nothing here ships until they have gone through `japanese-review-sheet.md` and the dev team has
+integrated their corrections (`JA_REVIEWED` in `catalog/mod.rs`). Until then the catalog is compiled in and checked, and
+offered only to the operator who turns the preview on (`PLANETER_PREVIEW_LANGUAGES=ja`). **The English meaning of every
+trust label is fixed; the Japanese keeps it exactly, and where the draft is unsure it says so here instead of choosing.**
+The style is the polite form (です・ます); headings and badges are noun phrases; Japanese has no plural, so a counted message
+says the same for every count; numbers group with commas (`1,200`).
+
+### 5.1 Terms
+
+*Shown* says whether the interface uses the term. **Hard term** = the reviewers decide; the draft's choice is a proposal.
+
+| English term | Japanese term the draft uses | Shown | Why, and alternatives | Status |
+|---|---|---|---|---|
+| repository | リポジトリ | yes | The usual loan word; on every page (`home.*`, `layout.nav_repository`, the not-found sentences). | Hard term — reviewers decide |
+| branch | ブランチ | yes | The usual loan word (`nav.refs`, `refs.*`, `history.empty`). Alternative: 枝 is not used in software. | Hard term — reviewers decide |
+| tag | タグ | yes | The usual loan word. | Proposed |
+| patch | パッチ | yes | prikk's own word is *patch*; the interface explains it (`explain.patch`: 記録された編集1件). Alternative: 編集 would drop prikk's word. | Hard term — reviewers decide |
+| change | 変更 | yes | The one word for a recorded unit of history (prikk: *block*), as in English. Counted with 件 (`history.patch_count`). | Hard term — reviewers decide |
+| history | 履歴 | yes | The usual word for a repository's history. | Proposed |
+| rollback | ロールバック | yes | The usual loan word; explained in place (`explain.rollback`: 以前の変更を取り消す変更). | Hard term — reviewers decide |
+| verify / verification | 検証 | yes | The page and the navigation say 検証; the checks are チェック (`verify.col.stage`), so a *check* and the *verification* stay two words, as in English. Alternative: 確認 (used for *could not be checked*, 現在は確認できません). | Hard term — reviewers decide |
+| Verified (badge) | 検証済み | yes | A trust label. English: prikk ran all its checks just now and found no problems. 検証済み says *has been verified*; the explanation (`explain.verified`) says *just now*. The reviewers confirm the label does not read as a lasting guarantee. | Hard term — trust label, reviewers decide |
+| Signed into the history (badge) | 署名して履歴に記録済み | yes | A trust label. English: a maintainer signed this patch into the project's history. The draft says both parts, *signed* and *recorded in the history*. Alternatives: 履歴に署名済み, 署名済み. It must not read as *verified* (it is not). | Hard term — trust label, reviewers decide |
+| Approved, awaiting signature (badge) | 承認済み・署名待ち | yes | A trust label. English: approved on this server, not yet signed by a maintainer, so not part of the verified record. 署名待ち keeps *not yet signed*. | Hard term — trust label, reviewers decide |
+| Verification failed (badge) | 検証に失敗 | yes | A trust label. prikk checked and found problems (not *was not checked*). | Hard term — trust label, reviewers decide |
+| Could not be checked now (badge) | 現在は確認できません | yes | A trust label. The check could not run (not *failed*). 確認 rather than 検証 so that it does not claim a verification happened. | Hard term — trust label, reviewers decide |
+| seal / sealed / unsealed | (not used) | no | The interface never says *seal* (the plain-words work retired it; the English reader sees *signed into the history*). **prikk documents no Japanese, so there is no usage to follow.** If a document ever needs the word, the draft would propose 封印 / 封印済み / 未封印 or the loan word シール; both are on the forbidden list for the messages (`tests/retired_words.rs`). | Hard term — reviewers decide (not shown to the reader) |
+| single sign-on | シングルサインオン | yes | The usual katakana form; the abbreviation SSO is retired (`login.sso`, `page.sso_*`). | Hard term — reviewers decide |
+| sign in / sign out | ログイン / ログアウト | yes | The usual words. Alternative: サインイン / サインアウト. | Proposed |
+| username | ユーザー名 | yes | `login.user`. | Proposed |
+| maintainer | メンテナー | yes | The usual loan word (`explain.signed`, `explain.queued`). | Proposed |
+| check (a verification stage) | チェック | yes | `verify.col.stage`; the statuses are 完了 / 問題あり / 未実行 / 途中で停止. | Proposed |
+| the person who runs this server | このサーバーの管理者 | yes | `unavailable.body`, `too_large.body`, `error.too_large.raw_hint`. The API hints say 運用者 (operator), as the English hints say *operator*. | Proposed |
+
+### 5.2 Messages that carry a term or a trust label
+
+The Japanese cell is the catalog text, character for character (`tests/glossary_ja.rs` compares it, and the English cell, with
+the two catalogs). A reviewer's correction changes this cell and `ja.rs` together.
+
+| Message | English | Japanese |
+|---|---|---|
+| `nav.code` | "Files" | "ファイル" |
+| `nav.history` | "History" | "履歴" |
+| `nav.refs` | "Branches and tags" | "ブランチとタグ" |
+| `nav.verify` | "Verification" | "検証" |
+| `layout.sign_in` | "Sign in" | "ログイン" |
+| `layout.sign_out` | "Sign out" | "ログアウト" |
+| `layout.language` | "Language" | "言語" |
+| `login.sso` | "Sign in with single sign-on" | "シングルサインオンでログイン" |
+| `login.user` | "Username" | "ユーザー名" |
+| `login.password` | "Password" | "パスワード" |
+| `assurance.verified` | "Verified" | "検証済み" |
+| `assurance.sealed` | "Signed into the history" | "署名して履歴に記録済み" |
+| `assurance.queued` | "Approved, awaiting signature" | "承認済み・署名待ち" |
+| `assurance.unverified` | "Verification failed" | "検証に失敗" |
+| `assurance.verify_unavailable` | "Could not be checked now" | "現在は確認できません" |
+| `explain.summary` | "What does this mean?" | "これはどういう意味ですか？" |
+| `explain.verified` | "prikk ran all of its checks on this repository just now, and they found no problems." | "prikk がこのリポジトリに対してすべてのチェックをたった今実行し、問題は見つかりませんでした。" |
+| `explain.signed` | "A maintainer signed this patch into the project's history. The Verification page shows whether the whole repository checks out." | "メンテナーがこのパッチをプロジェクトの履歴に署名して記録しました。リポジトリ全体に問題がないかどうかは、「検証」ページで確認できます。" |
+| `explain.queued` | "This change was approved on this server. A maintainer has not yet signed it into the project's history, so it is not part of the verified record." | "この変更は、このサーバーで承認されました。メンテナーがまだプロジェクトの履歴に署名していないため、検証済みの記録には含まれていません。" |
+| `explain.failed` | "prikk checked this repository and found problems. The Verification page lists what was found." | "prikk がこのリポジトリをチェックしたところ、問題が見つかりました。見つかった内容は「検証」ページに一覧があります。" |
+| `explain.failed_here` | "prikk checked this repository and found problems. They are listed below." | "prikk がこのリポジトリをチェックしたところ、問題が見つかりました。内容は下に一覧で示します。" |
+| `explain.unavailable` | "Try again in a little while." | "しばらくしてから、もう一度お試しください。" |
+| `explain.patch` | "A patch is one recorded edit." | "パッチとは、記録された編集1件のことです。" |
+| `explain.rollback` | "A rollback is a change that undoes an earlier change." | "ロールバックとは、以前の変更を取り消す変更のことです。" |
+| `history.rollback` | "rollback" | "ロールバック" |
+| `history.patch_count` | "{count} patch" / "{count} patches" | "パッチ {count} 件" |
+| `history.empty` | "There are no signed changes on this branch yet." | "このブランチには、署名済みの変更がまだありません。" |
+| `refs.branches` | "Branches" | "ブランチ" |
+| `refs.tags` | "Tags" | "タグ" |
+| `refs.current` | "current" | "現在" |
+| `refs.closed` | "closed" | "クローズ済み" |
+| `verify.heading` | "Verification" | "検証" |
+| `verify.findings` | "What was found" | "見つかった内容" |
+| `verify.status.evaluated` | "completed" | "完了" |
+| `verify.status.failed` | "problem found" | "問題あり" |
+| `verify.status.not_evaluated` | "not run (blocked by {check})" | "未実行（{check} が原因）" |
+| `verify.status.not_run` | "not run" | "未実行" |
+| `verify.status.halted` | "stopped early" | "途中で停止" |
+| `verify.status.halted_after` | "stopped early (after {check})" | "途中で停止（{check} の後）" |
+| `verify.col.stage` | "Check" | "チェック" |
+| `verify.sessions` | "{verified} of {count} session verified." / "{verified} of {count} sessions verified." | "{count} 件中 {verified} 件のセッションを検証済み。" |
+| `home.open` | "Open repository" | "リポジトリを開く" |
+| `home.address_label` | "Repository address" | "リポジトリのアドレス" |
+| `unavailable.body` | "This repository could not be read right now. Try again in a little while. If it keeps happening, tell the person who runs this server." | "今はこのリポジトリを読み込めません。しばらくしてから、もう一度お試しください。それでも解決しない場合は、このサーバーの管理者にお知らせください。" |
+| `not_found.body` | "There is no repository at this address, or you do not have access to it. Check the address, or sign in if the repository is private." | "このアドレスにはリポジトリがないか、アクセスする権限がありません。アドレスを確認してください。非公開のリポジトリの場合は、ログインしてください。" |
