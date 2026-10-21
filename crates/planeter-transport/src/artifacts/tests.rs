@@ -354,3 +354,53 @@ fn the_configuration_is_validated() {
     assert!(opened.spool.unwrap().root().join("incoming").is_dir());
     let _ = fs::remove_dir_all(&base);
 }
+
+#[test]
+fn an_export_gets_a_working_directory_of_its_own_that_is_removed_with_it() {
+    let d = dir("workdir");
+    let s = Spool::open(&d, 1000).unwrap();
+    let w1 = s.new_work_dir().unwrap();
+    let w2 = s.new_work_dir().unwrap();
+    assert_ne!(w1.path(), w2.path());
+    assert!(w1.path().starts_with(d.join("work")) && w1.path().is_dir());
+    assert!(!w1.file().exists(), "the export file does not exist yet");
+    fs::write(w1.file(), b"abc").unwrap();
+    // The finished file is moved into the spool by rename; the directory can then go.
+    let (digest, size) = s.adopt(&w1.file()).unwrap();
+    assert_eq!(size, 3);
+    assert!(s.contains(&digest));
+    let p1 = w1.path().to_path_buf();
+    drop(w1);
+    assert!(!p1.exists(), "a dropped working directory is gone");
+    assert!(
+        w2.path().is_dir(),
+        "another export's directory is untouched"
+    );
+    assert!(
+        s.contains(&digest),
+        "the adopted object does not depend on the directory"
+    );
+    let _ = fs::remove_dir_all(&d);
+}
+
+#[test]
+fn orphaned_working_directories_are_removed_when_the_spool_opens() {
+    let d = dir("workdir-orphans");
+    {
+        let s = Spool::open(&d, 1000).unwrap();
+        let w = s.new_work_dir().unwrap();
+        fs::write(w.file(), b"half written").unwrap();
+        std::mem::forget(w); // a crash: the guard never ran
+        let w = s.new_work_dir().unwrap();
+        std::mem::forget(w);
+    }
+    assert_eq!(fs::read_dir(d.join("work")).unwrap().count(), 2);
+    let s = Spool::open(&d, 1000).unwrap();
+    assert_eq!(fs::read_dir(d.join("work")).unwrap().count(), 0);
+    assert_eq!(
+        s.cleaned_partials(),
+        2,
+        "the removed directories are counted"
+    );
+    let _ = fs::remove_dir_all(&d);
+}

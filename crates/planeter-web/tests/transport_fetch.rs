@@ -1741,3 +1741,120 @@ async fn the_advertisement_serializes_to_exactly_the_fields_the_document_declare
             .is_object()
     );
 }
+
+// ================================================================================================ T0(b): a narrower mount
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn under_the_real_sandbox_an_export_sees_its_own_working_directory_and_no_other_spool_object()
+{
+    if skip() {
+        return;
+    }
+    if !bwrap_works() || !have("prlimit") {
+        eprintln!("skipping: needs bubblewrap (with user namespaces) and prlimit");
+        return;
+    }
+    // A stand-in prikk that, as `archive export`, writes into the file it was given a report of what it can do
+    // to the rest of the spool; and whose `archive verify` accepts anything (the report is the "archive").
+    let dir = scratch("isolation-bin");
+    let bin = stand_in(
+        &dir,
+        r#"if [ "$2" = "export" ]; then
+  out="$3"; work=$(dirname "$out"); spool=$(dirname "$(dirname "$work")")
+  {
+    echo "own-dir-write: $(echo ok > "$work/note" 2>/dev/null && echo ok || echo fail)"
+    echo "objects-listing: $(ls "$spool/objects" 2>/dev/null | wc -l)"
+    echo "objects-read: $(cat "$spool"/objects/*/* 2>/dev/null | wc -c)"
+    echo "objects-write: $(echo x > "$spool/objects/planted" 2>/dev/null && echo ok || echo fail)"
+    echo "spool-write: $(echo x > "$spool/planted" 2>/dev/null && echo ok || echo fail)"
+    echo "incoming-write: $(echo x > "$spool/incoming/planted.partial" 2>/dev/null && echo ok || echo fail)"
+    echo "sibling-work-dirs: $(ls "$spool/work" 2>/dev/null | wc -l)"
+    echo "sibling-read: $(cat "$spool"/work/*/secret 2>/dev/null | wc -c)"
+    echo "sibling-write: $(echo x > "$spool"/work/other-export/planted 2>/dev/null && echo ok || echo fail)"
+  } > "$out"
+elif [ "$2" = "verify" ]; then
+  echo '{"schema_version":"prepo-verify-report-v1","ok":true,"structure":{"ok":true},"closure":{"ok":true},"damaged":[],"interrupted_appends":[]}'
+fi"#,
+    );
+    let fx = fixture(
+        "isolation",
+        Opts {
+            binary: Some(bin),
+            sandbox: planeter_prikk::Sandbox::default(),
+            ..Opts::default()
+        },
+    );
+    // A stored object and another export's working directory, both of which the stand-in must not reach.
+    let victim = fx
+        .export
+        .spool()
+        .put(&mut std::io::Cursor::new(
+            b"another artifact, not for this export".to_vec(),
+        ))
+        .unwrap();
+    let other = fx.spool_dir.join("work/other-export");
+    std::fs::create_dir_all(&other).unwrap();
+    std::fs::write(other.join("secret"), b"another export's file").unwrap();
+
+    let r = call(&fx.router, FETCH_ARCHIVE, &[]).await;
+    assert_eq!(
+        r.status,
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&r.body)
+    );
+    let report = String::from_utf8_lossy(&r.body).into_owned();
+    let line = |k: &str| {
+        report
+            .lines()
+            .find(|l| l.starts_with(k))
+            .unwrap_or_else(|| panic!("{k}: {report}"))
+            .to_owned()
+    };
+    assert_eq!(
+        line("own-dir-write"),
+        "own-dir-write: ok",
+        "it can write its own working directory\n{report}"
+    );
+    assert_eq!(
+        line("objects-listing"),
+        "objects-listing: 0",
+        "stored objects are not even listed\n{report}"
+    );
+    assert_eq!(line("objects-read"), "objects-read: 0", "{report}");
+    assert_eq!(line("objects-write"), "objects-write: fail", "{report}");
+    // (A write under a directory that bubblewrap only made to hold the mount lands in the sandbox's private
+    // in-memory root and vanishes with it: only the host check below says anything about it.)
+    assert_eq!(
+        line("sibling-work-dirs"),
+        "sibling-work-dirs: 1",
+        "it sees only its own working directory\n{report}"
+    );
+    assert_eq!(line("incoming-write"), "incoming-write: fail", "{report}");
+    assert_eq!(line("sibling-read"), "sibling-read: 0", "{report}");
+    assert_eq!(line("sibling-write"), "sibling-write: fail", "{report}");
+    // And on the host nothing was planted or disturbed.
+    assert!(!fx.spool_dir.join("planted").exists());
+    assert!(!fx.spool_dir.join("objects/planted").exists());
+    assert!(!fx.spool_dir.join("incoming/planted.partial").exists());
+    assert!(!other.join("planted").exists());
+    assert_eq!(
+        std::fs::read(other.join("secret")).unwrap(),
+        b"another export's file"
+    );
+    assert!(
+        fx.export.spool().verify_object(&victim),
+        "the stored object is intact"
+    );
+    // The export's own directory is gone once it is done; the other export's directory is still there.
+    let left: Vec<_> = std::fs::read_dir(fx.spool_dir.join("work"))
+        .unwrap()
+        .flatten()
+        .map(|e| e.file_name())
+        .collect();
+    assert_eq!(
+        left,
+        vec![std::ffi::OsString::from("other-export")],
+        "only the directory that was not ours remains: {left:?}"
+    );
+}

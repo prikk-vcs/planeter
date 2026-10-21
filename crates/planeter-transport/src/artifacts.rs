@@ -309,6 +309,30 @@ struct SpoolState {
     tick: u64,
 }
 
+/// One export's working directory (see [`Spool::new_work_dir`]); removed, with everything in it, on drop.
+#[derive(Debug)]
+pub struct WorkDir {
+    path: PathBuf,
+}
+
+impl WorkDir {
+    /// The directory: the only part of the spool the exporting process is given.
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    /// The file the export writes (it does not exist yet: prikk refuses to overwrite one).
+    pub fn file(&self) -> PathBuf {
+        self.path.join("export")
+    }
+}
+
+impl Drop for WorkDir {
+    fn drop(&mut self) {
+        let _ = fs::remove_dir_all(&self.path);
+    }
+}
+
 /// The export spool: content-addressed, atomic, bounded by a disk budget, evicting **least recently used**.
 pub struct Spool {
     dir: Dir,
@@ -324,7 +348,15 @@ impl Spool {
     /// removed; objects already there are counted, in the order of their modification times, and the spool is
     /// brought within the budget.
     pub fn open(root: impl AsRef<Path>, budget_bytes: u64) -> Result<Arc<Spool>, StoreError> {
-        let (dir, cleaned) = Dir::open(root.as_ref())?;
+        let (dir, mut cleaned) = Dir::open(root.as_ref())?;
+        // Working directories left by a crashed export: removed whole.
+        let work = dir.root.join("work");
+        fs::create_dir_all(&work).map_err(io_err("cannot create the work directory"))?;
+        for e in fs::read_dir(&work).map_err(io_err("cannot read the work directory"))? {
+            let e = e.map_err(io_err("cannot read the work directory"))?;
+            let _ = fs::remove_dir_all(e.path());
+            cleaned += 1;
+        }
         let mut found = dir.scan()?;
         found.sort_by(|a, b| (a.2, &a.0).cmp(&(b.2, &b.0)));
         let mut state = SpoolState {
@@ -387,6 +419,22 @@ impl Spool {
         }
         self.evict_to_budget(Some(&digest))?;
         Ok(digest)
+    }
+
+    /// A fresh **working directory** for one export (`<spool>/work/<id>`), created now and removed when the returned
+    /// guard is dropped, so that whatever writes there (prikk, in the spool-out mount) is given this directory and
+    /// nothing else of the spool: no other export's file, no stored object. The finished file is moved into the spool
+    /// by [`Spool::adopt`] (an atomic rename on the same volume) before the guard is dropped. Orphaned working
+    /// directories (a crash) are removed when the spool is opened.
+    pub fn new_work_dir(&self) -> Result<WorkDir, StoreError> {
+        let n = UNIQUE.fetch_add(1, Ordering::Relaxed);
+        let path = self
+            .dir
+            .root
+            .join("work")
+            .join(format!("{}-{n}", std::process::id()));
+        fs::create_dir(&path).map_err(io_err("cannot create an export working directory"))?;
+        Ok(WorkDir { path })
     }
 
     /// A fresh path inside the spool for a file that is being written by someone else (prikk, in the spool-out

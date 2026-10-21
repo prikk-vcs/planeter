@@ -633,10 +633,12 @@ impl ExportService {
         }
     }
 
-    fn sandbox_for_export(&self) -> planeter_prikk::Sandbox {
+    /// The sandbox of one export: the repository and **this export's working directory** (read-write, the
+    /// spool-out mount), and nothing else of the spool.
+    fn sandbox_for_export(&self, work: &crate::artifacts::WorkDir) -> planeter_prikk::Sandbox {
         self.hosting
             .sandbox()
-            .with_spool_out(self.spool.root(), self.config.deadline.as_secs().max(1))
+            .with_spool_out(work.path(), self.config.deadline.as_secs().max(1))
     }
 
     fn map_prikk(e: &PrikkError) -> FetchError {
@@ -691,11 +693,15 @@ impl ExportService {
             a.cache = CacheStatus::Shared;
             return Ok(a);
         }
-        let partial = self.spool.partial_path();
+        let work = self.spool.new_work_dir().map_err(|e| {
+            eprintln!("planeter: cannot create an export working directory: {e}");
+            FetchError::Unavailable
+        })?;
+        let partial = work.file();
         let limits = CallLimits::data_ceiling(self.config.data_ceiling);
         let driver = self
             .hosting
-            .open_record_sandboxed(record, limits, self.sandbox_for_export())
+            .open_record_sandboxed(record, limits, self.sandbox_for_export(&work))
             .map_err(|e| {
                 eprintln!("planeter: cannot open a repository for an export: {e}");
                 FetchError::Unavailable
