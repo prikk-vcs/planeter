@@ -1,17 +1,21 @@
-# RFC 005 — Change proposal and review (second edition)
+# RFC 005 — Change proposal and review (third edition)
 
-**Status.** Proposed — **second edition, drafted 2026-10-15** for the owner's reading; the implementer must
-not start. It replaces the body of the 2026-09-15 acceptance (v1 is in this path's git history; its
-2026-09-16 revision preface is folded in below). **Issues (CAP-4), bundled in v1, are split out** (see
-§Scope). This RFC is not accepted until the unconfirmed upstream rows named in §Upstream facts are confirmed
-or the owner accepts that risk in writing (RFC 010 D-8).
+**Status.** Proposed — **third edition, drafted 2026-10-21** for the owner's reading; the implementer must
+not start. It replaces the body of the second edition (2026-10-15; earlier editions are in this path's git
+history). **Issues (CAP-4), bundled in v1, are split out** (see §Scope). The upstream rows the second edition
+waited for were measured (transport measurement A1–A12, ledger v1.9 PK-57 to PK-61, 2026-10-21); this edition
+changes the design where they disagreed: the accept is resumable, not atomic, so the change record is made
+from an **intent journal after a complete accept** (D-1); a revision's patch set cannot be recovered from
+prikk's output when patches overlap, so it is **declared by the client helper and checked by the forge**
+(D-1); a change is read through **patch ids, never block ids** (D-4, prikk defect PK-57); and `queued` never
+means "unsealed" (D-10, PK-58). Ready for the owner's decision to accept (it depends on RFC 004 third edition).
 Handoff: v1 ([`../handoffs/005-change-review/change-review-handoff-v1.md`](../handoffs/005-change-review/change-review-handoff-v1.md))
 is superseded; **handoff v2 is written on acceptance.**
 **Tracks.** ROADMAP Phase A3 → M3. Requirements `CAP-5`, `SEC-1`, `NG-3`, `NG-6`; external design
 `WEB-02`, `WEB-06`, `FL-04`, `FL-08`; internal design `WR-4`, `DM-2`, `DM-4`, `RD-3`; threat model `T-1`,
 `T-3`, `T-9`, `T-10`, `INV-1`, `INV-2`, `INV-6`; RFC 002 (`authorize()`), RFC 003 (re-derivation), RFC 004 v2
 (accept and retained artifacts), RFC 006 v2 (checks, D-C6 accepted), RFC 008 and the owner's decision D-8
-(how a branch is published); ledger PK-2, PK-28, PK-34, PK-35, PK-46, PK-48, PK-49, PK-50.
+(how a branch is published); ledger PK-2, PK-28, PK-34, PK-35, PK-46, PK-48, PK-49, PK-50, PK-56–PK-60.
 **Touches.** `planeter-core` (the change and review model), `planeter-store` (change, revision and review
 records), `planeter-web` (review UI and API), `planeter-transport` (the retained-artifact relay). **Not
 here:** how a published branch comes to contain a change (publication/merge: RFC 008 and decision D-8), CI
@@ -32,8 +36,8 @@ belongs to the exact revision and base it was given for.
 
 ## Upstream facts (what this design stands on)
 
-Measured by the architect on prikk 0.52.0, scratch directory, keyless receiver, 2026-10-15
-(`.git-exclude/reviewed/` note; the transport spike repeats and extends them):
+U-1…U-5 measured by the architect on prikk 0.52.0, keyless receiver, 2026-10-15; U-9…U-13 measured by the
+transport measurement (dev team, prikk 0.53.0 with 0.52.0 side by side, 2026-10-21; rows A6, A7, A12):
 
 | ID | Fact | Label | Ledger |
 |---|---|---|---|
@@ -46,10 +50,17 @@ Measured by the architect on prikk 0.52.0, scratch directory, keyless receiver, 
 | U-7 | A keyed receiver can `sync accept` an artifact built elsewhere and `sync seal --claims <file>` it under its own key; nothing about this needs the forge. | D (sync guide) | PK-2 |
 | U-8 | prikk is considering a read-only command whose point may be **one pending accepted claim** (files = its parent's files plus its patches); 0.54.0 behind a design round, not promised. | D | PK-46 |
 
-**Not yet confirmed** (RFC 010 D-8): that the accept output's claim lines are stable enough to parse (text);
-that pending-before/pending-after is a race-free derivation under the lease across idempotent re-accept and
-interrupted accept; that U-7 works end to end with an artifact relayed from the forge. These are rows A12 of
-the transport measurement handoff.
+| U-9 | **`prikk show <block-id>` fails for a block that edits a file for the third time** (integrity error from a lifecycle replay) while `verify` is clean; `show <patch-id>` of the same block works. So a change is read patch by patch. | M | PK-57 |
+| U-10 | **`show <patch-id>` reports `queued: false` for an accepted-but-unsealed patch.** `queued` means "in this repository's own active queue"; pending versus sealed comes from `sync pending` and `log`, never from `queued`. | M | PK-58 |
+| U-11 | **An interrupted `sync accept` is not atomic** (SIGKILL at 15/40/70/90 % leaves 147/397/706/902 of 1,000 patches pending, locks in place, `verify` and `doctor` clean); a retry resumes and converges. | M | PK-59 |
+| U-12 | **The accept event's output is stable text and complete for the artifact, not for what is new:** a second push of 5 patches, 3 new, gives pending 5, new objects 3, claims file with all claim lines (new first), order stable; a re-accept is idempotent (claims file byte-identical). **Claim lines cannot be mapped to patch ids** (`show <claim-id>` is refused), so the set of patches *inside* an artifact is not recoverable from prikk's output when some are already pending. | M | PK-48, PK-59 |
+| U-13 | **The relay works end to end (A12c):** an artifact accepted into a second, keyed repository can be sealed with `sync seal --claims <file>`: with the pusher's key adopted the claims are `Sound`, each claim becomes its own block, `verify` is clean; without the adoption the seal still succeeds but creates a `Root` block, `verify` exits 1 (`publication-trust`) and the received history stays pending. | M | PK-48 |
+
+**Confirmed since the second edition:** the accept output's claim lines are parseable and deterministic (U-12);
+the relay into a second repository works (U-13). **Refuted:** that the accept event is a race-free unit
+(U-11): derivation from pending-before/after is sound only after a **complete** accept (D-1). **Open, to prikk
+(letter drafted):** JSON for `sync accept`/`sync pending` (claim → patch ids), a documented meaning of
+`queued`, and the `show <block-id>` defect.
 
 ## Goals
 
@@ -76,13 +87,30 @@ the transport measurement handoff.
 
 ## Decisions
 
-- **D-1 — A change is one accept event, and its record is made under the write lease.** On a successful
-  `sync accept` (RFC 004 v2 lease class W), planeter records a **change revision**:
-  `{ revision_id, change_id, repo, artifact_digest, claim_ids (from --claims-out), patch_ids (the pending set
-  after minus the pending set before), claim outcomes (as reported), submitter principal, author key ids,
-  base (D-3), created_at }`. Nothing about history is copied (NG-6); ids only. Re-accepting an identical
-  artifact (same digest) finds the existing revision and creates nothing. An interrupted accept records
-  nothing and is retried (accept is idempotent, ledger PK-28).
+- **D-1 — A change is built from complete accept events, recorded from an intent journal.** RFC 004 D-3
+  writes an **intent record** (`artifact digest`, `pending-before`) *before* `sync accept` and closes it after a
+  **complete** run (exit 0). Only then does planeter record a **change revision** — in one store transaction that
+  also closes the intent:
+  `{ revision_id, change_id, repo, artifact_digest, claim_ids (from --claims-out), added_patch_ids
+  (pending-after minus the intent's pending-before), declared_patch_ids (below), claim outcomes (as reported),
+  submitter principal, author key ids, base (D-3), created_at }`. Nothing about history is copied (NG-6); ids
+  only. Re-accepting an identical artifact (same digest) finds the existing revision and creates nothing; an
+  accept that adds nothing new records nothing and tells the submitter so. **A killed or timed-out accept
+  records nothing** (U-11): its intent stays open, the repository is `needs-recovery` (RFC 004 D-6), and the
+  retry of the same artifact completes it; derivation always uses the *first* attempt's pending-before.
+  - **The patch set of a revision.** `added_patch_ids` is what this accept newly stored. It is **not** the
+    artifact's patch set when some of its patches were already pending (U-12): a revision that amends or
+    extends a series carries its earlier patches again. The client helper therefore **declares** the full
+    list of patch ids its artifact contains (it computes them from its own `log` of the blocks since the
+    declared base, ids only), and the forge **checks the declaration**: every declared id must be held (pending
+    or reachable) after the accept, and `declared ⊇ added`. A declaration that fails either check is refused with
+    a named reason. The revision's patch set is `declared_patch_ids`; the UI labels it "as declared by the
+    submitter and found on the forge". A push by plain prikk (no helper) has no declaration: the revision is
+    recorded with `added_patch_ids` only and the UI says "patches added by this push; earlier patches of the
+    same series, if any, are not listed" — it never claims completeness it does not have.
+  - **Why not derive it?** The only other sources are claims (unreadable, U-12) and a scratch accept (an
+    incremental artifact omits objects the forge already holds, so it is refused outside the forge's store).
+    When prikk exposes the accept's patch ids (the drafted ask), the declaration becomes a cross-check.
 - **D-2 — A change is a series of immutable revisions.** A push names an existing `change_id` to add a
   revision, or none to open a new change. A change has `target` (the ref name the submitter intends, advisory
   only), a title and a description (Markdown, rendered through the RFC 003 sanitizer), and a state:
@@ -91,12 +119,15 @@ the transport measurement handoff.
   the UI says so.
 - **D-3 — Base: declared by the client, verified as held.** The client helper states the block id it built
   against (it knows it; claims' parents are unreadable by the forge). The forge accepts a revision only if
-  `show <base>` succeeds, i.e. the base is held (published or received); otherwise it refuses with a named
+  the base is **listed by `log` of a ref it holds** (published or received; **not** by `show <base>`, which fails for
+  some blocks, U-9); otherwise it refuses with a named
   reason ("base unknown: push the base first"). A revision with no declared base records `base: none` and is
   reviewable but its results never count (D-7). A *declaration* is not a fact about the artifact; the UI
   labels it "declared base".
-- **D-4 — The review view is patch-level and re-derived.** For each patch in `patch_ids`, the diff is
-  prikk's own `show <patch-id> --format json` rendered through RFC 003 (sanitized, honest). Because patch
+- **D-4 — The review view is patch-level and re-derived.** For each patch in the revision's patch set, the
+  diff is prikk's own `show <patch-id> --format json` rendered through RFC 003 (sanitized, honest). **Always by
+  patch id, never by block id** (U-9: `show <block-id>` fails for blocks that edit a file a third time, and a
+  pending patch has no block at all). Because patch
   ids are content-addressed and immutable, caching by patch id is correct forever and does not conflict with
   INV-6. A file-level tree view is added behind the same `ChangeView` interface **when** prikk ships its
   read-only command with a claim as a point (U-8); until then the UI shows per-patch effects and says what
@@ -107,9 +138,11 @@ the transport measurement handoff.
   revision does **not** carry approvals over: they are shown on the revision they were given for, and a
   later revision shows "approved on revision N". This keeps "approved" from silently covering code the
   reviewer never saw.
-- **D-6 — Landing is observed, never asserted.** A change is `landed` when every patch id of its latest
-  revision has left the repository's pending set (they are now reachable from a block: `sync pending` no
-  longer lists them), re-derived from prikk. The forge never marks a change landed by its own say-so, and
+- **D-6 — Landing is observed, never asserted.** A change is `landed` when every patch id of its **current
+  patch set** has left the repository's pending set (they are now reachable from a block: `sync pending` no
+  longer lists them), re-derived from prikk. The current patch set is the latest revision's declared set; for
+  a change whose revisions have no declaration it is the union of their `added` sets, and the UI says that a
+  superseded patch that no one seals keeps such a change open. The forge never marks a change landed by its own say-so, and
   records the first observation point (the ref or received ref that reaches them, where prikk reports it).
 - **D-7 — Checks and approvals are bound to (revision, base) and stale never counts.** As the owner
   accepted for RFC 006 (D-C6): a result or approval belongs to the exact (revision, declared base) it was
@@ -129,7 +162,11 @@ the transport measurement handoff.
   count and open changes; a refusal names the quota. The quotas exist because an accepted patch cannot be
   removed from a store (PK-41/E11). A change from a principal without `write` is an *untrusted change* for
   CI (RFC 006 C8): no secrets, a maintainer's approval to run.
-- **D-10 — Honesty is a type, not a style.** The change view model carries an `Assurance` for every item:
+- **D-10 — Honesty is a type, not a style.** *(Amended 2026-10-21 by IS-44/IS-47.)* The project's `Assurance`
+  has four values (`prikk-verified`, `sealed`, `forge-approved-unsealed`, `unverified`). **`sealed` is never
+  derived from `queued: false`** (U-10: a pending patch reports `queued: false`); a patch is shown as signed
+  into the history only when a block that contains it is read from `log` or a published tip, and as pending when
+  `sync pending` lists it. The change view model carries an `Assurance` for every item:
   `ForgeHeldUnsealed` (default), `SignatureOutcome { adopted | not-adopted }` per claim as accept reported it
   (stored, not re-asserted), and `PrikkVerified` only for objects that a published or adopted tip reaches and
   `verify` confirms. A forge approval is never rendered as, or convertible to, `PrikkVerified` (INV-1).
@@ -179,13 +216,12 @@ M3 (OPS-5 metering applies). Observability: counters for revisions, refusals by 
 
 ## Testing and verification
 
-- **Model tests (pure):** revision derivation from (pending-before, pending-after); idempotent re-accept;
-  approvals not carried; staleness; landing observation from a recorded pending sequence.
+- **Model tests (pure):** revision derivation from an intent's pending-before and the pending-after of a complete run; **a killed accept records no revision and the resumed accept records exactly one, from the first attempt's pending-before**; idempotent re-accept; an accept that adds nothing; declared sets (accepted, `declared ⊉ added` refused, an id not held refused); approvals not carried; staleness; landing observation from a recorded pending sequence; a pending patch (`queued: false`) never rendered as `sealed`.
 - **Authorization tests:** `propose` default-deny; setting `any-authenticated`; quotas; reviewers cannot
   approve their own revision's artifact retention beyond quota.
 - **Honesty tests:** an open change never renders `PrikkVerified`; an approval never renders as verification.
-- **Real-binary tests (prikk on `PATH`, skipped visibly otherwise):** accept → revision → `show` per patch →
-  relay → second repository accepts the relayed artifact; the stand-in is allowed only for text formats.
+- **Real-binary tests (prikk on `PATH`, skipped visibly otherwise):** accept → revision → `show` per **patch id** →
+  relay → second repository accepts the relayed artifact; SIGKILL an accept at several points, recover per RFC 004 D-6 and obtain exactly one revision; a block that edits a file three times is reviewed through its patches (U-9); the stand-in is allowed only for text formats.
 - **Hostile input:** a Markdown title/description with script/handler/URL attacks; an artifact over bound;
   a base id that is not held.
 
@@ -216,9 +252,10 @@ adds a new inbound flow and a new action: threat model v0.4 and a security audit
   Suggested changes, draft changes, review-thread resolution, required-reviewer lists and boards would each
   be additions behind this model; none changes D-1…D-7.
 - **Q-2 (owner, D-9).** `proposals: members` as the default; quota values (set from measurement, not here).
-- **Q-3 (architect → prikk).** Asks for a later letter: JSON for `sync pending` and `sync accept` (claim →
-  patch ids, parents, signers) and a claim as a point for the read-only command. The transport measurement
-  handoff row A12 supplies the evidence.
+- **Q-3 (architect → prikk).** The letter is drafted (2026-10-21): the `show <block-id>` defect, the meaning of
+  `queued`, and whether a killed accept is meant to be resumable; the earlier ask (JSON for `sync pending` and
+  `sync accept`: claim → patch ids, parents, signers) stands and would make the declaration of D-1 a cross-check.
+  A claim as a point exists in `prikk extract` (0.54.0, PK-56).
 - **Q-4 (owner, D-8).** Publication. Nothing in D-1…D-10 depends on its answer; "landed" is observed.
 
 ## Sequencing and handoff
