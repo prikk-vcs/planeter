@@ -4,7 +4,7 @@
 //! Both routes are `Authorized(Read)` through the route registry, answer a hidden and an absent repository
 //! identically (`404`), and sit behind the rate limits of [`RateLimiter`], which are applied **before** the
 //! repository is looked at and keyed by the caller only, so a rate-limit answer says nothing about any repository.
-//! A fetch is a whole artifact exported once and **served from the spool file** by [`FileStream`]: prikk's output
+//! A fetch is a whole artifact exported once and **served from the spool file** by a chunked file stream: prikk's output
 //! is never streamed to a client, so a slow client holds no lease and no process.
 
 use std::collections::{HashMap, VecDeque};
