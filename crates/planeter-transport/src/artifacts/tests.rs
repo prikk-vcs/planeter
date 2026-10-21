@@ -240,7 +240,7 @@ fn the_spool_after_a_restart_counts_what_is_there_cleans_partials_and_keeps_with
 fn eviction_never_touches_the_artifact_store() {
     let parent = dir("both");
     let store = ArtifactStore::open(parent.join("artifacts")).unwrap();
-    let kept: Vec<Digest> = (0..5u8).map(|i| put_bytes(&store, &vec![i; 150])).collect();
+    let kept: Vec<Digest> = (0..5u8).map(|i| put_bytes(&store, &[i; 150])).collect();
     let s = Spool::open(parent.join("spool"), 300).unwrap();
     for i in 0..40u8 {
         spool_put(&s, 150, i);
