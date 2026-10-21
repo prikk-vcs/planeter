@@ -116,6 +116,90 @@ impl IncomingBounds {
     }
 }
 
+/// One extra mount of the sandbox (RFC 004 D-6). The list is closed on purpose: the transport needs exactly
+/// two, and each is named for what it is for. A mount is a directory outside the repository, bound at the same
+/// path inside the sandbox.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum MountKind {
+    /// `--ro-bind`: prikk reads it, cannot write it.
+    ReadOnly,
+    /// `--bind`: prikk reads and writes it.
+    ReadWrite,
+}
+
+/// The optional mounts: where accepted artifacts are read from (**artifact-in**, read-only) and where an
+/// export is written to (**spool-out**, read-write). Both are `None` by default and then add nothing to the
+/// vector: [`BwrapConfig::default`] confines exactly as before.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct ExtraMounts {
+    /// Read-only: the artifact store (for `sync accept`, `bundle import`, `archive import`).
+    pub artifact_in: Option<PathBuf>,
+    /// Read-write: the export spool (for `bundle export`, `archive export`, `sync export`).
+    pub spool_out: Option<PathBuf>,
+}
+
+/// Why a set of mounts was refused.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MountError {
+    /// A mount path is not absolute or contains `..`.
+    NotAbsolute(PathBuf),
+    /// The two mounts, or a mount and the repository, overlap: a directory would be reachable through both.
+    Overlap(PathBuf, PathBuf),
+}
+
+impl std::fmt::Display for MountError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            MountError::NotAbsolute(p) => write!(
+                f,
+                "a sandbox mount must be an absolute path without `..` (got {})",
+                p.display()
+            ),
+            MountError::Overlap(a, b) => write!(
+                f,
+                "sandbox mounts must not overlap ({} and {})",
+                a.display(),
+                b.display()
+            ),
+        }
+    }
+}
+
+impl std::error::Error for MountError {}
+
+impl ExtraMounts {
+    /// The mounts that are set, in a fixed order: artifact-in, then spool-out.
+    fn list(&self) -> impl Iterator<Item = (MountKind, &Path)> {
+        [
+            (MountKind::ReadOnly, self.artifact_in.as_deref()),
+            (MountKind::ReadWrite, self.spool_out.as_deref()),
+        ]
+        .into_iter()
+        .filter_map(|(k, p)| p.map(|p| (k, p)))
+    }
+
+    /// Check the mounts against the repository directory `root` of a call: absolute, no `..`, and no overlap
+    /// between them or with `root`.
+    pub fn validate(&self, root: &Path) -> Result<(), MountError> {
+        let mut seen: Vec<&Path> = vec![root];
+        for (_, p) in self.list() {
+            if !p.is_absolute()
+                || p.components()
+                    .any(|c| matches!(c, std::path::Component::ParentDir))
+            {
+                return Err(MountError::NotAbsolute(p.to_path_buf()));
+            }
+            for other in &seen {
+                if p.starts_with(other) || other.starts_with(p) {
+                    return Err(MountError::Overlap(p.to_path_buf(), other.to_path_buf()));
+                }
+            }
+            seen.push(p);
+        }
+        Ok(())
+    }
+}
+
 /// Tunables for the bubblewrap sandbox.
 #[derive(Debug, Clone)]
 pub struct BwrapConfig {
@@ -128,6 +212,8 @@ pub struct BwrapConfig {
     pub timeout_secs: u64,
     /// Incoming-artifact bounds passed to prikk through the environment (none set by default).
     pub bounds: IncomingBounds,
+    /// Optional artifact-in / spool-out mounts (none by default; see [`ExtraMounts`]).
+    pub mounts: ExtraMounts,
 }
 
 impl Default for BwrapConfig {
@@ -137,6 +223,7 @@ impl Default for BwrapConfig {
             prlimit: OsString::from(PRLIMIT),
             timeout_secs: 120,
             bounds: IncomingBounds::default(),
+            mounts: ExtraMounts::default(),
         }
     }
 }
@@ -204,6 +291,11 @@ impl Sandbox {
         args: &[&str],
         limits: CallLimits,
     ) -> std::io::Result<Run> {
+        if let Sandbox::Bwrap(cfg) = self {
+            cfg.mounts
+                .validate(root)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
+        }
         run_bounded(
             self.command_with(prikk_binary, root, args, limits),
             self.deadline(),
@@ -236,6 +328,15 @@ impl BwrapConfig {
         c.arg("--dev").arg("/dev");
         // The one writable location: this repository.
         c.arg("--bind").arg(root).arg(root);
+        // The optional mounts (RFC 004 D-6), only when configured: none configured, nothing added here.
+        for (kind, path) in self.mounts.list() {
+            c.arg(match kind {
+                MountKind::ReadOnly => "--ro-bind",
+                MountKind::ReadWrite => "--bind",
+            })
+            .arg(path)
+            .arg(path);
+        }
         c.arg("--chdir").arg(root);
         // Isolation: new namespaces (incl. network), no lingering session, die with parent.
         c.arg("--unshare-all");
