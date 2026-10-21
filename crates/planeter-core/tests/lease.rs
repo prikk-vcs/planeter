@@ -567,3 +567,33 @@ fn a_failing_record_store_refuses_the_grant_and_frees_the_slot() {
     // Reads need no record and still work.
     assert!(m.acquire(&r, R, "read", Duration::ZERO).is_ok());
 }
+
+/// A clean shutdown removes this process's own holder records and nobody else's.
+#[test]
+fn clear_own_records_removes_this_boots_records_only() {
+    let records = Arc::new(InMemoryLeaseRecords::new());
+    let old = LeaseManager::new(
+        records.clone(),
+        "boot-old".to_owned(),
+        || 1,
+        Duration::from_secs(1),
+    );
+    std::mem::forget(old.acquire(&repo("a"), W, "w", Duration::ZERO).unwrap());
+    let m = LeaseManager::new(
+        records.clone(),
+        "boot-new".to_owned(),
+        || 2,
+        Duration::from_secs(1),
+    );
+    std::mem::forget(m.acquire(&repo("b"), X, "x", Duration::ZERO).unwrap());
+    std::mem::forget(m.acquire(&repo("c"), W, "w", Duration::ZERO).unwrap());
+    assert_eq!(records.list().unwrap().len(), 3);
+    assert_eq!(m.clear_own_records().unwrap(), 2);
+    let left = records.list().unwrap();
+    assert_eq!(left.len(), 1);
+    assert_eq!(
+        left[0].boot_id, "boot-old",
+        "another process's record is not ours to remove"
+    );
+    assert_eq!(m.clear_own_records().unwrap(), 0);
+}

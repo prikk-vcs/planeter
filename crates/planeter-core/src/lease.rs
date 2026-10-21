@@ -335,6 +335,22 @@ impl LeaseManager {
             .collect())
     }
 
+    /// Remove the records **this process** granted and has not yet released: a clean shutdown leaves none behind
+    /// for the next start to report as a crashed holder. Returns how many were removed.
+    pub fn clear_own_records(&self) -> Result<usize, StoreError> {
+        let mine: Vec<HolderRecord> = self
+            .inner
+            .records
+            .list()?
+            .into_iter()
+            .filter(|r| r.boot_id == self.inner.boot_id)
+            .collect();
+        for r in &mine {
+            self.inner.records.clear(&r.holder_id)?;
+        }
+        Ok(mine.len())
+    }
+
     /// Remove an orphan's record once recovery has dealt with it.
     pub fn clear_orphan(&self, holder_id: &str) -> Result<(), StoreError> {
         self.inner.records.clear(holder_id)

@@ -89,11 +89,23 @@ pub use security::{
 
 /// Serve the read API on `addr` until the process is stopped.
 pub async fn serve(state: AppState, addr: std::net::SocketAddr) -> std::io::Result<()> {
+    serve_until(state, addr, std::future::pending()).await
+}
+
+/// Like [`serve`], and **stops gracefully when `shutdown` completes**: the listener stops accepting, the requests
+/// already in flight run to their end, and then this returns. (The caller bounds the drain and decides what a
+/// second signal means; see the `planeter` binary.)
+pub async fn serve_until(
+    state: AppState,
+    addr: std::net::SocketAddr,
+    shutdown: impl std::future::Future<Output = ()> + Send + 'static,
+) -> std::io::Result<()> {
     let listener = tokio::net::TcpListener::bind(addr).await?;
     // Connect-info gives handlers the TCP peer, which the trusted-proxy rules turn into the client IP.
     axum::serve(
         listener,
         router(state).into_make_service_with_connect_info::<std::net::SocketAddr>(),
     )
+    .with_graceful_shutdown(shutdown)
     .await
 }

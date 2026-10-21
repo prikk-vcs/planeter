@@ -81,6 +81,8 @@ environment:
                                 evicted to stay within the budget); absolute, outside PLANETER_REPOS_ROOT,
                                 and not overlapping PLANETER_ARTIFACT_DIR; unset: none
   PLANETER_SPOOL_BUDGET_MB      the spool's disk budget in MiB (default 1024; needs PLANETER_SPOOL_DIR)
+  PLANETER_SHUTDOWN_DRAIN_SECS  on SIGTERM/SIGINT, seconds to let requests in flight finish before stopping
+                                (default 30); a second signal stops at once
   PLANETER_TRUSTED_PROXIES      comma-separated addresses/CIDRs of the TLS-terminating reverse proxies;
                                 a non-loopback PLANETER_ADDR is refused unless this is set
   PLANETER_PRIKK_CONCURRENCY    most prikk subprocesses at once (default min(CPUs, 8))

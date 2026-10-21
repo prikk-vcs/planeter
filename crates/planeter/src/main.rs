@@ -186,7 +186,7 @@ async fn main() {
 
     // The repository lease (RFC 004 D-7). Nothing takes a lease yet (the transport routes come later); what a
     // previous process left in the durable holder table is reported, so an operator sees it.
-    match SqliteLeaseRecords::new(db.clone()) {
+    let leases = match SqliteLeaseRecords::new(db.clone()) {
         Ok(records) => {
             let leases = planeter_core::LeaseManager::new(
                 Arc::new(records),
@@ -207,12 +207,13 @@ async fn main() {
                 ),
                 Err(e) => eprintln!("planeter: cannot read the lease records: {e}"),
             }
+            leases
         }
         Err(e) => {
             eprintln!("planeter: cannot initialise the lease records: {e}");
             exit_releasing_lock(1);
         }
-    }
+    };
     let hosting = Arc::new(HostingService::new(repos_root, repo_store));
     let membership: Arc<dyn MembershipStore> = Arc::new(SqliteMembershipStore::new(db.clone()));
     let read = Arc::new(ReadService::new(
@@ -370,10 +371,99 @@ async fn main() {
         },
     };
 
+    // RFC 004 part 2 T0(b): graceful shutdown. The first SIGTERM or SIGINT stops accepting and lets the requests in
+    // flight finish, for at most the drain; a second signal, or the end of the drain, ends the process at once.
+    // Either way the lock file and this process's lease records are released.
+    let drain = match drain_from(
+        std::env::var("PLANETER_SHUTDOWN_DRAIN_SECS")
+            .ok()
+            .as_deref(),
+    ) {
+        Ok(d) => d,
+        Err(e) => {
+            eprintln!("planeter: {e}");
+            exit_releasing_lock(1);
+        }
+    };
+    let leases = Arc::new(leases);
+    let mut signals = match Signals::new() {
+        Ok(s) => s,
+        Err(e) => {
+            eprintln!("planeter: cannot listen for shutdown signals: {e}");
+            exit_releasing_lock(1);
+        }
+    };
+    let (stop_tx, stop_rx) = tokio::sync::oneshot::channel::<()>();
+    let for_signals = leases.clone();
+    tokio::spawn(async move {
+        let first = signals.next().await;
+        eprintln!(
+            "planeter: {first} received: no new requests; letting requests in flight finish (at most {} s); send the signal again to stop at once",
+            drain.as_secs()
+        );
+        let _ = stop_tx.send(());
+        tokio::select! {
+            second = signals.next() => eprintln!("planeter: {second} received again: stopping at once"),
+            () = tokio::time::sleep(drain) => eprintln!(
+                "planeter: the drain of {} s ended with requests still running: stopping",
+                drain.as_secs()
+            ),
+        }
+        release_and_exit(&for_signals, 1);
+    });
+
     eprintln!("planeter listening on http://{addr} (db: {db_path})");
-    if let Err(e) = planeter_web::serve(state, addr).await {
+    let served = planeter_web::serve_until(state, addr, async {
+        let _ = stop_rx.await;
+    })
+    .await;
+    if let Err(e) = served {
         eprintln!("planeter: server error: {e}");
-        exit_releasing_lock(1);
+        release_and_exit(&leases, 1);
     }
-    drop(PROCESS_LOCK.lock().expect("lock slot").take());
+    eprintln!("planeter: stopped");
+    release_and_exit(&leases, 0);
+}
+
+/// Remove this process's lease records and the lock file, then exit.
+fn release_and_exit(leases: &planeter_core::LeaseManager, code: i32) -> ! {
+    if let Err(e) = leases.clear_own_records() {
+        eprintln!("planeter: cannot clear this process's lease records: {e}");
+    }
+    exit_releasing_lock(code)
+}
+
+/// `PLANETER_SHUTDOWN_DRAIN_SECS`: the longest a graceful shutdown waits for requests in flight (default 30).
+fn drain_from(value: Option<&str>) -> Result<std::time::Duration, String> {
+    match value.filter(|v| !v.is_empty()) {
+        None => Ok(std::time::Duration::from_secs(30)),
+        Some(v) => match v.parse::<u64>() {
+            Ok(n) if n > 0 => Ok(std::time::Duration::from_secs(n)),
+            _ => Err(format!(
+                "PLANETER_SHUTDOWN_DRAIN_SECS must be a whole number of seconds greater than zero (got {v:?})"
+            )),
+        },
+    }
+}
+
+/// SIGTERM and SIGINT, both registered at once so that a second signal is never lost.
+struct Signals {
+    term: tokio::signal::unix::Signal,
+    int: tokio::signal::unix::Signal,
+}
+
+impl Signals {
+    fn new() -> std::io::Result<Signals> {
+        use tokio::signal::unix::{SignalKind, signal};
+        Ok(Signals {
+            term: signal(SignalKind::terminate())?,
+            int: signal(SignalKind::interrupt())?,
+        })
+    }
+    async fn next(&mut self) -> &'static str {
+        tokio::select! {
+            _ = self.term.recv() => "SIGTERM",
+            _ = self.int.recv() => "SIGINT",
+        }
+    }
 }
