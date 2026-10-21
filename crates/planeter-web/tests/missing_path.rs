@@ -239,6 +239,22 @@ fn text(key: Key) -> String {
 }
 
 /// The page's sentence and link, as plain text.
+/// The page with the value of every CSRF hidden field replaced by a fixed token.
+fn sans_csrf_token(body: &str) -> String {
+    let marker = "name=\"csrf\" value=\"";
+    let mut out = String::new();
+    let mut rest = body;
+    while let Some(i) = rest.find(marker) {
+        let start = i + marker.len();
+        out.push_str(&rest[..start]);
+        out.push_str("TOKEN");
+        let end = rest[start..].find('"').map_or(rest.len(), |j| start + j);
+        rest = &rest[end..];
+    }
+    out.push_str(rest);
+    out
+}
+
 fn missing_sentence(html: &str) -> bool {
     html.contains(&text(Key::NoSuchPathBody)) && html.contains(&text(Key::NoSuchPathLink))
 }
@@ -369,9 +385,11 @@ async fn the_page_says_a_path_is_missing_only_to_a_reader_of_the_repository() {
         // …and the same page, byte for byte but for the name in the address, as for a repository that is not there.
         let absent = get(&a, &uri("ghost"), APP, None).await;
         assert_eq!(absent.status, stranger.status);
+        // (Every page now carries the language switcher's form with this visitor's own CSRF token, which is random
+        // per visitor by design and says nothing about the repository: it is compared as a fixed token.)
         assert_eq!(
-            absent.body.replace("/alice/ghost/", "/alice/secret/"),
-            stranger.body,
+            sans_csrf_token(&absent.body.replace("/alice/ghost/", "/alice/secret/")),
+            sans_csrf_token(&stranger.body),
             "{kind} {path}: a hidden and an absent repository must read the same"
         );
         // (`content-length` differs by the length of the name in the title, which the replacement above undoes.)

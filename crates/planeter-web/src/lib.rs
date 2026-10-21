@@ -19,6 +19,7 @@ pub mod cookies;
 pub mod errors;
 pub mod gate;
 pub mod headers;
+pub mod lang_switch;
 pub mod openapi;
 pub mod principal;
 pub mod routes;
@@ -78,6 +79,7 @@ pub fn router(state: AppState) -> axum::Router {
             for_layer,
             headers::response_policy,
         ))
+        .layer(axum::middleware::from_fn(lang_switch::remember_path))
 }
 pub use sanitize::{render_markdown, sanitize_html};
 pub use security::{

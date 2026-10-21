@@ -29,7 +29,7 @@ use crate::api::{
     with_security_headers,
 };
 use crate::authn;
-use crate::catalog::{Key, LanguageVaries, T, negotiate_from_headers};
+use crate::catalog::{Key, Lang, LanguageVaries, T, lang_cookie, negotiate_from_headers};
 use crate::client_ip::{PeerAddr, client_ip};
 use crate::cookies::{
     CSRF_COOKIE, OIDC_STATE_COOKIE, SESSION_COOKIE, clear_cookie, get_cookie, set_cookie,
@@ -82,6 +82,12 @@ pub fn routes() -> Routes {
             Class::public("completes single sign-on: it authenticates the caller; no repository data"),
             &["GET"],
             get(oidc_callback),
+        )
+        .route(
+            "/lang",
+            Class::public("sets the visitor's own language cookie, then returns to the page they were on (CSRF-protected); it names no repository and serves no repository data"),
+            &["POST"],
+            post(set_language),
         )
         .route(
             "/logout",
@@ -1097,6 +1103,59 @@ async fn logout(
         let _ = authn::blocking(&state, move |s| s.sessions.delete(&SessionId(id))).await;
     }
     redirect(&state, "/", vec![clear_cookie(SESSION_COOKIE)])
+}
+
+/// The language switcher's form: the CSRF token, the language chosen, and the page to return to.
+#[derive(serde::Deserialize)]
+struct LangForm {
+    csrf: String,
+    lang: String,
+    #[serde(default)]
+    next: String,
+}
+
+/// `POST /lang`: remember the visitor's language in a cookie (a language code and nothing else) and send them
+/// back to the page they were on. CSRF double-submit like every other form; an unknown language is a refused
+/// form, not a silent fallback; the return address must be a local path.
+async fn set_language(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    form: Result<Form<LangForm>, FormRejection>,
+) -> Response {
+    let c = ctx(&headers, &state).await;
+    let Ok(Form(form)) = form else {
+        return notice(
+            &state,
+            &c,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Notice::FormIncomplete,
+            Next::Home,
+            vec![],
+        );
+    };
+    let cookie_csrf = get_cookie(&headers, CSRF_COOKIE).unwrap_or_default();
+    if cookie_csrf.is_empty() || !tokens_match(&cookie_csrf, &form.csrf) {
+        return notice(
+            &state,
+            &c,
+            StatusCode::FORBIDDEN,
+            Notice::CsrfFailed,
+            Next::Home,
+            vec![],
+        );
+    }
+    let Some(lang) = Lang::from_tag(&form.lang) else {
+        return notice(
+            &state,
+            &c,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            Notice::FormIncomplete,
+            Next::Home,
+            vec![],
+        );
+    };
+    let to = crate::lang_switch::safe_back(&form.next).unwrap_or("/");
+    redirect(&state, to, vec![lang_cookie(lang.tag())])
 }
 
 #[derive(serde::Deserialize)]

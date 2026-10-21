@@ -81,3 +81,5 @@ exact :: ui.rs :: sign-in: it authenticates the caller (throttled, CSRF-protecte
 exact :: ui.rs :: begins single sign-on: a redirect to the provider; no repository data :: the reason a public route is public (route table, IS-14); never shown
 exact :: ui.rs :: completes single sign-on: it authenticates the caller; no repository data :: the reason a public route is public (route table, IS-14); never shown
 exact :: ui.rs :: ends the caller's own session (CSRF-protected); no repository data :: the reason a public route is public (route table, IS-14); never shown
+exact :: ui.rs :: sets the visitor's own language cookie, then returns to the page they were on (CSRF-protected); it names no repository and serves no repository data :: the reason a public route is public (route table, IS-14); never shown
+exact :: lang_switch.rs :: {path}?{q} :: a format string of identifiers: a local path and its query, for the switcher's return address

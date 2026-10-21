@@ -16,6 +16,13 @@
 <main id="main">
 {% block body %}{% endblock %}
 </main>
-<footer>{{ t.msg(Key::LayoutFooter).product().with("version", t.version()) }}</footer>
+<footer>
+<p class="footer-line">{{ t.msg(Key::LayoutFooter).product().with("version", t.version()) }}</p>
+<nav class="lang" aria-label="{{ t.get(Key::LayoutLanguage) }}">
+<ul>
+{% for l in t.languages() %}<li><form class="inline" method="post" action="/lang"><input type="hidden" name="csrf" value="{{ csrf }}"><input type="hidden" name="lang" value="{{ l.tag }}"><input type="hidden" name="next" value="{{ t.switch_back() }}"><button type="submit" lang="{{ l.tag }}"{% if l.current %} aria-current="true"{% endif %}>{{ l.endonym }}</button></form></li>
+{% endfor %}</ul>
+</nav>
+</footer>
 </body>
 </html>

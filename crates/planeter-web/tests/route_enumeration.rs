@@ -201,6 +201,7 @@ fn the_table_lists_the_routes_the_contract_knows_and_every_public_entry_has_a_re
         "/login/oidc",
         "/login/oidc/callback",
         "/logout",
+        "/lang",
         "/{owner}/{name}",
         "/{owner}/{name}/tree/{*path}",
         "/{owner}/{name}/blob/{*path}",
