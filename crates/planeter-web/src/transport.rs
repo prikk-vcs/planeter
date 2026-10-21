@@ -42,6 +42,8 @@ pub struct TransportRuntime {
     pub export: Arc<ExportService>,
     /// The write side (propose), when the operator also configured the artifact store; `None` otherwise.
     pub propose: Option<Arc<ProposeService>>,
+    /// Recovery (RFC 004 part 4), when the write side is on; `None` otherwise.
+    pub recovery: Option<Arc<planeter_transport::RecoveryService>>,
     pub ip_limit: RateLimiter,
     pub principal_limit: RateLimiter,
 }
@@ -1160,6 +1162,441 @@ pub(crate) async fn propose_handler(
     };
     let json = serde_json::to_vec(&view).unwrap_or_default();
     let mut resp = with_security_headers(&state, Response::builder().status(status))
+        .header(header::CONTENT_TYPE, "application/json")
+        .header(header::CACHE_CONTROL, "no-store")
+        .body(Body::from(json))
+        .unwrap_or_else(|_| code_response(&state, ErrorCode::Internal));
+    resp.extensions_mut().insert(crate::catalog::LanguageVaries);
+    resp
+}
+
+// ------------------------------------------------------------------------------------------------ recovery
+
+#[derive(Serialize)]
+struct CauseView {
+    code: &'static str,
+    text: String,
+}
+
+#[derive(Serialize)]
+struct HolderJson {
+    holder_id: String,
+    class: String,
+    operation: String,
+    since_unix: u64,
+    dead: bool,
+}
+
+#[derive(Serialize)]
+struct ProcJson {
+    pid: u32,
+    command: String,
+}
+
+#[derive(Serialize)]
+struct IntentJson {
+    intent_id: String,
+    principal: String,
+    started_at: u64,
+    attempts: u32,
+    artifact_bytes: u64,
+    expired: bool,
+}
+
+#[derive(Serialize)]
+struct LockJson {
+    path: String,
+    kind: String,
+    recorded_pid: u32,
+    liveness: String,
+    expected: bool,
+}
+
+#[derive(Serialize)]
+struct DoctorJson {
+    errors: u32,
+    warnings: u32,
+    info: u32,
+    clean: bool,
+    repairs_named: Vec<String>,
+    repairs_allowed: Vec<String>,
+}
+
+#[derive(Serialize)]
+struct BlockerJson {
+    code: &'static str,
+    text: String,
+    detail: String,
+    overridable: bool,
+}
+
+#[derive(Serialize)]
+pub struct PlanJson {
+    flagged: bool,
+    flag_reason: Option<String>,
+    flag_since: Option<u64>,
+    cause: CauseView,
+    holders: Vec<HolderJson>,
+    processes: Vec<ProcJson>,
+    intents: Vec<IntentJson>,
+    locks: Vec<LockJson>,
+    doctor: Option<DoctorJson>,
+    blockers: Vec<BlockerJson>,
+    commands: Vec<String>,
+    may_run_unattended: bool,
+    steps: Vec<&'static str>,
+}
+
+#[derive(Serialize)]
+struct StepJson {
+    seq: u32,
+    name: String,
+    started_at: u64,
+    ended_at: Option<u64>,
+    outcome: Option<String>,
+    detail: String,
+}
+
+#[derive(Serialize)]
+struct RecordJson {
+    recovery_id: String,
+    actor: String,
+    started_at: u64,
+    ended_at: Option<u64>,
+    outcome: Option<String>,
+    steps: Vec<StepJson>,
+}
+
+#[derive(Serialize)]
+pub struct RecoveryStateJson {
+    plan: PlanJson,
+    recoveries: Vec<RecordJson>,
+}
+
+#[derive(Serialize)]
+pub struct RecoveryRunJson {
+    outcome: &'static str,
+    outcome_text: String,
+    recovery_id: Option<String>,
+    stopped: Option<String>,
+    plan: PlanJson,
+}
+
+fn cause_key(code: &str) -> crate::catalog::Key {
+    use crate::catalog::Key;
+    match code {
+        "accept_deadline" => Key::RecoveryCauseAcceptDeadline,
+        "accept_ceiling" => Key::RecoveryCauseAcceptCeiling,
+        "accept_failed" => Key::RecoveryCauseAcceptFailed,
+        "accept_unreadable" => Key::RecoveryCauseAcceptUnreadable,
+        "accept_not_recorded" => Key::RecoveryCauseAcceptNotRecorded,
+        "server_stopped" => Key::RecoveryCauseServerStopped,
+        _ => Key::RecoveryCauseOther,
+    }
+}
+
+fn blocker_key(code: &str) -> crate::catalog::Key {
+    use crate::catalog::Key;
+    match code {
+        "cause_not_ours" => Key::RecoveryBlockerCauseNotOurs,
+        "lease_held" => Key::RecoveryBlockerLeaseHeld,
+        "foreign_process" => Key::RecoveryBlockerForeignProcess,
+        "doctor_problems" => Key::RecoveryBlockerDoctorProblems,
+        "unexpected_lock" => Key::RecoveryBlockerUnexpectedLock,
+        "too_many_open_intents" => Key::RecoveryBlockerTooManyOpenIntents,
+        _ => Key::RecoveryBlockerOutputUnreadable,
+    }
+}
+
+fn outcome_key(o: planeter_transport::RecoveryOutcome) -> crate::catalog::Key {
+    use crate::catalog::Key;
+    use planeter_transport::RecoveryOutcome as O;
+    match o {
+        O::Recovered => Key::RecoveryOutcomeRecovered,
+        O::Stopped => Key::RecoveryOutcomeStopped,
+        O::NotNow => Key::RecoveryOutcomeNotNow,
+        O::NothingToDo => Key::RecoveryOutcomeNothingToDo,
+    }
+}
+
+fn plan_json(p: &planeter_transport::RecoveryPlan, lang: crate::catalog::Lang) -> PlanJson {
+    let t = crate::catalog::T::new(lang);
+    PlanJson {
+        flagged: p.flagged,
+        flag_reason: p.flag_reason.clone(),
+        flag_since: p.flag_since,
+        cause: CauseView {
+            code: p.cause.code(),
+            text: t.msg(cause_key(p.cause.code())).text(),
+        },
+        holders: p
+            .holders
+            .iter()
+            .map(|h| HolderJson {
+                holder_id: h.holder_id.clone(),
+                class: h.class.clone(),
+                operation: h.operation.clone(),
+                since_unix: h.since_unix,
+                dead: h.dead,
+            })
+            .collect(),
+        processes: p
+            .processes
+            .iter()
+            .map(|x| ProcJson {
+                pid: x.pid,
+                command: x.command.clone(),
+            })
+            .collect(),
+        intents: p
+            .intents
+            .iter()
+            .map(|i| IntentJson {
+                intent_id: i.intent_id.clone(),
+                principal: i.principal.clone(),
+                started_at: i.started_at,
+                attempts: i.attempts,
+                artifact_bytes: i.artifact_bytes,
+                expired: i.expired,
+            })
+            .collect(),
+        locks: p
+            .locks
+            .iter()
+            .map(|l| LockJson {
+                path: l.path.clone(),
+                kind: l.kind.clone(),
+                recorded_pid: l.recorded_pid,
+                liveness: l.liveness.clone(),
+                expected: l.expected,
+            })
+            .collect(),
+        doctor: p.doctor.as_ref().map(|d| DoctorJson {
+            errors: d.errors,
+            warnings: d.warnings,
+            info: d.info,
+            clean: d.clean,
+            repairs_named: d.repairs_named.clone(),
+            repairs_allowed: d.repairs_allowed.clone(),
+        }),
+        blockers: p
+            .blockers
+            .iter()
+            .map(|b| BlockerJson {
+                code: b.code,
+                text: t.msg(blocker_key(b.code)).text(),
+                detail: b.detail.chars().take(1000).collect(),
+                overridable: b.overridable,
+            })
+            .collect(),
+        commands: p.commands.clone(),
+        may_run_unattended: p.may_run_unattended,
+        steps: p.steps.clone(),
+    }
+}
+
+fn record_json(r: &planeter_store::RecoveryRecord) -> RecordJson {
+    RecordJson {
+        recovery_id: r.recovery_id.clone(),
+        actor: r.actor.clone(),
+        started_at: r.started_at,
+        ended_at: r.ended_at,
+        outcome: r.outcome.clone(),
+        steps: r
+            .steps
+            .iter()
+            .map(|s| StepJson {
+                seq: s.seq,
+                name: s.name.clone(),
+                started_at: s.started_at,
+                ended_at: s.ended_at,
+                outcome: s.outcome.clone(),
+                detail: s.detail.clone(),
+            })
+            .collect(),
+    }
+}
+
+/// The repository's record if the caller may administer it, else the response to give: `404` for a stranger (the
+/// read gate, identical for a hidden and an absent repository), `403` for a reader who may not administer. The
+/// request is authenticated by bearer token only, like every request that changes something.
+async fn admin_gate(
+    state: &AppState,
+    peer: crate::client_ip::PeerAddr,
+    headers: &HeaderMap,
+    owner: &str,
+    name: &str,
+) -> Result<
+    (
+        planeter_store::RepositoryRecord,
+        Principal,
+        Arc<planeter_transport::RecoveryService>,
+    ),
+    Response,
+> {
+    let mut bearer_only = headers.clone();
+    bearer_only.remove(header::COOKIE);
+    let principal = crate::principal::principal_from_request(&bearer_only, state).await;
+    let runtime = state.transport.clone();
+    if let Some(rt) = &runtime
+        && let Some(refused) = limits(state, rt, peer, headers, &principal)
+    {
+        return Err(refused);
+    }
+    let access = {
+        let (read, principal, owner, name) = (
+            Arc::clone(&state.read),
+            principal.clone(),
+            owner.to_owned(),
+            name.to_owned(),
+        );
+        offload(move || {
+            match read.admin_access(
+                &principal,
+                &planeter_store::Owner::User(owner.clone()),
+                &name,
+            ) {
+                Err(planeter_core::ProposeAccess::NotFound) => {
+                    read.admin_access(&principal, &planeter_store::Owner::Org(owner), &name)
+                }
+                other => other,
+            }
+        })
+        .await
+    };
+    let record = match access {
+        Err(_) | Ok(Err(planeter_core::ProposeAccess::Backend(_))) => {
+            return Err(error_response(state, Failure::Internal));
+        }
+        Ok(Err(planeter_core::ProposeAccess::NotFound)) => {
+            return Err(error_response(
+                state,
+                Failure::Read(planeter_core::ReadError::NotFound),
+            ));
+        }
+        Ok(Err(_)) => return Err(code_response(state, ErrorCode::Forbidden)),
+        Ok(Ok(r)) => r,
+    };
+    let Some(rt) = runtime else {
+        return Err(code_response(state, ErrorCode::TransportOff));
+    };
+    let Some(recovery) = rt.recovery.clone() else {
+        return Err(code_response_with_keys(
+            state,
+            ErrorCode::TransportOff,
+            ErrorCode::PROPOSE_OFF,
+        ));
+    };
+    Ok((record, principal, recovery))
+}
+
+pub(crate) async fn recovery_plan_handler(
+    State(state): State<AppState>,
+    Path((owner, name)): Path<(String, String)>,
+    peer: crate::client_ip::PeerAddr,
+    headers: HeaderMap,
+) -> Response {
+    let (record, _principal, recovery) =
+        match admin_gate(&state, peer, &headers, &owner, &name).await {
+            Ok(v) => v,
+            Err(r) => return r,
+        };
+    let lang = crate::catalog::negotiate_from_headers(&headers);
+    let made = {
+        let (recovery, record) = (Arc::clone(&recovery), record.clone());
+        state
+            .gate
+            .run(move || {
+                let plan = recovery.plan(&record)?;
+                Ok::<_, planeter_transport::RecoveryError>((
+                    plan,
+                    recovery.recent(&record.repo_id, 10),
+                ))
+            })
+            .await
+    };
+    let (plan, recent) = match made {
+        Ok(Ok(v)) => v,
+        Ok(Err(_)) => return code_response(&state, ErrorCode::Unavailable),
+        Err(_) => return error_response(&state, Failure::Busy),
+    };
+    let view = RecoveryStateJson {
+        plan: plan_json(&plan, lang),
+        recoveries: recent.iter().map(record_json).collect(),
+    };
+    let mut resp = respond(&state, &headers, Ok::<_, Failure>(view));
+    resp.headers_mut()
+        .insert(header::CACHE_CONTROL, HeaderValue::from_static("no-store"));
+    resp.extensions_mut().insert(crate::catalog::LanguageVaries);
+    resp
+}
+
+/// The body of a run: `{ "abandon_intents": ["…"] }`, every field optional; at most 64 KiB.
+#[derive(Debug, Default, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct RunBody {
+    #[serde(default)]
+    abandon_intents: Vec<String>,
+}
+
+pub(crate) async fn recovery_run_handler(
+    State(state): State<AppState>,
+    Path((owner, name)): Path<(String, String)>,
+    peer: crate::client_ip::PeerAddr,
+    headers: HeaderMap,
+    body: Body,
+) -> Response {
+    let (record, principal, recovery) =
+        match admin_gate(&state, peer, &headers, &owner, &name).await {
+            Ok(v) => v,
+            Err(r) => return r,
+        };
+    let Ok(bytes) = axum::body::to_bytes(body, 64 * 1024).await else {
+        return error_response(&state, Failure::Invalid);
+    };
+    let parsed: RunBody = if bytes.iter().all(u8::is_ascii_whitespace) {
+        RunBody::default()
+    } else {
+        match serde_json::from_slice(&bytes) {
+            Ok(b) => b,
+            Err(_) => return error_response(&state, Failure::Invalid),
+        }
+    };
+    if parsed.abandon_intents.len() > 1000 {
+        return error_response(&state, Failure::Invalid);
+    }
+    let Some(actor) = principal.user().map(|u| u.as_str().to_owned()) else {
+        return code_response(&state, ErrorCode::Forbidden);
+    };
+    let lang = crate::catalog::negotiate_from_headers(&headers);
+    let ran = {
+        let (recovery, record) = (Arc::clone(&recovery), record.clone());
+        state
+            .gate
+            .run(move || recovery.recover(&record, &actor, &parsed.abandon_intents))
+            .await
+    };
+    let result = match ran {
+        Ok(Ok(r)) => r,
+        Ok(Err(planeter_transport::RecoveryError::UnknownIntent(_))) => {
+            return code_response(&state, ErrorCode::UnknownIntent);
+        }
+        Ok(Err(planeter_transport::RecoveryError::Unavailable)) => {
+            return code_response(&state, ErrorCode::Unavailable);
+        }
+        Err(_) => return error_response(&state, Failure::Busy),
+    };
+    let view = RecoveryRunJson {
+        outcome: result.outcome.code(),
+        outcome_text: crate::catalog::T::new(lang)
+            .msg(outcome_key(result.outcome))
+            .text(),
+        recovery_id: result.recovery_id,
+        stopped: result.stopped,
+        plan: plan_json(&result.plan, lang),
+    };
+    let json = serde_json::to_vec(&view).unwrap_or_default();
+    let mut resp = with_security_headers(&state, Response::builder().status(StatusCode::OK))
         .header(header::CONTENT_TYPE, "application/json")
         .header(header::CACHE_CONTROL, "no-store")
         .body(Body::from(json))

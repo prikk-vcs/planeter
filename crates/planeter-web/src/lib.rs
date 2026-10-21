@@ -77,6 +77,11 @@ pub fn router(state: AppState) -> axum::Router {
                             axum::http::header::ALLOW,
                             axum::http::HeaderValue::from_static("POST"),
                         );
+                    } else if uri.path().ends_with("/recovery") {
+                        resp.headers_mut().insert(
+                            axum::http::header::ALLOW,
+                            axum::http::HeaderValue::from_static("GET, POST"),
+                        );
                     }
                     return resp;
                 }

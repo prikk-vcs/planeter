@@ -101,13 +101,15 @@ pub enum ErrorCode {
     AcceptRefused,
     /// 409: somebody else has begun sending this exact artifact and it has not finished.
     IntentPending,
+    /// 422: an intent to abandon is not an open intent of this repository.
+    UnknownIntent,
     /// 503: the accept did not finish; the body names the intent, and the same artifact can be sent again once the repository has recovered.
     Incomplete,
 }
 
 impl ErrorCode {
     /// Every code, in a fixed order (the OpenAPI enum).
-    pub const ALL: [ErrorCode; 31] = [
+    pub const ALL: [ErrorCode; 32] = [
         ErrorCode::NotFound,
         ErrorCode::Unavailable,
         ErrorCode::Busy,
@@ -139,6 +141,7 @@ impl ErrorCode {
         ErrorCode::AcceptRefused,
         ErrorCode::IntentPending,
         ErrorCode::Incomplete,
+        ErrorCode::UnknownIntent,
     ];
 
     /// The stable snake_case code.
@@ -175,6 +178,7 @@ impl ErrorCode {
             ErrorCode::AcceptRefused => "accept_refused",
             ErrorCode::IntentPending => "intent_pending",
             ErrorCode::Incomplete => "incomplete",
+            ErrorCode::UnknownIntent => "unknown_intent",
         }
     }
 
@@ -209,6 +213,7 @@ impl ErrorCode {
             ErrorCode::AcceptRefused => StatusCode::UNPROCESSABLE_ENTITY,
             ErrorCode::IntentPending => StatusCode::CONFLICT,
             ErrorCode::Incomplete => StatusCode::SERVICE_UNAVAILABLE,
+            ErrorCode::UnknownIntent => StatusCode::UNPROCESSABLE_ENTITY,
             ErrorCode::InvalidRequest => StatusCode::BAD_REQUEST,
             ErrorCode::Internal => StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -265,6 +270,7 @@ impl ErrorCode {
             ErrorCode::AcceptRefused => (Key::ErrAcceptRefusedMessage, Key::ErrAcceptRefusedHint),
             ErrorCode::IntentPending => (Key::ErrIntentPendingMessage, Key::ErrIntentPendingHint),
             ErrorCode::Incomplete => (Key::ErrIncompleteMessage, Key::ErrIncompleteHint),
+            ErrorCode::UnknownIntent => (Key::ErrUnknownIntentMessage, Key::ErrUnknownIntentHint),
         };
         ErrorKeys { message, hint }
     }
@@ -408,6 +414,9 @@ impl ErrorCode {
             }
             ErrorCode::Incomplete => {
                 "the accept did not finish (the body names the intent; send the same artifact again once the repository has recovered)"
+            }
+            ErrorCode::UnknownIntent => {
+                "an intent to abandon is not an open intent of this repository"
             }
         }
     }

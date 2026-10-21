@@ -499,6 +499,84 @@ pub const CATALOG: &[Entry] = &[
         "propose.already_recorded",
         "This exact artifact was already recorded, so nothing was added, and no branch has changed.",
     ),
+    // recovery (RFC 004 part 4)
+    msg(
+        "recovery.cause.accept_deadline",
+        "An accept took longer than this server allows and was stopped.",
+    ),
+    msg(
+        "recovery.cause.accept_ceiling",
+        "An accept needed more memory than this server allows and was stopped.",
+    ),
+    msg("recovery.cause.accept_failed", "An accept failed part-way."),
+    msg(
+        "recovery.cause.accept_unreadable",
+        "An accept finished but what it printed could not be read.",
+    ),
+    msg(
+        "recovery.cause.accept_not_recorded",
+        "An accept finished but its record could not be saved.",
+    ),
+    msg(
+        "recovery.cause.server_stopped",
+        "The server stopped while a write was in progress.",
+    ),
+    msg(
+        "recovery.cause.other",
+        "The flag was set for a reason this server does not recognise.",
+    ),
+    msg(
+        "recovery.blocker.cause_not_ours",
+        "The flag was not set by an unfinished accept, so it is not cleared by itself.",
+    ),
+    msg(
+        "recovery.blocker.lease_held",
+        "The repository's lease is held right now.",
+    ),
+    msg(
+        "recovery.blocker.foreign_process",
+        "A process that is not this server's is using the repository.",
+    ),
+    msg(
+        "recovery.blocker.doctor_problems",
+        "The repository check found problems that need a person.",
+    ),
+    msg(
+        "recovery.blocker.output_unreadable",
+        "The output of a repository tool could not be read, so nothing was changed.",
+    ),
+    msg(
+        "recovery.blocker.unexpected_lock",
+        "A lock of an unexpected kind, or outside the repository, was found.",
+    ),
+    msg(
+        "recovery.blocker.too_many_open_intents",
+        "More proposals are waiting than the lease records account for.",
+    ),
+    msg(
+        "recovery.outcome.recovered",
+        "The repository is writable again.",
+    ),
+    msg(
+        "recovery.outcome.stopped",
+        "Recovery stopped and changed nothing more, and the flag is still set.",
+    ),
+    msg(
+        "recovery.outcome.not_now",
+        "The repository is busy right now, so try again.",
+    ),
+    msg(
+        "recovery.outcome.nothing_to_do",
+        "The repository was not waiting for recovery.",
+    ),
+    msg(
+        "error.unknown_intent.message",
+        "That is not an open proposal of this repository.",
+    ),
+    msg(
+        "error.unknown_intent.hint",
+        "Take the ids from the open proposals in the recovery plan.",
+    ),
     // pages that used to be bare strings (T7): a heading, one sentence, one link
     msg("page.link.sign_in", "Go to the sign-in page"),
     msg("page.link.home", "Go to the home page"),

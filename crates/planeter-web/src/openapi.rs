@@ -149,7 +149,7 @@ fn nullable_string() -> Value {
 
 /// Component schemas for every view type the API returns.
 fn schemas() -> Value {
-    json!({
+    let mut all = json!({
         "Error": obj(&["code", "message", "hint"], json!({
             "code": {"type": "string", "enum": ErrorCode::ALL.iter().map(|c| c.code()).collect::<Vec<_>>(),
                      "description": "A stable, machine-readable code."},
@@ -279,7 +279,86 @@ fn schemas() -> Value {
             "failed_conditions": array_of("FailedCondition"),
             "stages": array_of("Stage")
         })),
-    })
+    });
+    if let (Some(all), Some(more)) = (all.as_object_mut(), recovery_schemas().as_object()) {
+        all.extend(more.clone());
+    }
+    all
+}
+
+/// The recovery schemas (RFC 004 part 4), in two parts so that no one `json!` is too deep for the compiler.
+fn recovery_schemas() -> Value {
+    let mut a = json!({
+        "RecoveryCause": obj(&["code", "text"], json!({
+            "code": {"type": "string", "enum": ["accept_deadline", "accept_ceiling", "accept_failed", "accept_unreadable", "accept_not_recorded", "server_stopped", "other"]},
+            "text": string_prop()
+        })),
+        "RecoveryHolder": obj(&["holder_id", "class", "operation", "since_unix", "dead"], json!({
+            "holder_id": string_prop(), "class": {"type": "string", "enum": ["W", "X"]}, "operation": string_prop(),
+            "since_unix": {"type": "integer", "minimum": 0},
+            "dead": {"type": "boolean", "description": "Written by another boot of the server: that process is gone."}
+        })),
+        "RecoveryProcess": obj(&["pid", "command"], json!({"pid": {"type": "integer", "minimum": 0}, "command": string_prop()})),
+        "RecoveryIntent": obj(&["intent_id", "principal", "started_at", "attempts", "artifact_bytes", "expired"], json!({
+            "intent_id": string_prop(), "principal": string_prop(), "started_at": {"type": "integer", "minimum": 0},
+            "attempts": {"type": "integer", "minimum": 1}, "artifact_bytes": {"type": "integer", "minimum": 0},
+            "expired": {"type": "boolean", "description": "Older than the retention period (30 days): an administrator's run may abandon it."}
+        })),
+        "RecoveryLock": obj(&["path", "kind", "recorded_pid", "liveness", "expected"], json!({
+            "path": string_prop(), "kind": string_prop(), "recorded_pid": {"type": "integer", "minimum": 0},
+            "liveness": {"type": "string", "description": "prikk's own words, kept for the record and never trusted (inside our PID namespace they are wrong)."},
+            "expected": {"type": "boolean", "description": "Of a kind an accept leaves, inside the repository's own `.prikk` directory."}
+        })),
+        "RecoveryDoctor": obj(&["errors", "warnings", "info", "clean", "repairs_named", "repairs_allowed"], json!({
+            "errors": {"type": "integer", "minimum": 0}, "warnings": {"type": "integer", "minimum": 0}, "info": {"type": "integer", "minimum": 0},
+            "clean": {"type": "boolean"},
+            "repairs_named": {"type": "array", "items": {"type": "string"}, "description": "Flags the report's recommendations name."},
+            "repairs_allowed": {"type": "array", "items": {"type": "string"}, "description": "Those an administrator's run may run: the idempotent tail and index repairs."}
+        })),
+        "RecoveryBlocker": obj(&["code", "text", "detail", "overridable"], json!({
+            "code": {"type": "string", "enum": ["cause_not_ours", "lease_held", "foreign_process", "doctor_problems", "output_unreadable", "unexpected_lock", "too_many_open_intents"]},
+            "text": string_prop(),
+            "detail": {"type": "string", "description": "What was seen, verbatim where it is prikk's text (English)."},
+            "overridable": {"type": "boolean", "description": "An administrator's run goes on despite it; the others always stop."}
+        })),
+    });
+    let b = json!({
+        "RecoveryPlan": obj(&["flagged", "flag_reason", "flag_since", "cause", "holders", "processes", "intents", "locks", "doctor", "blockers", "commands", "may_run_unattended", "steps"], json!({
+            "flagged": {"type": "boolean"}, "flag_reason": nullable_string(),
+            "flag_since": {"type": "integer", "minimum": 0, "nullable": true},
+            "cause": {"$ref": "#/components/schemas/RecoveryCause"},
+            "holders": array_of("RecoveryHolder"), "processes": array_of("RecoveryProcess"), "intents": array_of("RecoveryIntent"),
+            "locks": array_of("RecoveryLock"),
+            "doctor": {"allOf": [{"$ref": "#/components/schemas/RecoveryDoctor"}], "nullable": true},
+            "blockers": array_of("RecoveryBlocker"),
+            "commands": {"type": "array", "items": {"type": "string"}, "description": "The exact commands for an operator when the procedure stays stopped; run them in the shell of the server's host."},
+            "may_run_unattended": {"type": "boolean", "description": "Every witness agrees and the cause is ours: the server may run it by itself."},
+            "steps": {"type": "array", "items": {"type": "string"}}
+        })),
+        "RecoveryStep": obj(&["seq", "name", "started_at", "ended_at", "outcome", "detail"], json!({
+            "seq": {"type": "integer", "minimum": 1}, "name": string_prop(), "started_at": {"type": "integer", "minimum": 0},
+            "ended_at": {"type": "integer", "minimum": 0, "nullable": true}, "outcome": nullable_string(),
+            "detail": {"type": "string", "description": "What was done and what prikk said, verbatim (bounded)."}
+        })),
+        "RecoveryRecord": obj(&["recovery_id", "actor", "started_at", "ended_at", "outcome", "steps"], json!({
+            "recovery_id": string_prop(), "actor": {"type": "string", "description": "A user id, or `automatic`."},
+            "started_at": {"type": "integer", "minimum": 0}, "ended_at": {"type": "integer", "minimum": 0, "nullable": true},
+            "outcome": nullable_string(), "steps": array_of("RecoveryStep")
+        })),
+        "RecoveryState": obj(&["plan", "recoveries"], json!({
+            "plan": {"$ref": "#/components/schemas/RecoveryPlan"}, "recoveries": array_of("RecoveryRecord")
+        })),
+        "RecoveryRun": obj(&["outcome", "outcome_text", "recovery_id", "stopped", "plan"], json!({
+            "outcome": {"type": "string", "enum": ["recovered", "stopped", "not_now", "nothing_to_do"]},
+            "outcome_text": string_prop(), "recovery_id": nullable_string(),
+            "stopped": {"type": "string", "nullable": true, "description": "Why a stopped run stopped, in a line."},
+            "plan": {"$ref": "#/components/schemas/RecoveryPlan"}
+        })),
+    });
+    if let (Some(a), Some(b)) = (a.as_object_mut(), b.as_object()) {
+        a.extend(b.clone());
+    }
+    a
 }
 
 /// The full document.
@@ -555,6 +634,51 @@ pub fn document(content_origin: &str) -> Value {
             ],
         ),
     );
+    // RFC 004 part 4: recovery. One path, two operations: the plan (GET) and the run (POST).
+    let recovery_errors = [
+        ErrorCode::Busy,
+        ErrorCode::TransportOff,
+        ErrorCode::RateLimited,
+        ErrorCode::Forbidden,
+    ];
+    let mut recovery = with_errors(
+        json!({"get": {
+            "operationId": "getRecovery",
+            "summary": "What recovery would do for a repository, and what it has done",
+            "description": "For whoever may **administer** the repository (`admin`; a stranger is told `404` exactly as for a hidden repository, a reader who may not administer `403`); bearer token only. **Read-only**: it runs `doctor` and the listing of `unlock` and changes nothing. The plan names the flag and its cause, the lease holders (`dead` = written by another boot of the server), the processes that are not the server's and name the repository, the open proposals (intents), the locks `unlock` lists, `doctor`'s verdict, the blockers (what disagrees and whether an administrator's run may go on), the exact commands for an operator, and whether the server could run it by itself. `recoveries` are the last runs with every step and the text of each prikk call.",
+            "parameters": owner_name(),
+            "security": [{"bearerToken": []}],
+            "responses": {"200": {"description": "The plan and the last runs.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/RecoveryState"}}}}},
+        }}),
+        &recovery_errors,
+    );
+    let run = with_errors(
+        json!({"post": {
+            "operationId": "postRecovery",
+            "summary": "Run recovery for a repository",
+            "description": "Runs the procedure of `docs/propose.md` for a repository that proposals flagged: the witnesses (the flag's cause, only dead lease holders, no process that is not the server's, `doctor` clean, `unlock` listing only locks of the kinds an accept leaves) are read, the repository's write lease is taken, the witnesses are read again under it, each listed lock is cleared (`unlock --lock … --force`; prikk's liveness line is never used), `doctor`'s named idempotent repairs are run when this request is an administrator's, a fresh `verify` must pass, the dead lease records are removed, the flag is cleared and the state fingerprint moves. Every step is written to a recovery record before it is taken. The body is optional: `{\"abandon_intents\": [\"…\"]}` abandons the named open proposals (their accepted patches stay in the repository; their artifacts leave the retained set). A run that stops leaves the flag set and changes nothing more; the answer is `200` with the `outcome` (`recovered`, `stopped`, `not_now`, `nothing_to_do`) and the plan as it then stood.",
+            "parameters": owner_name(),
+            "security": [{"bearerToken": []}],
+            "requestBody": {
+                "required": false,
+                "content": {"application/json": {"schema": {"type": "object", "properties": {"abandon_intents": {"type": "array", "items": {"type": "string"}}}}}}
+            },
+            "responses": {"200": {"description": "What the run did.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/RecoveryRun"}}}}},
+        }}),
+        &[
+            ErrorCode::Busy,
+            ErrorCode::TransportOff,
+            ErrorCode::RateLimited,
+            ErrorCode::Forbidden,
+            ErrorCode::UnknownIntent,
+        ],
+    );
+    recovery["get"]["responses"]["405"]["headers"]["Allow"]["description"] =
+        json!("The methods this route supports: `GET` and `POST`.");
+    if let (Some(item), Some(post)) = (recovery.as_object_mut(), run.get("post")) {
+        item.insert("post".to_owned(), post.clone());
+    }
+    paths_obj.insert(paths::RECOVERY.into(), recovery);
     paths_obj.insert(
         paths::OPENAPI.into(),
         json!({"get": {

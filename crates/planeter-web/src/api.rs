@@ -31,7 +31,9 @@ use crate::errors::{ErrorBody, ErrorCode};
 use crate::gate::{AdmitError, PrikkGate, offload};
 use crate::routes::{Action, Class, Routes};
 use crate::security::{ContentOrigin, app_security_headers, raw_content_headers};
-use crate::transport::{advertise_handler, fetch_handler, propose_handler};
+use crate::transport::{
+    advertise_handler, fetch_handler, propose_handler, recovery_plan_handler, recovery_run_handler,
+};
 
 /// Default and maximum history page size (bounded — `STD-3`).
 const DEFAULT_LIMIT: usize = 50;
@@ -80,9 +82,10 @@ pub mod paths {
     pub const TRANSPORT_ADVERTISE: &str = "/api/v1/repos/{owner}/{name}/transport/advertise";
     pub const TRANSPORT_FETCH: &str = "/api/v1/repos/{owner}/{name}/transport/fetch";
     pub const TRANSPORT_PROPOSE: &str = "/api/v1/repos/{owner}/{name}/transport/propose";
+    pub const RECOVERY: &str = "/api/v1/repos/{owner}/{name}/recovery";
     pub const OPENAPI: &str = "/api/v1/openapi.json";
     /// Every route, in document order.
-    pub const ALL: [&str; 11] = [
+    pub const ALL: [&str; 12] = [
         HISTORY,
         CHANGE,
         FILE,
@@ -93,6 +96,7 @@ pub mod paths {
         TRANSPORT_ADVERTISE,
         TRANSPORT_FETCH,
         TRANSPORT_PROPOSE,
+        RECOVERY,
         OPENAPI,
     ];
 }
@@ -110,6 +114,9 @@ pub fn routes() -> Routes {
     // The write side (RFC 004 part 3b): authorized for `Propose`, which the handler checks after the read gate.
     let propose_class = Class::Authorized(Action::Propose);
     let propose = axum::routing::post(propose_handler);
+    // Recovery (RFC 004 part 4): the plan (GET) and the run (POST), for whoever may administer the repository.
+    let admin_class = Class::Authorized(Action::RepoAdmin);
+    let recovery = get(recovery_plan_handler).post(recovery_run_handler);
     Routes::new()
         .route(paths::HISTORY, read, &["GET"], get(history_handler))
         .route(paths::CHANGE, read, &["GET"], get(change_handler))
@@ -121,6 +128,7 @@ pub fn routes() -> Routes {
         .route(paths::TRANSPORT_ADVERTISE, read, &["GET"], advertise)
         .route(paths::TRANSPORT_FETCH, read, &["GET"], fetch)
         .route(paths::TRANSPORT_PROPOSE, propose_class, &["POST"], propose)
+        .route(paths::RECOVERY, admin_class, &["GET", "POST"], recovery)
         .route(paths::OPENAPI, description, &["GET"], get(openapi_handler))
 }
 

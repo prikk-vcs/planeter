@@ -461,6 +461,7 @@ fn world(name: &str, o: Opts) -> World {
     let transport = Some(Arc::new(TransportRuntime {
         export: export.clone(),
         propose: (!o.without_propose).then(|| propose.clone()),
+        recovery: None,
         ip_limit: RateLimiter::new(o.ip_limit, Duration::from_secs(60)),
         principal_limit: RateLimiter::new(o.ip_limit, Duration::from_secs(60)),
     }));
