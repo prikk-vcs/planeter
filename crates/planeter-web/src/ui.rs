@@ -17,6 +17,7 @@ use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::Response;
 use axum::routing::{get, post};
 
+use crate::routes::{Action, Class, Routes};
 use planeter_auth::{
     OidcError, PENDING_TTL_SECS, SESSION_TTL_SECS, SessionId, random_token, tokens_match,
 };
@@ -40,23 +41,65 @@ use crate::sanitize::render_markdown;
 const HISTORY_PAGE: usize = 50;
 const CSRF_TTL_SECS: u64 = 30 * 24 * 3600;
 
+/// The browse UI's routes, with their authorization classes (IS-14). This is the only place UI routes are
+/// registered.
+pub fn routes() -> Routes {
+    // Every page that shows repository data reads through `ReadService`: `authorize(_, Read, _)` first.
+    let read = Class::Authorized(Action::Read);
+    Routes::new()
+        .route(
+            "/",
+            Class::public("the home page: a form to type an address; it lists nothing"),
+            &["GET"],
+            get(home),
+        )
+        .route(
+            "/go",
+            Class::public("parses an address and redirects to its page, the same for every repository; the page authorizes"),
+            &["GET"],
+            get(go),
+        )
+        .route(
+            "/static/app.css",
+            Class::public("the one stylesheet, embedded in the binary"),
+            &["GET"],
+            get(stylesheet),
+        )
+        .route(
+            "/login",
+            Class::public("sign-in: it authenticates the caller (throttled, CSRF-protected) and serves no repository data"),
+            &["GET", "POST"],
+            get(login_form).post(login_submit),
+        )
+        .route(
+            "/login/oidc",
+            Class::public("begins single sign-on: a redirect to the provider; no repository data"),
+            &["GET"],
+            get(oidc_begin),
+        )
+        .route(
+            "/login/oidc/callback",
+            Class::public("completes single sign-on: it authenticates the caller; no repository data"),
+            &["GET"],
+            get(oidc_callback),
+        )
+        .route(
+            "/logout",
+            Class::public("ends the caller's own session (CSRF-protected); no repository data"),
+            &["POST"],
+            post(logout),
+        )
+        .route("/{owner}/{name}", read, &["GET"], get(repo_home))
+        .route("/{owner}/{name}/tree/{*path}", read, &["GET"], get(tree_page))
+        .route("/{owner}/{name}/blob/{*path}", read, &["GET"], get(file_page))
+        .route("/{owner}/{name}/history", read, &["GET"], get(history_page))
+        .route("/{owner}/{name}/change/{target}", read, &["GET"], get(change_page))
+        .route("/{owner}/{name}/refs", read, &["GET"], get(refs_page))
+        .route("/{owner}/{name}/verify", read, &["GET"], get(verify_page))
+}
+
 pub fn router(state: AppState) -> Router {
-    Router::new()
-        .route("/", get(home))
-        .route("/go", get(go))
-        .route("/static/app.css", get(stylesheet))
-        .route("/login", get(login_form).post(login_submit))
-        .route("/login/oidc", get(oidc_begin))
-        .route("/login/oidc/callback", get(oidc_callback))
-        .route("/logout", post(logout))
-        .route("/{owner}/{name}", get(repo_home))
-        .route("/{owner}/{name}/tree/{*path}", get(tree_page))
-        .route("/{owner}/{name}/blob/{*path}", get(file_page))
-        .route("/{owner}/{name}/history", get(history_page))
-        .route("/{owner}/{name}/change/{target}", get(change_page))
-        .route("/{owner}/{name}/refs", get(refs_page))
-        .route("/{owner}/{name}/verify", get(verify_page))
-        .with_state(state)
+    routes().build(state)
 }
 
 // -- request context: principal + CSRF token (minted on first sight, carried in a cookie) --

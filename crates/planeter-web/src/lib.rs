@@ -21,6 +21,7 @@ pub mod gate;
 pub mod headers;
 pub mod openapi;
 pub mod principal;
+pub mod routes;
 pub mod sanitize;
 pub mod security;
 pub mod ui;
@@ -28,6 +29,13 @@ pub mod ui;
 pub use api::AppState;
 pub use client_ip::{TrustedProxies, bind_allowed, client_ip};
 pub use gate::{AuthGate, BlockingGate, PrikkGate};
+pub use routes::{Class, Entry, Routes, Surface};
+
+/// Every route the web surface serves, with its authorization class (IS-14): the API's and the UI's. The router
+/// is built from this and from nothing else, so the table is complete by construction.
+pub fn registry() -> Routes {
+    api::routes().merge(ui::routes())
+}
 
 /// The full application router: the JSON read API under `/api/v1/…` merged with the browse UI.
 ///
@@ -39,8 +47,8 @@ pub fn router(state: AppState) -> axum::Router {
     let for_fallback = state.clone();
     let for_405 = state.clone();
     let for_layer = state.clone();
-    api::router(state.clone())
-        .merge(ui::router(state))
+    registry()
+        .build(state)
         .fallback(move |uri: axum::http::Uri| {
             let state = for_fallback.clone();
             async move {

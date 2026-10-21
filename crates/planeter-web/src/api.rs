@@ -29,6 +29,7 @@ use planeter_store::Owner;
 
 use crate::errors::{ErrorBody, ErrorCode};
 use crate::gate::{AdmitError, PrikkGate, offload};
+use crate::routes::{Action, Class, Routes};
 use crate::security::{ContentOrigin, app_security_headers, raw_content_headers};
 
 /// Default and maximum history page size (bounded — `STD-3`).
@@ -78,18 +79,32 @@ pub mod paths {
     pub const ALL: [&str; 8] = [HISTORY, CHANGE, FILE, TREE, RAW, REFS, VERIFY, OPENAPI];
 }
 
-/// Build the read-API router. This is the only place API routes are registered.
+/// The read API's routes, with their authorization classes (IS-14). This is the only place API routes are
+/// registered.
+pub fn routes() -> Routes {
+    // Every repository read goes through `ReadService`, whose first line is `authorize(_, Read, _)`.
+    let read = Class::Authorized(Action::Read);
+    Routes::new()
+        .route(paths::HISTORY, read, &["GET"], get(history_handler))
+        .route(paths::CHANGE, read, &["GET"], get(change_handler))
+        .route(paths::FILE, read, &["GET"], get(file_handler))
+        .route(paths::TREE, read, &["GET"], get(tree_handler))
+        .route(paths::RAW, read, &["GET"], get(raw_handler))
+        .route(paths::REFS, read, &["GET"], get(refs_handler))
+        .route(paths::VERIFY, read, &["GET"], get(verify_handler))
+        .route(
+            paths::OPENAPI,
+            Class::public(
+                "the API's own description: it names no repository and serves no repository data",
+            ),
+            &["GET"],
+            get(openapi_handler),
+        )
+}
+
+/// Build the read-API router.
 pub fn router(state: AppState) -> Router {
-    Router::new()
-        .route(paths::HISTORY, get(history_handler))
-        .route(paths::CHANGE, get(change_handler))
-        .route(paths::FILE, get(file_handler))
-        .route(paths::TREE, get(tree_handler))
-        .route(paths::RAW, get(raw_handler))
-        .route(paths::REFS, get(refs_handler))
-        .route(paths::VERIFY, get(verify_handler))
-        .route(paths::OPENAPI, get(openapi_handler))
-        .with_state(state)
+    routes().build(state)
 }
 
 // -- request query models --
