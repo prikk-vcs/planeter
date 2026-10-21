@@ -116,6 +116,7 @@ fn app(repos: Vec<Repo>, gate: Arc<PrikkGate>, prikk: Prikk) -> (Router, AppStat
         ip_throttle: Arc::new(planeter_auth::LoginThrottle::new(20, 15 * 60)),
         trusted_proxies: Arc::new(TrustedProxies::default()),
         oidc: None,
+        transport: None,
     };
     (router(state.clone()), state)
 }

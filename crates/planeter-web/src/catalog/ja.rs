@@ -278,6 +278,83 @@ pub const CATALOG: &[Entry] = &[
         "error.internal.hint",
         "後でもう一度お試しください。解決しない場合は、運用者にお知らせください。",
     ),
+    msg(
+        "error.transport_off.message",
+        "このサーバーでは、アーティファクトの取得は設定されていません。",
+    ),
+    msg(
+        "error.transport_off.hint",
+        "このサーバーの管理者に、エクスポート用スプールの設定を依頼してください。",
+    ),
+    msg(
+        "error.unknown_ref.message",
+        "その名前の ref は、このリポジトリにありません。",
+    ),
+    msg(
+        "error.unknown_ref.hint",
+        "ref の名前は、リポジトリのアドバタイズから確認してください。",
+    ),
+    msg(
+        "error.unknown_kind.message",
+        "その取得の種類はサポートされていません。",
+    ),
+    msg(
+        "error.unknown_kind.hint",
+        "kind=archive または kind=bundle を指定してください。",
+    ),
+    msg(
+        "error.bundle_of_received_ref.message",
+        "受信した ref は、バンドルとしては取得できません。",
+    ),
+    msg(
+        "error.bundle_of_received_ref.hint",
+        "代わりに kind=archive でリポジトリ全体を取得してください。",
+    ),
+    msg(
+        "error.not_verified.message",
+        "エクスポートしたアーティファクトが検証に通らなかったため、提供しませんでした。",
+    ),
+    msg(
+        "error.not_verified.hint",
+        "しばらくしてから、もう一度お試しください。公開された ref は kind=bundle で取得できる場合があります。",
+    ),
+    msg(
+        "error.export_failed.message",
+        "今はアーティファクトをエクスポートできません。",
+    ),
+    msg(
+        "error.export_failed.hint",
+        "しばらくしてから、もう一度お試しください。",
+    ),
+    msg(
+        "error.export_failed.deadline_hint",
+        "エクスポートがこのサーバーの許す時間を超えました。このサーバーの管理者に、エクスポートの制限時間の引き上げを依頼してください。",
+    ),
+    msg(
+        "error.export_failed.ceiling_hint",
+        "エクスポートに必要なメモリが、このサーバーの許す量を超えています。このサーバーの管理者に、エクスポート用メモリ上限の引き上げを依頼してください。",
+    ),
+    msg(
+        "error.export_failed.spool_hint",
+        "アーティファクトがエクスポート用スプール全体より大きくなっています。このサーバーの管理者に、スプールの拡大を依頼してください。",
+    ),
+    msg("error.rate_limited.message", "リクエストが多すぎます。"),
+    msg(
+        "error.rate_limited.hint",
+        "Retry-After ヘッダーに示された秒数が過ぎてから、再試行してください。",
+    ),
+    msg(
+        "error.range_not_satisfiable.message",
+        "指定されたバイト範囲は提供できません。",
+    ),
+    msg(
+        "error.range_not_satisfiable.hint",
+        "アーティファクトの内側の範囲を指定してください。サイズは Content-Range ヘッダーに示されます。",
+    ),
+    msg(
+        "error.invalid_request.ref_hint",
+        "バンドルには ref が必要です。アドバタイズから名前を確認して、ref=名前 を追加してください。",
+    ),
     // pages that used to be bare strings (T7): a heading, one sentence, one link
     msg("page.link.sign_in", "ログインのページへ"),
     msg("page.link.home", "ホームページへ"),

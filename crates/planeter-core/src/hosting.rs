@@ -215,6 +215,26 @@ impl HostingService {
         }
     }
 
+    /// The sandbox policy every prikk call of this service runs under.
+    pub fn sandbox(&self) -> &planeter_prikk::Sandbox {
+        &self.sandbox
+    }
+
+    /// [`HostingService::open_record_with`] under a **different sandbox** (the transport's exports mount the
+    /// spool read-write and have their own deadline).
+    pub fn open_record_sandboxed(
+        &self,
+        record: &RepositoryRecord,
+        limits: CallLimits,
+        sandbox: planeter_prikk::Sandbox,
+    ) -> Result<CliPrikkRepo> {
+        let repo = match &self.binary {
+            Some(b) => CliPrikkRepo::with_binary(&record.path, b.clone()),
+            None => CliPrikkRepo::new(&record.path),
+        };
+        Ok(repo.with_sandbox(sandbox).with_limits(limits).checked()?)
+    }
+
     /// Open a driver bound to a record's path with this service's binary/sandbox, version-pinned. Lets
     /// the read path open a repository it has already fetched and authorized (avoids a second lookup).
     pub fn open_record(&self, record: &RepositoryRecord) -> Result<CliPrikkRepo> {

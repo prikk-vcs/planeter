@@ -9,6 +9,7 @@ pub mod lease;
 pub mod membership;
 pub mod memory;
 pub mod model;
+pub mod revision;
 pub mod sqlite;
 pub mod store;
 
@@ -20,5 +21,6 @@ pub use memory::InMemoryRepositoryStore;
 pub use model::{
     Owner, ProposalPolicy, RepoId, RepositoryRecord, UnknownProposalPolicy, Visibility,
 };
+pub use revision::{InMemoryRevisions, RevisionStore, SqliteRevisions};
 pub use sqlite::{SqliteDb, SqliteMembershipStore, SqliteRepositoryStore};
 pub use store::{RepositoryStore, StoreError};

@@ -82,6 +82,16 @@ pub trait PrikkRepo {
     /// `bundle export --ref <ref>` → write a bundle for one ref to `out`.
     fn bundle_export(&self, ref_name: &str, out: &Path) -> Result<()>;
 
+    /// `archive export <out>` → write a whole-repository archive to `out` (prikk refuses an existing file).
+    fn archive_export(&self, out: &Path) -> Result<()>;
+
+    /// `archive verify <artifact> --format json` → the verification report of an archive file (structure,
+    /// closure, signatures). A report that is not ok, or a non-zero exit, is a failure to serve.
+    fn archive_verify(&self, artifact: &Path) -> Result<model::ArchiveVerifyReport>;
+
+    /// `bundle verify --input <artifact>` → check a bundle offline (a non-zero exit is an error).
+    fn bundle_verify(&self, artifact: &Path) -> Result<()>;
+
     /// `bundle import <artifact>` → import a bundle (lands under `remotes/`).
     fn bundle_import(&self, artifact: &Path) -> Result<()>;
 

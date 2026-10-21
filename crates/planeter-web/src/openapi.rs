@@ -207,6 +207,25 @@ fn schemas() -> Value {
         "RefsView": obj(&["current_branch", "branches", "tags"], json!({
             "current_branch": nullable_string(), "branches": array_of("Branch"), "tags": array_of("Tag")
         })),
+        "Offer": obj(&["kind", "ref", "size", "etag"], json!({
+            "kind": {"type": "string", "enum": ["bundle", "archive"]},
+            "ref": nullable_string(),
+            "size": {"type": "integer", "minimum": 0, "nullable": true, "description": "The last known size of an export of it; null until the first export (it may be stale)."},
+            "etag": {"type": "string", "description": "The `ETag` a fetch of it would return now."}
+        })),
+        "AdvertisedRef": obj(&["name", "state", "kind", "closed", "tip_block", "ref_state_id", "fetch"], json!({
+            "name": string_prop(),
+            "state": {"type": "string", "enum": ["published", "received"]},
+            "kind": {"type": "string", "enum": ["branch", "tag", "received"]},
+            "closed": {"type": "boolean", "nullable": true},
+            "tip_block": nullable_string(), "ref_state_id": nullable_string(),
+            "fetch": array_of("Offer")
+        })),
+        "Advertisement": obj(&["fingerprint", "refs", "archive"], json!({
+            "fingerprint": {"type": "string", "description": "The repository's state fingerprint."},
+            "refs": array_of("AdvertisedRef"),
+            "archive": {"$ref": "#/components/schemas/Offer"}
+        })),
         "FailedCondition": obj(&["id", "message"], json!({"id": string_prop(), "message": string_prop()})),
         "Stage": obj(&["stage", "status", "detail"], json!({
             "stage": string_prop(), "status": string_prop(), "detail": nullable_string(),
@@ -368,6 +387,85 @@ pub fn document(content_origin: &str) -> Value {
         with_errors(
             json_get("getVerify", "Verify status", owner_name(), "VerifyView"),
             &busy,
+        ),
+    );
+    // RFC 004 part 2: the transport's read side.
+    let transport_errors = [
+        ErrorCode::Busy,
+        ErrorCode::TransportOff,
+        ErrorCode::RateLimited,
+    ];
+    paths_obj.insert(
+        paths::TRANSPORT_ADVERTISE.into(),
+        with_errors(
+            {
+                let mut op = json_get(
+                    "getTransportAdvertise",
+                    "What the repository holds and can be fetched",
+                    owner_name(),
+                    "Advertisement",
+                );
+                op["get"]["description"] = json!("The refs the repository holds (published `heads/…` and `tags/…`, received `remotes/…`), the repository's **state fingerprint**, and the fetches on offer with the last known size of each (absent until the first export) and the `ETag` a fetch would return now. No filesystem path appears. Subject to the per-client and per-user rate limit.");
+                op
+            },
+            &transport_errors,
+        ),
+    );
+    paths_obj.insert(
+        paths::TRANSPORT_FETCH.into(),
+        with_errors(
+            {
+                let mut params = owner_name();
+                params.push(param(
+                    "kind",
+                    "query",
+                    true,
+                    "`archive` (the whole repository, the only way to carry a received ref) or `bundle` (one published ref).",
+                    json!({"type": "string", "enum": ["archive", "bundle"]}),
+                ));
+                params.push(param(
+                    "ref",
+                    "query",
+                    false,
+                    "The ref to bundle (required for `kind=bundle`; ignored for `archive`); take it from the advertisement.",
+                    json!({"type": "string"}),
+                ));
+                json!({"get": {
+                    "operationId": "getTransportFetch",
+                    "summary": "Fetch the repository as one verified artifact",
+                    "description": "A **whole artifact**, exported once under the repository's export lease, verified (`archive verify` / `bundle verify`; one that does not verify is never served), spooled and cached by the repository's state fingerprint, and served from the spool file: a slow client holds no lock. `304` when `If-None-Match` matches the `ETag`; `Range` is honoured within the one current artifact (`206`, `416`). The cost of a changed-state fetch is the artifact's size; the mitigations are the cache, single flight (concurrent requests share one export), a bound on concurrent exports and the rate limits.",
+                    "parameters": params,
+                    "security": [{"bearerToken": []}, {"sessionCookie": []}, {}],
+                    "responses": {
+                        "200": {
+                            "description": "The artifact.",
+                            "headers": {
+                                "ETag": {"description": "Derived from the repository, the kind, the ref and the state fingerprint: equal for equal states.", "schema": {"type": "string"}},
+                                "Accept-Ranges": {"description": "`bytes`.", "schema": {"type": "string"}},
+                                "Content-Disposition": {"description": "`attachment` with a file name.", "schema": {"type": "string"}}
+                            },
+                            "content": {"application/octet-stream": {"schema": {"type": "string", "format": "binary"}}}
+                        },
+                        "206": {
+                            "description": "A byte range of the one current artifact.",
+                            "headers": {"Content-Range": {"description": "`bytes first-last/size`.", "schema": {"type": "string"}}},
+                            "content": {"application/octet-stream": {"schema": {"type": "string", "format": "binary"}}}
+                        },
+                        "304": {"description": "Not modified (the request's `If-None-Match` matched `ETag`)."}
+                    },
+                }})
+            },
+            &[
+                ErrorCode::Busy,
+                ErrorCode::TransportOff,
+                ErrorCode::RateLimited,
+                ErrorCode::UnknownRef,
+                ErrorCode::UnknownKind,
+                ErrorCode::BundleOfReceivedRef,
+                ErrorCode::NotVerified,
+                ErrorCode::ExportFailed,
+                ErrorCode::RangeNotSatisfiable,
+            ],
         ),
     );
     paths_obj.insert(

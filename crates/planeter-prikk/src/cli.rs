@@ -522,6 +522,25 @@ impl super::repo::PrikkRepo for CliPrikkRepo {
             .map(drop)
     }
 
+    fn archive_export(&self, out: &Path) -> Result<()> {
+        let out = out.to_string_lossy();
+        self.run(&["archive", "export", &out]).map(drop)
+    }
+
+    fn archive_verify(&self, artifact: &Path) -> Result<model::ArchiveVerifyReport> {
+        let a = artifact.to_string_lossy();
+        // Its schema is the archive report's own (`prepo-verify-report-v1`), not a `--format json` of a repository.
+        self.run_json(
+            &["archive", "verify", &a, "--format", "json"],
+            "prepo-verify-report-v1",
+        )
+    }
+
+    fn bundle_verify(&self, artifact: &Path) -> Result<()> {
+        let a = artifact.to_string_lossy();
+        self.run(&["bundle", "verify", "--input", &a]).map(drop)
+    }
+
     fn bundle_import(&self, artifact: &Path) -> Result<()> {
         let a = artifact.to_string_lossy();
         self.run(&["bundle", "import", "--input", &a]).map(drop)

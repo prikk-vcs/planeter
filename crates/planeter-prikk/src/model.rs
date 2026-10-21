@@ -664,3 +664,37 @@ mod tests {
         assert_eq!(c.public_key, None);
     }
 }
+
+// ----------------------------------------------------------------------------
+// `archive verify` — schema_version "prepo-verify-report-v1" (RFC 004 part 2: the serve gate)
+// ----------------------------------------------------------------------------
+
+/// What `prikk archive verify --format json` says about an archive file: structure, reference closure and every
+/// signature against the archive's own carried material. An archive is served only if [`ArchiveVerifyReport::passed`].
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct ArchiveVerifyReport {
+    pub schema_version: String,
+    pub ok: bool,
+    pub structure: ArchiveCheck,
+    pub closure: ArchiveCheck,
+    #[serde(default)]
+    pub damaged: Vec<serde_json::Value>,
+    #[serde(default)]
+    pub interrupted_appends: Vec<serde_json::Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct ArchiveCheck {
+    pub ok: bool,
+}
+
+impl ArchiveVerifyReport {
+    /// Every part says ok and nothing is damaged or interrupted.
+    pub fn passed(&self) -> bool {
+        self.ok
+            && self.structure.ok
+            && self.closure.ok
+            && self.damaged.is_empty()
+            && self.interrupted_appends.is_empty()
+    }
+}

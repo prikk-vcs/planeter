@@ -122,7 +122,7 @@ async fn main() {
 
     // RFC 004 D-2: the artifact store and the export spool. Unset means not configured (nothing uses them yet).
     // A directory inside the repository root, or two that overlap, is refused here.
-    match planeter_transport::DirsConfig::from_vars(
+    let dirs = match planeter_transport::DirsConfig::from_vars(
         std::env::var("PLANETER_ARTIFACT_DIR").ok().as_deref(),
         std::env::var("PLANETER_SPOOL_DIR").ok().as_deref(),
         std::env::var("PLANETER_SPOOL_BUDGET_MB").ok().as_deref(),
@@ -150,12 +150,13 @@ async fn main() {
                     s.cleaned_partials()
                 );
             }
+            dirs
         }
         Err(e) => {
             eprintln!("planeter: {e}");
             exit_releasing_lock(1);
         }
-    }
+    };
 
     // RFC 012 D-3f: a draft language (Japanese, not yet signed off by its reviewers) is offered only when the
     // operator asks for it. Off by default; logged once.
@@ -207,7 +208,7 @@ async fn main() {
                 ),
                 Err(e) => eprintln!("planeter: cannot read the lease records: {e}"),
             }
-            leases
+            Arc::new(leases)
         }
         Err(e) => {
             eprintln!("planeter: cannot initialise the lease records: {e}");
@@ -217,10 +218,64 @@ async fn main() {
     let hosting = Arc::new(HostingService::new(repos_root, repo_store));
     let membership: Arc<dyn MembershipStore> = Arc::new(SqliteMembershipStore::new(db.clone()));
     let read = Arc::new(ReadService::new(
-        hosting,
+        hosting.clone(),
         membership,
         Arc::new(NullAuditSink),
     ));
+
+    // RFC 004 part 2: advertise and fetch need the export spool; without it the routes answer `transport_off`
+    // to a reader of the repository. Every setting is a positive whole number, refused at start otherwise.
+    let transport = match &dirs.spool {
+        None => {
+            eprintln!("planeter: artifact fetches are off (no PLANETER_SPOOL_DIR)");
+            None
+        }
+        Some(spool) => {
+            let revisions = match planeter_store::SqliteRevisions::new(db.clone()) {
+                Ok(r) => Arc::new(r),
+                Err(e) => {
+                    eprintln!("planeter: cannot initialise the revision counters: {e}");
+                    exit_releasing_lock(1);
+                }
+            };
+            let cfg = planeter_transport::ExportConfig {
+                max_concurrent: positive_env("PLANETER_EXPORT_CONCURRENCY", 2) as usize,
+                lease_wait: std::time::Duration::from_secs(positive_env(
+                    "PLANETER_EXPORT_LEASE_WAIT_SECS",
+                    5,
+                )),
+                deadline: std::time::Duration::from_secs(positive_env(
+                    "PLANETER_EXPORT_DEADLINE_SECS",
+                    600,
+                )),
+                data_ceiling: positive_env("PLANETER_EXPORT_MEMORY_MB", 2048) << 20,
+            };
+            let rate = positive_env("PLANETER_TRANSPORT_RATE_PER_MIN", 120) as u32;
+            eprintln!(
+                "planeter: artifact fetches on: at most {} export(s) at once, {} s deadline per prikk call, {} MiB memory ceiling, {} request(s) a minute per client and per signed-in user",
+                cfg.max_concurrent,
+                cfg.deadline.as_secs(),
+                cfg.data_ceiling >> 20,
+                rate
+            );
+            let export = Arc::new(planeter_transport::ExportService::new(
+                hosting.clone(),
+                spool.clone(),
+                leases.clone(),
+                revisions,
+                cfg,
+                Arc::new(planeter_transport::Metrics::new()),
+            ));
+            Some(Arc::new(planeter_web::TransportRuntime {
+                export,
+                ip_limit: planeter_web::RateLimiter::new(rate, std::time::Duration::from_secs(60)),
+                principal_limit: planeter_web::RateLimiter::new(
+                    rate,
+                    std::time::Duration::from_secs(60),
+                ),
+            }))
+        }
+    };
 
     // The bound on concurrent prikk invocations and on the wait for a slot (IS-4). Logged once.
     let gate = match planeter_web::PrikkGate::from_vars(
@@ -363,6 +418,7 @@ async fn main() {
         ip_throttle: Arc::new(planeter_auth::LoginThrottle::new(20, 15 * 60)),
         trusted_proxies: Arc::new(trusted_proxies),
         oidc,
+        transport,
         now_unix: || {
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -385,7 +441,6 @@ async fn main() {
             exit_releasing_lock(1);
         }
     };
-    let leases = Arc::new(leases);
     let mut signals = match Signals::new() {
         Ok(s) => s,
         Err(e) => {
@@ -431,6 +486,20 @@ fn release_and_exit(leases: &planeter_core::LeaseManager, code: i32) -> ! {
         eprintln!("planeter: cannot clear this process's lease records: {e}");
     }
     exit_releasing_lock(code)
+}
+
+/// A positive whole-number setting from the environment, or `default`; anything else refuses to start.
+fn positive_env(name: &str, default: u64) -> u64 {
+    match std::env::var(name).ok().filter(|v| !v.is_empty()) {
+        None => default,
+        Some(v) => match v.parse::<u64>() {
+            Ok(n) if n > 0 && n <= (u64::MAX >> 20) => n,
+            _ => {
+                eprintln!("planeter: {name} must be a whole number greater than zero (got {v:?})");
+                exit_releasing_lock(1);
+            }
+        },
+    }
 }
 
 /// `PLANETER_SHUTDOWN_DRAIN_SECS`: the longest a graceful shutdown waits for requests in flight (default 30).

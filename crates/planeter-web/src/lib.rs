@@ -25,12 +25,14 @@ pub mod principal;
 pub mod routes;
 pub mod sanitize;
 pub mod security;
+pub mod transport;
 pub mod ui;
 
 pub use api::AppState;
 pub use client_ip::{TrustedProxies, bind_allowed, client_ip};
 pub use gate::{AuthGate, BlockingGate, PrikkGate};
 pub use routes::{Class, Entry, Routes, Surface};
+pub use transport::{RateLimiter, TransportRuntime};
 
 /// Every route the web surface serves, with its authorization class (IS-14): the API's and the UI's. The router
 /// is built from this and from nothing else, so the table is complete by construction.

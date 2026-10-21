@@ -257,6 +257,80 @@ pub const CATALOG: &[Entry] = &[
         "error.internal.hint",
         "Try again later; if it persists, tell the operator.",
     ),
+    msg(
+        "error.transport_off.message",
+        "Artifact fetches are not set up on this server.",
+    ),
+    msg(
+        "error.transport_off.hint",
+        "Ask the person who runs this server to configure the export spool.",
+    ),
+    msg(
+        "error.unknown_ref.message",
+        "The repository has no ref with that name.",
+    ),
+    msg(
+        "error.unknown_ref.hint",
+        "Take the ref names from the advertisement of the repository.",
+    ),
+    msg(
+        "error.unknown_kind.message",
+        "That fetch kind is not supported.",
+    ),
+    msg(
+        "error.unknown_kind.hint",
+        "Use kind=archive or kind=bundle.",
+    ),
+    msg(
+        "error.bundle_of_received_ref.message",
+        "A received ref cannot be fetched as a bundle.",
+    ),
+    msg(
+        "error.bundle_of_received_ref.hint",
+        "Fetch the whole repository with kind=archive instead.",
+    ),
+    msg(
+        "error.not_verified.message",
+        "The exported artifact did not pass verification, so it was not served.",
+    ),
+    msg(
+        "error.not_verified.hint",
+        "Try again in a little while, or fetch a published ref as kind=bundle.",
+    ),
+    msg(
+        "error.export_failed.message",
+        "The artifact could not be exported right now.",
+    ),
+    msg("error.export_failed.hint", "Try again in a little while."),
+    msg(
+        "error.export_failed.deadline_hint",
+        "The export took longer than this server allows; ask the person who runs this server to raise the export deadline.",
+    ),
+    msg(
+        "error.export_failed.ceiling_hint",
+        "The export needs more memory than this server allows; ask the person who runs this server to raise the export memory limit.",
+    ),
+    msg(
+        "error.export_failed.spool_hint",
+        "The artifact is larger than the whole export spool; ask the person who runs this server to enlarge it.",
+    ),
+    msg("error.rate_limited.message", "Too many requests."),
+    msg(
+        "error.rate_limited.hint",
+        "Retry after the number of seconds in the Retry-After header.",
+    ),
+    msg(
+        "error.range_not_satisfiable.message",
+        "The requested byte range cannot be served.",
+    ),
+    msg(
+        "error.range_not_satisfiable.hint",
+        "Ask for a range inside the artifact; the Content-Range header gives its size.",
+    ),
+    msg(
+        "error.invalid_request.ref_hint",
+        "A bundle needs a ref: add ref=NAME, taking the name from the advertisement.",
+    ),
     // pages that used to be bare strings (T7): a heading, one sentence, one link
     msg("page.link.sign_in", "Go to the sign-in page"),
     msg("page.link.home", "Go to the home page"),

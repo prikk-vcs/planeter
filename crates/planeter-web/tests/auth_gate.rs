@@ -105,6 +105,7 @@ fn harness(concurrency: usize, wait: Duration, delay_ms: u64) -> Harness {
         ip_throttle: Arc::new(planeter_auth::LoginThrottle::new(20, 15 * 60)),
         trusted_proxies: Arc::new(planeter_web::TrustedProxies::parse("10.0.0.0/8").unwrap()),
         oidc: None,
+        transport: None,
     };
     Harness {
         router: router(state),

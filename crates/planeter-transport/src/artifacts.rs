@@ -314,6 +314,8 @@ pub struct Spool {
     dir: Dir,
     budget: u64,
     state: Mutex<SpoolState>,
+    /// Objects whose content was re-hashed, with the (length, modification time) they had then.
+    checked: Mutex<HashMap<Digest, (u64, Option<SystemTime>)>>,
     cleaned: usize,
 }
 
@@ -339,6 +341,7 @@ impl Spool {
             dir,
             budget: budget_bytes,
             state: Mutex::new(state),
+            checked: Mutex::new(HashMap::new()),
             cleaned,
         });
         spool.evict_to_budget(None)?;
@@ -384,6 +387,125 @@ impl Spool {
         }
         self.evict_to_budget(Some(&digest))?;
         Ok(digest)
+    }
+
+    /// A fresh path inside the spool for a file that is being written by someone else (prikk, in the spool-out
+    /// mount): it ends in `.partial`, so a crash leaves nothing visible and opening the spool removes it. The file
+    /// does not exist yet (prikk refuses to overwrite one). Pass it to [`Spool::adopt`] or [`Spool::discard`].
+    pub fn partial_path(&self) -> PathBuf {
+        self.dir.partial_path()
+    }
+
+    /// Remove a partial file (best effort; used on every failure path, so the spool never keeps a partial result).
+    pub fn discard(&self, partial: &Path) {
+        let _ = fs::remove_file(partial);
+    }
+
+    /// Take a finished partial file into the spool: hash it, refuse it if it is larger than the whole budget
+    /// (`TooLarge`; the file is removed), otherwise rename it into place (atomically; the same volume) and count
+    /// it. Returns its digest and size. Evicts least-recently-used objects to stay within the budget.
+    pub fn adopt(&self, partial: &Path) -> Result<(Digest, u64), StoreError> {
+        let result = (|| {
+            let mut file = File::open(partial).map_err(io_err("cannot open the exported file"))?;
+            let mut hash = Sha256Stream::new();
+            let mut size: u64 = 0;
+            let mut buf = vec![0u8; CHUNK];
+            loop {
+                let n = file
+                    .read(&mut buf)
+                    .map_err(io_err("cannot read the exported file"))?;
+                if n == 0 {
+                    break;
+                }
+                size += n as u64;
+                if size > self.budget {
+                    return Err(StoreError::TooLarge { limit: self.budget });
+                }
+                hash.update(&buf[..n]);
+            }
+            file.sync_all()
+                .map_err(io_err("cannot sync the exported file"))?;
+            Ok((Digest(hash.finish_hex()), size))
+        })();
+        let (digest, size) = match result {
+            Ok(v) => v,
+            Err(e) => {
+                self.discard(partial);
+                return Err(e);
+            }
+        };
+        self.dir.publish(partial, &digest)?;
+        {
+            let mut st = self.lock();
+            st.tick += 1;
+            let tick = st.tick;
+            match st.entries.get_mut(&digest) {
+                Some(entry) => entry.1 = tick,
+                None => {
+                    st.entries.insert(digest.clone(), (size, tick));
+                    st.total += size;
+                }
+            }
+        }
+        self.evict_to_budget(Some(&digest))?;
+        Ok((digest, size))
+    }
+
+    /// Check that an object is still what its name says: re-hash it unless it has not changed (length and
+    /// modification time) since it was last checked. A mismatch removes the object (it is never served). Returns
+    /// whether the object is present and intact.
+    pub fn verify_object(&self, digest: &Digest) -> bool {
+        let path = self.dir.object_path(digest);
+        let Ok(meta) = fs::metadata(&path) else {
+            self.forget(digest);
+            return false;
+        };
+        let stamp = (meta.len(), meta.modified().ok());
+        {
+            let checked = self
+                .checked
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            if checked.get(digest) == Some(&stamp) {
+                return true;
+            }
+        }
+        let intact = (|| {
+            let mut f = File::open(&path).ok()?;
+            let mut hash = Sha256Stream::new();
+            let mut buf = vec![0u8; CHUNK];
+            loop {
+                let n = f.read(&mut buf).ok()?;
+                if n == 0 {
+                    break;
+                }
+                hash.update(&buf[..n]);
+            }
+            Some(hash.finish_hex() == digest.0)
+        })()
+        .unwrap_or(false);
+        if intact {
+            self.checked
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .insert(digest.clone(), stamp);
+        } else {
+            let _ = fs::remove_file(&path);
+            self.forget(digest);
+        }
+        intact
+    }
+
+    /// Drop an object from the accounting (its file is gone or was removed).
+    fn forget(&self, digest: &Digest) {
+        let mut st = self.lock();
+        if let Some((size, _)) = st.entries.remove(digest) {
+            st.total = st.total.saturating_sub(size);
+        }
+        self.checked
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(digest);
     }
 
     /// Open an object for reading and mark it recently used. The returned file stays readable even if the object

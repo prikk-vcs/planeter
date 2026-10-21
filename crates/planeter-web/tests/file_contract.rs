@@ -104,6 +104,7 @@ fn app(name: &str) -> Router {
         ip_throttle: Arc::new(planeter_auth::LoginThrottle::new(20, 15 * 60)),
         trusted_proxies: Arc::new(TrustedProxies::default()),
         oidc: None,
+        transport: None,
     })
 }
 

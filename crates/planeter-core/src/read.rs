@@ -516,6 +516,18 @@ impl ReadService {
         self
     }
 
+    /// The record of a repository the principal may **read** (the one `authorize(_, Read, _)` gate), for a
+    /// surface that serves it by other means than a view (the transport). A denied or absent repository is
+    /// [`ReadError::NotFound`], the same for both (T-7).
+    pub fn readable_record(
+        &self,
+        principal: &Principal,
+        owner: &Owner,
+        name: &str,
+    ) -> Result<RepositoryRecord> {
+        self.authorize_read(principal, owner, name)
+    }
+
     /// Resolve + authorize a read, returning the record only if the principal may read it. A denied or
     /// nonexistent repository both yield [`ReadError::NotFound`] (T-7).
     fn authorize_read(

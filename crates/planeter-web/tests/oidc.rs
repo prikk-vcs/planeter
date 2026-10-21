@@ -136,6 +136,7 @@ fn app(subdir: &str) -> (AppState, Arc<MockFetcher>) {
         ip_throttle: Arc::new(planeter_auth::LoginThrottle::new(20, 15 * 60)),
         trusted_proxies: Arc::new(planeter_web::TrustedProxies::default()),
         oidc: Some(oidc),
+        transport: None,
     };
     (state, fetcher)
 }

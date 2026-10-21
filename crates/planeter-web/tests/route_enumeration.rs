@@ -98,6 +98,7 @@ fn state() -> AppState {
         ip_throttle: Arc::new(planeter_auth::LoginThrottle::new(20, 15 * 60)),
         trusted_proxies: Arc::new(TrustedProxies::default()),
         oidc: None,
+        transport: None,
     }
 }
 
@@ -232,8 +233,8 @@ fn the_table_lists_the_routes_the_contract_knows_and_every_public_entry_has_a_re
         .collect();
     assert_eq!(
         authorized.len(),
-        7 + 7,
-        "7 API reads and 7 repository pages"
+        7 + 2 + 7,
+        "7 API reads, the transport's advertise and fetch, and 7 repository pages"
     );
     assert!(authorized.iter().all(|p| p.contains("{owner}")));
 }

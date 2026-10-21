@@ -48,11 +48,27 @@ pub enum ErrorCode {
     RawElsewhere,
     /// 500: an internal fault.
     Internal,
+    /// 503: artifact fetches are not set up on this server (no export spool configured).
+    TransportOff,
+    /// 422: the repository has no ref of that name (transport fetch).
+    UnknownRef,
+    /// 422: the fetch `kind` is neither `archive` nor `bundle`.
+    UnknownKind,
+    /// 422: a bundle of a received ref was asked for; the archive carries it (PK-60).
+    BundleOfReceivedRef,
+    /// 503: the exported artifact did not verify and was not served.
+    NotVerified,
+    /// 503: the export failed, hit its deadline or its memory ceiling, or the artifact exceeds the spool.
+    ExportFailed,
+    /// 429: the per-principal or per-IP rate limit; carries `Retry-After`.
+    RateLimited,
+    /// 416: a `Range` that cannot be satisfied by the one current artifact; carries `Content-Range: bytes */size`.
+    RangeNotSatisfiable,
 }
 
 impl ErrorCode {
     /// Every code, in a fixed order (the OpenAPI enum).
-    pub const ALL: [ErrorCode; 8] = [
+    pub const ALL: [ErrorCode; 16] = [
         ErrorCode::NotFound,
         ErrorCode::Unavailable,
         ErrorCode::Busy,
@@ -61,6 +77,14 @@ impl ErrorCode {
         ErrorCode::RawElsewhere,
         ErrorCode::TooLarge,
         ErrorCode::Internal,
+        ErrorCode::TransportOff,
+        ErrorCode::UnknownRef,
+        ErrorCode::UnknownKind,
+        ErrorCode::BundleOfReceivedRef,
+        ErrorCode::NotVerified,
+        ErrorCode::ExportFailed,
+        ErrorCode::RateLimited,
+        ErrorCode::RangeNotSatisfiable,
     ];
 
     /// The stable snake_case code.
@@ -74,6 +98,14 @@ impl ErrorCode {
             ErrorCode::RawElsewhere => "raw_elsewhere",
             ErrorCode::TooLarge => "too_large",
             ErrorCode::Internal => "internal",
+            ErrorCode::TransportOff => "transport_off",
+            ErrorCode::UnknownRef => "unknown_ref",
+            ErrorCode::UnknownKind => "unknown_kind",
+            ErrorCode::BundleOfReceivedRef => "bundle_of_received_ref",
+            ErrorCode::NotVerified => "not_verified",
+            ErrorCode::ExportFailed => "export_failed",
+            ErrorCode::RateLimited => "rate_limited",
+            ErrorCode::RangeNotSatisfiable => "range_not_satisfiable",
         }
     }
 
@@ -82,8 +114,17 @@ impl ErrorCode {
         match self {
             ErrorCode::NotFound | ErrorCode::RawElsewhere => StatusCode::NOT_FOUND,
             ErrorCode::MethodNotAllowed => StatusCode::METHOD_NOT_ALLOWED,
-            ErrorCode::TooLarge => StatusCode::UNPROCESSABLE_ENTITY,
-            ErrorCode::Unavailable | ErrorCode::Busy => StatusCode::SERVICE_UNAVAILABLE,
+            ErrorCode::TooLarge
+            | ErrorCode::UnknownRef
+            | ErrorCode::UnknownKind
+            | ErrorCode::BundleOfReceivedRef => StatusCode::UNPROCESSABLE_ENTITY,
+            ErrorCode::Unavailable
+            | ErrorCode::Busy
+            | ErrorCode::TransportOff
+            | ErrorCode::NotVerified
+            | ErrorCode::ExportFailed => StatusCode::SERVICE_UNAVAILABLE,
+            ErrorCode::RateLimited => StatusCode::TOO_MANY_REQUESTS,
+            ErrorCode::RangeNotSatisfiable => StatusCode::RANGE_NOT_SATISFIABLE,
             ErrorCode::InvalidRequest => StatusCode::BAD_REQUEST,
             ErrorCode::Internal => StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -105,6 +146,17 @@ impl ErrorCode {
             ErrorCode::RawElsewhere => (Key::ErrRawElsewhereMessage, Key::ErrRawElsewhereHint),
             ErrorCode::TooLarge => (Key::ErrTooLargeMessage, Key::ErrTooLargeHint),
             ErrorCode::Internal => (Key::ErrInternalMessage, Key::ErrInternalHint),
+            ErrorCode::TransportOff => (Key::ErrTransportOffMessage, Key::ErrTransportOffHint),
+            ErrorCode::UnknownRef => (Key::ErrUnknownRefMessage, Key::ErrUnknownRefHint),
+            ErrorCode::UnknownKind => (Key::ErrUnknownKindMessage, Key::ErrUnknownKindHint),
+            ErrorCode::BundleOfReceivedRef => (
+                Key::ErrBundleOfReceivedMessage,
+                Key::ErrBundleOfReceivedHint,
+            ),
+            ErrorCode::NotVerified => (Key::ErrNotVerifiedMessage, Key::ErrNotVerifiedHint),
+            ErrorCode::ExportFailed => (Key::ErrExportFailedMessage, Key::ErrExportFailedHint),
+            ErrorCode::RateLimited => (Key::ErrRateLimitedMessage, Key::ErrRateLimitedHint),
+            ErrorCode::RangeNotSatisfiable => (Key::ErrRangeMessage, Key::ErrRangeHint),
         };
         ErrorKeys { message, hint }
     }
@@ -114,6 +166,30 @@ impl ErrorCode {
     pub const TOO_LARGE_RAW: ErrorKeys = ErrorKeys {
         message: Key::ErrTooLargeMessage,
         hint: Key::ErrTooLargeRawHint,
+    };
+
+    /// `invalid_request` for a bundle fetch without a `ref`: the same code and status, and the hint that is true there.
+    pub const REF_REQUIRED: ErrorKeys = ErrorKeys {
+        message: Key::ErrInvalidRequestMessage,
+        hint: Key::ErrRefRequiredHint,
+    };
+
+    /// `export_failed` because an export or verify call hit its wall-time bound.
+    pub const EXPORT_DEADLINE: ErrorKeys = ErrorKeys {
+        message: Key::ErrExportFailedMessage,
+        hint: Key::ErrExportDeadlineHint,
+    };
+
+    /// `export_failed` because an export or verify call hit its memory ceiling.
+    pub const EXPORT_CEILING: ErrorKeys = ErrorKeys {
+        message: Key::ErrExportFailedMessage,
+        hint: Key::ErrExportCeilingHint,
+    };
+
+    /// `export_failed` because the artifact is larger than the whole spool.
+    pub const SPOOL_TOO_SMALL: ErrorKeys = ErrorKeys {
+        message: Key::ErrExportFailedMessage,
+        hint: Key::ErrSpoolTooSmallHint,
     };
 
     fn text(key: Key, lang: Lang) -> String {
@@ -150,6 +226,24 @@ impl ErrorCode {
                 "the response would exceed what this server serves (a file above the file or raw bound), or the repository needs more memory than the read budget permits (not retryable as is; the hint names the remedy for the cause)"
             }
             ErrorCode::Internal => "an internal fault",
+            ErrorCode::TransportOff => {
+                "artifact fetches are not set up on this server (no export spool configured)"
+            }
+            ErrorCode::UnknownRef => "the repository has no ref of that name",
+            ErrorCode::UnknownKind => "the fetch kind is neither `archive` nor `bundle`",
+            ErrorCode::BundleOfReceivedRef => {
+                "a bundle of a received ref was asked for; the archive carries received refs"
+            }
+            ErrorCode::NotVerified => "the exported artifact did not verify and was not served",
+            ErrorCode::ExportFailed => {
+                "the export failed, hit its deadline or its memory ceiling, or the artifact is larger than the spool (the hint names the cause)"
+            }
+            ErrorCode::RateLimited => {
+                "too many requests from this principal or address (carries Retry-After)"
+            }
+            ErrorCode::RangeNotSatisfiable => {
+                "a byte range the current artifact cannot satisfy (carries `Content-Range: bytes */size`)"
+            }
         }
     }
 

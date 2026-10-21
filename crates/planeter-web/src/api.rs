@@ -31,6 +31,7 @@ use crate::errors::{ErrorBody, ErrorCode};
 use crate::gate::{AdmitError, PrikkGate, offload};
 use crate::routes::{Action, Class, Routes};
 use crate::security::{ContentOrigin, app_security_headers, raw_content_headers};
+use crate::transport::{advertise_handler, fetch_handler};
 
 /// Default and maximum history page size (bounded — `STD-3`).
 const DEFAULT_LIMIT: usize = 50;
@@ -62,6 +63,8 @@ pub struct AppState {
     pub trusted_proxies: Arc<crate::client_ip::TrustedProxies>,
     /// The OIDC provider, when the operator configured one (SSO sign-in).
     pub oidc: Option<Arc<planeter_auth::OidcProvider>>,
+    /// The transport (advertise and fetch), when the operator configured an export spool; `None` otherwise.
+    pub transport: Option<Arc<crate::transport::TransportRuntime>>,
 }
 
 /// The API's route paths. The router and the OpenAPI document both take their paths from here, and
@@ -74,9 +77,22 @@ pub mod paths {
     pub const RAW: &str = "/api/v1/repos/{owner}/{name}/raw";
     pub const REFS: &str = "/api/v1/repos/{owner}/{name}/refs";
     pub const VERIFY: &str = "/api/v1/repos/{owner}/{name}/verify";
+    pub const TRANSPORT_ADVERTISE: &str = "/api/v1/repos/{owner}/{name}/transport/advertise";
+    pub const TRANSPORT_FETCH: &str = "/api/v1/repos/{owner}/{name}/transport/fetch";
     pub const OPENAPI: &str = "/api/v1/openapi.json";
     /// Every route, in document order.
-    pub const ALL: [&str; 8] = [HISTORY, CHANGE, FILE, TREE, RAW, REFS, VERIFY, OPENAPI];
+    pub const ALL: [&str; 10] = [
+        HISTORY,
+        CHANGE,
+        FILE,
+        TREE,
+        RAW,
+        REFS,
+        VERIFY,
+        TRANSPORT_ADVERTISE,
+        TRANSPORT_FETCH,
+        OPENAPI,
+    ];
 }
 
 /// The read API's routes, with their authorization classes (IS-14). This is the only place API routes are
@@ -87,6 +103,8 @@ pub fn routes() -> Routes {
     let description = Class::public(
         "the API's own description: it names no repository and serves no repository data",
     );
+    // The transport's two reads (RFC 004 part 2).
+    let (advertise, fetch) = (get(advertise_handler), get(fetch_handler));
     Routes::new()
         .route(paths::HISTORY, read, &["GET"], get(history_handler))
         .route(paths::CHANGE, read, &["GET"], get(change_handler))
@@ -95,6 +113,8 @@ pub fn routes() -> Routes {
         .route(paths::RAW, read, &["GET"], get(raw_handler))
         .route(paths::REFS, read, &["GET"], get(refs_handler))
         .route(paths::VERIFY, read, &["GET"], get(verify_handler))
+        .route(paths::TRANSPORT_ADVERTISE, read, &["GET"], advertise)
+        .route(paths::TRANSPORT_FETCH, read, &["GET"], fetch)
         .route(paths::OPENAPI, description, &["GET"], get(openapi_handler))
 }
 
@@ -481,7 +501,7 @@ pub(crate) fn try_both_owners<T>(
 
 /// Turn a read result into a response: JSON + security headers + ETag/304 on success; a status-only
 /// (existence-neutral) error otherwise.
-fn respond<T: Serialize>(
+pub(crate) fn respond<T: Serialize>(
     state: &AppState,
     req_headers: &HeaderMap,
     result: Result<T, Failure>,

@@ -92,6 +92,13 @@ environment:
                                 is never capped; a read above it is refused with 422 too_large)
   PLANETER_AUTH_CONCURRENCY     most password verifications at once (default min(CPUs, 4))
   PLANETER_AUTH_QUEUE_WAIT_SECS seconds a sign-in waits for a slot before 503 (default 5)
+  PLANETER_EXPORT_CONCURRENCY   most artifact exports at once (default 2; needs PLANETER_SPOOL_DIR)
+  PLANETER_EXPORT_LEASE_WAIT_SECS  seconds a fetch waits for an export slot and the repository's export lease
+                                before 503 busy (default 5)
+  PLANETER_EXPORT_DEADLINE_SECS wall-time bound of each prikk call of an export, export and verify (default 600)
+  PLANETER_EXPORT_MEMORY_MB     memory ceiling of each prikk call of an export, in MiB (default 2048)
+  PLANETER_TRANSPORT_RATE_PER_MIN  advertise and fetch requests a minute per client address and per signed-in
+                                user, before 429 (default 120)
   PLANETER_PREVIEW_LANGUAGES    comma-separated draft languages to offer for review (only ja exists); a
                                 draft is not signed off, so it is off by default and logged at start
   PLANETER_OIDC_ISSUER, PLANETER_OIDC_CLIENT_ID, PLANETER_OIDC_REDIRECT_URI

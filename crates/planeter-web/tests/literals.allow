@@ -60,12 +60,12 @@ exact :: headers.rs :: max-age=15552000 :: an HSTS value
 exact :: authn.rs :: Bearer  :: the Authorization scheme prefix
 
 # --- errors.rs: the stable machine codes and the OpenAPI prose (developer-facing, English by decision)
-re :: errors.rs :: ^(not_found|unavailable|busy|invalid_request|method_not_allowed|raw_elsewhere|too_large|internal)$ :: a stable machine-readable error code
+re :: errors.rs :: ^(not_found|unavailable|busy|invalid_request|method_not_allowed|raw_elsewhere|too_large|internal|transport_off|unknown_ref|unknown_kind|bundle_of_received_ref|not_verified|export_failed|rate_limited|range_not_satisfiable)$ :: a stable machine-readable error code
 exact :: errors.rs :: document :: a placeholder name
 exact :: errors.rs :: code :: a JSON field name
 exact :: errors.rs :: message :: a JSON field name
 exact :: errors.rs :: hint :: a JSON field name
-re :: errors.rs :: ^(no such resource, or|the repository could not be read|too many requests|a malformed parameter|the method is not supported|the raw route, asked|the response would exceed|an internal fault).* :: ErrorCode::description: OpenAPI prose for developers, English by decision (D-3d)
+re :: errors.rs :: ^(no such resource, or|the repository could not be read|too many requests|a malformed parameter|the method is not supported|the raw route, asked|the response would exceed|an internal fault|artifact fetches are not set up|the repository has no ref|the fetch kind is neither|a bundle of a received ref|the exported artifact did not verify|the export failed, hit|too many requests from this|a byte range the current).* :: ErrorCode::description: OpenAPI prose for developers, English by decision (D-3d)
 
 # --- templates: `|safe` is for sanitised repository content only
 safe :: file.html :: html :: the Markdown renderer's output, sanitised by ammonia (RFC 003 T4); not catalog output
@@ -83,3 +83,26 @@ exact :: ui.rs :: completes single sign-on: it authenticates the caller; no repo
 exact :: ui.rs :: ends the caller's own session (CSRF-protected); no repository data :: the reason a public route is public (route table, IS-14); never shown
 exact :: ui.rs :: sets the visitor's own language cookie, then returns to the page they were on (CSRF-protected); it names no repository and serves no repository data :: the reason a public route is public (route table, IS-14); never shown
 exact :: lang_switch.rs :: {path}?{q} :: a format string of identifiers: a local path and its query, for the switcher's return address
+
+# --- transport.rs (RFC 004 part 2): developer-facing keys and a query-parameter name; no response text
+exact :: transport.rs :: ref :: a query-parameter name (serde rename)
+exact :: transport.rs :: ip:unknown :: a rate-limit key when the client address is unknown (never shown)
+exact :: transport.rs :: user:{} :: a rate-limit key built from an account id (never shown)
+exact :: transport.rs :: rate_limited :: the refusal reason counted in the metrics (never shown to a person)
+exact :: transport.rs :: unknown_kind :: the refusal reason counted in the metrics (never shown to a person)
+exact :: transport.rs :: range_not_satisfiable :: the refusal reason counted in the metrics (never shown to a person)
+exact :: transport.rs :: busy :: the refusal reason counted in the metrics (never shown to a person)
+exact :: transport.rs :: unavailable :: the refusal reason counted in the metrics (never shown to a person)
+exact :: transport.rs :: published :: the advertisement's `state` value (a stable JSON token, never shown as text)
+exact :: transport.rs :: received :: the advertisement's `state`/`kind` value (a stable JSON token, never shown as text)
+exact :: transport.rs :: branch :: the advertisement's `kind` value (a stable JSON token, never shown as text)
+exact :: transport.rs :: tag :: the advertisement's `kind` value (a stable JSON token, never shown as text)
+exact :: transport.rs :: bytes= :: the HTTP Range unit
+exact :: transport.rs :: the read task ended :: an internal error value for a failed read task; never shown
+exact :: transport.rs :: {}-{}.archive :: a download file name built from the owner and repository names
+exact :: transport.rs :: {}-{}-{}.bundle :: a download file name built from the owner, repository and ref names
+exact :: transport.rs :: bytes */{size} :: the Content-Range of an unsatisfiable range
+exact :: transport.rs :: application/octet-stream :: a media type
+exact :: transport.rs :: attachment; filename="{filename}" :: the Content-Disposition of a download
+exact :: transport.rs :: bytes :: the Accept-Ranges unit
+exact :: transport.rs :: bytes {first}-{}/{size} :: the Content-Range of a partial response

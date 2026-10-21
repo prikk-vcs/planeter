@@ -270,6 +270,21 @@ impl Sandbox {
         }
     }
 
+    /// This policy with the export **spool** mounted read-write (RFC 004 D-6: `spool-out`) and the wall-time bound
+    /// set to `timeout_secs`, for the calls that write an artifact. The unconfined dev mode is returned as it is.
+    #[must_use]
+    pub fn with_spool_out(&self, spool: impl Into<PathBuf>, timeout_secs: u64) -> Sandbox {
+        match self {
+            Sandbox::Unconfined => Sandbox::Unconfined,
+            Sandbox::Bwrap(cfg) => {
+                let mut cfg = cfg.clone();
+                cfg.mounts.spool_out = Some(spool.into());
+                cfg.timeout_secs = timeout_secs;
+                Sandbox::Bwrap(cfg)
+            }
+        }
+    }
+
     /// The wall-time bound of one call: [`BwrapConfig::timeout_secs`] when sandboxed; none for the
     /// dev-only unconfined mode.
     pub fn deadline(&self) -> Option<Duration> {
