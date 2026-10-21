@@ -7,7 +7,7 @@ waited for were measured (transport measurement A1–A12, ledger v1.9 PK-57 to P
 changes the design where they disagreed: the accept is resumable, not atomic, so the change record is made
 from an **intent journal after a complete accept** (D-1); a revision's patch set cannot be recovered from
 prikk's output when patches overlap, so it is **declared by the client helper and checked by the forge**
-(D-1); a change is read through **patch ids, never block ids** (D-4, prikk defect PK-57); and `queued` never
+(D-1); a change is shown **file by file from `prikk extract` of the claim and of its parent** (D-4; `show <block-id>` is a prikk defect and `show <patch-id>` cannot name the file of an edit, PK-57, PK-64); and `queued` never
 means "unsealed" (D-10, PK-58). Ready for the owner's decision to accept (it depends on RFC 004 third edition).
 Handoff: v1 ([`../handoffs/005-change-review/change-review-handoff-v1.md`](../handoffs/005-change-review/change-review-handoff-v1.md))
 is superseded; **handoff v2 is written on acceptance.**
@@ -50,7 +50,7 @@ transport measurement (dev team, prikk 0.53.0 with 0.52.0 side by side, 2026-10-
 | U-7 | A keyed receiver can `sync accept` an artifact built elsewhere and `sync seal --claims <file>` it under its own key; nothing about this needs the forge. | D (sync guide) | PK-2 |
 | U-8 | prikk is considering a read-only command whose point may be **one pending accepted claim** (files = its parent's files plus its patches); 0.54.0 behind a design round, not promised. | D | PK-46 |
 
-| U-9 | **`prikk show <block-id>` fails for a block that edits a file for the third time** (integrity error from a lifecycle replay) while `verify` is clean; `show <patch-id>` of the same block works. So a change is read patch by patch. | M | PK-57 |
+| U-9 | **`prikk show <block-id>` fails for a block that edits a file for the third time** (integrity error from a lifecycle replay) while `verify` is clean; prikk confirmed it as its own defect (fix proposed for 0.54.0). `show <patch-id>` works but **names the file by an internal node id** for an edit, a rename or a delete. So neither form can show which file a pending patch edits. | M, R (prikk) | PK-57, PK-64 |
 | U-10 | **`show <patch-id>` reports `queued: false` for an accepted-but-unsealed patch.** `queued` means "in this repository's own active queue"; pending versus sealed comes from `sync pending` and `log`, never from `queued`. | M | PK-58 |
 | U-11 | **An interrupted `sync accept` is not atomic** (SIGKILL at 15/40/70/90 % leaves 147/397/706/902 of 1,000 patches pending, locks in place, `verify` and `doctor` clean); a retry resumes and converges. | M | PK-59 |
 | U-12 | **The accept event's output is stable text and complete for the artifact, not for what is new:** a second push of 5 patches, 3 new, gives pending 5, new objects 3, claims file with all claim lines (new first), order stable; a re-accept is idempotent (claims file byte-identical). **Claim lines cannot be mapped to patch ids** (`show <claim-id>` is refused), so the set of patches *inside* an artifact is not recoverable from prikk's output when some are already pending. | M | PK-48, PK-59 |
@@ -124,14 +124,26 @@ the relay into a second repository works (U-13). **Refuted:** that the accept ev
   reason ("base unknown: push the base first"). A revision with no declared base records `base: none` and is
   reviewable but its results never count (D-7). A *declaration* is not a fact about the artifact; the UI
   labels it "declared base".
-- **D-4 — The review view is patch-level and re-derived.** For each patch in the revision's patch set, the
-  diff is prikk's own `show <patch-id> --format json` rendered through RFC 003 (sanitized, honest). **Always by
-  patch id, never by block id** (U-9: `show <block-id>` fails for blocks that edit a file a third time, and a
-  pending patch has no block at all). Because patch
-  ids are content-addressed and immutable, caching by patch id is correct forever and does not conflict with
-  INV-6. A file-level tree view is added behind the same `ChangeView` interface **when** prikk ships its
-  read-only command with a claim as a point (U-8); until then the UI shows per-patch effects and says what
-  it cannot show.
+- **D-4 — The review view: what the change does to the files, from `extract`; the patch list from ids.**
+  *(Amended 2026-10-21 on prikk's answer, PK-64.)* Two facts decide it: `prikk show <block-id>` is a prikk defect
+  for blocks that edit a file a third time (fix proposed for 0.54.0), and `show <patch-id>`, which works for every
+  patch including pending ones, **names the file by an internal node id for an edit, a rename or a delete**, so
+  it cannot say which file a patch changes. Therefore:
+  1. **The primary review view is file-level.** For a revision the forge materializes two points with
+     `prikk extract` (RFC 006 / ledger PK-56): the **claim** (`extract --claim`, i.e. its parent's files plus the
+     claim's patches) and the claim's **parent** (`extract --ref <parent block>`); planeter diffs the two trees
+     itself (sanitized, size-bounded by `--max-bytes`/`--max-files`, rendered through RFC 003). This also shows
+     exactly "what the change does to the files", the thing a reviewer needs, and uses only prikk's own
+     materialization. It requires prikk's `extract` (0.54.0) and the checkpoint refresh of RFC 006 v2; **until
+     then the review view does not exist** and the change page says so plainly.
+  2. **The patch list is secondary**: ids and, where `show <patch-id>` gives them, operation kinds and the paths it
+     resolves (creates and content show paths; edits, renames and deletes may not). Patch ids are content-addressed
+     and immutable, so caching by patch id is correct forever and does not conflict with INV-6. Nothing is ever read
+     through a block id for a pending change; sealed history is read through RFC 003 (and benefits from the prikk fix
+     when it ships).
+  3. What can be built **before** 0.54.0 is everything except the file-level view: the intent journal, revisions,
+     quotas, comments and decisions, landing observation, the artifact relay. The implementation handoffs are
+     sequenced that way.
 - **D-5 — Review state is forge-owned and bound to a revision.** Comments (anchored to a patch id and, where
   prikk's view carries one, a path and span), threads, and a decision per reviewer per revision
   (`approve` | `request-changes`), authorized by RFC 002's existing `comment` and `review` actions. A new
