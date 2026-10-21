@@ -5,6 +5,23 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **Propose: a change can be put on the forge (RFC 004 part 3b).** With `PLANETER_ARTIFACT_DIR` set (and the export spool), an
+  authenticated principal who may propose (`write` and above; any signed-in reader if the repository's `proposals` setting is
+  `any-authenticated`) can `POST …/transport/propose` an artifact built by `prikk sync build`: it is checked, accepted under the
+  repository's write lease with an intent journaled first, and recorded as a revision of a change. **Nothing is sealed, merged or
+  published: the work is held for review and no branch changes.** The request is framed (`PLANETER-PROPOSE-1`, a metadata length,
+  JSON metadata, the artifact), authenticated by bearer token only, bounded before its body is read, and streamed to disk. An accept
+  that does not finish (killed, past its deadline, past its memory ceiling) leaves the repository **waiting for recovery**: writes are
+  refused with `needs_recovery`, reads are not affected, and the same artifact sent again resumes it once an operator has cleared the
+  stale locks (automatic recovery is the next part). **A server killed in the middle of a write now flags the repository when it
+  starts.** New operator settings: `PRIKK_EXCHANGE_MAX_BYTES`, `PRIKK_EXCHANGE_MAX_OBJECTS`, `PLANETER_ACCEPT_DEADLINE_SECS`,
+  `PLANETER_PROPOSE_CONCURRENCY`, `PLANETER_PROPOSE_LEASE_WAIT_SECS`, `PLANETER_PROPOSAL_CAPACITY_MB`. New API error codes (see the
+  OpenAPI document): `forbidden`, `length_required`, `payload_too_large`, `needs_recovery`, `quota_exceeded`, `base_unknown`,
+  `declaration_misses_added`, `declared_not_held`, `no_new_content`, `unknown_change`, `change_not_open`, `not_your_change`,
+  `accept_refused`, `intent_pending`, `incomplete`. The capacity ceiling now counts every artifact still retained (open changes
+  and changes within their 30-day grace), and a change's current patch set keeps a declared patch that a later undeclared push
+  would have dropped. Design note: `docs/propose.md`.
+
 - **The database gains the tables behind proposed changes (RFC 004 part 3a; nothing uses them yet).** Opening an existing
   database now also creates `changes`, `revisions`, `intents` and `repo_flags` (idempotent; every earlier table is
   untouched, and reopening changes nothing). Nothing writes to them until the transport's write side is built, so a

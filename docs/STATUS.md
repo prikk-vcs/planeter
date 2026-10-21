@@ -8,7 +8,14 @@
 
 ## Where we are
 
-- **RFC 004 part 3a built 2026-10-21, awaiting review** (`rfcs/handoffs/005-change-review/change-model-and-journal-handoff-v2.md`):
+- **RFC 004 part 3b built 2026-10-22, awaiting review** (`rfcs/handoffs/004-transport/propose-and-accept-handoff-v2.md`): propose,
+  the write side of the transport — `POST …/transport/propose` (framed body, bearer token only, bounded at the edge, streamed to
+  disk), the order of the checks, the W lease and the intent journal around `sync accept` in the sandbox (own deadline, memory
+  admission from the heavy pool), the revision derived from the intent and recorded in one transaction, `needs-recovery` on any
+  accept that does not finish, and a start-up reconcile that flags a repository whose write lease a killed server left behind.
+  Tested with real prikk, the real sandbox, and a real server SIGKILLed in the middle of a 1,000-patch accept. `docs/propose.md`.
+  Recovery itself is part 4. Part 3a was **reviewed Approved (2026-10-22)**; its three corrections are in this part (T0).
+- **RFC 004 part 3a built 2026-10-21, reviewed Approved** (`rfcs/handoffs/005-change-review/change-model-and-journal-handoff-v2.md`):
   the records (`changes`, `revisions`, `intents`, `repo_flags`; the atomic `complete_intent_with_revision`; usage queries), the
   pure rules (derivation from an intent, declarations, base, states, landing, quotas, the sealed-from-`log` rule) and their
   tests, in `docs/changes.md`. No route yet. Also: the export sandbox mounts a working directory of its own, not the whole
