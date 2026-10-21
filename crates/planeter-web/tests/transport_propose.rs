@@ -1572,3 +1572,539 @@ async fn a_pending_patch_is_never_called_sealed_whatever_show_says_of_queued() {
         Some(planeter_core::Assurance::ForgeApprovedUnsealed)
     );
 }
+
+// ------------------------------------------------------------------------------------------------ a run that does not finish
+
+/// A stand-in `prikk` that passes everything to the real one, except `sync accept`, which does what the control
+/// file says. The control file is read at each call, so a test can change the behaviour between requests.
+fn standin(base: &Path) -> (PathBuf, PathBuf) {
+    let real = Command::new("sh")
+        .args(["-c", "command -v prikk"])
+        .output()
+        .unwrap()
+        .stdout;
+    let real = String::from_utf8(real).unwrap().trim().to_owned();
+    let ctrl = base.join("standin.mode");
+    std::fs::write(&ctrl, "pass").unwrap();
+    let script = base.join("prikk-standin");
+    std::fs::write(
+        &script,
+        format!(
+            r#"#!/bin/sh
+REAL={real}
+if [ "$1" = sync ] && [ "$2" = accept ]; then
+  case "$(cat {ctrl})" in
+    die-after-real) "$REAL" "$@"; kill -9 $$ ;;
+    unreadable) echo "this is not what accept prints"; exit 0 ;;
+    refuse) echo "error: the artifact is damaged" >&2; exit 1 ;;
+    fail-after-real) "$REAL" "$@" >/dev/null; echo "error: something broke midway" >&2; exit 1 ;;
+    lock) echo "error: lock conflict: container:object-store lock already exists: /x" >&2; exit 1 ;;
+    *) exec "$REAL" "$@" ;;
+  esac
+fi
+exec "$REAL" "$@"
+"#,
+            ctrl = ctrl.display()
+        ),
+    )
+    .unwrap();
+    let st = Command::new("chmod")
+        .arg("+x")
+        .arg(&script)
+        .status()
+        .unwrap();
+    assert!(st.success());
+    (script, ctrl)
+}
+
+fn standin_world(name: &str) -> (World, PathBuf) {
+    let base = std::env::temp_dir().join(format!("planeter-standin-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).unwrap();
+    let (script, ctrl) = standin(&base);
+    let w = world(
+        name,
+        Opts {
+            binary: Some(script),
+            ..Opts::default()
+        },
+    );
+    (w, ctrl)
+}
+
+fn object_exists(w: &World, art: &[u8]) -> bool {
+    let d = planeter_auth::sha256_hex(art);
+    w.artifacts_dir
+        .join("objects")
+        .join(&d[..2])
+        .join(&d)
+        .is_file()
+}
+
+#[tokio::test]
+async fn a_run_that_dies_after_changing_the_repository_is_incomplete_and_a_resend_after_recovery_records_exactly_one()
+ {
+    if skip() {
+        return;
+    }
+    let (mut w, ctrl) = standin_world("died");
+    std::fs::write(&ctrl, "die-after-real").unwrap();
+    w.client.commit(2);
+    let art = w.client.artifact(&w.forge, "a1");
+    let repo = RepoId::new("r-forge");
+    let fp_before = w
+        .export
+        .state(&w.store.get(&repo).unwrap().unwrap())
+        .unwrap();
+
+    let r = propose_as(&w, "forge", "tok-alice", titled("x"), &art).await;
+    assert_eq!(
+        (r.status, r.code().as_str()),
+        (StatusCode::SERVICE_UNAVAILABLE, "incomplete"),
+        "{}",
+        String::from_utf8_lossy(&r.body)
+    );
+    let v = r.json();
+    assert_eq!(v["cause"], "accept_failed");
+    let intent_id = v["intent"].as_str().unwrap().to_owned();
+    assert!(v["hint"].as_str().unwrap().contains("same artifact again"));
+
+    // What the next start reads: an open intent with the first attempt's list, the flag, the artifact kept.
+    let intent = w.changes.get_intent(&intent_id).unwrap().unwrap();
+    assert_eq!(
+        (intent.state, intent.attempts),
+        (planeter_store::IntentState::Open, 1)
+    );
+    assert!(intent.pending_before.is_empty());
+    assert!(w.changes.repo_flags(&repo).unwrap().needs_recovery);
+    assert!(object_exists(&w, &art), "the uploaded artifact is kept");
+    assert!(
+        w.changes.list_changes(&repo, None).unwrap().is_empty(),
+        "a killed accept records nothing"
+    );
+    assert_eq!(
+        pending(&w.forge).len(),
+        2,
+        "the repository did change (here, all of it)"
+    );
+    assert_ne!(
+        fp_before,
+        w.export
+            .state(&w.store.get(&repo).unwrap().unwrap())
+            .unwrap(),
+        "so its fingerprint moved"
+    );
+    assert_eq!(w.metrics.snapshot().proposals_incomplete, 1);
+
+    // Reads still work; the repository verifies and its doctor is clean (U-13); a new proposal is refused.
+    let adv = send(
+        &w.router,
+        Request::builder()
+            .uri("/api/v1/repos/alice/forge/transport/advertise")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    assert_eq!(adv.status, StatusCode::OK);
+    let driver = planeter_prikk::CliPrikkRepo::new(&w.forge);
+    assert!(
+        driver.verify().unwrap().verdict.ok,
+        "verify is clean after a kill"
+    );
+    let doctor = Command::new("prikk")
+        .arg("doctor")
+        .current_dir(&w.forge)
+        .output()
+        .unwrap();
+    assert!(
+        doctor.status.success(),
+        "doctor is clean: {}",
+        String::from_utf8_lossy(&doctor.stderr)
+    );
+    w.client.commit(1);
+    let other = w.client.artifact(&w.forge, "a2");
+    let blocked = propose_as(&w, "forge", "tok-alice", titled("y"), &other).await;
+    assert_eq!(blocked.code(), "needs_recovery");
+
+    // The hook that recovery (part 4) replaces: clear the flag. Re-sending the SAME artifact resumes the intent,
+    // completes, and records exactly one revision, derived from the first attempt's list.
+    w.changes.clear_needs_recovery(&repo).unwrap();
+    std::fs::write(&ctrl, "pass").unwrap();
+    let ok = propose_as(&w, "forge", "tok-alice", titled("x"), &art).await;
+    assert_eq!(
+        ok.status,
+        StatusCode::CREATED,
+        "{}",
+        String::from_utf8_lossy(&ok.body)
+    );
+    assert_eq!(
+        ok.json()["added_count"],
+        2,
+        "both patches count as this revision's, though they were pending by then"
+    );
+    let revs = w
+        .changes
+        .revisions_of(ok.json()["change_id"].as_str().unwrap())
+        .unwrap();
+    assert_eq!(revs.len(), 1, "exactly one revision");
+    let done = w.changes.get_intent(&intent_id).unwrap().unwrap();
+    assert_eq!(
+        (done.state, done.attempts),
+        (planeter_store::IntentState::Complete, 2)
+    );
+    assert_eq!(w.metrics.snapshot().propose_attempts_max, 2);
+    assert!(w.changes.open_intents(&repo).unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn a_refusal_that_leaves_nothing_closes_the_intent_and_does_not_flag_the_repository() {
+    if skip() {
+        return;
+    }
+    let (mut w, ctrl) = standin_world("refused");
+    std::fs::write(&ctrl, "refuse").unwrap();
+    w.client.commit(1);
+    let art = w.client.artifact(&w.forge, "a1");
+    let repo = RepoId::new("r-forge");
+    let r = propose_as(&w, "forge", "tok-alice", titled("x"), &art).await;
+    assert_eq!(
+        (r.status, r.code().as_str()),
+        (StatusCode::UNPROCESSABLE_ENTITY, "accept_refused")
+    );
+    let v = r.json();
+    assert!(
+        v["detail"]
+            .as_str()
+            .unwrap()
+            .contains("the artifact is damaged"),
+        "prikk's text is kept verbatim: {v}"
+    );
+    assert!(
+        !v["message"].as_str().unwrap().contains("damaged"),
+        "behind a plain sentence of ours"
+    );
+    assert!(!w.changes.repo_flags(&repo).unwrap().needs_recovery);
+    assert!(
+        w.changes.open_intents(&repo).unwrap().is_empty(),
+        "the intent is abandoned"
+    );
+    assert!(!object_exists(&w, &art), "a refused upload is not kept");
+    assert!(pending(&w.forge).is_empty());
+    // And the repository takes the next proposal.
+    std::fs::write(&ctrl, "pass").unwrap();
+    let ok = propose_as(&w, "forge", "tok-alice", titled("x"), &art).await;
+    assert_eq!(ok.status, StatusCode::CREATED);
+}
+
+#[tokio::test]
+async fn output_that_cannot_be_read_a_failure_after_a_change_and_a_lock_conflict_are_all_incomplete()
+ {
+    if skip() {
+        return;
+    }
+    let repo = RepoId::new("r-forge");
+    for (mode, cause) in [
+        ("unreadable", "accept_unreadable"),
+        ("fail-after-real", "accept_failed"),
+        ("lock", "accept_failed"),
+    ] {
+        let (mut w, ctrl) = standin_world(&format!("incomplete-{mode}"));
+        std::fs::write(&ctrl, mode).unwrap();
+        w.client.commit(1);
+        let art = w.client.artifact(&w.forge, "a1");
+        let r = propose_as(&w, "forge", "tok-alice", titled("x"), &art).await;
+        assert_eq!(
+            (r.status, r.code().as_str()),
+            (StatusCode::SERVICE_UNAVAILABLE, "incomplete"),
+            "{mode}"
+        );
+        assert_eq!(r.json()["cause"], cause, "{mode}");
+        assert!(
+            w.changes.repo_flags(&repo).unwrap().needs_recovery,
+            "{mode}"
+        );
+        assert_eq!(w.changes.open_intents(&repo).unwrap().len(), 1, "{mode}");
+        assert!(
+            w.changes.list_changes(&repo, None).unwrap().is_empty(),
+            "{mode}: nothing is derived from an unfinished run"
+        );
+    }
+}
+
+#[tokio::test]
+async fn a_server_killed_during_a_write_comes_back_with_the_repository_flagged() {
+    if skip() {
+        return;
+    }
+    let w = world("reconcile", Opts::default());
+    let repo = RepoId::new("r-forge");
+    // The evidence a killed process leaves: a durable W holder record that this process did not grant.
+    let records = Arc::new(InMemoryLeaseRecords::new());
+    use planeter_store::{HolderRecord, LeaseRecordStore};
+    records
+        .record(&HolderRecord {
+            repo_id: repo.clone(),
+            class: "W".into(),
+            operation: "sync accept".into(),
+            holder_id: "old-boot-1".into(),
+            boot_id: "old-boot".into(),
+            since_unix: 1,
+        })
+        .unwrap();
+    let leases = Arc::new(LeaseManager::new(
+        records,
+        new_boot_id(),
+        now,
+        Duration::from_secs(3),
+    ));
+    let artifacts = Arc::new(ArtifactStore::open(w.base.join("artifacts2")).unwrap());
+    let svc = ProposeService::new(
+        w.hosting.clone(),
+        artifacts,
+        leases,
+        w.changes.clone() as Arc<dyn ChangeStore>,
+        w.export.clone(),
+        ProposeConfig::default(),
+        w.metrics.clone(),
+    );
+    assert!(!w.changes.repo_flags(&repo).unwrap().needs_recovery);
+    let flagged = svc.reconcile_at_start();
+    assert_eq!(flagged, vec![repo.clone()]);
+    let f = w.changes.repo_flags(&repo).unwrap();
+    assert!(f.needs_recovery);
+    assert!(f.reason.unwrap().contains("stopped during a write"));
+    // Idempotent: a second start flags nothing new.
+    assert!(svc.reconcile_at_start().is_empty());
+    // A read-only (R) record, or an export's (X), is not a write.
+    let _ = w.base;
+}
+
+// ------------------------------------------------------------------------------------------------ the real sandbox
+
+/// A stand-in `prikk` that needs nothing outside the sandbox (bubblewrap binds only this script): it answers the
+/// version pin and `sync pending` (nothing pending) itself, and does `accept_body` for `sync accept`.
+fn sandbox_standin(base: &Path, accept_body: &str) -> PathBuf {
+    let script = base.join("prikk-sandboxed");
+    std::fs::write(
+        &script,
+        format!(
+            r#"#!/bin/sh
+if [ "$1" = --version ]; then echo "prikk 0.53.0"; exit 0; fi
+if [ "$1" = sync ] && [ "$2" = pending ]; then echo "pending (accepted, unsealed) patches: 0"; exit 0; fi
+if [ "$1" = sync ] && [ "$2" = accept ]; then
+{accept_body}
+fi
+echo "unexpected: $*" >&2; exit 2
+"#
+        ),
+    )
+    .unwrap();
+    let st = Command::new("chmod")
+        .arg("+x")
+        .arg(&script)
+        .status()
+        .unwrap();
+    assert!(st.success());
+    script
+}
+
+fn sandboxed(name: &str, standin_body: Option<&str>, config: ProposeConfig) -> World {
+    let base =
+        std::env::temp_dir().join(format!("planeter-sandboxed-{name}-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&base);
+    std::fs::create_dir_all(&base).unwrap();
+    let binary = standin_body.map(|b| sandbox_standin(&base, b));
+    world(
+        name,
+        Opts {
+            config,
+            sandbox: planeter_prikk::Sandbox::default(),
+            binary,
+            ..Opts::default()
+        },
+    )
+}
+
+#[tokio::test]
+async fn under_the_real_sandbox_the_accept_sees_its_own_two_directories_and_nothing_else_of_the_store()
+ {
+    if skip() || !bwrap_works() {
+        eprintln!("skipping: needs bubblewrap and prlimit");
+        return;
+    }
+    // The probe records, into the repository (the one place it may write), what it can see and do, then refuses.
+    let w = sandboxed(
+        "probe",
+        Some(
+            r#"  A="$3"; IN=$(dirname "$A"); WORK=$(dirname "$IN"); ROOT=$(dirname $(dirname "$WORK"))
+  {
+    echo "objects-listing: $(ls "$ROOT/objects" 2>/dev/null | wc -l)"
+    echo "objects-write: $(touch "$ROOT/objects/evil" >/dev/null 2>&1 && echo ok || echo fail)"
+    echo "incoming-write: $(touch "$ROOT/incoming/evil" >/dev/null 2>&1 && echo ok || echo fail)"
+    echo "in-visible: $(ls "$IN" | tr '\n' ' ')"
+    echo "in-write: $(touch "$IN/evil" >/dev/null 2>&1 && echo ok || echo fail)"
+    echo "out-write: $(touch "$WORK/out/mine" >/dev/null 2>&1 && echo ok || echo fail)"
+    echo "siblings: $(ls "$ROOT/work" | wc -l)"
+    echo "artifact-bytes: $(wc -c < "$A")"
+    echo "bound-bytes: ${PRIKK_EXCHANGE_MAX_BYTES:-unset} objects: ${PRIKK_EXCHANGE_MAX_OBJECTS:-unset}"
+  } > .probe
+  echo "error: probe done" >&2; exit 1"#,
+        ),
+        ProposeConfig {
+            max_artifact_bytes: 7_000_000,
+            max_objects: 1234,
+            ..Opts::default().config
+        },
+    );
+    let mut w = w;
+    w.client.commit(1);
+    let art = w.client.artifact(&w.forge, "a1");
+    let r = propose_as(&w, "forge", "tok-alice", titled("x"), &art).await;
+    assert_eq!(
+        r.status,
+        StatusCode::UNPROCESSABLE_ENTITY,
+        "{}",
+        String::from_utf8_lossy(&r.body)
+    );
+    assert_eq!(r.code(), "accept_refused");
+    let probe =
+        std::fs::read_to_string(w.forge.join(".probe")).expect("the probe ran inside the sandbox");
+    let line = |k: &str| {
+        probe
+            .lines()
+            .find(|l| l.starts_with(k))
+            .unwrap_or("")
+            .to_owned()
+    };
+    assert_eq!(
+        line("objects-listing"),
+        "objects-listing: 0",
+        "no stored artifact is visible\n{probe}"
+    );
+    assert_eq!(line("in-visible"), "in-visible: artifact ", "{probe}");
+    assert_eq!(
+        line("in-write"),
+        "in-write: fail",
+        "the input is read-only\n{probe}"
+    );
+    assert_eq!(
+        line("out-write"),
+        "out-write: ok",
+        "the output directory is writable\n{probe}"
+    );
+    assert_eq!(
+        line("siblings"),
+        "siblings: 1",
+        "only this proposal's own working area\n{probe}"
+    );
+    assert_eq!(
+        line("artifact-bytes"),
+        format!("artifact-bytes: {}", art.len()),
+        "{probe}"
+    );
+    assert_eq!(
+        line("bound-bytes"),
+        "bound-bytes: 7000000 objects: 1234",
+        "the incoming bounds reach prikk's environment\n{probe}"
+    );
+    // Whatever the probe wrote outside its two directories left nothing in the store.
+    assert!(!w.artifacts_dir.join("objects/evil").exists());
+    assert!(!w.artifacts_dir.join("incoming/evil").exists());
+    assert_eq!(
+        std::fs::read_dir(w.artifacts_dir.join("objects"))
+            .unwrap()
+            .count(),
+        0,
+        "a refused upload is not kept"
+    );
+}
+
+#[tokio::test]
+async fn an_accept_past_its_deadline_is_killed_and_is_incomplete() {
+    if skip() || !bwrap_works() {
+        eprintln!("skipping: needs bubblewrap and prlimit");
+        return;
+    }
+    let mut w = sandboxed(
+        "deadline",
+        Some("  sleep 60; exit 0"),
+        ProposeConfig {
+            accept_deadline: Duration::from_secs(2),
+            ..Opts::default().config
+        },
+    );
+    w.client.commit(1);
+    let art = w.client.artifact(&w.forge, "a1");
+    let started = std::time::Instant::now();
+    let r = propose_as(&w, "forge", "tok-alice", titled("x"), &art).await;
+    assert!(
+        started.elapsed() < Duration::from_secs(20),
+        "the deadline killed it: {:?}",
+        started.elapsed()
+    );
+    assert_eq!(
+        (r.status, r.code().as_str()),
+        (StatusCode::SERVICE_UNAVAILABLE, "incomplete"),
+        "{}",
+        String::from_utf8_lossy(&r.body)
+    );
+    assert_eq!(r.json()["cause"], "accept_deadline");
+    let repo = RepoId::new("r-forge");
+    assert!(w.changes.repo_flags(&repo).unwrap().needs_recovery);
+    assert_eq!(w.changes.open_intents(&repo).unwrap().len(), 1);
+    assert!(object_exists(&w, &art));
+}
+
+#[tokio::test]
+async fn under_the_real_sandbox_with_real_prikk_a_proposal_is_taken_in_and_an_over_bound_artifact_is_refused_by_prikk()
+ {
+    if skip() || !bwrap_works() {
+        eprintln!("skipping: needs bubblewrap and prlimit");
+        return;
+    }
+    // prikk's own object bound (the edge checks bytes; the object count is prikk's to enforce): exit 1, nothing accepted.
+    let mut w = sandboxed(
+        "bound",
+        None,
+        ProposeConfig {
+            max_objects: 1,
+            ..Opts::default().config
+        },
+    );
+    w.client.commit(2);
+    let art = w.client.artifact(&w.forge, "a1");
+    let r = propose_as(&w, "forge", "tok-alice", titled("x"), &art).await;
+    assert_eq!(
+        (r.status, r.code().as_str()),
+        (StatusCode::UNPROCESSABLE_ENTITY, "accept_refused"),
+        "{}",
+        String::from_utf8_lossy(&r.body)
+    );
+    assert!(
+        r.json()["detail"]
+            .as_str()
+            .unwrap()
+            .contains("over the configured limit of 1"),
+        "{}",
+        r.json()
+    );
+    assert!(pending(&w.forge).is_empty(), "nothing was accepted");
+    let repo = RepoId::new("r-forge");
+    assert!(!w.changes.repo_flags(&repo).unwrap().needs_recovery);
+    assert!(w.changes.open_intents(&repo).unwrap().is_empty());
+
+    // With the default bounds the same artifact goes through the whole real path: both mounts, the claims file,
+    // the bounds, the ceiling, the deadline.
+    let mut ok = sandboxed("sandboxed-ok", None, Opts::default().config);
+    ok.client.commit(2);
+    let art = ok.client.artifact(&ok.forge, "a1");
+    let r = propose_as(&ok, "forge", "tok-alice", titled("x"), &art).await;
+    assert_eq!(
+        r.status,
+        StatusCode::CREATED,
+        "{}",
+        String::from_utf8_lossy(&r.body)
+    );
+    assert_eq!(r.json()["added_count"], 2);
+    assert_eq!(pending(&ok.forge).len(), 2);
+}
