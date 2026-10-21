@@ -40,7 +40,10 @@ const APP: &str = "forge.example";
 const RAW: &str = "raw.planeter.example";
 
 fn state() -> AppState {
-    let base = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("route-enumeration");
+    // One directory per call: the tests run in parallel and each builds its own state.
+    static NEXT: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+    let n = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+    let base = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("route-enumeration-{n}"));
     let _ = std::fs::remove_dir_all(&base);
     // Two repositories whose directories exist but hold no prikk repository: reading either would fail at
     // opening (503). One is private (a stranger must never get that far), one public (the control).

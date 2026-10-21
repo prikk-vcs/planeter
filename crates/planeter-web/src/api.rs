@@ -84,6 +84,9 @@ pub mod paths {
 pub fn routes() -> Routes {
     // Every repository read goes through `ReadService`, whose first line is `authorize(_, Read, _)`.
     let read = Class::Authorized(Action::Read);
+    let description = Class::public(
+        "the API's own description: it names no repository and serves no repository data",
+    );
     Routes::new()
         .route(paths::HISTORY, read, &["GET"], get(history_handler))
         .route(paths::CHANGE, read, &["GET"], get(change_handler))
@@ -92,14 +95,7 @@ pub fn routes() -> Routes {
         .route(paths::RAW, read, &["GET"], get(raw_handler))
         .route(paths::REFS, read, &["GET"], get(refs_handler))
         .route(paths::VERIFY, read, &["GET"], get(verify_handler))
-        .route(
-            paths::OPENAPI,
-            Class::public(
-                "the API's own description: it names no repository and serves no repository data",
-            ),
-            &["GET"],
-            get(openapi_handler),
-        )
+        .route(paths::OPENAPI, description, &["GET"], get(openapi_handler))
 }
 
 /// Build the read-API router.

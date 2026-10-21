@@ -15,6 +15,7 @@ scope :: principal.rs :: * :: header and token handling
 scope :: client_ip.rs :: * :: network parsing and its operator-facing log lines
 scope :: gate.rs :: * :: operator-facing log lines and the gate's counters
 scope :: budget.rs :: * :: operator-facing configuration messages (start-up)
+scope :: routes.rs :: * :: the route registry (IS-14): developer-facing panic messages of the build-time table; no response carries them
 
 # --- routes, URLs and templates
 re :: * :: ^/.* :: a route or URL path
@@ -69,3 +70,14 @@ re :: errors.rs :: ^(no such resource, or|the repository could not be read|too m
 # --- templates: `|safe` is for sanitised repository content only
 safe :: file.html :: html :: the Markdown renderer's output, sanitised by ammonia (RFC 003 T4); not catalog output
 safe :: repo.html :: html :: the README, rendered and sanitised the same way
+
+# --- the route registry's public reasons (IS-14): written for the reviewer of the route table, shown to no one
+re :: * :: ^(GET|POST)$ :: an HTTP method in a route's declared method list
+exact :: api.rs :: the API's own description: it names no repository and serves no repository data :: the reason a public route is public (route table, IS-14); never shown
+exact :: ui.rs :: the home page: a form to type an address; it lists nothing :: the reason a public route is public (route table, IS-14); never shown
+exact :: ui.rs :: parses an address and redirects to its page, the same for every repository; the page authorizes :: the reason a public route is public (route table, IS-14); never shown
+exact :: ui.rs :: the one stylesheet, embedded in the binary :: the reason a public route is public (route table, IS-14); never shown
+exact :: ui.rs :: sign-in: it authenticates the caller (throttled, CSRF-protected) and serves no repository data :: the reason a public route is public (route table, IS-14); never shown
+exact :: ui.rs :: begins single sign-on: a redirect to the provider; no repository data :: the reason a public route is public (route table, IS-14); never shown
+exact :: ui.rs :: completes single sign-on: it authenticates the caller; no repository data :: the reason a public route is public (route table, IS-14); never shown
+exact :: ui.rs :: ends the caller's own session (CSRF-protected); no repository data :: the reason a public route is public (route table, IS-14); never shown
