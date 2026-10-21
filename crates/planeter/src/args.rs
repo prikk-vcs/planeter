@@ -76,7 +76,7 @@ environment:
   PLANETER_DB                   the SQLite database file (default ./planeter.db; created if absent)
                                 (one server per database: <file>.lock refuses a second one)
   PLANETER_ARTIFACT_DIR         directory for accepted artifacts (content-addressed; never evicted);
-                                an absolute path outside PLANETER_REPOS_ROOT; unset: none (nothing uses it yet)
+                                an absolute path outside PLANETER_REPOS_ROOT; unset: proposals are off
   PLANETER_SPOOL_DIR            directory for exports being served (content-addressed; the oldest are
                                 evicted to stay within the budget); absolute, outside PLANETER_REPOS_ROOT,
                                 and not overlapping PLANETER_ARTIFACT_DIR; unset: none
@@ -99,6 +99,16 @@ environment:
   PLANETER_EXPORT_MEMORY_MB     memory ceiling of each prikk call of an export, in MiB (default 2048)
   PLANETER_TRANSPORT_RATE_PER_MIN  advertise and fetch requests a minute per client address and per signed-in
                                 user, before 429 (default 120)
+  PRIKK_EXCHANGE_MAX_BYTES      largest artifact a proposal may carry, in bytes (default 268435456 = 256 MiB):
+                                refused with 413 before it is read, and again by prikk (needs PLANETER_ARTIFACT_DIR)
+  PRIKK_EXCHANGE_MAX_OBJECTS    most objects an artifact may declare (default 20000); prikk refuses a larger one
+  PLANETER_ACCEPT_DEADLINE_SECS wall-time bound of one accept (default 600); past it the accept is killed and the
+                                repository needs recovery
+  PLANETER_PROPOSE_CONCURRENCY  most proposals being uploaded or accepted at once (default 2)
+  PLANETER_PROPOSE_LEASE_WAIT_SECS  seconds a proposal waits for an upload slot and the repository's write lease
+                                before 503 busy (default 5)
+  PLANETER_PROPOSAL_CAPACITY_MB  most megabytes of artifacts a repository retains for open and recently
+                                finished changes before proposals are refused for repository capacity (default 4096)
   PLANETER_PREVIEW_LANGUAGES    comma-separated draft languages to offer for review (only ja exists); a
                                 draft is not signed off, so it is off by default and logged at start
   PLANETER_OIDC_ISSUER, PLANETER_OIDC_CLIENT_ID, PLANETER_OIDC_REDIRECT_URI

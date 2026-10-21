@@ -198,6 +198,14 @@ pub struct OperationView {
 }
 
 impl ChangeView {
+    /// The view of what `prikk show` reported for a **sealed block**.
+    ///
+    /// **Valid only for the patches of a sealed block** (RFC 004 part 3b, T0c). `show` reports `queued: false` for a
+    /// patch that is merely **pending** (U-10, IS-47), so this function would label a pending patch `Sealed`. A
+    /// pending patch is never classified here: the propose path, and every view of an open change, classifies a patch
+    /// with [`crate::change::patch_assurance`] from the facts that name it (`sync pending` for pending, a block read
+    /// from `log` for sealed), never from `queued`. `tests/transport_propose.rs` feeds a pending patch through the
+    /// propose path and holds the two apart.
     pub fn from_show(show: &model::ShowReport) -> Self {
         Self {
             patches: show
