@@ -1184,6 +1184,8 @@ async fn the_door_runs_recovery_abandons_the_intents_it_is_asked_to_and_refuses_
     }
     let w = world("door-run", Opts::default());
     w.killed_accept();
+    // The plan before the run (for the review request: `PLANETER_PRINT_RECOVERY_SAMPLE=<dir>` writes it and the record).
+    let (_, before) = call(&w.router, "GET", RECOVERY, Some("tok-alice"), "", &[]).await;
     // An unknown intent id refuses the whole request before anything is touched.
     let (status, v) = call(
         &w.router,
@@ -1255,6 +1257,18 @@ async fn the_door_runs_recovery_abandons_the_intents_it_is_asked_to_and_refuses_
             && names.contains(&"clear-flag"),
         "{names:?}"
     );
+    if let Ok(dir) = std::env::var("PLANETER_PRINT_RECOVERY_SAMPLE") {
+        std::fs::write(
+            format!("{dir}/plan-before.json"),
+            serde_json::to_string_pretty(&before["plan"]).unwrap(),
+        )
+        .unwrap();
+        std::fs::write(
+            format!("{dir}/record-after.json"),
+            serde_json::to_string_pretty(&v["recoveries"][0]).unwrap(),
+        )
+        .unwrap();
+    }
     // Run again: nothing to do.
     let (_, v) = call(&w.router, "POST", RECOVERY, Some("tok-alice"), "", &[]).await;
     assert_eq!(v["outcome"], "nothing_to_do");
