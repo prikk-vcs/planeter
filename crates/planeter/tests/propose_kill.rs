@@ -289,7 +289,7 @@ fn build_fixture(name: &str, patches: u32) -> Fixture {
             prikk(&client, &client_keys, &["seal", "--allow-no-audit"]);
         }
     }
-    if patches % 1000 != 0 {
+    if !patches.is_multiple_of(1000) {
         prikk(&client, &client_keys, &["seal", "--allow-no-audit"]);
     }
     let have = dir.join("forge.have");
