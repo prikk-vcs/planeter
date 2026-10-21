@@ -17,6 +17,11 @@ pub enum StoreError {
     NotFound,
     /// A backend (I/O, database) failure.
     Backend(String),
+    /// A uniqueness rule was broken (RFC 005 D-1: an identical artifact is one revision; a change's revisions are
+    /// numbered once; one open intent per artifact). The text names the rule, never a value.
+    Duplicate(&'static str),
+    /// A value the store refuses to keep (a malformed id, a state it does not know, an illegal transition).
+    Invalid(String),
 }
 
 impl fmt::Display for StoreError {
@@ -25,6 +30,8 @@ impl fmt::Display for StoreError {
             StoreError::Conflict(what) => write!(f, "conflict: {what}"),
             StoreError::NotFound => f.write_str("repository record not found"),
             StoreError::Backend(e) => write!(f, "store backend error: {e}"),
+            StoreError::Duplicate(rule) => write!(f, "duplicate: {rule}"),
+            StoreError::Invalid(what) => write!(f, "invalid: {what}"),
         }
     }
 }
