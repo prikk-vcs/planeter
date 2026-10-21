@@ -1420,6 +1420,8 @@ fn record_json(r: &planeter_store::RecoveryRecord) -> RecordJson {
 /// The repository's record if the caller may administer it, else the response to give: `404` for a stranger (the
 /// read gate, identical for a hidden and an absent repository), `403` for a reader who may not administer. The
 /// request is authenticated by bearer token only, like every request that changes something.
+// The error is the response to send, which is large by nature and sent once.
+#[allow(clippy::result_large_err)]
 async fn admin_gate(
     state: &AppState,
     peer: crate::client_ip::PeerAddr,

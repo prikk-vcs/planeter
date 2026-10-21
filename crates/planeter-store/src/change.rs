@@ -262,6 +262,8 @@ pub trait ChangeStore: Send + Sync {
     /// `open`, that one is **resumed**: `attempts += 1`, its `pending_before` **not overwritten**, and it is
     /// returned. Otherwise a new open intent with `attempts = 1` is written. A repository may hold open intents for
     /// different artifacts only if the caller allows it; serializing them is the W lease's job.
+    // The journal entry is one fact of eight, written once; a parameter struct would only move the list.
+    #[allow(clippy::too_many_arguments)]
     fn open_or_resume_intent(
         &self,
         intent_id: &str,
@@ -420,6 +422,8 @@ impl ChangeStore for InMemoryChangeStore {
             .cloned())
     }
 
+    // The journal entry is one fact of eight, written once; a parameter struct would only move the list.
+    #[allow(clippy::too_many_arguments)]
     fn open_or_resume_intent(
         &self,
         intent_id: &str,
@@ -1154,6 +1158,8 @@ impl ChangeStore for SqliteChangeStore {
         row.transpose()
     }
 
+    // The journal entry is one fact of eight, written once; a parameter struct would only move the list.
+    #[allow(clippy::too_many_arguments)]
     fn open_or_resume_intent(
         &self,
         intent_id: &str,

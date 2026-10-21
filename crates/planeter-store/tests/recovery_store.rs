@@ -137,13 +137,7 @@ fn recent_runs_are_newest_first_per_repository_and_limited(s: &dyn RecoveryStore
         ids(s.recent(&RepoId::new("r2"), 10).unwrap()),
         vec!["rec-3"]
     );
-    assert!(
-        s.recent(&RepoId::new("none"), 10)
-            .unwrap()
-            .iter()
-            .next()
-            .is_none()
-    );
+    assert!(s.recent(&RepoId::new("none"), 10).unwrap().is_empty());
     assert_eq!(
         s.recent(&repo(), 1).unwrap()[0].steps.len(),
         1,
