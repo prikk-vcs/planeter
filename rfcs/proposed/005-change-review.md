@@ -132,10 +132,11 @@ the relay into a second repository works (U-13). **Refuted:** that the accept ev
   1. **The primary review view is file-level.** For a revision the forge materializes two points with
      `prikk extract` (RFC 006 / ledger PK-56): the **claim** (`extract --claim`, i.e. its parent's files plus the
      claim's patches) and its **parent** (`extract --ref <parent block>`); prikk measured exactly this route
-     (`diff -r before/ after/` shows the edit and the rename, both extracts `provisional: false`; PK-65). **No
-     command prints a claim's parent today**: until prikk adds it to `extract-report-v1` (proposed), the "before"
-     tree is the change's **declared base** (D-3, verified as held) and the page says "compared with the declared
-     base"; a differing real parent would show *extra* differences, never fewer. planeter diffs the two trees
+     (`diff -r before/ after/` shows the edit and the rename, both extracts `provisional: false`; PK-65). **prikk
+     will report the claim's parent in `extract-report-v1` (`claim_parent_block_id`, 0.54.0, PK-66)**, so the "before" tree is
+     the claim's **real** parent, and a revision whose declared base (D-3) disagrees with it is refused with a named
+     reason. (If the field were absent, the declared base would stand in and the page would say "compared with the
+     declared base"; that fallback is not expected to ship.) planeter diffs the two trees
      itself (sanitized, size-bounded by `--max-bytes`/`--max-files`, rendered through RFC 003). This also shows
      exactly "what the change does to the files", the thing a reviewer needs, and uses only prikk's own
      materialization. It requires prikk's `extract` (0.54.0) and the checkpoint refresh of RFC 006 v2; **until
@@ -288,7 +289,7 @@ be confused"; "less is more"). Decided by the architect unless marked *owner*.
 - **Q-3 (architect → prikk) — answered 2026-10-21** (ledger PK-64, PK-65): `show <block-id>` is prikk's defect (fix
   proposed for 0.54.0); `queued` means "in this repository's own queue"; a killed accept is resumable by design; the
   review route is `extract --claim` against `extract` of the parent (measured by prikk). `sync pending --format
-  json` (claim → patches, signer, parent) is recorded as our first choice, unscheduled; it would turn D-1's
+  json` (claim → patches, signer, parent) is recorded as our first choice, not scheduled (prikk, PK-66); it would turn D-1's
   declaration into a cross-check.
 - **Q-4 (D-8, publication) — the one owner question left; it does not block accepting this RFC.** Nothing in
   D-1…D-11 depends on its answer: "landed" is observed. Under model A a change can be proposed, reviewed and
