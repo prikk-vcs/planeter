@@ -5,6 +5,13 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **The database gains the tables behind proposed changes (RFC 004 part 3a; nothing uses them yet).** Opening an existing
+  database now also creates `changes`, `revisions`, `intents` and `repo_flags` (idempotent; every earlier table is
+  untouched, and reopening changes nothing). Nothing writes to them until the transport's write side is built, so a
+  server updated to this version behaves as before. The design note is `docs/changes.md`. The export sandbox now mounts
+  only a working directory of its own, never the whole spool (`<spool>/work/<id>`, created and removed per export;
+  leftovers from a crash are cleaned when the server starts).
+
 - **The verification page no longer shows "N of M sessions verified", and the verify endpoint no longer returns
   `verified_sessions` and `total_sessions` (IS-49) — a breaking change to the success body of
   `GET …/verify`.** prikk's `active_sessions` is not a tally of work (`count` is the number of session folders,
