@@ -285,6 +285,20 @@ impl Sandbox {
         }
     }
 
+    /// This policy with the wall-time bound of one call set to `timeout_secs` (for the calls that may legitimately
+    /// run long: recovery's `doctor`, repairs and `verify`). The unconfined dev mode has none and is returned as it is.
+    #[must_use]
+    pub fn with_deadline(&self, timeout_secs: u64) -> Sandbox {
+        match self {
+            Sandbox::Unconfined => Sandbox::Unconfined,
+            Sandbox::Bwrap(cfg) => {
+                let mut cfg = cfg.clone();
+                cfg.timeout_secs = timeout_secs;
+                Sandbox::Bwrap(cfg)
+            }
+        }
+    }
+
     /// This policy with the **artifact-in** directory mounted read-only (RFC 004 D-6): where `sync accept` reads the
     /// artifact it is given. The unconfined dev mode is returned as it is.
     #[must_use]

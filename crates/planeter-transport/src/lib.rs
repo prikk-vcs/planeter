@@ -10,6 +10,7 @@ pub mod export;
 pub mod fingerprint;
 pub mod metrics;
 pub mod propose;
+pub mod recovery;
 
 pub use artifacts::{
     AcceptDir, ArtifactStore, Digest, DirsConfig, DirsConfigError, Spool, StoreError,
@@ -23,4 +24,8 @@ pub use metrics::{CacheStatus, FetchRecord, Metrics, Outcome, ProposeOutcome, Pr
 pub use propose::{
     IncompleteCause, MetaError, Plan, ProposeConfig, ProposeError, ProposeMeta, ProposeService,
     Proposed, Submitter, Upload, Uploaded,
+};
+pub use recovery::{
+    Blocker, Cause, Outcome as RecoveryOutcome, Plan as RecoveryPlan, ProcFs, ProcessInfo,
+    ProcessTable, RecoveryConfig, RecoveryError, RecoveryResult, RecoveryService, classify_cause,
 };

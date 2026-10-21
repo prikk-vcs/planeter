@@ -335,6 +335,28 @@ impl LeaseManager {
             .collect())
     }
 
+    /// The boot id of this process: a holder record with another one was written by a process that is not this one.
+    pub fn boot_id(&self) -> &str {
+        &self.inner.boot_id
+    }
+
+    /// Every holder record of `repo`, oldest first, each with whether **this process** granted it. A record of
+    /// another boot belongs to a process that is gone (the server runs once per database, RFC 004 D-7, so no other
+    /// can be alive); a record of this boot is a lease held now.
+    pub fn records_of(&self, repo: &RepoId) -> Result<Vec<(HolderRecord, bool)>, StoreError> {
+        Ok(self
+            .inner
+            .records
+            .list()?
+            .into_iter()
+            .filter(|r| &r.repo_id == repo)
+            .map(|r| {
+                let ours = r.boot_id == self.inner.boot_id;
+                (r, ours)
+            })
+            .collect())
+    }
+
     /// Remove the records **this process** granted and has not yet released: a clean shutdown leaves none behind
     /// for the next start to report as a crashed holder. Returns how many were removed.
     pub fn clear_own_records(&self) -> Result<usize, StoreError> {
@@ -384,6 +406,11 @@ impl Lease {
     pub fn class(&self) -> LeaseClass {
         self.class
     }
+    /// The id of this grant's durable record (`None` for a read, which leaves none).
+    pub fn holder_id(&self) -> Option<&str> {
+        self.holder_id.as_deref()
+    }
+
     pub fn repo(&self) -> &RepoId {
         &self.repo
     }

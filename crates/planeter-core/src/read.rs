@@ -555,6 +555,29 @@ impl ReadService {
         owner: &Owner,
         name: &str,
     ) -> std::result::Result<(RepositoryRecord, bool), ProposeAccess> {
+        self.action_access(Action::Propose, principal, owner, name)
+    }
+
+    /// The record of a repository the principal may **administer** (`RepoAdmin`: recovery, RFC 004 part 4), by the same
+    /// rules as [`ReadService::propose_access`]: the read gate first (`NotFound` for a stranger, identical for a hidden
+    /// and an absent repository), then the action (`NotPermitted` for a reader who may not administer).
+    pub fn admin_access(
+        &self,
+        principal: &Principal,
+        owner: &Owner,
+        name: &str,
+    ) -> std::result::Result<RepositoryRecord, ProposeAccess> {
+        self.action_access(Action::RepoAdmin, principal, owner, name)
+            .map(|(record, _)| record)
+    }
+
+    fn action_access(
+        &self,
+        action: Action,
+        principal: &Principal,
+        owner: &Owner,
+        name: &str,
+    ) -> std::result::Result<(RepositoryRecord, bool), ProposeAccess> {
         let record = match self.authorize_read(principal, owner, name) {
             Ok(r) => r,
             Err(ReadError::NotFound | ReadError::NoSuchPath) => {
@@ -571,7 +594,7 @@ impl ReadService {
             visibility: record.visibility,
             proposals: record.proposals,
         });
-        if !authorize(principal, Action::Propose, &resource, &ctx).is_allowed() {
+        if !authorize(principal, action, &resource, &ctx).is_allowed() {
             return Err(ProposeAccess::NotPermitted);
         }
         let writer = ctx

@@ -93,6 +93,9 @@ pub struct Snapshot {
     pub lease_wait_total: Duration,
     pub per_repo: BTreeMap<String, RepoCounters>,
     pub refusals: BTreeMap<String, u64>,
+    /// Runs of the recovery procedure by outcome (`recovered`, `stopped`, `not_now`, `nothing_to_do`), and the
+    /// repositories left to an administrator (`left_to_administrator`).
+    pub recoveries: BTreeMap<String, u64>,
     pub proposals_accepted: u64,
     pub proposals_already_recorded: u64,
     pub proposals_incomplete: u64,
@@ -186,6 +189,11 @@ impl Metrics {
             r.wall.as_millis(),
             r.lease_wait.as_millis()
         );
+    }
+
+    /// One run of the recovery procedure ended (or was left to an administrator).
+    pub fn recovery(&self, outcome: &str) {
+        self.with(|m| *m.recoveries.entry(outcome.to_owned()).or_insert(0) += 1);
     }
 
     /// One export run for `repo`.

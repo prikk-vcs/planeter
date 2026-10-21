@@ -467,6 +467,8 @@ pub struct ProposeService {
     metrics: Arc<Metrics>,
     slots: Arc<Slots>,
     now_unix: fn() -> u64,
+    /// Recovery, when the operator runs it: tried by itself right after an accept that did not finish.
+    recovery: Option<Arc<crate::recovery::RecoveryService>>,
 }
 
 fn system_now() -> u64 {
@@ -510,7 +512,16 @@ impl ProposeService {
             metrics,
             slots,
             now_unix: system_now,
+            recovery: None,
         }
+    }
+
+    /// Let recovery try, unattended, right after an accept that did not finish (the child is confirmed gone: the
+    /// accept returned). It runs on a thread of its own, so the client's `503` is not held up by `doctor` and `verify`.
+    #[must_use]
+    pub fn with_recovery(mut self, recovery: Arc<crate::recovery::RecoveryService>) -> Self {
+        self.recovery = Some(recovery);
+        self
     }
 
     /// Test seam: the clock of the records.
@@ -705,6 +716,15 @@ impl ProposeService {
         let result = self.accept_inner(record, who, meta, plan, &uploaded);
         if let Err(e) = &result {
             self.metrics.refusal(e.reason());
+            // The write lease was released when `accept_inner` returned; the child is gone.
+            if matches!(e, ProposeError::Incomplete { .. })
+                && let Some(recovery) = &self.recovery
+            {
+                let (recovery, record) = (Arc::clone(recovery), record.clone());
+                std::thread::spawn(move || {
+                    let _ = recovery.auto(&record);
+                });
+            }
         }
         result
     }
