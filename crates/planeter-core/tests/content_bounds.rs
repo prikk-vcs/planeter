@@ -143,13 +143,16 @@ fn file_and_raw_refuse_above_the_shared_bound_and_serve_below_it() {
     ));
     assert!(matches!(
         svc.file(&anon, &owner, "repo", None, "no-such-file", NONE),
-        Err(ReadError::NotFound)
+        Err(ReadError::NoSuchPath)
     ));
 
     // raw: the same constant; an over-cap file is `TooLarge`, not `Unavailable`.
     assert_eq!(raw("small.bin", cap).expect("small").bytes.len(), 1 << 20);
     assert!(matches!(raw("big.bin", cap), Err(ReadError::TooLarge)));
-    assert!(matches!(raw("no-such-file", cap), Err(ReadError::NotFound)));
+    assert!(matches!(
+        raw("no-such-file", cap),
+        Err(ReadError::NoSuchPath)
+    ));
     // No cap: the file is served whole (the UI/API choose their cap; the read does not invent one).
     assert_eq!(raw("big.bin", None).expect("uncapped").bytes.len(), 5 << 20);
 }

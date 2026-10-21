@@ -280,6 +280,8 @@ keys! {
     BusyBody => "busy.body",
     TooLargeHeading => "too_large.heading",
     TooLargeBody => "too_large.body",
+    NoSuchPathBody => "no_such_path.body",
+    NoSuchPathLink => "no_such_path.link",
     // repository, tree, file
     RepoLocation => "repo.location",
     RepoLocationBranch => "repo.location_branch",

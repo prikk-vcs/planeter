@@ -134,6 +134,8 @@ fn the_words_the_handoff_names_are_all_on_the_page() {
         "unavailable.body",
         "too_large.heading",
         "too_large.body",
+        "no_such_path.body",
+        "no_such_path.link",
         "repo.location",
         "tree.at",
         "file.binary",

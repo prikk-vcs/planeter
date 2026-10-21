@@ -133,7 +133,7 @@ fn a_ceiling_hit_is_unavailable_never_notfound_and_never_a_verification_result()
     unavailable_naming_the_ceiling(svc.tree(&anon, &owner, "big", None, None, LOW), "tree");
     // `file` learns the size from a tree pre-check first, so the pre-check is the call that trips.
     unavailable_naming_the_ceiling(svc.file(&anon, &owner, "big", None, "big.bin", LOW), "tree");
-    // `raw_file` asks `cat --format json` first and turns a command failure into `NotFound` ("no such
+    // `raw_file` asks `cat --format json` first and turns a command failure into `NoSuchPath` ("no such
     // path"): a ceiling hit there must NOT be read as a missing path.
     unavailable_naming_the_ceiling(svc.raw_file(&anon, &owner, "big", BIG, LOW), "cat");
 }

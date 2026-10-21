@@ -38,6 +38,11 @@ pub enum ReadError {
     /// The repository does not exist, **or** the principal may not read it. Deliberately the same for
     /// both (T-7): a caller cannot tell a hidden private repo from a missing one.
     NotFound,
+    /// The reader **may read the repository**, and the path they asked for is not in it (IS-45). Produced only
+    /// **after** `authorize_read` succeeded, so it tells a stranger nothing: a hidden or absent repository is
+    /// still [`ReadError::NotFound`], byte for byte. The API answers it exactly as `NotFound`; the UI says "this
+    /// file or folder was not found" to a reader who is entitled to know the repository is there.
+    NoSuchPath,
     /// prikk could not be reached or returned an error (the repository exists and is authorized).
     Unavailable(String),
     /// The response would exceed what this server serves (a file above
@@ -53,6 +58,7 @@ impl std::fmt::Display for ReadError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             ReadError::NotFound => f.write_str("not found"),
+            ReadError::NoSuchPath => f.write_str("no such path in this repository"),
             ReadError::Unavailable(e) => write!(f, "repository temporarily unavailable: {e}"),
             ReadError::TooLarge => f.write_str("too large to serve here"),
             ReadError::Backend(e) => write!(f, "backend error: {e}"),
@@ -633,22 +639,21 @@ impl ReadService {
         let driver = self.open(&record, limits)?;
         // RFC 011 D-3: learn the entry's size from the tree listing and refuse a file above the shared
         // bound *before* any content is read (the patch-plan read holds ≈ 3.1 × the file, in prikk and
-        // again here). A path that is not an entry is `NotFound`, as before.
+        // again here). A path that is not an entry is `NoSuchPath`: the repository was authorized above.
         let listing = driver.tree(ref_name, Some(path)).map_err(unavailable)?;
         let entry = listing
             .entries
             .iter()
             .find(|e| e.path == path)
-            .ok_or(ReadError::NotFound)?;
+            .ok_or(ReadError::NoSuchPath)?;
         if entry.size > CONTENT_MAX_BYTES {
             return Err(ReadError::TooLarge);
         }
         let plan = driver
             .patch_plan_content(ref_name, &[path])
             .map_err(unavailable)?;
-        // A path that is not in the repository is `NotFound`, like a missing repository (never a
-        // successful view that says "not found").
-        FileView::from_patch_plan(&plan, path).ok_or(ReadError::NotFound)
+        // A path that is not in the repository is `NoSuchPath` (never a successful view that says "not found").
+        FileView::from_patch_plan(&plan, path).ok_or(ReadError::NoSuchPath)
     }
 
     /// Refs/branches/tags (`branch` + `tag`).
@@ -667,7 +672,8 @@ impl ReadService {
         Ok(RefsView::from_lists(&branches, &tags))
     }
 
-    /// A directory listing at a point (`tree`). `prefix` filters by whole path components.
+    /// A directory listing at a point (`tree`). `prefix` filters by whole path components. A prefix with no
+    /// entries is an empty listing, as the API has always answered it (see [`Self::tree_existing`]).
     pub fn tree(
         &self,
         principal: &Principal,
@@ -677,15 +683,54 @@ impl ReadService {
         prefix: Option<&str>,
         limits: CallLimits,
     ) -> Result<TreeView> {
+        self.tree_inner(principal, owner, name, point, prefix, limits)
+            .map(|(view, _)| view)
+    }
+
+    /// [`Self::tree`] for the page that names the folder it shows: a **non-empty** `prefix` that has no entry
+    /// under it, at a point prikk has **sealed** (`target_block_id` present), is [`ReadError::NoSuchPath`].
+    /// prikk stores files, not directories (measured on 0.53.0: an empty directory in the worktree leaves no
+    /// trace, and a prefix with no file below it lists nothing), so an empty listing at a sealed point means
+    /// the path is not there. Without a sealed block (a repository whose only content is queued work) nothing
+    /// is said about the path: the listing is empty, as it is for the API. The API's `tree` does not use this
+    /// (its status for a missing prefix is part of the contract and stays `200` with no entries).
+    pub fn tree_existing(
+        &self,
+        principal: &Principal,
+        owner: &Owner,
+        name: &str,
+        point: Option<&str>,
+        prefix: Option<&str>,
+        limits: CallLimits,
+    ) -> Result<TreeView> {
+        let (view, sealed) = self.tree_inner(principal, owner, name, point, prefix, limits)?;
+        let asked_for_a_path = prefix.is_some_and(|p| !p.is_empty());
+        if asked_for_a_path && sealed && view.entries.is_empty() {
+            return Err(ReadError::NoSuchPath);
+        }
+        Ok(view)
+    }
+
+    /// The listing and whether prikk resolved it to a sealed block.
+    fn tree_inner(
+        &self,
+        principal: &Principal,
+        owner: &Owner,
+        name: &str,
+        point: Option<&str>,
+        prefix: Option<&str>,
+        limits: CallLimits,
+    ) -> Result<(TreeView, bool)> {
         let record = self.authorize_read(principal, owner, name)?;
         let driver = self.open(&record, limits)?;
         let listing = driver.tree(point, prefix).map_err(unavailable)?;
-        Ok(TreeView::from_tree(&listing))
+        let sealed = listing.target_block_id.is_some();
+        Ok((TreeView::from_tree(&listing), sealed))
     }
 
     /// The raw bytes of a file at a point (`cat`), for the download / isolated-origin view. `max_bytes`,
     /// if set, refuses (returns `Unavailable`) when the content exceeds it — prikk writes nothing.
-    /// A missing path is [`ReadError::NotFound`].
+    /// A missing path is [`ReadError::NoSuchPath`].
     pub fn raw_file(
         &self,
         principal: &Principal,
@@ -706,7 +751,7 @@ impl ReadService {
             Ok(m) => m,
             // Only prikk's own "no such path" is `NotFound`. A timeout (status 124), a ceiling hit or any
             // other failure says nothing about the path: `Unavailable` (RFC 011 handoff 1, deviation 4).
-            Err(e) if is_missing_path(&e) => return Err(ReadError::NotFound),
+            Err(e) if is_missing_path(&e) => return Err(ReadError::NoSuchPath),
             Err(e) => return Err(unavailable(e)),
         };
         // RFC 011 D-4: a file above the bound is `TooLarge` (a retry cannot help), decided from the

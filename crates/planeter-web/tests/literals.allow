@@ -37,6 +37,7 @@ exact :: ui.rs :: halted :: a verify stage status token matched against; the wor
 exact :: ui.rs :: README.md :: a file name compared with, to find the README
 exact :: ui.rs :: text :: prikk's encoding token compared with
 exact :: ui.rs :: ref :: a query-parameter name (serde rename)
+exact :: ui.rs :: path :: a placeholder name (the path in the not-found title pattern)
 exact :: ui.rs :: check :: a placeholder name (the blocking check in "not run (blocked by {check})")
 
 # --- headers, media types, protocol words

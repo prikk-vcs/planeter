@@ -178,7 +178,9 @@ fn error_page(state: &AppState, c: &Ctx, at: &str, e: Failure) -> Response {
             },
             c,
         ),
-        Failure::Read(ReadError::NotFound) => render(
+        // `NoSuchPath` is shown by the pages that know their repository (`path_error_page`); anywhere else it is
+        // the plain not-found page.
+        Failure::Read(ReadError::NotFound | ReadError::NoSuchPath) => render(
             state,
             StatusCode::NOT_FOUND,
             &NotFoundTpl {
@@ -201,6 +203,40 @@ fn error_page(state: &AppState, c: &Ctx, at: &str, e: Failure) -> Response {
             c,
         ),
     }
+}
+
+/// The error page of a page that names a path inside a repository (a file or a folder): a path the reader may
+/// look for but that is not there says so (IS-45), with a link back to the repository's files. Every other failure
+/// is `error_page`'s, unchanged. `NoSuchPath` exists only for a reader who may read the repository (the service
+/// raises it after authorization), so this page is never shown to a stranger of a private one.
+fn path_error_page(
+    state: &AppState,
+    c: &Ctx,
+    owner: &str,
+    name: &str,
+    ref_name: Option<&str>,
+    at: &str,
+    e: Failure,
+) -> Response {
+    if !matches!(e, Failure::Read(ReadError::NoSuchPath)) {
+        return error_page(state, c, at, e);
+    }
+    let tpl = MessageTpl {
+        user: c.user.clone(),
+        csrf: c.csrf.clone(),
+        t: c.t,
+        title: c
+            .t
+            .msg(Key::TitleNotFound)
+            .with("path", at)
+            .product()
+            .text(),
+        heading: c.t.get(Key::NotFoundHeading),
+        body: c.t.get(Key::NoSuchPathBody),
+        link_label: c.t.get(Key::NoSuchPathLink),
+        link_href: format!("/{owner}/{name}{}", ref_query(ref_name)),
+    };
+    render(state, StatusCode::NOT_FOUND, &tpl, c)
 }
 
 /// The "busy" page with `Retry-After` (a refused request, IS-4 / IS-24): the same page whether or not the
@@ -1307,7 +1343,7 @@ async fn tree_page(
     let subject = Subject::new(&c.principal, &owner, &name, &[ReadVerb::Tree]);
     let tree = read_blocking(&state, subject, move |read, adm| {
         try_both_owners(&o, |ow| {
-            read.tree(
+            read.tree_existing(
                 &principal,
                 ow,
                 &n,
@@ -1320,7 +1356,17 @@ async fn tree_page(
     .await;
     let tree = match tree {
         Ok(t) => t,
-        Err(e) => return error_page(&state, &c, &format!("/{owner}/{name}/tree/{prefix}"), e),
+        Err(e) => {
+            return path_error_page(
+                &state,
+                &c,
+                &owner,
+                &name,
+                r,
+                &format!("/{owner}/{name}/tree/{prefix}"),
+                e,
+            );
+        }
     };
     let (dirs, files) = listing(&tree.entries, &format!("{prefix}/"));
     render(
@@ -1377,7 +1423,17 @@ async fn file_page(
     .await;
     let raw = match raw {
         Ok(f) => f,
-        Err(e) => return error_page(&state, &c, &format!("/{owner}/{name}/blob/{path}"), e),
+        Err(e) => {
+            return path_error_page(
+                &state,
+                &c,
+                &owner,
+                &name,
+                r,
+                &format!("/{owner}/{name}/blob/{path}"),
+                e,
+            );
+        }
     };
     let raw_url = format!(
         "{}/api/v1/repos/{}/{}/raw?path={}{}",

@@ -88,6 +88,12 @@ pub const CATALOG: &[Entry] = &[
         "too_large.body",
         "This is too large for this server to show. You can download it, or ask the person who runs this server to raise the limit.",
     ),
+    // a missing path in a repository the reader may read (IS-45); the heading and title are `not_found.*`
+    msg(
+        "no_such_path.body",
+        "This file or folder was not found in this repository. Check the path, or go back to the files.",
+    ),
+    msg("no_such_path.link", "Go to the files"),
     // repository, tree, file
     msg("repo.location", "Showing {point}"),
     msg("repo.location_branch", "Showing {point} · branch {branch}"),

@@ -66,7 +66,7 @@ fn owner_browses_history_refs_and_verify() {
     assert_eq!(tree.point, "heads/main");
     assert!(tree.entries.is_empty());
 
-    // raw_file for a path that does not exist is NotFound (not a generic error).
+    // raw_file for a path that does not exist is NoSuchPath (after authorization; not a generic error).
     assert!(matches!(
         svc.raw_file(
             &alice,
@@ -79,7 +79,7 @@ fn owner_browses_history_refs_and_verify() {
             },
             CallLimits::NONE
         ),
-        Err(ReadError::NotFound)
+        Err(ReadError::NoSuchPath)
     ));
 }
 

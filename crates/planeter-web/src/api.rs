@@ -545,7 +545,9 @@ pub(crate) fn error_response(state: &AppState, e: Failure) -> Response {
         Failure::Busy => ErrorCode::Busy,
         Failure::Invalid => ErrorCode::InvalidRequest,
         Failure::Internal => ErrorCode::Internal,
-        Failure::Read(ReadError::NotFound) => ErrorCode::NotFound,
+        // IS-45: a missing path in a repository the reader may read is answered exactly as a missing
+        // repository: the same status, headers and body, so the API's shape tells no one anything new.
+        Failure::Read(ReadError::NotFound | ReadError::NoSuchPath) => ErrorCode::NotFound,
         Failure::Read(ReadError::Unavailable(_)) => ErrorCode::Unavailable,
         Failure::Read(ReadError::TooLarge) | Failure::OverBudget => ErrorCode::TooLarge,
         Failure::RawTooLarge => {

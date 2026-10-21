@@ -800,7 +800,7 @@ async fn build_real_states() -> Option<Out> {
         ),
         (
             "tree-missing",
-            "tree:alice/full:nope".into(),
+            "notfound:/alice/full/tree/nope".into(),
             "/alice/full/tree/nope".into(),
         ),
         (
