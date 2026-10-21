@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | Part 4 of the RFC 004 v2 series: **a repository that `propose` flagged `needs_recovery` becomes writable again by a written, tested procedure** (RFC 004 D-6), run automatically only when every witness agrees and otherwise by an administrator with exact commands; plus the fix of IS-50 (an accept whose declaration fails is counted by no quota) and the small items the part 3b review left. |
-| Status | **Assigned** (2026-10-22), after part 3b was reviewed Approved. |
+| Status | **Done, reviewed Approved (2026-10-22; commits `2516bce`…`5ccf9a4`).** IS-50 closed. Follow-ups (IS-51 and two small items): `recovery-followups-handoff-v2.md`. |
 | Basis | [`../../accepted/004-transport.md`](../../accepted/004-transport.md) D-6, D-7, D-3.5, U-13, U-16; [`propose-and-accept-handoff-v2.md`](propose-and-accept-handoff-v2.md) and `docs/propose.md` (the flag, the intent, `reconcile_at_start`, the test hook of T6); `docs/changes.md`; ledger PK-59 (accept resumable, not atomic), PK-60, U-16 (`unlock`'s PID advisory is wrong inside our PID namespace); the lease module (`lease_holders`, orphans) and the sandbox. |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 
