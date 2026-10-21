@@ -756,8 +756,6 @@ struct VerifyTpl {
     assurance_class: &'static str,
     assurance_label: Key,
     explain: Vec<ExplainRow>,
-    verified_sessions: u64,
-    total_sessions: u64,
     failed: Vec<FindingRow>,
     stages: Vec<StageRow>,
 }
@@ -1811,8 +1809,6 @@ async fn verify_page(
             assurance_class: ac,
             assurance_label: al,
             explain: explain_badge_here(al),
-            verified_sessions: v.verified_sessions,
-            total_sessions: v.total_sessions,
             failed: v
                 .failed_conditions
                 .iter()

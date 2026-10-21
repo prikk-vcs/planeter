@@ -105,7 +105,7 @@ fn a_key_is_named_once_with_a_known_status() {
     for r in &rows {
         assert!(seen.insert(r.key.clone()), "`{}` is listed twice", r.key);
         assert!(
-            ["Approved", "Derived", "Held for prikk's confirmation"].contains(&r.status.as_str()),
+            ["Approved", "Derived"].contains(&r.status.as_str()),
             "`{}`: unknown status {:?}",
             r.key,
             r.status
@@ -165,7 +165,6 @@ fn the_words_the_handoff_names_are_all_on_the_page() {
         "verify.status.not_run",
         "repo.location_branch",
         "title.too_large",
-        "verify.sessions",
         "page.csrf.body",
         "page.form_incomplete.body",
         "page.server_error.body",
@@ -179,21 +178,33 @@ fn the_words_the_handoff_names_are_all_on_the_page() {
     }
 }
 
+/// IS-49: the "N of M sessions verified" message is gone, from the catalog and from the page: no row is held, the
+/// removed key is in no row and in no catalog, and the page says it was removed and why.
 #[test]
-fn the_held_message_is_listed_as_held_and_is_exactly_what_it_was() {
-    let rows = rows(&glossary());
-    let held: Vec<&Row> = rows
-        .iter()
-        .filter(|r| r.status.starts_with("Held"))
-        .collect();
-    assert_eq!(held.len(), 1, "exactly one row is held");
-    let r = held[0];
-    assert_eq!(r.key, "verify.sessions");
-    assert_eq!(r.was, r.current, "a held row does not change");
-    // The words and the plural forms, as they were before the plain-words work (RFC 012 handoff T1 (a)).
-    let (one, other) = catalog()["verify.sessions"];
-    assert_eq!(one, "{verified} of {count} session verified.");
-    assert_eq!(other, "{verified} of {count} sessions verified.");
+fn the_sessions_message_is_removed_and_nothing_is_held() {
+    let src = glossary();
+    let rows = rows(&src);
+    assert!(
+        rows.iter().all(|r| !r.status.starts_with("Held")),
+        "no row is held any more"
+    );
+    assert!(rows.iter().all(|r| r.key != "verify.sessions"));
+    assert!(
+        !catalog().contains_key("verify.sessions"),
+        "the key is gone from the English catalog"
+    );
+    assert!(
+        !planeter_web::catalog::JA_DEF
+            .entries
+            .iter()
+            .any(|e| e.key == "verify.sessions"),
+        "and from the Japanese draft"
+    );
+    assert!(src.contains("`verify.sessions`") && src.contains("**removed** (IS-49)"));
+    assert!(
+        src.contains("`queue.count`"),
+        "the page says where waiting work would come from"
+    );
 }
 
 #[test]

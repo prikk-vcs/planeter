@@ -203,12 +203,6 @@ pub const CATALOG: &[Entry] = &[
         "これらのチェックは、このページを開いたときにたった今実行されたものです。以前に開いたときの結果が再利用されることはありません。",
     ),
     msg("verify.findings", "見つかった内容"),
-    // HELD in English (RFC 012 D-4): the sentence stays as it was until prikk confirms what `active_sessions` means.
-    plural_msg(
-        "verify.sessions",
-        "{count} 件中 {verified} 件のセッションを検証済み。",
-        "{count} 件中 {verified} 件のセッションを検証済み。",
-    ),
     msg("verify.status.evaluated", "完了"),
     msg("verify.status.failed", "問題あり"),
     msg("verify.status.not_evaluated", "未実行（{check} が原因）"),

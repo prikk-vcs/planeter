@@ -152,9 +152,9 @@ fn a_placeholder_set_that_differs_from_english_is_found() {
         "t4",
         |e| {
             let mut c = copy(e);
-            if e.key == "verify.sessions" {
-                c.one = "{verified} of the sessions";
-                c.other = "{verified} of the sessions";
+            if e.key == "history.heading" {
+                c.one = "History {refs}";
+                c.other = "History {refs}";
             }
             Some(c)
         },
@@ -163,7 +163,7 @@ fn a_placeholder_set_that_differs_from_english_is_found() {
     let p = audit(&[shipped()[0], l]);
     assert!(
         p.contains(&Problem::PlaceholdersDiffer {
-            key: "verify.sessions",
+            key: "history.heading",
             lang: "t4"
         }),
         "{p:?}"

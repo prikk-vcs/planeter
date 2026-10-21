@@ -5,6 +5,12 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **The verification page no longer shows "N of M sessions verified", and the verify endpoint no longer returns
+  `verified_sessions` and `total_sessions` (IS-49) — a breaking change to the success body of
+  `GET …/verify`.** prikk's `active_sessions` is not a tally of work (`count` is the number of session folders,
+  always one; `verified_count` a fixed 1), so the sentence next to the badge suggested progress that does not exist.
+  The checks, the verdict, the stages and the badge are unchanged.
+
 - **The transport's read side: advertise and fetch (RFC 004 part 2), and a graceful shutdown.** With an export spool
   configured (`PLANETER_SPOOL_DIR`), a reader of a repository can ask what it holds
   (`GET /api/v1/repos/{owner}/{name}/transport/advertise`) and fetch it as one whole, **verified** artifact

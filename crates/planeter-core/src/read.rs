@@ -388,8 +388,6 @@ impl RefsView {
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize)]
 pub struct VerifyView {
     pub ok: bool,
-    pub verified_sessions: u64,
-    pub total_sessions: u64,
     pub failed_conditions: Vec<FailedConditionView>,
     pub stages: Vec<StageView>,
 }
@@ -420,8 +418,6 @@ impl VerifyView {
     pub fn from_verify(v: &model::VerifyReport) -> Self {
         Self {
             ok: v.verdict.ok,
-            verified_sessions: v.active_sessions.verified_count,
-            total_sessions: v.active_sessions.count,
             failed_conditions: v
                 .verdict
                 .failed_conditions

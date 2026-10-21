@@ -180,13 +180,6 @@ pub const CATALOG: &[Entry] = &[
         "These checks were run just now, when you opened this page. They are never reused from an earlier visit.",
     ),
     msg("verify.findings", "What was found"),
-    // HELD (RFC 012 D-4): the glossary proposes "Waiting work: {verified} of {count} checked." but only once
-    // prikk confirms what `active_sessions` means (letter pending). Text and plural forms stay as they were.
-    plural_msg(
-        "verify.sessions",
-        "{verified} of {count} session verified.",
-        "{verified} of {count} sessions verified.",
-    ),
     msg("verify.status.evaluated", "completed"),
     msg("verify.status.failed", "problem found"),
     msg(

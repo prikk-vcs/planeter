@@ -232,10 +232,8 @@ fn schemas() -> Value {
             "blocked_by": {"type": "string", "description": "Only on a `not_evaluated` stage: the id of the stage that blocked it. Absent otherwise."},
             "after": {"type": "string", "description": "Only on a `halted` stage: the id of the stage it stopped after. Absent otherwise."}
         })),
-        "VerifyView": obj(&["ok", "verified_sessions", "total_sessions", "failed_conditions", "stages"], json!({
+        "VerifyView": obj(&["ok", "failed_conditions", "stages"], json!({
             "ok": {"type": "boolean"},
-            "verified_sessions": {"type": "integer", "minimum": 0},
-            "total_sessions": {"type": "integer", "minimum": 0},
             "failed_conditions": array_of("FailedCondition"),
             "stages": array_of("Stage")
         })),

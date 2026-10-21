@@ -4,7 +4,7 @@
 {% block body %}
 <h1>{{ t.get(Key::VerifyHeading) }} <span class="badge {{ assurance_class }}">{{ t.get(*assurance_label) }}</span></h1>
 {% include "explain.html" %}
-<p class="muted">{{ t.get(Key::VerifyIntro) }} {{ t.msg(Key::VerifySessions).with("verified", verified_sessions).n(*total_sessions) }}</p>
+<p class="muted">{{ t.get(Key::VerifyIntro) }}</p>
 {% if !failed.is_empty() %}
 <h2>{{ t.get(Key::VerifyFindings) }}</h2>
 <ul>

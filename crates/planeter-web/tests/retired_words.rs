@@ -16,6 +16,10 @@ const WORDS: &[&str] = &[
     "evaluated",
     "refs",
     "SSO",
+    // IS-49: the verification page's "N of M sessions verified" is gone; a user message does not say "session"
+    // (the sign-in session never appears in a message either).
+    "session",
+    "sessions",
 ];
 /// Old navigation words that may not be a whole message (a label); `Verification` and `error code` are fine.
 const LABELS: &[&str] = &["code", "history", "verify"];
@@ -167,6 +171,8 @@ fn every_retired_word_is_found_wherever_it_hides() {
         ("evaluated", "evaluated"),
         ("Show refs · {repo}", "refs"),
         ("Sign in with SSO", "SSO"),
+        ("3 of 4 sessions verified.", "sessions"),
+        ("1 of 1 session verified.", "session"),
         ("sign in with sso", "SSO"),
         // a whole message that is an old navigation label
         ("code", "code"),
@@ -257,6 +263,10 @@ const JA_FORBIDDEN: &[(&str, &str)] = &[
     (
         "リファレンス",
         "refs are \"branches and tags\" (ブランチとタグ)",
+    ),
+    (
+        "セッション",
+        "IS-49: the sessions count was removed; no message says session",
     ),
     // RFC 012 D-6: no blaming, no gendered wording.
     (

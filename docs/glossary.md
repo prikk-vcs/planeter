@@ -3,8 +3,7 @@
 **Status.** Read and approved by the owner (2026-10-21) and **in force** in the English catalog
 (`crates/planeter-web/src/catalog/en.rs`) since the plain-words work (RFC 012 D-4) and its refinements
 (2026-10-21: the dev team's questions Q1–Q9 were answered by the architect's review, and the change page's badge
-became **Signed into the history**, IS-44). One row is **held** for prikk's confirmation (the `session(s)` count,
-section 1). The test
+became **Signed into the history**, IS-44). The test
 `crates/planeter-web/tests/glossary.rs` reads the *Current* cell of every row in section 2 and fails if it is not
 exactly the English catalog text: **change the words on this page and in the catalog together**. Nothing here
 changes what a label *means*: a label that carries trust (what is verified, what is not) keeps its exact meaning
@@ -21,8 +20,7 @@ choice* = a wording decision.
 
 **Status column (section 2).** *Approved* = the text the owner approved, or a sentence the dev team wrote where this
 page gave none and the architect's review accepted (including the one-sentence form of the raw-route hint, which an
-API test requires). *Derived* = the approved case rule applied to a label this page did not list, or a sentence a handoff specified (IS-45). *Held* = unchanged
-on purpose.
+API test requires). *Derived* = the approved case rule applied to a label this page did not list, or a sentence a handoff specified (IS-45).
 
 **Case.** Standalone labels, headings, titles, links and badges in a heading are in sentence case ("Sign in",
 "History · {repo} · {product}", "Verified"). **In-cell tags and status words are lowercase** ("rollback",
@@ -44,7 +42,7 @@ labels of their own.
 | A recorded unit of history (prikk: *Block*) | "change", "block" | **change** | One word. The page already said "change". | Confirmed |
 | The smallest edit inside a change (prikk: *Patch*) | "patch" | **patch**, explained on the change page: "A patch is one recorded edit." | It is prikk's own word and users of a version-control forge know it | Owner's choice (alternative: "edit") |
 | A change that undoes an earlier one (prikk: *rollback*) | "rollback" | **rollback**, explained on the change page: "A rollback is a change that undoes an earlier change." | Familiar word; the explanation was what was missing. The page cannot say "This change undoes an earlier change." because it does not know whether the change is a rollback, so the explanation is a definition. | Owner's choice |
-| Queued, unsigned work counted by `verify` (prikk JSON: `active_sessions` count and `verified_count`) | "{n} of {m} session(s) verified." | **Held — unchanged** until prikk confirms what `active_sessions` means; the proposal is **Waiting work: {n} of {m} checked.** (plural forms by language rules) | "session" means the sign-in session on one page and prikk's queue of unsigned work on another. This is the architect's reading of prikk's `active_sessions`. | **Confirm with prikk** |
+| The **number of sessions** in prikk's verify report (JSON `active_sessions`: `count`, `verified_count`) | "{n} of {m} session(s) verified." | **Removed (IS-49).** Not shown anywhere: prikk says `count` is the number of session folders (always one, `default`) and `verified_count` a fixed 1, a scope statement and not a tally. It is **not** waiting work: the number of waiting commits is `status`'s `queue.count`, which is not used today. | A number that cannot be true must not be shown (the sentence next to a green badge suggested progress that does not exist). prikk's own advice: say nothing about sessions. | Confirmed (prikk's letter of 2026-10-21, ledger PK-62) |
 | A verification **stage** and its status (`evaluated`, `failed`, `not_evaluated`, `halted`) | "Stage", "evaluated", "failed", "not_evaluated", "halted" | column **Check**; status **completed**, **problem found**, **not run (blocked by {check})**, **stopped early (after {check})** (the two check names come from the stage's `blocked_by` and `after` fields) | "evaluated" does **not** mean "passed" (a stage can complete and still add a problem); "completed" says only that it ran | Confirmed that `evaluated` ≠ passed; wording is the owner's choice |
 | The **findings** of a failed check (prikk conditions such as `stage-failure`, `item-failure`, `publication-trust`) | "{id}: {message}" in prikk's English | prikk's id and message as the detail, under a plain heading **What was found** | The text is prikk's and cannot be translated by us; the heading can | Confirmed |
 | `SSO` | "Sign in with SSO" | **Sign in with single sign-on** | The abbreviation is not universal | Owner's choice |
@@ -142,14 +140,13 @@ whether a private repository exists. Messages not listed here did not change (fo
 | `verify.status.not_run` | — | "not run" | Approved |
 | `verify.status.halted` | "halted" | "stopped early" | Approved |
 | `verify.status.halted_after` | — | "stopped early (after {check})" | Approved |
-| `verify.sessions` | "{verified} of {count} session verified." / "{verified} of {count} sessions verified." | "{verified} of {count} session verified." / "{verified} of {count} sessions verified." | Held for prikk's confirmation |
 
+**Removed messages.** `verify.sessions` ("{verified} of {count} session(s) verified.") was held for prikk's confirmation and is **removed** (IS-49): the verification page and the verify API no longer carry it or the fields behind it (`verified_sessions`, `total_sessions`).
 
 ## 3. Open
 
 1. ~~The owner's reading of sections 1 and 2~~ — done, approved (2026-10-21).
-2. **Confirm with prikk** (next letter): that `active_sessions` in the verify report means queued, not-yet-signed
-   work, and the right user-facing name for it. Until then `verify.sessions` is held.
+2. ~~Confirm with prikk what `active_sessions` means~~ — answered (PK-62): it is not waiting work; the message is removed (IS-49).
 3. ~~Who reads the Japanese (RFC 012 O-2)~~ — **the owner and a colleague** (named by the owner, 2026-10-21); the Japanese draft is section 5 and the reviewers' sheet.
 
 ## 4. How this is used
@@ -244,7 +241,6 @@ the two catalogs). A reviewer's correction changes this cell and `ja.rs` togethe
 | `verify.status.halted` | "stopped early" | "途中で停止" |
 | `verify.status.halted_after` | "stopped early (after {check})" | "途中で停止（{check} の後）" |
 | `verify.col.stage` | "Check" | "チェック" |
-| `verify.sessions` | "{verified} of {count} session verified." / "{verified} of {count} sessions verified." | "{count} 件中 {verified} 件のセッションを検証済み。" |
 | `home.open` | "Open repository" | "リポジトリを開く" |
 | `home.address_label` | "Repository address" | "リポジトリのアドレス" |
 | `unavailable.body` | "This repository could not be read right now. Try again in a little while. If it keeps happening, tell the person who runs this server." | "今はこのリポジトリを読み込めません。しばらくしてから、もう一度お試しください。それでも解決しない場合は、このサーバーの管理者にお知らせください。" |

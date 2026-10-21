@@ -411,7 +411,6 @@ keys! {
     VerifyHeading => "verify.heading",
     VerifyIntro => "verify.intro",
     VerifyFindings => "verify.findings",
-    VerifySessions => "verify.sessions",
     VerifyStatusEvaluated => "verify.status.evaluated",
     VerifyStatusFailed => "verify.status.failed",
     VerifyStatusNotEvaluated => "verify.status.not_evaluated",

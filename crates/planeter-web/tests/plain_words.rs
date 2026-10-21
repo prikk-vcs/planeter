@@ -574,9 +574,11 @@ async fn the_verification_table_uses_plain_words_and_names_the_blocker_from_the_
         "{html}"
     );
     assert!(!html.contains("<b>x</b>"), "{html}");
-    // The intro and the held sessions line are as the glossary says (the held line is the old text).
+    // The intro is as the glossary says, and nothing about "sessions" follows it (IS-49: prikk's report says
+    // `{"count": 2, "verified_count": 1}` here, and the page says nothing of it).
     assert!(html.contains(&text(Key::VerifyIntro)));
-    assert!(html.contains("1 of 2 sessions verified."), "{html}");
+    assert!(!html.to_lowercase().contains("session"), "{html}");
+    assert!(!html.contains("of 2"), "{html}");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
@@ -589,6 +591,7 @@ async fn a_verified_repository_has_no_findings_heading_and_the_api_keeps_its_fie
     let (_, html) = get(&r, "/alice/app/verify").await;
     assert!(!html.contains("What was found"), "{html}");
     assert!(html.contains("<td>completed</td>"), "{html}");
+    assert!(!html.to_lowercase().contains("session"), "{html}");
 
     // The API: `blocked_by` only on a not-run check; `detail` is as it always was.
     let report = fixture("api-report.json", FAILED_REPORT);
@@ -596,6 +599,12 @@ async fn a_verified_repository_has_no_findings_heading_and_the_api_keeps_its_fie
     let (s, body) = get(&r, "/api/v1/repos/alice/app/verify").await;
     assert_eq!(s, StatusCode::OK, "{body}");
     let v: serde_json::Value = serde_json::from_str(&body).unwrap();
+    // IS-49: the verify body no longer carries the two session fields (prikk's report has `active_sessions`).
+    assert!(
+        v.get("verified_sessions").is_none() && v.get("total_sessions").is_none(),
+        "{body}"
+    );
+    assert!(!body.contains("sessions"), "{body}");
     let stage = |name: &str| {
         v["stages"]
             .as_array()

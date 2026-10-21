@@ -250,7 +250,7 @@ async fn every_repository_page_fills_every_placeholder_and_takes_every_word_from
             "/alice/app/verify",
             &[
                 "<h1>Verification <span class=\"badge ok\">Verified</span></h1>",
-                "These checks were run just now, when you opened this page. They are never reused from an earlier visit. 1 of 1 session verified.",
+                "These checks were run just now, when you opened this page. They are never reused from an earlier visit.",
                 "<td>completed</td>",
                 "<title>Verification · alice/app · planeter</title>",
             ],

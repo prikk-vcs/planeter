@@ -132,7 +132,6 @@ fn the_five_trust_labels_and_their_explanations_are_all_in_the_japanese_section(
         "nav.history",
         "nav.refs",
         "nav.verify",
-        "verify.sessions",
     ] {
         assert!(
             named.contains(&key),

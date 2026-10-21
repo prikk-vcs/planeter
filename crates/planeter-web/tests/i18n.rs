@@ -31,7 +31,7 @@ fn other_only(_: u64) -> Plural {
     Plural::Other
 }
 
-/// English wrapped in guillemets, with two deliberate differences from English: `verify.sessions` puts its
+/// English wrapped in guillemets, with two deliberate differences from English: `repo.location_branch` puts its
 /// placeholders in the other order, and the numbers use `.` for groups and `,` for decimals.
 fn qaa() -> &'static LangDef {
     static DEF: std::sync::OnceLock<&'static LangDef> = std::sync::OnceLock::new();
@@ -41,7 +41,7 @@ fn qaa() -> &'static LangDef {
             .iter()
             .map(|e| {
                 let text = match e.key {
-                    "verify.sessions" => "{count} / {verified} ‹sessions›".to_owned(),
+                    "repo.location_branch" => "{branch} / {point} ‹branch›".to_owned(),
                     // a counted message has one form in a language with no plural
                     "history.patch_count" => "{count} ‹patch›".to_owned(),
                     _ => format!("‹{}›", e.other),
@@ -225,14 +225,6 @@ fn plural_and_placeholder_rules_follow_the_language() {
         en.msg(Key::HistoryPatchCount).n(1200).text(),
         "1,200 patches"
     );
-    assert_eq!(
-        en.msg(Key::VerifySessions).with("verified", 3).n(4).text(),
-        "3 of 4 sessions verified."
-    );
-    assert_eq!(
-        en.msg(Key::VerifySessions).with("verified", 1).n(1).text(),
-        "1 of 1 session verified."
-    );
 
     let q = T::new(qaa_lang());
     // No grammatical plural: one form for every count, in the language's number format.
@@ -243,8 +235,11 @@ fn plural_and_placeholder_rules_follow_the_language() {
     );
     // Another word order: the placeholders are named, so the catalog may reorder them.
     assert_eq!(
-        q.msg(Key::VerifySessions).with("verified", 3).n(4).text(),
-        "4 / 3 ‹sessions›"
+        q.msg(Key::RepoLocationBranch)
+            .with("point", "heads/main")
+            .with("branch", "heads/dev")
+            .text(),
+        "heads/dev / heads/main ‹branch›"
     );
 }
 
@@ -523,7 +518,7 @@ fn a_hostile_value_in_a_text_code_muted_or_link_slot_cannot_inject_markup_or_an_
                 .with("target", v)
                 .with("repo", v)
                 .html(),
-            t.msg(Key::VerifySessions).with("verified", v).n(3).html(),
+            t.msg(Key::HistoryPatchCount).n(3).html(),
         ] {
             only_expected_tags(html.as_str());
             assert!(

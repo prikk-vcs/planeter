@@ -479,8 +479,6 @@ async fn every_view_serializes_to_exactly_the_declared_fields() {
             "VerifyView",
             serde_json::to_value(VerifyView {
                 ok: false,
-                verified_sessions: 1,
-                total_sessions: 2,
                 failed_conditions: vec![FailedConditionView {
                     id: "stage-failure".into(),
                     message: "m".into(),
