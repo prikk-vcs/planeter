@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | A **follow-on** of the done RFC 003 (the read path) and of RFC 012 D-4 (plain words), from two observations in the prikk 0.53.0 re-baseline review request (T3): (1) a missing **file** in a repository the reader can see shows "There is no repository at this address, or you do not have access to it." — the existence-neutral sentence for a repository, wrong for a path; (2) the behaviour of a repository whose only content is queued work is unpinned by any test. Issue **IS-45**. |
-| Status | **Assigned** (2026-10-21). |
+| Status | **Done, reviewed Approved (2026-10-21; commits `f6d36ce`, `3c39e5d`).** IS-45 closed. |
 | Basis | The re-baseline review request (private), T3 tables and its two "existing oddities"; `crates/planeter-core/src/read.rs` (`ReadError`, `file()` with its `tree` pre-check, `raw_file` and `is_missing_path`), `crates/planeter-web/src/{api,ui}.rs` (error mapping, `not_found` page), `catalog/en.rs`, `docs/glossary.md`; the existence-neutrality rule (a stranger must not learn whether a private repository exists). |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 

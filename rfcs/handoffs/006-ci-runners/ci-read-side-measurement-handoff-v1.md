@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | An **investigation** handoff under RFC 006 (workflow Phase 1–2: limited technical investigation and small proofs of concept when requested; RFC 010 D-8). It measures; it implements nothing. It turns assumptions under RFC 006's second edition into ledger evidence. SCHEDULE theme T13. |
-| Status | **Authorized by the owner 2026-10-15 (SCHEDULE D-7).** It inherits RFC 006's state (revision pending); it is startable because it changes nothing: its preconditions are that the advisory lock update (RFC 010's handoff) is pushed and prikk 0.52.0 is installed (met). |
+| Status | **B4–B7 done, reviewed Approved 2026-10-21 (PK-61); B1–B3 held for `prikk extract` (PK-56).** (Authorized by the owner 2026-10-15, SCHEDULE D-7.) It inherits RFC 006's state (revision pending); it is startable because it changes nothing: its preconditions are that the advisory lock update (RFC 010's handoff) is pushed and prikk 0.52.0 is installed (met). |
 | Basis | Dependency ledger v1.6 §D (rows marked *prikk-measured* or *ASSUMED*); prikk letters 2026-10-13 and 2026-10-15; prikk RFC 155 §9.3–§9.6; RFC 010 D-8; `docs/dependency-policy.md` rule 1 (no manifest changes). |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`) and the raw logs. |
 | Scope | Part B: the CI read-side measurements B1–B7 below, on the installed prikk (0.53.0 since 2026-10-21; 0.52.0 when first written), in a scratch directory outside the repository. **Non-change scope:** no file in the repository except the review request; no product code; no manifest change; no prikk patch; no letter to prikk. |
