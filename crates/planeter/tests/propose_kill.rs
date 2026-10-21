@@ -1,14 +1,18 @@
-//! RFC 004 part 3b, T6: the real server, real prikk and the real sandbox; the server is **SIGKILLed in the middle of a
-//! large accept** (a 1,000-patch artifact, as in the measurements). Afterwards:
+//! RFC 004 parts 3b and 4: the real server, real prikk and the real sandbox; the server is **SIGKILLed in the middle of
+//! an accept**. Afterwards, for each kill:
 //!
 //! * the store has an **open intent** with the first attempt's list, and no revision;
 //! * the next start flags the repository `needs-recovery` (the killed server could not), from the durable lease record;
-//! * reads still work; a new proposal is refused with `needs_recovery`; `verify` and `doctor` are clean (U-13);
-//! * after the recovery hook (unlock the stale prikk locks, clear the flag; part 4 replaces it), re-sending **the same
-//!   artifact** resumes the intent, completes, and records **exactly one** revision, derived from the first attempt's
-//!   list (all 1,000 patches), though by then a prefix of them was already pending.
+//!   with automatic recovery off, reads still work, a new proposal is refused with `needs_recovery`, `verify` and
+//!   `doctor` are clean (U-13), and the administrator's door shows a plan that may run unattended;
+//! * with automatic recovery on, **the next start clears the flag by itself** (the stale locks cleared, `verify` passed,
+//!   the dead lease record removed) and writes a recovery record that shows the steps;
+//! * re-sending **the same artifact** resumes the intent, completes, and records **exactly one** revision, derived from
+//!   the first attempt's list, though by then a prefix of the patches was already pending.
 //!
-//! Self-skips (printing why) without prikk, prlimit or bubblewrap. Building the 1,000 commits takes about a minute.
+//! Two tests: one over a 1,000-patch artifact killed once (as part 3b), one over a 300-patch artifact killed at roughly
+//! 15, 40, 70 and 90 % of the accept (found by watching `sync pending` grow). Self-skip (printing why) without prikk,
+//! prlimit or bubblewrap.
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
@@ -19,11 +23,9 @@ use std::time::{Duration, Instant};
 use planeter_auth::{Sha256TokenHasher, SqliteCredentialStore, TokenHasher, TokenRecord};
 use planeter_core::{RepoScope, Scope, ScopeAccess};
 use planeter_store::{
-    ChangeStore, IntentState, Owner, RepoId, RepositoryRecord, RepositoryStore, SqliteChangeStore,
-    SqliteDb, SqliteRepositoryStore, UserId, Visibility,
+    ChangeStore, IntentState, Owner, RecoveryStore, RepoId, RepositoryRecord, RepositoryStore,
+    SqliteChangeStore, SqliteDb, SqliteRecoveries, SqliteRepositoryStore, UserId, Visibility,
 };
-
-const PATCHES: u32 = 1000;
 
 fn runs(tool: &str) -> bool {
     Command::new(tool)
@@ -98,7 +100,7 @@ struct Server {
     port: u16,
 }
 
-fn start(dir: &Path) -> Server {
+fn start(dir: &Path, automatic_recovery: bool) -> Server {
     let port = std::net::TcpListener::bind("127.0.0.1:0")
         .unwrap()
         .local_addr()
@@ -113,6 +115,10 @@ fn start(dir: &Path) -> Server {
         .env("PLANETER_ARTIFACT_DIR", dir.join("artifacts"))
         .env("PLANETER_SPOOL_DIR", dir.join("spool"))
         .env("PLANETER_SPOOL_BUDGET_MB", "64")
+        .env(
+            "PLANETER_AUTOMATIC_RECOVERY",
+            if automatic_recovery { "on" } else { "off" },
+        )
         .current_dir(dir)
         .stdin(Stdio::null())
         .stdout(Stdio::null())
@@ -200,20 +206,25 @@ fn frame(meta: &str, artifact: &[u8]) -> Vec<u8> {
     out
 }
 
-#[test]
-fn a_server_killed_in_the_middle_of_a_1000_patch_accept_leaves_a_state_the_next_start_reads_and_a_resend_records_exactly_one_revision()
- {
-    if !runs("prikk") || !runs("prlimit") || !bwrap_works() {
-        eprintln!("skipping: needs prikk, prlimit and bubblewrap (with user namespaces)");
-        return;
-    }
-    let dir = scratch("sigkill");
+// ------------------------------------------------------------------------------------------------ the fixture
+
+/// A keyed client with `patches` queued patches sealed into one block, a keyless forge that adopted its key (kept
+/// pristine), and the artifact that closes the gap. Each kill gets a copy of the forge and a database of its own.
+struct Fixture {
+    dir: PathBuf,
+    forge_pristine: PathBuf,
+    forge_keys: PathBuf,
+    art: Vec<u8>,
+    patches: u32,
+}
+
+fn build_fixture(name: &str, patches: u32) -> Fixture {
+    let dir = scratch(name);
     let (client, client_keys) = (dir.join("client"), dir.join("client-keys"));
-    let (forge, forge_keys) = (dir.join("forge"), dir.join("forge-keys"));
+    let (forge, forge_keys) = (dir.join("forge-pristine"), dir.join("forge-keys"));
     for d in [&client, &client_keys, &forge, &forge_keys] {
         std::fs::create_dir_all(d).unwrap();
     }
-    // The keyed client, and a keyless forge that adopted its key by an archive import.
     prikk(&client, &client_keys, &["setup"]);
     std::fs::write(client.join("README.md"), b"# kill\n").unwrap();
     prikk(
@@ -261,11 +272,9 @@ fn a_server_killed_in_the_middle_of_a_1000_patch_accept_leaves_a_state_the_next_
         &forge_keys,
         &["archive", "import", archive.to_str().unwrap(), "--adopt"],
     );
-
-    // 1,000 patches in the client, and the artifact that closes the gap to the forge.
     let built = Instant::now();
-    // 1,000 queued patches sealed into one block (a block holds many patches; sealing each alone would take minutes).
-    for i in 0..PATCHES {
+    // Queued patches are sealed in batches of 1,000 (a queue holds at most that many).
+    for i in 0..patches {
         std::fs::write(
             client.join(format!("f{i}.txt")),
             format!("patch {i}\n").repeat(10),
@@ -276,8 +285,13 @@ fn a_server_killed_in_the_middle_of_a_1000_patch_accept_leaves_a_state_the_next_
             &client_keys,
             &["commit", "--from-worktree", "-m", &format!("p{i}")],
         );
+        if i % 1000 == 999 {
+            prikk(&client, &client_keys, &["seal", "--allow-no-audit"]);
+        }
     }
-    prikk(&client, &client_keys, &["seal", "--allow-no-audit"]);
+    if patches % 1000 != 0 {
+        prikk(&client, &client_keys, &["seal", "--allow-no-audit"]);
+    }
     let have = dir.join("forge.have");
     prikk(
         &forge,
@@ -306,110 +320,160 @@ fn a_server_killed_in_the_middle_of_a_1000_patch_accept_leaves_a_state_the_next_
     );
     let art = std::fs::read(&art_path).unwrap();
     eprintln!(
-        "built {PATCHES} patches and a {} byte artifact in {:?}",
+        "built {patches} patches and a {} byte artifact in {:?}",
         art.len(),
         built.elapsed()
     );
-
-    // The server's database: the repository, and a token for its owner.
-    {
-        let db = SqliteDb::open(dir.join("db.sqlite")).unwrap();
-        SqliteRepositoryStore::new(db.clone())
-            .create(RepositoryRecord {
-                repo_id: RepoId::new("r1"),
-                owner: Owner::User("alice".into()),
-                name: "forge".into(),
-                visibility: Visibility::Public,
-                created_at: 0,
-                prikk_format_version: None,
-                proposals: Default::default(),
-                path: forge.clone(),
-            })
-            .unwrap();
-        SqliteCredentialStore::new(db)
-            .unwrap()
-            .add_token(TokenRecord {
-                hash: TokenHasher::hash(&Sha256TokenHasher, "tok-alice"),
-                user: UserId::new("alice"),
-                scope: Scope {
-                    access: ScopeAccess::Write,
-                    repos: RepoScope::All,
-                    expires_at: None,
-                },
-            })
-            .unwrap();
+    Fixture {
+        dir,
+        forge_pristine: forge,
+        forge_keys,
+        art,
+        patches,
     }
+}
 
-    // First start: send the artifact on a thread, and kill the server once a prefix of the patches is pending.
-    let mut server = start(&dir);
+/// A server directory: a copy of the pristine forge, a database with the repository and the owner's token.
+struct Instance {
+    dir: PathBuf,
+    forge: PathBuf,
+}
+
+fn instance(fx: &Fixture, tag: &str) -> Instance {
+    let dir = fx.dir.join(format!("inst-{tag}"));
+    std::fs::create_dir_all(&dir).unwrap();
+    let forge = dir.join("forge");
+    let st = Command::new("cp")
+        .arg("-a")
+        .arg(&fx.forge_pristine)
+        .arg(&forge)
+        .status()
+        .unwrap();
+    assert!(st.success());
+    let db = SqliteDb::open(dir.join("db.sqlite")).unwrap();
+    SqliteRepositoryStore::new(db.clone())
+        .create(RepositoryRecord {
+            repo_id: RepoId::new("r1"),
+            owner: Owner::User("alice".into()),
+            name: "forge".into(),
+            visibility: Visibility::Public,
+            created_at: 0,
+            prikk_format_version: None,
+            proposals: Default::default(),
+            path: forge.clone(),
+        })
+        .unwrap();
+    SqliteCredentialStore::new(db)
+        .unwrap()
+        .add_token(TokenRecord {
+            hash: TokenHasher::hash(&Sha256TokenHasher, "tok-alice"),
+            user: UserId::new("alice"),
+            // `Full`: the token of an administrator (it may use the recovery door).
+            scope: Scope {
+                access: ScopeAccess::Full,
+                repos: RepoScope::All,
+                expires_at: None,
+            },
+        })
+        .unwrap();
+    Instance { dir, forge }
+}
+
+const PROPOSE: &str = "/api/v1/repos/alice/forge/transport/propose";
+const RECOVERY: &str = "/api/v1/repos/alice/forge/recovery";
+
+fn bearer() -> Vec<(&'static str, String)> {
+    vec![("Authorization", "Bearer tok-alice".to_owned())]
+}
+
+fn propose_headers() -> Vec<(&'static str, String)> {
+    let mut h = bearer();
+    h.push(("Content-Type", "application/octet-stream".to_owned()));
+    h
+}
+
+fn change_store(inst: &Instance) -> SqliteChangeStore {
+    SqliteChangeStore::new(SqliteDb::open(inst.dir.join("db.sqlite")).unwrap()).unwrap()
+}
+
+fn flagged(inst: &Instance) -> bool {
+    change_store(inst)
+        .repo_flags(&RepoId::new("r1"))
+        .unwrap()
+        .needs_recovery
+}
+
+/// What one kill showed.
+struct Report {
+    pending_at_kill: usize,
+    recovery_steps: Vec<String>,
+    resumed: Duration,
+}
+
+/// Send the fixture's artifact to a server, SIGKILL the server once `kill_at` patches are pending, and walk the whole
+/// recovery: restart with automatic recovery off (the state a person would find), then on (the server recovers by
+/// itself), then send the same artifact again.
+fn kill_and_recover(fx: &Fixture, tag: &str, kill_at: usize) -> Report {
+    let inst = instance(fx, tag);
+    let repo = RepoId::new("r1");
+    let n = fx.patches as usize;
+
+    // First start: send the artifact on a thread, kill the server once a prefix is pending.
+    let mut server = start(&inst.dir, true);
     let port = server.port;
-    let body = frame(
-        r#"{"title":"a thousand patches","client":"propose-kill/1"}"#,
-        &art,
-    );
-    let sender = std::thread::spawn(move || {
-        http(
-            port,
-            "POST",
-            "/api/v1/repos/alice/forge/transport/propose",
-            &[
-                ("Authorization", "Bearer tok-alice".to_owned()),
-                ("Content-Type", "application/octet-stream".to_owned()),
-            ],
-            &body,
-        )
-    });
+    let body = frame(r#"{"title":"killed","client":"propose-kill/1"}"#, &fx.art);
+    let sender = std::thread::spawn(move || http(port, "POST", PROPOSE, &propose_headers(), &body));
     let watch = Instant::now();
-    let prefix = loop {
-        let n = pending_count(&forge, &forge_keys);
-        if n >= 100 {
-            break n;
+    loop {
+        let pending = pending_count(&inst.forge, &fx.forge_keys);
+        if pending >= kill_at {
+            break;
         }
         assert!(
-            watch.elapsed() < Duration::from_secs(180),
-            "the accept never got going (pending {n})"
+            watch.elapsed() < Duration::from_secs(300),
+            "the accept never got going (pending {pending})"
         );
-        std::thread::sleep(Duration::from_millis(100));
-    };
+        std::thread::sleep(Duration::from_millis(15));
+    }
     server.child.kill().unwrap(); // SIGKILL
     let _ = server.child.wait();
     let _ = sender.join();
-    let at_kill = pending_count(&forge, &forge_keys);
-    eprintln!("killed with {prefix}..{at_kill} of {PATCHES} patches pending");
+    let pending_at_kill = pending_count(&inst.forge, &fx.forge_keys);
     assert!(
-        at_kill < PATCHES as usize,
-        "the accept had already finished ({at_kill} pending): the machine is too fast for the kill window"
+        pending_at_kill < n,
+        "the accept had already finished ({pending_at_kill} pending): the kill window was missed"
     );
+    eprintln!("[{tag}] killed with {pending_at_kill} of {n} patches pending");
 
-    // What the killed process left: an open intent with the first attempt's (empty) list, no revision, no change.
-    let repo = RepoId::new("r1");
+    // What the killed process left: an open intent with the first attempt's (empty) list, no revision, no flag.
     {
-        let db = SqliteDb::open(dir.join("db.sqlite")).unwrap();
-        let changes = SqliteChangeStore::new(db).unwrap();
+        let changes = change_store(&inst);
         let open = changes.open_intents(&repo).unwrap();
-        assert_eq!(open.len(), 1, "one open intent");
+        assert_eq!(open.len(), 1, "[{tag}] one open intent");
         assert!(
             open[0].pending_before.is_empty(),
-            "the first attempt's list"
+            "[{tag}] the first attempt's list"
         );
         assert_eq!(open[0].state, IntentState::Open);
         assert!(
             changes.list_changes(&repo, None).unwrap().is_empty(),
-            "a killed accept records nothing"
+            "[{tag}] a killed accept records nothing"
         );
         assert!(
             !changes.repo_flags(&repo).unwrap().needs_recovery,
-            "the killed process could not set the flag"
+            "[{tag}] the killed process could not set the flag"
         );
     }
 
-    // Second start: the flag is set from the durable lease record (reconcile at start).
-    let mut server = start(&dir);
+    // Second start, automatic recovery OFF: the flag is set from the durable lease record; reads work; a new proposal
+    // is refused; the administrator's door shows a plan that may run unattended; verify and doctor are clean.
+    let mut server = start(&inst.dir, false);
     {
-        let db = SqliteDb::open(dir.join("db.sqlite")).unwrap();
-        let changes = SqliteChangeStore::new(db).unwrap();
-        let f = changes.repo_flags(&repo).unwrap();
-        assert!(f.needs_recovery, "the next start flags the repository");
+        let f = change_store(&inst).repo_flags(&repo).unwrap();
+        assert!(
+            f.needs_recovery,
+            "[{tag}] the next start flags the repository"
+        );
         assert!(
             f.reason
                 .unwrap_or_default()
@@ -417,7 +481,6 @@ fn a_server_killed_in_the_middle_of_a_1000_patch_accept_leaves_a_state_the_next_
         );
     }
     let port = server.port;
-    // Reads still work; a new proposal is refused with the named reason.
     let (status, _) = http(
         port,
         "GET",
@@ -425,89 +488,164 @@ fn a_server_killed_in_the_middle_of_a_1000_patch_accept_leaves_a_state_the_next_
         &[],
         b"",
     );
-    assert_eq!(status, 200);
+    assert_eq!(status, 200, "[{tag}] reads work");
     let (status, refused) = http(
         port,
         "POST",
-        "/api/v1/repos/alice/forge/transport/propose",
-        &[("Authorization", "Bearer tok-alice".to_owned())],
-        &frame(r#"{"title":"x"}"#, &art),
+        PROPOSE,
+        &bearer(),
+        &frame(r#"{"title":"x"}"#, &fx.art),
     );
     assert_eq!(status, 503);
-    assert!(String::from_utf8_lossy(&refused).contains("needs_recovery"));
-    // verify and doctor are clean after the kill (U-13).
-    prikk(&forge, &forge_keys, &["verify"]);
-    prikk(&forge, &forge_keys, &["doctor"]);
-
-    // The recovery hook (part 4 replaces it): unlock the stale prikk locks, stop the server, clear the flag and the
-    // stale lease record, start again.
+    assert!(
+        String::from_utf8_lossy(&refused).contains("needs_recovery"),
+        "[{tag}]"
+    );
+    let (status, plan) = http(port, "GET", RECOVERY, &bearer(), b"");
+    let plan = String::from_utf8_lossy(&plan).into_owned();
+    assert_eq!(status, 200, "{plan}");
+    assert!(
+        plan.contains("\"may_run_unattended\":true"),
+        "[{tag}] {plan}"
+    );
+    assert!(
+        plan.contains("\"cause\":{\"code\":\"server_stopped\""),
+        "[{tag}] {plan}"
+    );
+    prikk(&inst.forge, &fx.forge_keys, &["verify"]);
+    prikk(&inst.forge, &fx.forge_keys, &["doctor"]);
+    assert!(
+        prikk(&inst.forge, &fx.forge_keys, &["unlock"]).contains(".lock"),
+        "[{tag}] the killed accept left its locks"
+    );
     let _ = server.child.kill();
     let _ = server.child.wait();
-    let listing = prikk(&forge, &forge_keys, &["unlock"]);
-    let locks: Vec<String> = listing
-        .split_whitespace()
-        .filter(|t| t.ends_with(".lock"))
-        .map(str::to_owned)
-        .collect();
-    assert!(
-        !locks.is_empty(),
-        "the killed accept left its locks:\n{listing}"
+
+    // Third start, automatic recovery ON: the server clears the flag by itself.
+    let mut server = start(&inst.dir, true);
+    let end = Instant::now() + Duration::from_secs(120);
+    while flagged(&inst) {
+        assert!(
+            Instant::now() < end,
+            "[{tag}] automatic recovery did not clear the flag"
+        );
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    // The flag is cleared by the run's last step; its record is closed an instant later.
+    let recoveries =
+        SqliteRecoveries::new(SqliteDb::open(inst.dir.join("db.sqlite")).unwrap()).unwrap();
+    let closed = Instant::now() + Duration::from_secs(20);
+    let runs = loop {
+        let runs = recoveries.recent(&repo, 5).unwrap();
+        if runs.first().is_some_and(|r| r.outcome.is_some()) || Instant::now() > closed {
+            break runs;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    };
+    assert_eq!(runs.len(), 1, "[{tag}] one recovery record");
+    assert_eq!(
+        (runs[0].actor.as_str(), runs[0].outcome.as_deref()),
+        ("automatic", Some("recovered"))
     );
-    for l in &locks {
-        prikk(&forge, &forge_keys, &["unlock", "--lock", l, "--force"]);
-    }
-    {
-        let db = SqliteDb::open(dir.join("db.sqlite")).unwrap();
-        db.lock()
-            .unwrap()
-            .execute("DELETE FROM lease_holders", [])
-            .unwrap();
-        SqliteChangeStore::new(db)
-            .unwrap()
-            .clear_needs_recovery(&repo)
-            .unwrap();
-    }
-    let mut server = start(&dir);
+    let recovery_steps: Vec<String> = runs[0].steps.iter().map(|s| s.name.clone()).collect();
+    // An accept leaves `active.lock` at once and `objects.lock` after about a second and a half: one lock or two.
+    let forced = runs[0]
+        .steps
+        .iter()
+        .filter(|s| s.name == "unlock-force")
+        .count();
+    assert!(
+        (1..=2).contains(&forced),
+        "[{tag}] {forced} locks cleared: {recovery_steps:?}"
+    );
+    assert!(
+        runs[0]
+            .steps
+            .iter()
+            .all(|s| s.outcome.as_deref() == Some("ok")),
+        "[{tag}] {recovery_steps:?}"
+    );
+    assert!(
+        prikk(&inst.forge, &fx.forge_keys, &["unlock"]).contains("no locks currently held"),
+        "[{tag}]"
+    );
+    prikk(&inst.forge, &fx.forge_keys, &["verify"]);
+    prikk(&inst.forge, &fx.forge_keys, &["doctor"]);
+    assert!(
+        change_store(&inst).open_intents(&repo).unwrap().len() == 1,
+        "[{tag}] recovery never abandons an intent"
+    );
+
+    // The same artifact again: it resumes the intent and records exactly one revision, from the first attempt's list.
     let started = Instant::now();
     let (status, reply) = http(
         server.port,
         "POST",
-        "/api/v1/repos/alice/forge/transport/propose",
-        &[
-            ("Authorization", "Bearer tok-alice".to_owned()),
-            ("Content-Type", "application/octet-stream".to_owned()),
-        ],
-        &frame(
-            r#"{"title":"a thousand patches","client":"propose-kill/1"}"#,
-            &art,
-        ),
+        PROPOSE,
+        &propose_headers(),
+        &frame(r#"{"title":"killed","client":"propose-kill/1"}"#, &fx.art),
     );
-    let reply_text = String::from_utf8_lossy(&reply).into_owned();
-    assert_eq!(status, 201, "{reply_text}");
-    eprintln!("the resumed accept took {:?}", started.elapsed());
+    let resumed = started.elapsed();
+    let reply = String::from_utf8_lossy(&reply).into_owned();
+    assert_eq!(status, 201, "[{tag}] {reply}");
     assert_eq!(
-        json_num(&reply_text, "added_count"),
-        Some(u64::from(PATCHES)),
-        "derived from the first attempt's list: all {PATCHES} patches, though a prefix was pending when the retry began"
+        json_num(&reply, "added_count"),
+        Some(u64::from(fx.patches)),
+        "[{tag}] derived from the first attempt's list: all {n} patches, though {pending_at_kill} were pending when the retry began"
     );
-    assert_eq!(json_num(&reply_text, "seq"), Some(1));
-    assert_eq!(pending_count(&forge, &forge_keys), PATCHES as usize);
-
-    // Exactly one revision, the intent complete after two attempts, nothing open.
-    let change_id = json_str(&reply_text, "change_id").expect("change_id");
-    let db = SqliteDb::open(dir.join("db.sqlite")).unwrap();
-    let changes = SqliteChangeStore::new(db).unwrap();
+    let change_id = json_str(&reply, "change_id").expect("change_id");
+    let changes = change_store(&inst);
     assert_eq!(
         changes.revisions_of(&change_id).unwrap().len(),
         1,
-        "exactly one revision"
+        "[{tag}] exactly one revision"
     );
     assert_eq!(changes.list_changes(&repo, None).unwrap().len(), 1);
     assert!(changes.open_intents(&repo).unwrap().is_empty());
-    let stored = changes.revisions_of(&change_id).unwrap();
-    assert_eq!(stored[0].added_patch_ids.len(), PATCHES as usize);
-    // The size of the intent at this scale (its pending_before is empty here; the 20,000-id bound is measured in the
-    // store's tests).
+    assert_eq!(pending_count(&inst.forge, &fx.forge_keys), n);
     let _ = server.child.kill();
     let _ = server.child.wait();
+    Report {
+        pending_at_kill,
+        recovery_steps,
+        resumed,
+    }
+}
+
+fn needs_tools() -> bool {
+    if !runs("prikk") || !runs("prlimit") || !bwrap_works() {
+        eprintln!("skipping: needs prikk, prlimit and bubblewrap (with user namespaces)");
+        return true;
+    }
+    false
+}
+
+#[test]
+fn a_server_killed_in_the_middle_of_a_1000_patch_accept_recovers_by_itself_and_a_resend_records_exactly_one_revision()
+ {
+    if needs_tools() {
+        return;
+    }
+    let fx = build_fixture("sigkill-1000", 1000);
+    let r = kill_and_recover(&fx, "1000", 100);
+    eprintln!(
+        "1000 patches: killed at {} pending; recovery steps {:?}; the resumed accept took {:?}",
+        r.pending_at_kill, r.recovery_steps, r.resumed
+    );
+}
+
+#[test]
+fn recovery_converges_wherever_a_300_patch_accept_is_killed() {
+    if needs_tools() {
+        return;
+    }
+    let fx = build_fixture("sigkill-300", 300);
+    let n = fx.patches as usize;
+    for pct in [15usize, 40, 70, 90] {
+        let r = kill_and_recover(&fx, &format!("{pct}pct"), n * pct / 100);
+        eprintln!(
+            "{pct}% point: killed at {} of {n} pending; recovery steps {:?}; the resumed accept took {:?}",
+            r.pending_at_kill, r.recovery_steps, r.resumed
+        );
+    }
 }
