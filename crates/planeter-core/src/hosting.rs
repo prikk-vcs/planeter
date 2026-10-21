@@ -172,6 +172,7 @@ impl HostingService {
             visibility,
             created_at: now_unix_secs(),
             prikk_format_version: None,
+            proposals: Default::default(),
             path: path.clone(),
         };
 

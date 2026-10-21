@@ -50,6 +50,7 @@ fn app(subdir: &str, real: bool) -> AppState {
                 visibility: Visibility::Private,
                 created_at: 0,
                 prikk_format_version: None,
+                proposals: Default::default(),
                 path: root.join("never-opened"),
             })
             .expect("seed record");

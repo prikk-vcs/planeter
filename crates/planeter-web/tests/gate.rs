@@ -81,6 +81,7 @@ fn harness(name: &str, concurrency: usize, wait: Duration, sleep_secs: &str) -> 
             visibility: Visibility::Public,
             created_at: 0,
             prikk_format_version: None,
+            proposals: Default::default(),
             path: repo.clone(),
         })
         .expect("seed record");

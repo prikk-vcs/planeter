@@ -53,6 +53,56 @@ pub enum Visibility {
     Private,
 }
 
+/// Who may **propose** a change to a repository (RFC 004 D-3, RFC 005 D-9): the repository setting `proposals`.
+///
+/// The stored and displayed forms are the two words `members` and `any-authenticated`; anything else is
+/// **refused**, never defaulted ([`ProposalPolicy::parse`]). The default is `members`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ProposalPolicy {
+    /// Only principals with `write` or above may propose.
+    #[default]
+    Members,
+    /// Any authenticated principal who can read the repository may propose (a public project taking
+    /// contributions from strangers).
+    AnyAuthenticated,
+}
+
+impl ProposalPolicy {
+    /// The stable text form.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            ProposalPolicy::Members => "members",
+            ProposalPolicy::AnyAuthenticated => "any-authenticated",
+        }
+    }
+
+    /// Parse the text form. An unknown value is an error, not a default: a typo in a setting must not quietly
+    /// open or close contributions.
+    pub fn parse(text: &str) -> Result<Self, UnknownProposalPolicy> {
+        match text {
+            "members" => Ok(ProposalPolicy::Members),
+            "any-authenticated" => Ok(ProposalPolicy::AnyAuthenticated),
+            other => Err(UnknownProposalPolicy(other.to_owned())),
+        }
+    }
+}
+
+/// A `proposals` value that is not `members` or `any-authenticated`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UnknownProposalPolicy(pub String);
+
+impl std::fmt::Display for UnknownProposalPolicy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "unknown proposals setting {:?} (expected `members` or `any-authenticated`)",
+            self.0
+        )
+    }
+}
+
+impl std::error::Error for UnknownProposalPolicy {}
+
 /// A hosted repository's forge-level record. `repo_id` and `path` are stable for the repository's life;
 /// `owner`/`name` may change (rename/transfer) without touching either.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -66,7 +116,49 @@ pub struct RepositoryRecord {
     /// The prikk on-disk format version this repo is hosted in (RFC 009 durability; may be unknown
     /// until the repo is first read).
     pub prikk_format_version: Option<String>,
+    /// Who may propose a change (RFC 005 D-9); `members` unless the repository's administrator says otherwise.
+    pub proposals: ProposalPolicy,
     /// The directory containing this repository's `.prikk`. Keyed by `repo_id` (RFC 001 D-4), so it is
     /// invariant under rename/transfer.
     pub path: PathBuf,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_proposals_parser_accepts_the_two_words_and_refuses_everything_else() {
+        assert_eq!(
+            ProposalPolicy::parse("members"),
+            Ok(ProposalPolicy::Members)
+        );
+        assert_eq!(
+            ProposalPolicy::parse("any-authenticated"),
+            Ok(ProposalPolicy::AnyAuthenticated)
+        );
+        for bad in [
+            "",
+            "Members",
+            "MEMBERS",
+            "any",
+            "anyone",
+            "any_authenticated",
+            " members",
+            "members ",
+            "none",
+            "true",
+        ] {
+            assert_eq!(
+                ProposalPolicy::parse(bad),
+                Err(UnknownProposalPolicy(bad.to_owned())),
+                "{bad:?} must be refused, not defaulted"
+            );
+        }
+        // The text form round-trips, and the default is `members`.
+        for p in [ProposalPolicy::Members, ProposalPolicy::AnyAuthenticated] {
+            assert_eq!(ProposalPolicy::parse(p.as_str()), Ok(p));
+        }
+        assert_eq!(ProposalPolicy::default(), ProposalPolicy::Members);
+    }
 }

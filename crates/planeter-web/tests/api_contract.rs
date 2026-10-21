@@ -64,6 +64,7 @@ fn state(trusted: &str) -> AppState {
                 visibility: vis,
                 created_at: 0,
                 prikk_format_version: None,
+                proposals: Default::default(),
                 path: root.join("never-opened"),
             })
             .unwrap();

@@ -16,7 +16,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::membership::{MembershipStore, OrgId, OrgRole, Role, Subject, TeamId, UserId};
-use crate::model::{Owner, RepoId, RepositoryRecord, Visibility};
+use crate::model::{Owner, ProposalPolicy, RepoId, RepositoryRecord, Visibility};
 use crate::store::{RepositoryStore, Result, StoreError};
 
 /// A shared SQLite database handle (cheap to clone; one connection behind a mutex).
@@ -50,7 +50,36 @@ impl SqliteDb {
             conn: Arc::new(Mutex::new(conn)),
         };
         db.apply_schema(STORE_SCHEMA)?;
+        // A database made before a column existed gets it now (idempotent: nothing happens when it is there).
+        db.ensure_column(
+            "repositories",
+            "proposals",
+            "TEXT NOT NULL DEFAULT 'members'",
+        )?;
         Ok(db)
+    }
+
+    /// Add `column` to `table` if it is not there (`ALTER TABLE … ADD COLUMN`), so a schema change reaches an
+    /// existing database exactly once and a second call changes nothing. `declaration` is the column's type and
+    /// constraints, trusted code (never user input).
+    pub fn ensure_column(&self, table: &str, column: &str, declaration: &str) -> Result<()> {
+        let conn = self.lock()?;
+        let mut stmt = conn
+            .prepare(&format!("PRAGMA table_info({table})"))
+            .map_err(backend)?;
+        let present = stmt
+            .query_map([], |row| row.get::<_, String>(1))
+            .map_err(backend)?
+            .filter_map(std::result::Result::ok)
+            .any(|name| name == column);
+        drop(stmt);
+        if !present {
+            conn.execute_batch(&format!(
+                "ALTER TABLE {table} ADD COLUMN {column} {declaration}"
+            ))
+            .map_err(backend)?;
+        }
+        Ok(())
     }
 
     /// Apply an idempotent schema batch (`CREATE TABLE IF NOT EXISTS …`). Upper crates use this to add
@@ -82,6 +111,7 @@ CREATE TABLE IF NOT EXISTS repositories (
     created_at           INTEGER NOT NULL,
     prikk_format_version TEXT,
     path                 TEXT NOT NULL,
+    proposals            TEXT NOT NULL DEFAULT 'members',   -- 'members' | 'any-authenticated' (RFC 005 D-9)
     UNIQUE (owner_kind, owner, name)
 );
 CREATE TABLE IF NOT EXISTS repo_grants (
@@ -137,6 +167,9 @@ fn vis_from(s: &str) -> Result<Visibility> {
         "private" => Ok(Visibility::Private),
         other => Err(StoreError::Backend(format!("bad visibility {other:?}"))),
     }
+}
+fn proposals_from(s: &str) -> Result<ProposalPolicy> {
+    ProposalPolicy::parse(s).map_err(|e| StoreError::Backend(e.to_string()))
 }
 fn role_str(r: Role) -> &'static str {
     match r {
@@ -194,11 +227,12 @@ impl SqliteRepositoryStore {
             row.get(5)?,
             row.get(6)?,
             row.get(7)?,
+            row.get(8)?,
         ))
     }
 
     fn decode(
-        (repo_id, owner_kind, owner, name, visibility, created_at, fmt, path): RepoRow,
+        (repo_id, owner_kind, owner, name, visibility, created_at, fmt, path, proposals): RepoRow,
     ) -> Result<RepositoryRecord> {
         Ok(RepositoryRecord {
             repo_id: RepoId::new(repo_id),
@@ -207,13 +241,14 @@ impl SqliteRepositoryStore {
             visibility: vis_from(&visibility)?,
             created_at: u64::try_from(created_at).unwrap_or(0),
             prikk_format_version: fmt,
+            proposals: proposals_from(&proposals)?,
             path: PathBuf::from(path),
         })
     }
 }
 
 /// One `repositories` row, in column order: repo_id, owner_kind, owner, name, visibility,
-/// created_at, prikk_format_version, path.
+/// created_at, prikk_format_version, path, proposals.
 type RepoRow = (
     String,
     String,
@@ -223,10 +258,11 @@ type RepoRow = (
     i64,
     Option<String>,
     String,
+    String,
 );
 
 const SELECT_REPO: &str = "SELECT repo_id, owner_kind, owner, name, visibility, created_at, \
-                           prikk_format_version, path FROM repositories";
+                           prikk_format_version, path, proposals FROM repositories";
 
 impl RepositoryStore for SqliteRepositoryStore {
     fn create(&self, record: RepositoryRecord) -> Result<()> {
@@ -264,7 +300,7 @@ impl RepositoryStore for SqliteRepositoryStore {
         }
         conn.execute(
             "INSERT INTO repositories (repo_id, owner_kind, owner, name, visibility, created_at, \
-             prikk_format_version, path) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+             prikk_format_version, path, proposals) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 record.repo_id.as_str(),
                 kind,
@@ -274,6 +310,7 @@ impl RepositoryStore for SqliteRepositoryStore {
                 i64::try_from(record.created_at).unwrap_or(i64::MAX),
                 record.prikk_format_version,
                 record.path.to_string_lossy().into_owned(),
+                record.proposals.as_str(),
             ],
         )
         .map_err(backend)?;
@@ -351,6 +388,21 @@ impl RepositoryStore for SqliteRepositoryStore {
             .execute(
                 "UPDATE repositories SET prikk_format_version = ?1 WHERE repo_id = ?2",
                 params![version, repo_id.as_str()],
+            )
+            .map_err(backend)?;
+        if n == 0 {
+            Err(StoreError::NotFound)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn set_proposals(&self, repo_id: &RepoId, policy: ProposalPolicy) -> Result<()> {
+        let conn = self.db.lock()?;
+        let n = conn
+            .execute(
+                "UPDATE repositories SET proposals = ?1 WHERE repo_id = ?2",
+                params![policy.as_str(), repo_id.as_str()],
             )
             .map_err(backend)?;
         if n == 0 {
@@ -537,6 +589,7 @@ mod tests {
             visibility: Visibility::Private,
             created_at: 42,
             prikk_format_version: None,
+            proposals: Default::default(),
             path: PathBuf::from(format!("/repos/{id}")),
         }
     }
@@ -648,6 +701,93 @@ mod tests {
 
     fn repo_org(o: &OrgId) -> OrgId {
         o.clone()
+    }
+
+    #[test]
+    fn the_proposals_setting_defaults_to_members_is_settable_and_survives_reopen() {
+        let dir = std::env::temp_dir().join(format!("planeter-proposals-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("store.db");
+        {
+            let s = SqliteRepositoryStore::new(SqliteDb::open(&path).unwrap());
+            s.create(record("r1", Owner::User("alice".into()), "app"))
+                .unwrap();
+            assert_eq!(
+                s.get(&RepoId::new("r1")).unwrap().unwrap().proposals,
+                ProposalPolicy::Members
+            );
+            s.set_proposals(&RepoId::new("r1"), ProposalPolicy::AnyAuthenticated)
+                .unwrap();
+            assert!(matches!(
+                s.set_proposals(&RepoId::new("nope"), ProposalPolicy::Members),
+                Err(StoreError::NotFound)
+            ));
+        }
+        let s = SqliteRepositoryStore::new(SqliteDb::open(&path).unwrap());
+        assert_eq!(
+            s.get(&RepoId::new("r1")).unwrap().unwrap().proposals,
+            ProposalPolicy::AnyAuthenticated
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_database_made_before_the_column_existed_gets_it_once_and_keeps_its_rows() {
+        let dir = std::env::temp_dir().join(format!("planeter-migrate-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("old.db");
+        // The 0.4.0 shape: no `proposals` column, one row.
+        {
+            let conn = rusqlite::Connection::open(&path).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE repositories (
+                    repo_id TEXT PRIMARY KEY, owner_kind TEXT NOT NULL, owner TEXT NOT NULL, name TEXT NOT NULL,
+                    visibility TEXT NOT NULL, created_at INTEGER NOT NULL, prikk_format_version TEXT,
+                    path TEXT NOT NULL, UNIQUE (owner_kind, owner, name));
+                 INSERT INTO repositories VALUES ('old1', 'user', 'alice', 'legacy', 'public', 7, NULL, '/repos/old1');",
+            )
+            .unwrap();
+        }
+        for round in 0..3 {
+            // Opening applies the schema and the migration; a second and third open change nothing.
+            let db = SqliteDb::open(&path).unwrap();
+            let s = SqliteRepositoryStore::new(db);
+            let got = s.get(&RepoId::new("old1")).unwrap().unwrap();
+            assert_eq!(got.name, "legacy", "round {round}");
+            assert_eq!(
+                got.proposals,
+                ProposalPolicy::Members,
+                "the default for an old row, round {round}"
+            );
+        }
+        // Exactly one `proposals` column.
+        let conn = rusqlite::Connection::open(&path).unwrap();
+        let n: i64 = conn
+            .query_row(
+                "SELECT count(*) FROM pragma_table_info('repositories') WHERE name = 'proposals'",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(n, 1);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_stored_value_that_is_not_a_proposals_setting_is_refused_not_defaulted() {
+        let db = SqliteDb::open_in_memory().unwrap();
+        let s = SqliteRepositoryStore::new(db.clone());
+        s.create(record("r1", Owner::User("alice".into()), "app"))
+            .unwrap();
+        db.lock()
+            .unwrap()
+            .execute("UPDATE repositories SET proposals = 'anyone'", [])
+            .unwrap();
+        assert!(
+            matches!(s.get(&RepoId::new("r1")), Err(StoreError::Backend(m)) if m.contains("unknown proposals setting"))
+        );
     }
 
     #[test]

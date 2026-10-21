@@ -535,6 +535,7 @@ impl ReadService {
             repo_id: record.repo_id.clone(),
             owner: record.owner.clone(),
             visibility: record.visibility,
+            proposals: record.proposals,
         });
         if authorize(principal, Action::Read, &resource, &ctx).is_allowed() {
             Ok(record)
@@ -948,6 +949,7 @@ mod tests {
                 visibility,
                 created_at: 0,
                 prikk_format_version: None,
+                proposals: Default::default(),
                 path: "/nonexistent/for/deny/tests".into(),
             })
             .unwrap();

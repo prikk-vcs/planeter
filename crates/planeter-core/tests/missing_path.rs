@@ -59,6 +59,7 @@ fn service(repos: Vec<(&str, Visibility, PathBuf)>) -> (ReadService, Owner) {
                 visibility,
                 created_at: 0,
                 prikk_format_version: None,
+                proposals: Default::default(),
                 path,
             })
             .unwrap();

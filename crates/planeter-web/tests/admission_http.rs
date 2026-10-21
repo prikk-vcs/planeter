@@ -80,6 +80,7 @@ fn app(repos: Vec<Repo>, gate: Arc<PrikkGate>, prikk: Prikk) -> (Router, AppStat
                 visibility: r.visibility,
                 created_at: 0,
                 prikk_format_version: None,
+                proposals: Default::default(),
                 path: r.path,
             })
             .unwrap();

@@ -186,6 +186,7 @@ fn a_sigkilled_server_leaves_no_bwrap_or_prikk_process_of_an_in_flight_call() {
                 visibility: Visibility::Public,
                 created_at: 0,
                 prikk_format_version: None,
+                proposals: Default::default(),
                 path: repo_dir.clone(),
             })
             .expect("seed record");

@@ -49,6 +49,7 @@ fn router_for(content: ContentOrigin) -> Router {
             visibility: Visibility::Public,
             created_at: 0,
             prikk_format_version: None,
+            proposals: Default::default(),
             path: root.join("never-opened"),
         })
         .unwrap();

@@ -16,7 +16,7 @@
 //! `authorize()` never signs or seals (SEC-1 / INV-2): it gates *whether* an operation may proceed;
 //! prikk decides whether the result verifies, and a seal is the maintainer's own client-side signature.
 
-use planeter_store::{OrgRole, Owner, RepoId, Role, UserId, Visibility};
+use planeter_store::{OrgRole, Owner, ProposalPolicy, RepoId, Role, UserId, Visibility};
 
 /// A principal is the authenticated (or anonymous) party a decision is made for. `planeter-auth`
 /// produces it; `authorize()` sees only this (RFC 002 D-2).
@@ -122,6 +122,11 @@ pub enum Action {
     Read,
     /// Push author-signed patches to a repo/ref (keyless — RFC 004).
     Push,
+    /// **Propose** a change: deliver author-signed patches as a *proposal* that a maintainer may later
+    /// merge-seal (RFC 004 D-3, RFC 005 D-9). Repository-level. `write` and above by default; any authenticated
+    /// principal who can read the repository when the repository's `proposals` setting is `any-authenticated`;
+    /// never anonymous. A proposal is not a push: it never moves a ref.
+    Propose,
     /// Merge-seal a change on a repo/ref (the seal itself is the maintainer's client-side signature).
     MergeSeal,
     /// Administer a repository (settings, rename/transfer, delete, grants).
@@ -140,9 +145,10 @@ pub enum Action {
 
 impl Action {
     /// Every defined action — used by the default-deny property test.
-    pub const ALL: [Action; 9] = [
+    pub const ALL: [Action; 10] = [
         Action::Read,
         Action::Push,
+        Action::Propose,
         Action::MergeSeal,
         Action::RepoAdmin,
         Action::OrgAdmin,
@@ -156,7 +162,11 @@ impl Action {
     pub fn is_sensitive(self) -> bool {
         matches!(
             self,
-            Action::Push | Action::MergeSeal | Action::RepoAdmin | Action::OrgAdmin
+            Action::Push
+                | Action::Propose
+                | Action::MergeSeal
+                | Action::RepoAdmin
+                | Action::OrgAdmin
         )
     }
 }
@@ -167,6 +177,8 @@ pub struct RepoResource {
     pub repo_id: RepoId,
     pub owner: Owner,
     pub visibility: Visibility,
+    /// Who may propose a change to this repository (RFC 005 D-9).
+    pub proposals: ProposalPolicy,
 }
 
 /// Per-ref protection state (D-6): the rules `authorize()` evaluates for push/merge-seal on a ref.
@@ -354,6 +366,17 @@ fn authorize_repo(
             }
         }
         Action::Push => require(role, Role::Write),
+        Action::Propose => {
+            let member = role.is_some_and(|r| r >= Role::Write);
+            let open = repo.proposals == ProposalPolicy::AnyAuthenticated
+                && principal.is_authenticated()
+                && (role.is_some() || visibility_allows_read(principal, repo.visibility));
+            if member || open {
+                Decision::Allow
+            } else {
+                Decision::Deny(DenyReason::NotAuthorized)
+            }
+        }
         Action::MergeSeal => require(role, Role::Maintain),
         Action::RepoAdmin => require(role, Role::Admin),
         // Org/item actions do not apply to a repo resource.
@@ -461,6 +484,7 @@ mod tests {
             repo_id: RepoId::new("r1"),
             owner: Owner::User("alice".into()),
             visibility: vis,
+            proposals: ProposalPolicy::default(),
         }
     }
 
@@ -501,6 +525,129 @@ mod tests {
                 );
             }
         }
+    }
+
+    #[test]
+    fn the_action_list_has_ten_entries_and_propose_is_sensitive() {
+        assert_eq!(Action::ALL.len(), 10);
+        let mut seen = Action::ALL.to_vec();
+        seen.dedup();
+        assert_eq!(seen.len(), 10, "no action is listed twice");
+        assert!(Action::ALL.contains(&Action::Propose));
+        assert!(Action::Propose.is_sensitive(), "a proposal is audited");
+        assert!(!Action::Read.is_sensitive());
+    }
+
+    fn proposing(vis: Visibility, policy: ProposalPolicy) -> Resource {
+        Resource::Repo(RepoResource {
+            repo_id: RepoId::new("r1"),
+            owner: Owner::User("alice".into()),
+            visibility: vis,
+            proposals: policy,
+        })
+    }
+
+    /// Every principal kind x role x setting x visibility, against the rule: `write` and above always; any
+    /// authenticated principal who can read the repository when the setting is `any-authenticated`; never
+    /// anonymous; a read-only credential never.
+    #[test]
+    fn the_propose_matrix() {
+        let anon = Principal::Anonymous;
+        let user = Principal::User(UserId::new("someone"));
+        let ro = Principal::MachineAsUser {
+            user: UserId::new("someone"),
+            scope: Scope {
+                access: ScopeAccess::ReadOnly,
+                repos: RepoScope::All,
+                expires_at: None,
+            },
+        };
+        let rw = Principal::MachineAsUser {
+            user: UserId::new("someone"),
+            scope: Scope {
+                access: ScopeAccess::Write,
+                repos: RepoScope::All,
+                expires_at: None,
+            },
+        };
+        let roles = [
+            None,
+            Some(Role::Read),
+            Some(Role::Write),
+            Some(Role::Maintain),
+            Some(Role::Admin),
+        ];
+        for vis in [
+            Visibility::Public,
+            Visibility::Internal,
+            Visibility::Private,
+        ] {
+            for policy in [ProposalPolicy::Members, ProposalPolicy::AnyAuthenticated] {
+                let res = proposing(vis, policy);
+                for role in roles {
+                    let ctx = ctx_role(role);
+                    let member = role.is_some_and(|r| r >= Role::Write);
+                    let can_read = role.is_some() || vis != Visibility::Private;
+                    let open = policy == ProposalPolicy::AnyAuthenticated && can_read;
+                    let expect_user = member || open;
+                    let got =
+                        |p: &Principal| authorize(p, Action::Propose, &res, &ctx).is_allowed();
+                    // Anonymous: never, whatever the setting, role or visibility.
+                    assert!(!got(&anon), "anon {vis:?} {policy:?} {role:?}");
+                    assert_eq!(got(&user), expect_user, "user {vis:?} {policy:?} {role:?}");
+                    // A read-only credential: never.
+                    assert!(!got(&ro), "read-only {vis:?} {policy:?} {role:?}");
+                    // A write-scope credential: as the user, because the scope only caps.
+                    assert_eq!(
+                        got(&rw),
+                        expect_user,
+                        "write-scope {vis:?} {policy:?} {role:?}"
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn propose_applies_to_a_repository_only_and_the_setting_never_widens_other_actions() {
+        let user = Principal::User(UserId::new("someone"));
+        let ctx = ctx_role(None);
+        // On a ref, an item or an org: no.
+        let on_ref = Resource::Ref(RefResource {
+            repo: RepoResource {
+                repo_id: RepoId::new("r1"),
+                owner: Owner::User("alice".into()),
+                visibility: Visibility::Public,
+                proposals: ProposalPolicy::AnyAuthenticated,
+            },
+            ref_name: "heads/main".into(),
+            protection: RefProtection::default(),
+            attempt: RefAttempt::default(),
+        });
+        assert!(!authorize(&user, Action::Propose, &on_ref, &ctx).is_allowed());
+        // An open `proposals` setting on a public repository gives a stranger **only** Propose.
+        let open = proposing(Visibility::Public, ProposalPolicy::AnyAuthenticated);
+        for action in Action::ALL {
+            let allowed = authorize(&user, action, &open, &ctx).is_allowed();
+            assert_eq!(
+                allowed,
+                matches!(action, Action::Read | Action::Propose),
+                "{action:?} with an open proposals setting and no grant"
+            );
+        }
+        // An expired credential is denied before anything else.
+        let expired = Principal::MachineAsUser {
+            user: UserId::new("someone"),
+            scope: Scope {
+                access: ScopeAccess::Full,
+                repos: RepoScope::All,
+                expires_at: Some(5),
+            },
+        };
+        assert_eq!(
+            authorize(&expired, Action::Propose, &open, &ctx),
+            Decision::Deny(DenyReason::Expired)
+        );
     }
 
     #[test]
@@ -658,6 +805,7 @@ mod tests {
             repo_id: RepoId::new("r1"),
             owner: Owner::User("alice".into()),
             visibility: Visibility::Private,
+            proposals: ProposalPolicy::default(),
         });
         assert!(authorize(&scoped, Action::Push, &r1, &ctx_role(Some(Role::Write))).is_allowed());
         // r2 is out of scope → denied even with a Write role.
@@ -665,6 +813,7 @@ mod tests {
             repo_id: RepoId::new("r2"),
             owner: Owner::User("alice".into()),
             visibility: Visibility::Private,
+            proposals: ProposalPolicy::default(),
         });
         assert_eq!(
             authorize(&scoped, Action::Push, &r2, &ctx_role(Some(Role::Write))),

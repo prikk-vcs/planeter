@@ -4,7 +4,7 @@
 use std::collections::HashMap;
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
-use crate::model::{Owner, RepoId, RepositoryRecord};
+use crate::model::{Owner, ProposalPolicy, RepoId, RepositoryRecord};
 use crate::store::{RepositoryStore, Result, StoreError};
 
 #[derive(Default)]
@@ -101,6 +101,13 @@ impl RepositoryStore for InMemoryRepositoryStore {
         Ok(())
     }
 
+    fn set_proposals(&self, repo_id: &RepoId, policy: ProposalPolicy) -> Result<()> {
+        let mut inner = self.write()?;
+        let record = inner.by_id.get_mut(repo_id).ok_or(StoreError::NotFound)?;
+        record.proposals = policy;
+        Ok(())
+    }
+
     fn delete(&self, repo_id: &RepoId) -> Result<()> {
         let mut inner = self.write()?;
         let record = inner.by_id.remove(repo_id).ok_or(StoreError::NotFound)?;
@@ -134,8 +141,30 @@ mod tests {
             visibility: Visibility::Private,
             created_at: 0,
             prikk_format_version: None,
+            proposals: Default::default(),
             path: PathBuf::from(format!("/repos/{id}/.prikk")),
         }
+    }
+
+    #[test]
+    fn set_proposals_changes_the_setting_and_refuses_an_unknown_repository() {
+        let s = InMemoryRepositoryStore::new();
+        s.create(record("r1", Owner::User("alice".into()), "app"))
+            .unwrap();
+        assert_eq!(
+            s.get(&RepoId::new("r1")).unwrap().unwrap().proposals,
+            ProposalPolicy::Members
+        );
+        s.set_proposals(&RepoId::new("r1"), ProposalPolicy::AnyAuthenticated)
+            .unwrap();
+        assert_eq!(
+            s.get(&RepoId::new("r1")).unwrap().unwrap().proposals,
+            ProposalPolicy::AnyAuthenticated
+        );
+        assert!(matches!(
+            s.set_proposals(&RepoId::new("nope"), ProposalPolicy::Members),
+            Err(StoreError::NotFound)
+        ));
     }
 
     #[test]

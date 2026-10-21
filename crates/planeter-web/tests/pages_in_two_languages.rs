@@ -101,6 +101,7 @@ fn app(path: PathBuf) -> Router {
             visibility: Visibility::Public,
             created_at: 0,
             prikk_format_version: None,
+            proposals: Default::default(),
             path,
         })
         .unwrap();

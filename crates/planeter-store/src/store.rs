@@ -5,7 +5,7 @@
 
 use std::fmt;
 
-use crate::model::{Owner, RepoId, RepositoryRecord};
+use crate::model::{Owner, ProposalPolicy, RepoId, RepositoryRecord};
 
 /// A repository-store failure.
 #[derive(Debug)]
@@ -53,6 +53,10 @@ pub trait RepositoryStore: Send + Sync {
 
     /// Record (or update) the prikk on-disk format version this repo is hosted in (RFC 009).
     fn set_prikk_format_version(&self, repo_id: &RepoId, version: String) -> Result<()>;
+
+    /// Set who may propose a change to this repository (RFC 005 D-9). Fails [`StoreError::NotFound`] if the id
+    /// is unknown.
+    fn set_proposals(&self, repo_id: &RepoId, policy: ProposalPolicy) -> Result<()>;
 
     /// Remove a record (the caller removes the on-disk repository separately).
     fn delete(&self, repo_id: &RepoId) -> Result<()>;
