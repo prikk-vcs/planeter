@@ -245,3 +245,18 @@ the two catalogs). A reviewer's correction changes this cell and `ja.rs` togethe
 | `home.address_label` | "Repository address" | "リポジトリのアドレス" |
 | `unavailable.body` | "This repository could not be read right now. Try again in a little while. If it keeps happening, tell the person who runs this server." | "今はこのリポジトリを読み込めません。しばらくしてから、もう一度お試しください。それでも解決しない場合は、このサーバーの管理者にお知らせください。" |
 | `not_found.body` | "There is no repository at this address, or you do not have access to it. Check the address, or sign in if the repository is private." | "このアドレスにはリポジトリがないか、アクセスする権限がありません。アドレスを確認してください。非公開のリポジトリの場合は、ログインしてください。" |
+
+## 6. Words for the person who runs the server
+
+The messages of the recovery plan and of the proposal errors are read by whoever runs the server, and they use a few words that are
+not everyday ones. They are defined here, in plain words, once. (English only; the Japanese rows are for the reviewers to decide.)
+`tests/glossary_operator.rs` holds this section to the catalog: every one of these words that an operator sentence uses is defined here.
+
+| Word | In plain words | Where you meet it |
+|---|---|---|
+| **flag** | The mark a repository carries while it waits for recovery. While it is set, the repository takes no new proposals; reading is not affected. | the recovery plan, `needs_recovery` |
+| **lease** | The right to write to a repository right now. One thing holds it at a time (an accept, an export, a recovery); the others wait, or are told to try again. | the recovery plan |
+| **accept** | The server taking in a proposal: it hands the artifact to prikk, which stores its patches in the repository. | the proposal errors, the recovery plan |
+| **intent** | The server's note, written before it starts, that it began taking a proposal in. It lets a proposal that was cut off be finished later from the same starting point. | the recovery plan, the API's field names |
+| **lock** | A file of prikk's own, in the repository's hidden directory, that stops two writers at once. A write that was killed leaves its locks behind; recovery clears them only when it is sure nothing is using the repository. | the recovery plan |
+| **recovery** | The steps that make a flagged repository writable again: check that nothing is using it, clear the stale locks, check the repository, and clear the flag. Every step is recorded. | the recovery plan and its door |
