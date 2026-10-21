@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | Part 3a of the transport series and the first part of RFC 005's v2 handoffs: **the data and the pure rules** behind a proposed change — the change and revision records (RFC 005 D-1…D-3, D-6), the **intent journal** and the `needs-recovery` flag (RFC 004 D-3, D-6), and the quota rules (RFC 005 D-9) — as store tables and pure model functions with exhaustive tests. **No route, no `sync accept`, no prikk call.** Part 3b wires these to the network; part 4 is recovery. Keeping this part pure is deliberate: the hard correctness questions (a killed accept, a declared patch set, an idempotent re-push) are all decidable here without a process or a socket. |
-| Status | **Assigned** (2026-10-21), after part 2 (advertise and fetch) was reviewed Approved. |
+| Status | **Done, reviewed Approved (2026-10-22; commits `c8e67bc`…`5e12202`).** Next: `../004-transport/propose-and-accept-handoff-v2.md` (part 3b). |
 | Basis | [`../../accepted/005-change-review.md`](../../accepted/005-change-review.md) D-1, D-2, D-3, D-6, D-9, D-10 and §Testing ("Model tests (pure)"); [`../../accepted/004-transport.md`](../../accepted/004-transport.md) D-3, D-6 and U-11, U-13 (a killed accept leaves a prefix pending; a retry converges); ledger PK-58, PK-59, PK-65; part 1's `planeter-core::lease` (holder records) and `planeter-store` (`apply_schema`, `ensure_column`, the SQLite and in-memory pairs); `planeter-core::authorize` (`Propose`, `Close`, `Comment`, `Review`). |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 

@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | Resolves the **held** message `verify.sessions` of the plain-words work, and the API fields behind it, on prikk's answer of 2026-10-21 (ledger PK-62): `active_sessions` in the verify report is **not** a tally of work. `count` is the number of session folders (always exactly one, `default`, in every repository prikk creates); `verified_count` is a **fixed 1**, "not computed", a scope statement for a future with several sessions. "N of M sessions verified" therefore says nothing true about anything and, next to a green badge, suggests progress that does not exist. Issue **IS-49**. |
-| Status | **Assigned** (2026-10-21). |
+| Status | **Done, reviewed Approved (2026-10-22; commits `c8e67bc`, `d5f685c`).** IS-49 closed. |
 | Basis | prikk's letter `2026-10-21-reply-active-sessions-is-not-waiting-work.md` (private) and ledger PK-62; the dev team's own data points (the 0.53.0 re-baseline: three queued commits ⇒ `{count 1, verified_count 1}`; A12: pending patches are not "sessions"); `crates/planeter-core/src/read.rs` (`VerifyView`: `verified_sessions`, `total_sessions`), `crates/planeter-web/{templates/verify.html,src/openapi.rs,src/catalog/en.rs}`, `docs/glossary.md` (the held row), `tests/glossary.rs`, `tests/catalog_checks.rs`, `tests/i18n.rs`. |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 
