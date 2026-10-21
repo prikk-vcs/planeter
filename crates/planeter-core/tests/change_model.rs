@@ -488,20 +488,56 @@ fn rev(
 }
 
 #[test]
-fn the_current_patch_set_is_the_latest_declared_set_or_the_union_of_what_undeclared_revisions_added()
- {
-    // Declared: the latest revision's declared set, regardless of order in the slice.
+fn the_current_patch_set_is_the_latest_declared_set_plus_what_later_revisions_added() {
+    // Declared: the latest declared revision's set, regardless of order in the slice.
     let revs = [rev(2, 5..7, Some(3..8)), rev(1, 0..3, Some(0..3))];
     assert_eq!(current_patch_set(&revs), set(3..8));
-    // Undeclared: the union of their added sets.
+    // Undeclared throughout: the union of their added sets.
     let revs = [rev(1, 0..3, None), rev(2, 3..5, None)];
     assert_eq!(current_patch_set(&revs), set(0..5));
     // A change with no revision has no patch set.
     assert!(current_patch_set(&[]).is_empty());
-    // Latest undeclared after a declared one: only undeclared revisions' added sets count (the declared one is not
-    // the latest, so its declaration does not define the set).
+    // Declared, then undeclared: the declared set is kept AND the later push's added patches join it.
     let revs = [rev(1, 0..3, Some(0..3)), rev(2, 3..5, None)];
-    assert_eq!(current_patch_set(&revs), set(3..5));
+    assert_eq!(current_patch_set(&revs), set(0..5));
+    // Undeclared, declared, undeclared: the earlier undeclared one is superseded by the declaration.
+    let revs = [
+        rev(1, 0..2, None),
+        rev(2, 2..4, Some(2..4)),
+        rev(3, 9..10, None),
+    ];
+    assert_eq!(
+        current_patch_set(&revs),
+        [2, 3, 9].iter().map(|n| pid(*n)).collect()
+    );
+    // A later declaration replaces the earlier one entirely.
+    let revs = [
+        rev(1, 0..3, Some(0..3)),
+        rev(2, 3..5, None),
+        rev(3, 5..6, Some(4..7)),
+    ];
+    assert_eq!(current_patch_set(&revs), set(4..7));
+}
+
+#[test]
+fn a_declared_patch_never_silently_drops_out_declared_then_undeclared_then_landed() {
+    // Revision 1 declares 0..3; revision 2 is an undeclared push that added 3..5.
+    let revs = [rev(1, 0..3, Some(0..3)), rev(2, 3..5, None)];
+    let patches = current_patch_set(&revs);
+    // Observations of `sync pending` over time.
+    let pending = |ids: &[u64]| -> BTreeSet<String> { ids.iter().map(|n| pid(*n)).collect() };
+    // The later push's patches were sealed, but declared patch 1 is still pending: NOT landed.
+    assert_eq!(
+        observe_landing(&patches, &pending(&[1, 7])),
+        Landing::NotYet {
+            remaining: vec![pid(1)]
+        }
+    );
+    // Only when every declared and every later-added patch has left pending is it landed.
+    assert_eq!(
+        observe_landing(&patches, &pending(&[7, 8])),
+        Landing::Landed
+    );
 }
 
 #[test]

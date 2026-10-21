@@ -44,9 +44,11 @@ about 50 ms (one short transaction on the shared connection).
 4. **A base counts only if the forge holds it** (listed by `log` of a ref it holds); no base is recorded as "no base", and
    its results never count. A result is stale when the base is no longer the target's tip; an approval belongs to the
    revision it was given for and is not carried to the next.
-5. **Landing is observed, not asserted.** A change has *landed* only when every patch of its current patch set (the latest
-   revision's declaration; for undeclared revisions, the union of what they added) has left the pending list that `sync
-   pending` just reported. A superseded patch that nobody seals keeps such a change open, and the page will say so.
+5. **Landing is observed, not asserted.** A change has *landed* only when every patch of its current patch set has left the
+   pending list that `sync pending` just reported. The current patch set is **the latest declared revision's declared set
+   plus the patches every later revision added** (all the added patches, if no revision is declared): a declared patch never
+   silently drops out because a later push was undeclared. A superseded patch that nobody seals keeps such a change open,
+   and the page will say so.
 6. **Closing needs a reason** and a person already allowed to close. Landed and closed are final.
 7. **Quotas** (members / any-authenticated): open changes 10 / 3, accepted bytes 512 / 64 MiB, revisions per change 20 / 10,
    and a repository ceiling of 4 GiB of pending bytes. At the limit is allowed; one over is refused, naming the quota, the

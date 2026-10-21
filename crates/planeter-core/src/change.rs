@@ -307,21 +307,28 @@ pub fn transition(
 
 // ------------------------------------------------------------------------------------------------ landing
 
-/// The change's **current patch set** (RFC 005 D-6): the latest revision's declared set; where the latest revision
-/// has no declaration, the union of the `added` sets of the revisions without one. (A change with no revision has
-/// an empty set, which is never observed as landed.)
+/// The change's **current patch set** (RFC 005 D-6, as decided in the review of part 3a): the **latest declared**
+/// revision's declared set **plus the `added` sets of every revision after it**; when no revision is declared, the
+/// union of all the `added` sets. A declared set therefore never drops out because a later push was undeclared, and
+/// a change is never reported landed while an earlier declared patch is still pending. (A change with no revision
+/// has an empty set, which is never observed as landed.)
 pub fn current_patch_set(revisions: &[RevisionRecord]) -> BTreeSet<String> {
-    let Some(latest) = revisions.iter().max_by_key(|r| r.seq) else {
-        return BTreeSet::new();
+    let latest_declared = revisions
+        .iter()
+        .filter(|r| r.declared_patch_ids.is_some())
+        .max_by_key(|r| r.seq);
+    let mut set: BTreeSet<String> = BTreeSet::new();
+    let after = match latest_declared {
+        Some(r) => {
+            set.extend(r.declared_patch_ids.iter().flatten().cloned());
+            r.seq
+        }
+        None => 0,
     };
-    match &latest.declared_patch_ids {
-        Some(declared) => declared.iter().cloned().collect(),
-        None => revisions
-            .iter()
-            .filter(|r| r.declared_patch_ids.is_none())
-            .flat_map(|r| r.added_patch_ids.iter().cloned())
-            .collect(),
+    for r in revisions.iter().filter(|r| r.seq > after) {
+        set.extend(r.added_patch_ids.iter().cloned());
     }
+    set
 }
 
 /// What an observation of `sync pending` says about a change.
