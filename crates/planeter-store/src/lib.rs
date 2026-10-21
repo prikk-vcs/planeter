@@ -10,6 +10,7 @@ pub mod lease;
 pub mod membership;
 pub mod memory;
 pub mod model;
+pub mod recovery;
 pub mod revision;
 pub mod sqlite;
 pub mod store;
@@ -26,6 +27,10 @@ pub use membership::{
 pub use memory::InMemoryRepositoryStore;
 pub use model::{
     Owner, ProposalPolicy, RepoId, RepositoryRecord, UnknownProposalPolicy, Visibility,
+};
+pub use recovery::{
+    DETAIL_MAX_BYTES, InMemoryRecoveries, RecoveryRecord, RecoveryStep, RecoveryStore,
+    SqliteRecoveries,
 };
 pub use revision::{InMemoryRevisions, RevisionStore, SqliteRevisions};
 pub use sqlite::{SqliteDb, SqliteMembershipStore, SqliteRepositoryStore};
