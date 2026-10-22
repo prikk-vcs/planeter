@@ -24,6 +24,8 @@ records), `planeter-web` (review UI and API), `planeter-transport` (the retained
 here:** how a published branch comes to contain a change (publication/merge: RFC 008 and decision D-8), CI
 execution (RFC 006), issues, notifications delivery, forks.
 
+> **Terminology (amended 2026-10-22, D-38).** In everything a person or a program reads, what this RFC calls a *change* is a **proposal** (its versions are *revisions*): the owner-approved glossary already gives the word *change* to a recorded unit of history (prikk's block), and one word for two things is exactly the confusion the project forbids. The RFC's text keeps *change* as its internal name; the product, the API, the catalog and the docs say *proposal*. Nothing was released under the old word.
+
 ## Summary
 
 An **open change is exactly what prikk already holds**: patches a keyless `sync accept` has stored and not

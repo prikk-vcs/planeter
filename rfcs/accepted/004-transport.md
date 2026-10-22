@@ -156,18 +156,24 @@ change to prikk. **Not** a Git transport (NG-1).
   2. **prikk's own, set in the sandbox:** `PRIKK_EXCHANGE_MAX_BYTES`, `PRIKK_EXCHANGE_MAX_OBJECTS`,
      `PRIKK_BUNDLE_MAX_BYTES`, `PRIKK_BUNDLE_MAX_OBJECTS` through the existing seam, and per repository
      `incoming.max-object-bytes` via `prikk config` (never from content).
-  3. **Memory budget (extends RFC 011 to writes).** Measured *k* (U-12): an accept's peak is ≈ 10 MiB +
-     4.2 × the artifact; `sync build` (client) ≈ 2 ×. The admission cost of an accept is therefore
-     **10 MiB + 4.2 × the artifact's bytes**, its data ceiling × 1.5 (RFC 011 D-2), drawn from the same byte
-     budget as reads, in its own pool class (a write is never "light"). `PRIKK_EXCHANGE_MAX_BYTES` stays the
-     hard edge bound (prikk's default 256 MiB ⇒ ≈ 1.1 GiB of budget per accept), so the operator's budget
-     must be at least that to accept anything at the default bound; the start-up message says so. Values come
-     from this measurement, re-measured at each prikk re-baseline (RFC 011 D-1).
-  4. **Accept deadline and work bound.** Accept time follows the number of patches (≈ 7–17 ms each; U-12),
-     not the bytes. At the edge planeter bounds the **object count** (`PRIKK_EXCHANGE_MAX_OBJECTS`, the seam
-     exists) and gives the accept its own wall-time bound (default **600 s**, an operator variable, never
-     the 120 s read bound). The default object bound is chosen so that bound × 20 ms stays under the deadline
-     (≈ 20,000 objects at the default); a larger history is a repository creation (D-4), not a push.
+  3. **Memory budget (extends RFC 011 to writes).** *(Amended 2026-10-22, IS-52, ledger PK-69: the 4.2 × rule of U-12
+     holds for artifacts of many files or patches only; one large blob holds 7.0 ×.)* The admission cost of an
+     accept is **10 MiB + 7.0 × the artifact's bytes + 2 KiB × the object bound** (the worst shape measured, because
+     the largest blob is not known before prikk has read the artifact), its data ceiling × 1.5 (RFC 011 D-2), drawn
+     from the same byte budget as reads, in its own pool class (a write is never "light"). The constants live in one
+     place in the code with their provenance and are re-measured at each prikk re-baseline (RFC 011 D-1).
+     `PRIKK_EXCHANGE_MAX_BYTES` is the hard edge bound; its **default is 100 MiB** (amended 2026-10-22; was prikk's
+     256 MiB): the largest accept then needs about 0.7 GiB of budget, which the default budget (a quarter of usable
+     memory) admits on a 4 GiB host; an operator with more memory raises it, and the start-up message says whether
+     the configured bound is admitted.
+  4. **Accept deadline and work bound.** *(Amended 2026-10-22, PK-68.)* Accept time follows the number of **objects**
+     (patches and blobs), not the bytes: it is **one disk flush per object**, 14 ms on a quiet disk and 15–52 ms on a
+     loaded one (0.08 ms on a RAM disk). At the edge planeter bounds the **object count**
+     (`PRIKK_EXCHANGE_MAX_OBJECTS`, applied by prikk to patches and to blobs separately) and gives the accept its own
+     wall-time bound (default **600 s**, an operator variable, never the 120 s read bound). The default object bound is
+     **5,000** (was 20,000): 5,000 objects take 70–260 s, a third of the deadline at the loaded end, which is the
+     margin R-3 asks for; 20,000 take 300–1,040 s and are not safe. A larger history is a repository creation (D-4),
+     not a push. An operator on slow storage lowers the bound or raises the deadline.
   5. **Per-invocation limits** (memory, CPU, file size, processes) in the sandbox: the `prlimit` data
      ceiling of RFC 011 D-2 (a safe prefix, ≈ +0.15 ms) is the mechanism; a hit is a named refusal
      (`unavailable`-class), never an accept result.
@@ -314,7 +320,7 @@ deployment shape (spool volume, trusted proxy, host OpenSSH) before the release 
 
 - **R-1.** ~~The measured *k* or the lock behaviour differs from the documents~~ Measured (U-12, U-16, U-17): *k* ≈ 4.2, locks as drafted, no key directory. Residual: the numbers change per prikk release (re-measured at each re-baseline, RFC 011 D-1); the 100,000-patch point is extrapolated, not measured.
 - **R-2.** Whole-artifact cost proves unacceptable for developer clones: D-13, the owner's call, on D-12's data. Nothing is decided now.
-- **R-3.** Accept time per patch varies about 2× between runs on the same host and doubles under load (U-12): the 600 s default deadline and the 20,000-object bound leave that margin; an operator on slow storage lowers the object bound.
+- **R-3.** Accept time per object is a disk flush and varies about 3.5× with the host's disk load (14–52 ms, PK-68): the 600 s default deadline and the 5,000-object bound leave that margin (amended 2026-10-22; the 20,000 of the first draft did not); an operator on slow storage lowers the object bound.
 
 ### Open questions, reviewed 2026-10-21 against the owner's philosophy ("clean, safe and secure, robust and sophisticated; users must not be confused")
 
@@ -326,7 +332,7 @@ deployment shape (spool volume, trusted proxy, host OpenSSH) before the release 
   trust: everything lands under `remotes/`, and the output says in one sentence that **nothing is verified or
   trusted**). The default is the interactive adoption of D-10.
 - **Q-3 — decided (architect): initial defaults from the measurements, all operator-configurable and tuned by D-12's
-  data:** the accept edge bound `PRIKK_EXCHANGE_MAX_BYTES` 256 MiB (prikk's own default) and objects 20,000 (D-5);
+  data:** the accept edge bound `PRIKK_EXCHANGE_MAX_BYTES` 100 MiB and objects 5,000 (D-5, amended 2026-10-22 from 256 MiB and 20,000 on the measurements PK-68, PK-69);
   accept deadline 600 s; concurrent exports per host 2; spool budget 25 % of the spool volume with LRU eviction;
   rate limits per principal per repository: pushes 20 per hour, conditional fetches 120 per minute, 429 with
   `Retry-After`. The per-principal quotas are RFC 005 D-9's.

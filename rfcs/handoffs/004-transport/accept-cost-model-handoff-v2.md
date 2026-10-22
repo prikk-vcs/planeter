@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | Two measurements contradict the accept's cost model: **(1)** a single large blob needs far more memory than the 4.2 × rule (a 105 MiB random file in a 110 MiB artifact exceeded the 1.5 × ceiling of 677 MiB — more than 6.4 × — and was killed), and patch-shaped artifacts exceed 4.2 × from 7,500 patches on (the margin is down to 11 % at the 20,000 bound); **(2)** accept time per patch does not depend on the pending set but on the size of the artifact being accepted (≈ 15 ms at 1,000 patches, ≈ 37 ms from 5,000 on), so 20,000 patches take 672 s, over the 600 s deadline. This handoff **measures the shapes that matter, fits a conservative model, and sets provisional defaults**; the architect confirms them from the table. |
-| Status | **Assigned** (2026-10-22), after part 4a and the client HTTP assessment were reviewed Approved. Finding IS-52. |
+| Status | **Done, reviewed Approved (2026-10-22; commits `5c3985f`…`b892d9b`).** IS-52 closed. The default size bound became 100 MiB: `accept-bound-default-handoff-v2.md` (part 4c). |
 | Basis | [`../../accepted/004-transport.md`](../../accepted/004-transport.md) D-5, R-1, R-3; [`../../accepted/011-read-path-resource-model.md`](../../accepted/011-read-path-resource-model.md) (the cost table is per prikk release); `recovery-followups-review-request.md` §4 (PK-68 measured) and `client-http-assessment-review-request.md` §9 (the 105 MiB finding); `crates/planeter-transport/src/propose.rs` (`ProposeConfig::accept_cost`, `accept_ceiling`); ledger PK-59, PK-68. |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 
