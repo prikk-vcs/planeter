@@ -114,16 +114,21 @@ uploaded artifact is kept in the store; the retry sends it again and resumes the
 |---|---|---|
 | `PLANETER_ARTIFACT_DIR` | unset | the artifact store; **required** for proposals (unset: `503 transport_off`) |
 | `PRIKK_EXCHANGE_MAX_BYTES` | 268435456 | the largest artifact: refused at the edge and again by prikk |
-| `PRIKK_EXCHANGE_MAX_OBJECTS` | 20000 | the most objects an artifact may declare (prikk refuses a larger one) |
+| `PRIKK_EXCHANGE_MAX_OBJECTS` | 5000 | the most patches, and the most blobs, an artifact may declare (prikk refuses a larger one; nothing is accepted). Was 20000 before part 4b: the accept of 20,000 patches took 11 minutes, over the 600 s deadline |
 | `PLANETER_ACCEPT_DEADLINE_SECS` | 600 | wall-time bound of one accept (never the 120 s read bound) |
 | `PLANETER_PROPOSE_CONCURRENCY` | 2 | proposals uploading or accepting at once |
 | `PLANETER_PROPOSE_LEASE_WAIT_SECS` | 5 | the wait for an upload slot and the write lease before `503 busy` |
 | `PLANETER_PROPOSAL_CAPACITY_MB` | 4096 | artifacts a repository retains for open and recently finished changes |
 | `PLANETER_PRIKK_MEMORY_BUDGET_MB` | see `--help` | the budget an accept draws from, like a read, always from the **heavy** pool |
 
-An accept of an artifact of *A* bytes is admitted at 10 MiB + 4.2 × *A* (measured, U-12) and given an address-space ceiling of 1.5
-times that. At the default bound (256 MiB) that is about 1.1 GiB: the start-up log says whether the heavy pool admits it, and the
-operator raises the budget or lowers the bound if it does not.
+An accept of an artifact of *A* bytes under an object bound of *N* is admitted at **10 MiB + 7.0 × *A* + 2 KiB × *N*** and given a
+data-segment ceiling (`RLIMIT_DATA`) of 1.5 times that. The constants are in one place, `cost_model` in
+`crates/planeter-transport/src/propose.rs`, each annotated with its measurement (prikk 0.53.0, 2026-10-22, part 4b): a single
+large blob needs 7.0 × its size whatever it holds, artifacts of many files or patches 4.0 to 4.3 ×, and each patch about 1.7 KiB more.
+At the default bounds (256 MiB, 5,000 objects) that is about **1.8 GiB** of the budget and a ceiling of about 2.7 GiB: the start-up log
+says whether the heavy pool admits it (it does on a host with about 8.1 GiB or more of usable memory at the default budget), and the
+operator raises the budget or lowers `PRIKK_EXCHANGE_MAX_BYTES` if it does not. A proposal larger than the heavy pool is refused as
+too large *before* anything is accepted; one that is admitted is not killed by its own ceiling.
 
 ## Limits worth knowing
 
@@ -131,7 +136,7 @@ operator raises the budget or lowers the bound if it does not.
   from a prikk store. They are counted by nothing until a revision records the artifact; rate limits and the repository's disk are
   what bound a hostile repeat of this.
 * Two proposals of the same artifact by different people while one is unfinished: the second gets `409 intent_pending`.
-* The accept's wall time follows the number of patches, not the bytes (about 14 s for 1,000 patches on the test machine).
+* The accept's wall time follows the number of objects (patches and blobs), not the bytes: about one disk flush each, so 15 to 50 ms on the test machine's disk, depending on what else the host is doing (and well under a millisecond on a RAM disk): 5,000 patches in 70 to 230 s, and 20,000 could pass the 600 s deadline. The default bound keeps the worst accept inside it; the measurements are in the part 4b review request.
 
 ## Recovery: the runbook (RFC 004 part 4)
 

@@ -101,7 +101,8 @@ environment:
                                 user, before 429 (default 120)
   PRIKK_EXCHANGE_MAX_BYTES      largest artifact a proposal may carry, in bytes (default 268435456 = 256 MiB):
                                 refused with 413 before it is read, and again by prikk (needs PLANETER_ARTIFACT_DIR)
-  PRIKK_EXCHANGE_MAX_OBJECTS    most objects an artifact may declare (default 20000); prikk refuses a larger one
+  PRIKK_EXCHANGE_MAX_OBJECTS    most patches, and most blobs, an artifact may declare (default 5000); prikk refuses a
+                                larger one and nothing is accepted
   PLANETER_ACCEPT_DEADLINE_SECS wall-time bound of one accept (default 600); past it the accept is killed and the
                                 repository needs recovery
   PLANETER_PROPOSE_CONCURRENCY  most proposals being uploaded or accepted at once (default 2)
