@@ -166,6 +166,28 @@ impl Client {
         }
     }
 
+    /// Commit and seal one file of `bytes` bytes of incompressible content (a xorshift stream: the content is not what
+    /// is being tested, its size is). One patch, one blob.
+    fn commit_blob(&mut self, bytes: usize) {
+        self.counter += 1;
+        let mut x: u64 = 0x9E37_79B9_7F4A_7C15 ^ u64::from(self.counter);
+        let mut data = vec![0u8; bytes];
+        for chunk in data.chunks_mut(8) {
+            x ^= x << 13;
+            x ^= x >> 7;
+            x ^= x << 17;
+            let b = x.to_le_bytes();
+            chunk.copy_from_slice(&b[..chunk.len()]);
+        }
+        std::fs::write(self.repo.join(format!("blob-{}.bin", self.counter)), &data).unwrap();
+        prikk(
+            &self.repo,
+            &self.keys,
+            &["commit", "--from-worktree", "-m", "one big blob"],
+        );
+        prikk(&self.repo, &self.keys, &["seal", "--allow-no-audit"]);
+    }
+
     /// The artifact that closes the gap between this client and `forge` (what `sync build` makes against the
     /// forge's `sync have`).
     fn artifact(&self, forge: &Path, name: &str) -> Vec<u8> {
@@ -2627,4 +2649,92 @@ async fn after_an_unfinished_accept_recovery_runs_by_itself_and_the_same_artifac
             .len(),
         1
     );
+}
+
+// ------------------------------------------------------------------------------------------------ the accept's cost model (part 4b)
+
+/// IS-52: one large blob needs 7.0 × its size, not 4.2 ×; a 105 MiB random file in a 110 MiB artifact was killed at the
+/// old ceiling and the repository left flagged. With the measured model the artifact of the **largest allowed size**
+/// goes through the whole real path (bubblewrap, `prlimit` with the default ceiling, real prikk, the claims file) and
+/// is accepted.
+#[tokio::test]
+async fn a_single_blob_of_the_largest_allowed_size_is_accepted_end_to_end_under_the_default_ceiling()
+ {
+    if skip() || !bwrap_works() {
+        eprintln!("skipping: needs bubblewrap and prlimit");
+        return;
+    }
+    let mut w = sandboxed("largest-blob", None, Opts::default().config);
+    let bound = ProposeConfig::default().max_artifact_bytes;
+    // The blob plus prikk's own framing stays just under the bound (the measured overhead is a few hundred bytes).
+    w.client.commit_blob((bound - 4096) as usize);
+    let art = w.client.artifact(&w.forge, "big");
+    assert!(
+        (art.len() as u64) <= bound && (art.len() as u64) > bound - 8192,
+        "the artifact is the largest the bound allows: {} of {bound}",
+        art.len()
+    );
+    let ceiling = ProposeConfig::default().accept_ceiling(art.len() as u64);
+    let r = propose_as(&w, "forge", "tok-alice", titled("the largest blob"), &art).await;
+    assert_eq!(
+        r.status,
+        StatusCode::CREATED,
+        "{} (ceiling {} MiB)",
+        String::from_utf8_lossy(&r.body),
+        ceiling >> 20
+    );
+    assert_eq!(r.json()["added_count"], 1);
+    assert_eq!(pending(&w.forge).len(), 1);
+    let repo = RepoId::new("r-forge");
+    assert!(!w.changes.repo_flags(&repo).unwrap().needs_recovery);
+    assert!(w.changes.open_intents(&repo).unwrap().is_empty());
+}
+
+/// The object bound is prikk's to enforce: an artifact one patch over it is refused (`accept_refused`), nothing is accepted and
+/// nothing is flagged; one exactly at the bound goes through.
+#[tokio::test]
+async fn an_artifact_one_patch_over_the_object_bound_is_refused_by_prikk_and_one_at_the_bound_is_taken_in()
+ {
+    if skip() || !bwrap_works() {
+        eprintln!("skipping: needs bubblewrap and prlimit");
+        return;
+    }
+    let config = ProposeConfig {
+        max_objects: 3,
+        ..Opts::default().config
+    };
+    let mut over = sandboxed("one-over", None, config.clone());
+    over.client.commit(4);
+    let art = over.client.artifact(&over.forge, "four");
+    let r = propose_as(&over, "forge", "tok-alice", titled("four"), &art).await;
+    assert_eq!(
+        (r.status, r.code().as_str()),
+        (StatusCode::UNPROCESSABLE_ENTITY, "accept_refused"),
+        "{}",
+        String::from_utf8_lossy(&r.body)
+    );
+    assert!(
+        r.json()["detail"]
+            .as_str()
+            .unwrap()
+            .contains("declares 4 patches, over the configured limit of 3"),
+        "{}",
+        r.json()
+    );
+    assert!(pending(&over.forge).is_empty(), "nothing was accepted");
+    let repo = RepoId::new("r-forge");
+    assert!(!over.changes.repo_flags(&repo).unwrap().needs_recovery);
+    assert!(over.changes.open_intents(&repo).unwrap().is_empty());
+
+    let mut at = sandboxed("at-bound", None, config);
+    at.client.commit(3);
+    let art = at.client.artifact(&at.forge, "three");
+    let r = propose_as(&at, "forge", "tok-alice", titled("three"), &art).await;
+    assert_eq!(
+        r.status,
+        StatusCode::CREATED,
+        "{}",
+        String::from_utf8_lossy(&r.body)
+    );
+    assert_eq!(pending(&at.forge).len(), 3);
 }
