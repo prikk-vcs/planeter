@@ -57,7 +57,7 @@ pub const RESPONSE_PATCH_LIMIT: usize = 1000;
 pub struct ProposeConfig {
     /// The largest artifact (`PRIKK_EXCHANGE_MAX_BYTES`), default 256 MiB: refused at the edge and again by prikk.
     pub max_artifact_bytes: u64,
-    /// The most objects an artifact may declare (`PRIKK_EXCHANGE_MAX_OBJECTS`), default 20,000.
+    /// The most objects an artifact may declare (`PRIKK_EXCHANGE_MAX_OBJECTS`), default 5,000 (checked per kind: patches and blobs).
     pub max_objects: u64,
     /// The wall-time bound of the accept (default 600 s; never the 120 s read bound).
     pub accept_deadline: Duration,
@@ -76,7 +76,7 @@ impl Default for ProposeConfig {
     fn default() -> Self {
         ProposeConfig {
             max_artifact_bytes: 256 << 20,
-            max_objects: 20_000,
+            max_objects: 5_000,
             accept_deadline: Duration::from_secs(600),
             lease_wait: Duration::from_secs(5),
             max_concurrent: 2,
@@ -86,17 +86,61 @@ impl Default for ProposeConfig {
     }
 }
 
+/// The memory cost model of one accept (RFC 004 D-5.3, amended by part 4b). **One table, one place.**
+///
+/// What is modelled is the **data segment** of the `prikk sync accept` child (`VmData`, the quantity `RLIMIT_DATA`
+/// limits), not its resident set, because the ceiling is a data limit. Every constant below was measured with
+/// **prikk 0.53.0 on 2026-10-22** (part 4b T1: `prikk sync accept`, the call the server makes, sampled from
+/// `/proc/<pid>/status`; the table, the least-squares fit and the scripts are in the part 4b review request) and is the
+/// *worst* of the shapes measured: an admission that is too small kills a legitimate accept and flags the repository,
+/// one that is too large only queues. A new prikk release re-measures these (RFC 011: the cost table is per release).
+pub mod cost_model {
+    const KIB: u64 = 1 << 10;
+    const MIB: u64 = 1 << 20;
+
+    /// The fixed part: prikk's own start and the pending set it reads. Measured intercept 0.3 MiB on an empty store, and
+    /// 1.1 MiB for every 1,000 patches already pending (5,000 pending: +5.6 MiB); 10 MiB covers a pending set of
+    /// about 8,000 patches.
+    pub const BASE_BYTES: u64 = 10 * MIB;
+
+    /// What each byte of the artifact costs, in tenths. **7.0** is the worst shape measured: one large blob, whose
+    /// `VmData` is 7.00 × the artifact for 10, 25, 50, 100 and 250 MiB, random or compressible alike (and 7.3 MiB for
+    /// 1 MiB). Artifacts of many files or patches measure 4.0 to 4.3 × (the 4.2 of U-12); the fit
+    /// `4.10 × artifact + 2.91 × largest blob` explains all shapes (R² = 0.99999), and the largest blob is not known
+    /// before prikk has read the artifact, so the whole artifact is assumed to be one.
+    pub const BYTES_TENTHS: u64 = 70;
+
+    /// What each patch the object bound allows costs on top of its bytes: measured 1.7 KiB a patch beyond the artifact
+    /// term (1,000 to 10,000 one-file patches); 2 KiB. The bound applies to patches and to blobs separately, and the
+    /// measured cost follows the patches (1,000 blobs in one patch cost no more than the fit says).
+    pub const PER_OBJECT_BYTES: u64 = 2 * KIB;
+
+    /// The ceiling over the cost (RFC 011 D-2): unchanged.
+    pub const CEILING_TENTHS: u64 = 15;
+
+    /// The admission cost of one accept of an artifact of `bytes` under an object bound of `max_objects`:
+    /// `BASE + 7.0 × bytes + 2 KiB × max_objects`.
+    pub fn cost(bytes: u64, max_objects: u64) -> u64 {
+        BASE_BYTES
+            .saturating_add(bytes.saturating_mul(BYTES_TENTHS) / 10)
+            .saturating_add(max_objects.saturating_mul(PER_OBJECT_BYTES))
+    }
+
+    /// The `RLIMIT_DATA` of the accept: the cost × 1.5.
+    pub fn ceiling(bytes: u64, max_objects: u64) -> u64 {
+        cost(bytes, max_objects).saturating_mul(CEILING_TENTHS) / 10
+    }
+}
+
 impl ProposeConfig {
-    /// The admission cost of one accept of an artifact of `bytes` (RFC 004 D-5.3, measured *k* ≈ 4.2 in U-12):
-    /// 10 MiB + 4.2 × the artifact.
-    pub fn accept_cost(bytes: u64) -> u64 {
-        const MIB: u64 = 1 << 20;
-        10 * MIB + bytes.saturating_mul(42) / 10
+    /// The admission cost of one accept of an artifact of `bytes` ([`cost_model::cost`] with this configuration's object bound).
+    pub fn accept_cost(&self, bytes: u64) -> u64 {
+        cost_model::cost(bytes, self.max_objects)
     }
 
     /// The `RLIMIT_DATA` of the accept: the cost × 1.5 (RFC 011 D-2).
-    pub fn accept_ceiling(bytes: u64) -> u64 {
-        Self::accept_cost(bytes).saturating_mul(15) / 10
+    pub fn accept_ceiling(&self, bytes: u64) -> u64 {
+        cost_model::ceiling(bytes, self.max_objects)
     }
 }
 
@@ -799,7 +843,7 @@ impl ProposeService {
 
         // The driver of the accept: this proposal's two directories, the incoming bounds, the deadline and the
         // memory ceiling of the accept (not the read path's).
-        let ceiling = ProposeConfig::accept_ceiling(up.size);
+        let ceiling = self.config.accept_ceiling(up.size);
         let sandbox = self
             .hosting
             .sandbox()

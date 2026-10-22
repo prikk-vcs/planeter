@@ -57,6 +57,13 @@ pub fn default_budget(usable_bytes: u64) -> (u64, BudgetSource) {
     }
 }
 
+/// Whether the heavy pool admits an accept of the given admission `cost` (RFC 004 D-5.3): a budget of 0 means no gate (everything
+/// is admitted); otherwise the cost must fit the heavy pool, or the proposal is refused as too large before anything is accepted.
+/// The start-up log says which of the two it is.
+pub fn accept_admitted(cost_bytes: u64, heavy_pool_bytes: u64, budget_bytes: u64) -> bool {
+    budget_bytes == 0 || cost_bytes <= heavy_pool_bytes
+}
+
 /// The budget from the variable's value (`None`/empty = unset → the default for `usable_bytes`). An
 /// explicit value is a positive integer number of MiB and is **never capped**.
 pub fn budget_from_var(

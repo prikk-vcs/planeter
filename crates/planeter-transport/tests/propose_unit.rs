@@ -101,19 +101,118 @@ fn the_metadata_rules_each_have_a_named_reason() {
     assert_eq!(m.validate(), Err(MetaError::FieldsForExistingChange));
 }
 
+const MIB: u64 = 1 << 20;
+
+/// What `prikk sync accept` (0.53.0, the call the server makes) was measured to hold in its **data segment** (`VmData`, what
+/// `RLIMIT_DATA` limits), the worst of an empty store and one holding 5,000 pending patches: `(shape, artifact bytes, patches,
+/// blobs, VmData in tenths of a MiB)`. Part 4b T1, 2026-10-22; the script and the raw table are in the part 4b review request.
+/// Every row is a shape somebody could propose; the model has to cover all of them.
+const MEASURED: &[(&str, u64, u64, u64, u64)] = &[
+    ("one-file patches, 1,000", 531906, 1001, 1001, 38),
+    ("one 1 MiB blob", 1049378, 1, 1, 103),
+    ("one-file patches, 2,500", 1348584, 2501, 2501, 91),
+    ("one-file patches, 5,000", 2709714, 5001, 5001, 180),
+    ("one-file patches, 7,500", 4070844, 7501, 7501, 264),
+    ("one 5 MiB blob", 5243682, 1, 1, 413),
+    ("one patch of 100 files of 100 KiB", 10263864, 1, 100, 425),
+    ("one 10 MiB blob (random or zeros)", 10486564, 1, 1, 763),
+    ("one 25 MiB blob", 26215202, 1, 1, 1813),
+    (
+        "one 50 MiB blob (random, zeros or text)",
+        52429604,
+        1,
+        1,
+        3558,
+    ),
+    (
+        "one patch of 1,000 files of 100 KiB",
+        102634464,
+        1,
+        1000,
+        3953,
+    ),
+    ("1,000 patches of 100 KiB", 102832376, 1000, 1000, 3969),
+    ("one 100 MiB blob", 104858402, 1, 1, 7058),
+    ("25 patches of 4 MiB", 104868700, 25, 25, 4190),
+    ("100 patches of 1 MiB", 104900950, 100, 100, 4071),
+    ("one 250 MiB blob (random or zeros)", 262144804, 1, 1, 17558),
+    ("a 4 MiB file edited 50 times", 268686725, 51, 1, 10660),
+    ("a 20 MiB file edited 50 times", 1524039877, 51, 1, 60164),
+];
+
 #[test]
-fn the_admission_cost_of_an_accept_is_ten_mib_plus_four_point_two_times_the_artifact() {
-    const MIB: u64 = 1 << 20;
-    assert_eq!(ProposeConfig::accept_cost(0), 10 * MIB);
-    assert_eq!(ProposeConfig::accept_cost(100 * MIB), 10 * MIB + 420 * MIB);
-    // At the default bound (256 MiB): about 1.1 GiB of the budget, and a ceiling of 1.5 times that.
-    let cost = ProposeConfig::accept_cost(256 * MIB);
-    assert_eq!(cost, 10 * MIB + 256 * MIB * 42 / 10);
-    assert!(cost > 1000 * MIB && cost < 1100 * MIB, "{} MiB", cost / MIB);
-    assert_eq!(ProposeConfig::accept_ceiling(256 * MIB), cost * 15 / 10);
+fn the_cost_of_an_accept_is_ten_mib_plus_seven_times_the_artifact_plus_two_kib_an_object() {
+    use planeter_transport::propose::cost_model;
+    assert_eq!(cost_model::cost(0, 0), 10 * MIB);
+    assert_eq!(cost_model::cost(100 * MIB, 0), 10 * MIB + 700 * MIB);
+    assert_eq!(cost_model::cost(0, 5000), 10 * MIB + 5000 * 2048);
+    assert_eq!(
+        cost_model::ceiling(100 * MIB, 0),
+        (10 * MIB + 700 * MIB) * 15 / 10
+    );
+    // The configuration carries the object bound; the default is the provisional 5,000.
+    let c = ProposeConfig::default();
+    assert_eq!((c.max_objects, c.max_artifact_bytes), (5_000, 256 * MIB));
+    assert_eq!(c.accept_deadline, Duration::from_secs(600));
+    let cost = c.accept_cost(256 * MIB);
+    assert_eq!(cost, cost_model::cost(256 * MIB, 5_000));
+    assert!(cost > 1700 * MIB && cost < 1900 * MIB, "{} MiB", cost / MIB);
+    assert_eq!(c.accept_ceiling(256 * MIB), cost * 15 / 10);
+    let more = ProposeConfig {
+        max_objects: 20_000,
+        ..ProposeConfig::default()
+    };
+    assert!(
+        more.accept_cost(0) > c.accept_cost(0),
+        "a larger bound costs more"
+    );
     // No overflow at the extremes.
-    let _ = ProposeConfig::accept_cost(u64::MAX);
-    let _ = ProposeConfig::accept_ceiling(u64::MAX);
+    let _ = cost_model::cost(u64::MAX, u64::MAX);
+    let _ = cost_model::ceiling(u64::MAX, u64::MAX);
+}
+
+#[test]
+fn the_model_admits_every_measured_shape_at_no_less_than_what_it_held_and_kills_none_of_them() {
+    use planeter_transport::propose::cost_model;
+    for (shape, bytes, patches, blobs, tenths) in MEASURED {
+        let held = tenths * MIB / 10;
+        // The object bound is at least what the artifact declares (the server refuses a larger artifact before the accept).
+        let bound = 5_000.max(*patches).max(*blobs);
+        let cost = cost_model::cost(*bytes, bound);
+        assert!(
+            cost >= held,
+            "{shape}: admitted at {} MiB, held {} MiB",
+            cost / MIB,
+            held / MIB
+        );
+        let ceiling = cost_model::ceiling(*bytes, bound);
+        assert!(
+            ceiling >= held * 3 / 2,
+            "{shape}: the ceiling {} MiB leaves less than 1.5 x the {} MiB it held",
+            ceiling / MIB,
+            held / MIB
+        );
+    }
+}
+
+#[test]
+fn the_old_model_would_have_killed_a_single_blob_from_22_mib_and_the_new_one_does_not() {
+    // IS-52: 10 MiB + 4.2 x the artifact, times 1.5, against 7.0 x the artifact held by a single blob.
+    let old_ceiling = |bytes: u64| (10 * MIB + bytes * 42 / 10) * 15 / 10;
+    let held = |bytes: u64| bytes * 7;
+    assert!(old_ceiling(21 * MIB) > held(21 * MIB));
+    assert!(
+        old_ceiling(25 * MIB) < held(25 * MIB),
+        "the 25 MiB blob measured 175 MiB against 172 MiB"
+    );
+    assert!(
+        old_ceiling(105 * MIB) < held(105 * MIB),
+        "the 105 MiB blob of the assessment"
+    );
+    let c = ProposeConfig::default();
+    for mib in [1, 5, 10, 25, 50, 105, 250, 256] {
+        assert!(c.accept_ceiling(mib * MIB) > held(mib * MIB), "{mib} MiB");
+    }
 }
 
 #[test]

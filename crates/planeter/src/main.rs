@@ -287,7 +287,7 @@ async fn main() {
                         };
                     let pcfg = planeter_transport::ProposeConfig {
                         max_artifact_bytes: positive_env("PRIKK_EXCHANGE_MAX_BYTES", 256 << 20),
-                        max_objects: positive_env("PRIKK_EXCHANGE_MAX_OBJECTS", 20_000),
+                        max_objects: positive_env("PRIKK_EXCHANGE_MAX_OBJECTS", 5_000),
                         accept_deadline: std::time::Duration::from_secs(positive_env(
                             "PLANETER_ACCEPT_DEADLINE_SECS",
                             600,
@@ -312,9 +312,7 @@ async fn main() {
                         pcfg.max_concurrent,
                         pcfg.repo_capacity_bytes >> 20
                     );
-                    propose_cost = Some(planeter_transport::ProposeConfig::accept_cost(
-                        pcfg.max_artifact_bytes,
-                    ));
+                    propose_cost = Some(pcfg.accept_cost(pcfg.max_artifact_bytes));
                     // Recovery (RFC 004 part 4): the records of its runs, and the procedure itself.
                     let recoveries: Arc<dyn planeter_store::RecoveryStore> =
                         match planeter_store::SqliteRecoveries::new(db.clone()) {
@@ -471,7 +469,7 @@ async fn main() {
 
     // A write draws from the heavy pool too (RFC 004 D-5.3): say whether the budget admits the largest accept.
     if let Some(cost) = propose_cost {
-        if cost > heavy_bytes && budget_bytes > 0 {
+        if !planeter_web::budget::accept_admitted(cost, heavy_bytes, budget_bytes) {
             eprintln!(
                 "planeter: WARNING: an accept of the largest allowed artifact needs about {} MiB of the memory budget, and the heavy pool is {} MiB, so such a proposal is refused as too large; raise {} or lower PRIKK_EXCHANGE_MAX_BYTES",
                 cost / planeter_web::budget::MIB,

@@ -1090,7 +1090,7 @@ pub(crate) async fn propose_handler(
     };
 
     // The accept: admitted against the same byte budget as reads (a write is never light), under the write lease.
-    let cost = planeter_transport::ProposeConfig::accept_cost(artifact_len);
+    let cost = propose.config().accept_cost(artifact_len);
     let result = {
         let (propose, record, who, meta, plan) = (
             Arc::clone(&propose),
