@@ -5,6 +5,17 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **The accept's memory model is measured (RFC 004 part 4b, IS-52).** A single large blob needed 7.0 × its size in the
+  accept's data segment, not the 4.2 × the admission and the ceiling assumed, so a proposal carrying one file of about 22 MiB or
+  more was killed at its ceiling and left the repository waiting for recovery. The cost of an accept is now
+  **10 MiB + 7.0 × the artifact + 2 KiB × the object bound** (the constants, each with its measurement, are in one place,
+  `cost_model` in `planeter-transport`), the ceiling is still 1.5 × that; an artifact of the largest allowed size (256 MiB) is
+  accepted end to end through the real sandbox. The price is a larger share of the memory budget for every proposal: the largest
+  accept now needs about 1.8 GiB of the budget (was 1.1 GiB), so the default budget admits it on a host with about 8.1 GiB or more
+  of usable memory; the start-up log says whether it does. **`PRIKK_EXCHANGE_MAX_OBJECTS` now defaults to 5000** (was 20000):
+  the accept's time is one disk flush per patch or blob, 15 to 50 ms on the test machine, so 20,000 of them could pass the 600 s
+  deadline. The bound counts patches and blobs separately.
+
 - **Recovery follow-ups (RFC 004 part 4a).** An administrator's recovery run can now actually repair: when `doctor` lists problems
   and **every one of them names** one of the idempotent repairs (`--repair-wal-tail`, `--repair-index`,
   `--repair-pointer-index-tail`, `--repair-tails`), the run executes exactly those repairs (each step written first, with prikk's

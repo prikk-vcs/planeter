@@ -8,6 +8,10 @@
 
 ## Where we are
 
+- **RFC 004 part 4b built 2026-10-22, awaiting review** (`rfcs/handoffs/004-transport/accept-cost-model-handoff-v2.md`): IS-52 — the
+  accept's cost measured over twenty-odd artifacts (single blobs of 1 to 250 MiB, many files, many patches, an edited file) and
+  modelled in one place (`cost_model`: 10 MiB + 7.0 × bytes + 2 KiB × the object bound, ceiling 1.5 ×); the object bound defaults to
+  5000; the largest allowed artifact is accepted end to end through the real sandbox. Parts 4a and 5a were **reviewed Approved**.
 - **RFC 004 part 4a built 2026-10-22, awaiting review** (`rfcs/handoffs/004-transport/recovery-followups-handoff-v2.md`): IS-51 (the
   repair step is reachable, with its negative tests); the process witness reads working directories and open files; the glossary's
   words for the person who runs the server; the accept-time-per-patch measurement (PK-68) is a report, not a change. Part 4 was
