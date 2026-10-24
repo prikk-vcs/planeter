@@ -256,3 +256,64 @@ fn main_rs_no_longer_carries_its_own_copy_of_the_list() {
     );
     assert!(main.contains("--help"));
 }
+
+/// RFC 004 part 4c, T3: with proposals on, the start-up log names what the configured memory budget admits and the configured bound,
+/// in one sentence, so an operator sees at once whether the two agree. The default bound is 100 MiB.
+fn accept_line(name: &str, budget_mb: &str, max_bytes: Option<&str>) -> String {
+    let dir = scratch(&format!("{name}-data"));
+    let mut envs: Vec<(String, String)> = env_for(name, "127.0.0.1:0", &[]);
+    envs.push((
+        "PLANETER_ARTIFACT_DIR".into(),
+        dir.join("artifacts").display().to_string(),
+    ));
+    envs.push((
+        "PLANETER_SPOOL_DIR".into(),
+        dir.join("spool").display().to_string(),
+    ));
+    envs.push(("PLANETER_PRIKK_MEMORY_BUDGET_MB".into(), budget_mb.into()));
+    if let Some(b) = max_bytes {
+        envs.push(("PRIKK_EXCHANGE_MAX_BYTES".into(), b.into()));
+    }
+    if let Ok(p) = std::env::var("PATH") {
+        envs.push(("PATH".into(), p));
+    }
+    let lines = serve_and_collect(name, &as_refs(&envs));
+    let found: Vec<&String> = lines
+        .iter()
+        .filter(|l| {
+            l.contains("the memory budget (heavy pool") || l.contains("memory budget is off")
+        })
+        .collect();
+    assert_eq!(
+        found.len(),
+        1,
+        "exactly one sentence about the largest accept: {lines:?}"
+    );
+    found[0].clone()
+}
+
+#[test]
+fn the_startup_line_for_the_default_bound_on_a_four_gib_and_a_two_gib_budget() {
+    // A quarter of 4 GiB is 1024 MiB, and 7/8 of it is the heavy pool; a quarter of 2 GiB is 512 MiB.
+    assert_eq!(
+        accept_line("line-4g", "1024", None),
+        "planeter: the memory budget (heavy pool 896 MiB) admits an accept of an artifact up to 125 MiB; PRIKK_EXCHANGE_MAX_BYTES is 100 MiB, which fits"
+    );
+    let two = accept_line("line-2g", "512", None);
+    assert!(
+        two.starts_with("planeter: WARNING: the memory budget (heavy pool 448 MiB) admits an accept of an artifact up to 61 MiB, but PRIKK_EXCHANGE_MAX_BYTES is 100 MiB")
+            && two.ends_with("lower PRIKK_EXCHANGE_MAX_BYTES to 61 MiB"),
+        "{two}"
+    );
+    // A bound raised to 256 MiB by configuration is a warning on a 4 GiB budget and fits on 2304 MiB (a 9 GiB host).
+    let raised = accept_line("line-raised-4g", "1024", Some("268435456"));
+    assert!(
+        raised.contains("WARNING") && raised.contains("is 256 MiB"),
+        "{raised}"
+    );
+    let raised = accept_line("line-raised-9g", "2304", Some("268435456"));
+    assert!(
+        !raised.contains("WARNING") && raised.ends_with("which fits"),
+        "{raised}"
+    );
+}

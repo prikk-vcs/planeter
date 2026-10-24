@@ -2653,19 +2653,31 @@ async fn after_an_unfinished_accept_recovery_runs_by_itself_and_the_same_artifac
 
 // ------------------------------------------------------------------------------------------------ the accept's cost model (part 4b)
 
-/// IS-52: one large blob needs 7.0 × its size, not 4.2 ×; a 105 MiB random file in a 110 MiB artifact was killed at the
-/// old ceiling and the repository left flagged. With the measured model the artifact of the **largest allowed size**
-/// goes through the whole real path (bubblewrap, `prlimit` with the default ceiling, real prikk, the claims file) and
-/// is accepted.
+/// IS-52 and part 4c: one large blob needs 7.0 × its size. The artifact of the **default** bound's largest size (a blob within a few KiB
+/// of 100 MiB) goes through the whole real path (bubblewrap, `prlimit` with the default ceiling, real prikk, the claims file) and is accepted.
 #[tokio::test]
-async fn a_single_blob_of_the_largest_allowed_size_is_accepted_end_to_end_under_the_default_ceiling()
- {
+async fn a_single_blob_of_the_default_bound_is_accepted_end_to_end_under_the_default_ceiling() {
+    largest_blob_end_to_end("largest-blob", ProposeConfig::default()).await;
+}
+
+/// The operator can raise the bound by configuration: 256 MiB costs 1.8 GiB, and the accept of a blob of that size still goes through
+/// the real sandbox under its (larger) ceiling; the start-up sentence agrees for a host that has the memory (`accept_admission.rs`).
+#[tokio::test]
+async fn a_single_blob_of_a_bound_raised_to_256_mib_by_configuration_is_accepted_end_to_end() {
+    let config = ProposeConfig {
+        max_artifact_bytes: 256 << 20,
+        ..Opts::default().config
+    };
+    largest_blob_end_to_end("largest-blob-raised", config).await;
+}
+
+async fn largest_blob_end_to_end(name: &str, config: ProposeConfig) {
     if skip() || !bwrap_works() {
         eprintln!("skipping: needs bubblewrap and prlimit");
         return;
     }
-    let mut w = sandboxed("largest-blob", None, Opts::default().config);
-    let bound = ProposeConfig::default().max_artifact_bytes;
+    let mut w = sandboxed(name, None, config.clone());
+    let bound = config.max_artifact_bytes;
     // The blob plus prikk's own framing stays just under the bound (the measured overhead is a few hundred bytes).
     w.client.commit_blob((bound - 4096) as usize);
     let art = w.client.artifact(&w.forge, "big");
@@ -2674,7 +2686,7 @@ async fn a_single_blob_of_the_largest_allowed_size_is_accepted_end_to_end_under_
         "the artifact is the largest the bound allows: {} of {bound}",
         art.len()
     );
-    let ceiling = ProposeConfig::default().accept_ceiling(art.len() as u64);
+    let ceiling = config.accept_ceiling(art.len() as u64);
     let r = propose_as(&w, "forge", "tok-alice", titled("the largest blob"), &art).await;
     assert_eq!(
         r.status,

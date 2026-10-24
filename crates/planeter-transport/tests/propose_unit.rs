@@ -152,12 +152,25 @@ fn the_cost_of_an_accept_is_ten_mib_plus_seven_times_the_artifact_plus_two_kib_a
     );
     // The configuration carries the object bound; the default is the provisional 5,000.
     let c = ProposeConfig::default();
-    assert_eq!((c.max_objects, c.max_artifact_bytes), (5_000, 256 * MIB));
+    assert_eq!((c.max_objects, c.max_artifact_bytes), (5_000, 100 * MIB));
     assert_eq!(c.accept_deadline, Duration::from_secs(600));
-    let cost = c.accept_cost(256 * MIB);
-    assert_eq!(cost, cost_model::cost(256 * MIB, 5_000));
-    assert!(cost > 1700 * MIB && cost < 1900 * MIB, "{} MiB", cost / MIB);
-    assert_eq!(c.accept_ceiling(256 * MIB), cost * 15 / 10);
+    let cost = c.accept_cost(c.max_artifact_bytes);
+    assert_eq!(cost, cost_model::cost(100 * MIB, 5_000));
+    assert!(cost > 700 * MIB && cost < 740 * MIB, "{} MiB", cost / MIB);
+    assert_eq!(c.accept_ceiling(c.max_artifact_bytes), cost * 15 / 10);
+    // The operator can raise the bound: 256 MiB costs about 1.8 GiB.
+    let raised = cost_model::cost(256 * MIB, 5_000);
+    assert!(
+        raised > 1700 * MIB && raised < 1900 * MIB,
+        "{} MiB",
+        raised / MIB
+    );
+    // The inverse: what a pool admits, and that it admits no more.
+    let pool = cost_model::cost(125 * MIB, 5_000);
+    let a = cost_model::largest_artifact_admitted(pool, 5_000).unwrap();
+    assert!((125 * MIB..125 * MIB + 2).contains(&a), "{a}");
+    assert!(cost_model::cost(a + 16, 5_000) > pool);
+    assert_eq!(cost_model::largest_artifact_admitted(MIB, 5_000), None);
     let more = ProposeConfig {
         max_objects: 20_000,
         ..ProposeConfig::default()
