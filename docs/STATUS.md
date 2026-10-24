@@ -8,6 +8,10 @@
 
 ## Where we are
 
+- **RFC 005 part 5b (the prikk 0.54 re-baseline and the `extract` driver) built 2026-10-25, awaiting review**
+  (`rfcs/handoffs/005-change-review/prikk-0-54-rebaseline-and-extract-driver-handoff-v2.md`): the floor is 0.54.0 (IS-46 closed); `verify`
+  reads the `unreached objects` line; the `extract` driver with its strict readers, its own destination and the cost rule measured on
+  0.54.1 (`docs/extract.md`). Parts 4b and 4c were **reviewed Approved** / built.
 - **RFC 004 part 4c built 2026-10-24, awaiting review** (`rfcs/handoffs/004-transport/accept-bound-default-handoff-v2.md`): the default
   `PRIKK_EXCHANGE_MAX_BYTES` is 100 MiB (a 4 GiB host admits it; 256 MiB needs about 8.1 GiB); the start-up log names what the
   configured budget admits and whether the bound fits. Part 4b was **reviewed Approved** (IS-52 closed).

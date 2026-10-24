@@ -54,9 +54,9 @@ pub const CONTENT_MAX_BYTES: u64 = 4 * MIB;
 
 /// The prikk version the cost table was measured on (`MIN_PRIKK_VERSION` when the floor was last raised).
 ///
-/// **The floor moved to 0.54.0 (the 0.54 re-baseline, first commit); the table has not been re-measured yet** and still
-/// says 0.52.0. The next commit of the same handoff (T4) re-measures it on 0.54.1 and sets this to `(0, 54, 1)`.
-pub const MEASURED_ON: (u64, u64, u64) = (0, 52, 0);
+/// The floor is 0.54.0; the table was re-measured on **0.54.1** (the same code, an installer fix) at the 0.54 re-baseline:
+/// the seven read verbs on the eleven fixtures of the investigation (nothing tripped its 1.5 × ceiling), and `extract` anew.
+pub const MEASURED_ON: (u64, u64, u64) = (0, 54, 1);
 
 /// The most entries a store walk will visit before giving up (a sane store has about forty files).
 pub const MAX_STORE_ENTRIES: usize = 100_000;
@@ -78,6 +78,11 @@ pub enum ReadVerb {
     FileContent,
     /// `verify`.
     Verify,
+    /// `extract` (RFC 005 part 5b): the files of one point written into a fresh directory. Its memory follows the **largest
+    /// single file** it reads (about twice it; a file edited many times, replayed, up to about 8.6 ×), not the store: so the
+    /// cost is a multiple of the configured extraction byte bound ([`planeter_prikk::extract::DEFAULT_MAX_BYTES`]), because the
+    /// largest file of a point is not known before the call and `--plan-only` costs the same memory as a write (measured).
+    Extract,
 }
 
 /// How a verb's cost is derived: `max(floor, (S × store_tenths + CONTENT_MAX_BYTES × content_tenths) / 10)`.
@@ -89,13 +94,17 @@ pub struct CostRule {
     pub store_tenths: u64,
     /// The multiple of [`CONTENT_MAX_BYTES`], in tenths (31 = 3.1 ×): the bounded content a read holds.
     pub content_tenths: u64,
+    /// The multiple of the **extraction byte bound** (`--max-bytes`), in tenths (90 = 9.0 ×). Zero for every verb but `extract`.
+    pub bound_tenths: u64,
+    /// A fixed addition, for `extract` (prikk's own working set and the pending set it reads). Zero for the others.
+    pub base: u64,
     /// The smallest cost.
     pub floor: u64,
 }
 
 impl ReadVerb {
     /// Every verb (kept in step with the enum by `tests/admission.rs`).
-    pub const ALL: [ReadVerb; 7] = [
+    pub const ALL: [ReadVerb; 8] = [
         ReadVerb::Log,
         ReadVerb::Show,
         ReadVerb::Refs,
@@ -103,37 +112,59 @@ impl ReadVerb {
         ReadVerb::Cat,
         ReadVerb::FileContent,
         ReadVerb::Verify,
+        ReadVerb::Extract,
     ];
 
     /// The cost rule: **the one table**. No wildcard arm — a new verb must be given a cost here.
     pub const fn rule(self) -> CostRule {
-        let (store_tenths, content_tenths, floor) = match self {
+        let (store_tenths, content_tenths, bound_tenths, base, floor) = match self {
             // Flat: ≈ 9.5 MB at any repository size.
-            ReadVerb::Log | ReadVerb::Refs => (0, 0, COST_FLOOR),
+            ReadVerb::Log | ReadVerb::Refs => (0, 0, 0, 0, COST_FLOOR),
             // `show` follows the *patch's content*, which no store walk can see: flat (≈ 9 MB) for a patch of
             // small binary files, ≈ 18.8 MB for a 10,000-file patch, ≈ 2.1 × S for one large binary file and
             // ≈ 3.1 × S for text (`txt200`: 642 MB; measured 2026-10-18). Its *address-space* need, which is what the
             // ceiling (RLIMIT_DATA) counts, is ≈ 4.06 × S, so the multiple is 3.6: ceiling 4.5 × S clears it with ~10%.
-            ReadVerb::Show => (36, 0, SHOW_FLOOR),
-            ReadVerb::Tree | ReadVerb::Cat => (21, 0, COST_FLOOR),
-            ReadVerb::Verify => (41, 0, COST_FLOOR),
+            ReadVerb::Show => (36, 0, 0, 0, SHOW_FLOOR),
+            ReadVerb::Tree | ReadVerb::Cat => (21, 0, 0, 0, COST_FLOOR),
+            ReadVerb::Verify => (41, 0, 0, 0, COST_FLOOR),
             // The tree pre-check (2.1 × S) and the patch-plan read, whose content is ≤ CONTENT_MAX_BYTES.
-            ReadVerb::FileContent => (21, 31, COST_FLOOR),
+            ReadVerb::FileContent => (21, 31, 0, 0, COST_FLOOR),
+            // `extract` (prikk 0.54.1, part 5b T4): `VmData` = 0.26 MiB + 2.00 × the largest file (+ 0.7 MiB per 1,000
+            // pending patches) for a tree, one big file, a claim, a plan or a write alike; a file **edited many times**,
+            // replayed from the start, reaches 7.0 to 8.6 × its size (8 MiB × 8 edits: 7.0; × 63: 7.9; 1 MiB × 63: 8.6;
+            // 16 MiB × 63: 8.6; 8 MiB × 128: 8.35). 9.0 × covers the worst measured with 5 %; the ceiling (1.5 ×) is 13.5 ×.
+            // The store size does not enter. 8 MiB is prikk's floor plus the pending set (5,000 pending: +4 MiB).
+            ReadVerb::Extract => (0, 0, 90, 8 * MIB, COST_FLOOR),
         };
         CostRule {
             measured_on: MEASURED_ON,
             store_tenths,
             content_tenths,
+            bound_tenths,
+            base,
             floor,
         }
     }
 
     /// The estimated peak memory, in bytes, of this read against a store of `store_bytes`.
+    ///
+    /// For `extract` this is the cost under the **default** extraction bound; use [`ReadVerb::cost_with_bound`] for the
+    /// configured one.
     pub fn cost(self, store_bytes: u64) -> u64 {
+        self.cost_with_bound(store_bytes, planeter_prikk::extract::DEFAULT_MAX_BYTES)
+    }
+
+    /// [`ReadVerb::cost`] with the configured extraction byte bound (`--max-bytes`); the bound enters only the cost of
+    /// `extract`.
+    pub fn cost_with_bound(self, store_bytes: u64, extract_max_bytes: u64) -> u64 {
         let r = self.rule();
         let tenths = u128::from(store_bytes) * u128::from(r.store_tenths)
-            + u128::from(CONTENT_MAX_BYTES) * u128::from(r.content_tenths);
-        u64::try_from(tenths / 10).unwrap_or(u64::MAX).max(r.floor)
+            + u128::from(CONTENT_MAX_BYTES) * u128::from(r.content_tenths)
+            + u128::from(extract_max_bytes) * u128::from(r.bound_tenths);
+        u64::try_from(tenths / 10)
+            .unwrap_or(u64::MAX)
+            .saturating_add(r.base)
+            .max(r.floor)
     }
 
     /// A short name for log lines.
@@ -146,6 +177,7 @@ impl ReadVerb {
             ReadVerb::Cat => "cat",
             ReadVerb::FileContent => "file",
             ReadVerb::Verify => "verify",
+            ReadVerb::Extract => "extract",
         }
     }
 }

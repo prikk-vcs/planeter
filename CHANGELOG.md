@@ -5,6 +5,14 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **The `extract` driver and the `verify` line of prikk 0.54 (no page, no API yet).** planeter can now ask prikk for the files of a
+  point of history (`prikk extract`) into a working directory it makes itself, outside the repository, and removes afterwards:
+  prikk 0.54 does not refuse a destination inside the repository, so the driver never takes one from a caller. The extracted tree is
+  treated as untrusted and is never read by the driver. prikk's `refusal-v1` document (13 ids) and `extract-report-v1` are read
+  strictly; a claim whose parent is still pending is not reported as damage. `verify` now sees prikk's new `unreached objects`
+  line and array (a warning, recorded and not shown). The memory cost of `extract` is measured and admitted like a read (about
+  twice the largest file, up to 8.6 × for a file edited many times; admitted at 9 × the extraction bound + 8 MiB). See `docs/extract.md`.
+
 - **The prikk floor moves to 0.54.0 (the 0.54 re-baseline).** planeter now requires prikk **0.54.0 or later** (the container image carries it;
   `MIN_PRIKK_VERSION`, the release workflow and the Dockerfile agree). Why: 0.54.0 fixes `show <block-id>` for a block that edits a
   file three or more times, which made the change page and API answer "temporarily unavailable" for such a block (known as IS-46,

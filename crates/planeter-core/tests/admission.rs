@@ -24,18 +24,23 @@ fn scratch(name: &str) -> PathBuf {
 #[test]
 fn every_verb_has_a_cost_rule_measured_on_the_current_prikk_floor() {
     // Re-measure the table at each floor change (docs/UPSTREAM.md): this fails until it is.
-    // TRANSITIONAL (the floor commit of the 0.54 re-baseline): the floor is 0.54.0 and the table is still the 0.52.0 one until
-    // T4's re-measurement, which replaces this block with the real check (same major.minor as the floor, patch at least it).
+    // The table was measured on a release of the floor's own minor version, at the floor or a later patch of it (0.54.1's code is
+    // 0.54.0's: an installer fix); a floor in another minor means the table is stale.
     let floor = planeter_prikk::cli::MIN_PRIKK_VERSION;
-    assert_eq!(floor, (0, 54, 0));
-    for v in ReadVerb::ALL {
-        assert_eq!(v.rule().measured_on, MEASURED_ON, "{v:?}");
-    }
     assert_eq!(
-        MEASURED_ON,
-        (0, 52, 0),
-        "the table still says what it was measured on"
+        (MEASURED_ON.0, MEASURED_ON.1),
+        (floor.0, floor.1),
+        "measured on {MEASURED_ON:?}, the floor is {floor:?}"
     );
+    assert!(MEASURED_ON >= floor);
+    for v in ReadVerb::ALL {
+        assert_eq!(
+            v.rule().measured_on,
+            MEASURED_ON,
+            "{v:?} was measured on {:?}",
+            v.rule().measured_on
+        );
+    }
 }
 
 #[test]
@@ -50,6 +55,7 @@ fn the_verb_list_is_complete_and_exhaustively_matched() {
             ReadVerb::Cat => 4,
             ReadVerb::FileContent => 5,
             ReadVerb::Verify => 6,
+            ReadVerb::Extract => 7,
         }
     }
     for (i, v) in ReadVerb::ALL.iter().enumerate() {
@@ -300,7 +306,11 @@ fn the_estimate_equals_the_true_size_of_a_real_sealed_repository() {
 fn the_ceiling_clears_the_smallest_rlimit_data_a_legitimate_call_needs() {
     // The ceiling is an RLIMIT_DATA, which counts address space reserved (allocator growth included), not
     // only what is resident — so it is checked against the *smallest working limit* found by bisection
-    // (T5, prikk 0.52.0: (fixture, verb, store bytes by the walk, smallest working limit in bytes)).
+    // (T5: (fixture, verb, store bytes by the walk, smallest working limit in bytes)). Measured on 0.52.0 and **re-measured on
+    // 0.54.1** (2026-10-25, the same fixtures, the same bisection, ceilings at 1.5 x the cost): 63 of the 67 rows are the same
+    // within 2 %, one is lower, and three `show` rows are higher (+4 %, +9 %, +16 % of a figure of 2.7 to 13 MiB, within the
+    // bisection's resolution) and carry the 0.54.1 value below. Nothing tripped its ceiling; the tightest call is `verify` of
+    // a single large file at 0.82 of its ceiling, as before.
     let needs: &[(&str, ReadVerb, u64, u64)] = &[
         ("m1", ReadVerb::Log, 1013680, 2134016),
         ("m1", ReadVerb::Show, 1013680, 2174976),
@@ -317,20 +327,20 @@ fn the_ceiling_clears_the_smallest_rlimit_data_a_legitimate_call_needs() {
         ("m16", ReadVerb::FileContent, 15831709, 18201981),
         ("m16", ReadVerb::Verify, 15831709, 34052919),
         ("m64", ReadVerb::Log, 66201411, 2134016),
-        ("m64", ReadVerb::Show, 66201411, 2674904),
+        ("m64", ReadVerb::Show, 66201411, 2791274),
         ("m64", ReadVerb::Refs, 66201411, 2134016),
         ("m64", ReadVerb::Tree, 66201411, 68489626),
         ("m64", ReadVerb::Cat, 66201411, 68489626),
         ("m64", ReadVerb::FileContent, 66201411, 68534925),
         ("m64", ReadVerb::Verify, 66201411, 135127201),
         ("m200", ReadVerb::Log, 208915749, 2134016),
-        ("m200", ReadVerb::Show, 208915749, 3929229),
+        ("m200", ReadVerb::Show, 208915749, 4296464),
         ("m200", ReadVerb::Refs, 208915749, 2134016),
         ("m200", ReadVerb::Tree, 208915749, 211230181),
         ("m200", ReadVerb::Cat, 208915749, 211230181),
         ("m200", ReadVerb::FileContent, 208915749, 211958258),
         ("m1000", ReadVerb::Log, 1048411603, 2134016),
-        ("m1000", ReadVerb::Show, 1048411603, 11307611),
+        ("m1000", ReadVerb::Show, 1048411603, 13150522),
         ("m1000", ReadVerb::Refs, 1048411603, 2134016),
         ("hist1000", ReadVerb::Log, 2405152, 2134016),
         ("hist1000", ReadVerb::Show, 2405152, 2174976),
@@ -394,4 +404,141 @@ fn the_ceiling_clears_the_smallest_rlimit_data_a_legitimate_call_needs() {
         "the margin is thin again: {:.2}",
         tightest.0
     );
+}
+
+// ---------------------------------------------------------------- `extract` (RFC 005 part 5b, T4)
+
+/// prikk 0.54.1, `extract`: `(shape, largest file bytes, total bytes, files, VmData in tenths of a MiB)` — the data segment the call held
+/// (the quantity `RLIMIT_DATA` limits; a sampled maximum), the worst of an empty store, one holding 5,000 pending patches and a claim
+/// point, for a write and for `--plan-only` alike (they are equal). Measured 2026-10-25; the table and the fit are in the part 5b review
+/// request. Every row is a shape somebody could propose: a tree, one big file, a file edited many times and replayed.
+const EXTRACT_MEASURED: &[(&str, u64, u64, u64, u64)] = &[
+    ("a replayed history of 70 one-line files", 8, 550, 70, 3),
+    (
+        "1,000 files of 10 KiB (+ 5,000 pending)",
+        10240,
+        10240000,
+        1000,
+        45,
+    ),
+    (
+        "100 files of 1 MiB (+ 5,000 pending)",
+        1048576,
+        104857600,
+        100,
+        47,
+    ),
+    ("one file of 1 MiB", 1048576, 1048576, 1, 22),
+    (
+        "1 MiB text edited 63 times, replayed",
+        1049467,
+        1049467,
+        1,
+        86,
+    ),
+    (
+        "4 MiB text edited 63 times, replayed",
+        4195190,
+        4195190,
+        1,
+        331,
+    ),
+    (
+        "8 MiB text edited 8 times, replayed",
+        8388680,
+        8388680,
+        1,
+        560,
+    ),
+    (
+        "8 MiB text edited 16 times, replayed",
+        8388790,
+        8388790,
+        1,
+        570,
+    ),
+    (
+        "8 MiB text edited 32 times, replayed",
+        8389030,
+        8389030,
+        1,
+        630,
+    ),
+    (
+        "8 MiB text edited 63 times, replayed",
+        8389495,
+        8389495,
+        1,
+        631,
+    ),
+    (
+        "8 MiB text edited 128 times, replayed",
+        8390607,
+        8390607,
+        1,
+        668,
+    ),
+    ("one file of 16 MiB", 16777216, 16777216, 1, 322),
+    (
+        "16 MiB text edited 63 times, replayed",
+        16778095,
+        16778095,
+        1,
+        1370,
+    ),
+    (
+        "one file of 64 MiB (+ 5,000 pending)",
+        67108864,
+        67108864,
+        1,
+        1324,
+    ),
+    ("one file of 128 MiB", 134217728, 134217728, 1, 2562),
+];
+
+#[test]
+fn extract_never_costs_less_than_a_measured_shape_held_whatever_the_bound_is_set_to_down_to_that_shapes_largest_file()
+ {
+    for (shape, largest, _total, _files, tenths) in EXTRACT_MEASURED {
+        let held = tenths * MIB / 10;
+        // The bound is the configured `--max-bytes`; a point over it is refused before anything is written, so a shape that
+        // runs has largest <= total <= bound. The tightest case is a bound exactly the largest file.
+        for bound in [*largest, *largest * 2, (64 * MIB).max(*largest)] {
+            let cost = ReadVerb::Extract.cost_with_bound(5_000 * 1024, bound);
+            assert!(
+                cost >= held,
+                "{shape}: bound {bound}: cost {cost} < held {held}"
+            );
+            assert!(
+                ceiling_for(cost, None) >= held * 3 / 2,
+                "{shape}: the ceiling leaves less than 1.5 x what it held"
+            );
+        }
+    }
+}
+
+#[test]
+fn extract_costs_nine_times_the_bound_plus_eight_mib_with_a_floor_and_does_not_look_at_the_store() {
+    assert_eq!(
+        ReadVerb::Extract.cost_with_bound(0, 64 * MIB),
+        9 * 64 * MIB + 8 * MIB
+    );
+    assert_eq!(
+        ReadVerb::Extract.cost_with_bound(1 << 40, 64 * MIB),
+        9 * 64 * MIB + 8 * MIB,
+        "the store does not enter"
+    );
+    assert_eq!(ReadVerb::Extract.cost_with_bound(0, 0), COST_FLOOR);
+    assert_eq!(
+        ReadVerb::Extract.cost_with_bound(0, MIB / 2),
+        COST_FLOOR,
+        "a half-MiB bound is under the floor"
+    );
+    // `cost` is the cost under the default bound (64 MiB), which is a heavy-pool cost.
+    assert_eq!(planeter_prikk::extract::DEFAULT_MAX_BYTES, 64 * MIB);
+    assert_eq!(ReadVerb::Extract.cost(123), 584 * MIB);
+    assert!(ReadVerb::Extract.cost(0) > LIGHT_CLASS_MAX_COST);
+    assert_eq!(ReadVerb::Extract.name(), "extract");
+    // No overflow at the extremes.
+    let _ = ReadVerb::Extract.cost_with_bound(u64::MAX, u64::MAX);
 }
