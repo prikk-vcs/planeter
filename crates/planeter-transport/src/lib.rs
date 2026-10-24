@@ -9,11 +9,12 @@ pub mod artifacts;
 pub mod export;
 pub mod fingerprint;
 pub mod metrics;
+pub mod proposals;
 pub mod propose;
 pub mod recovery;
 
 pub use artifacts::{
-    AcceptDir, ArtifactStore, Digest, DirsConfig, DirsConfigError, Spool, StoreError,
+    AcceptDir, ArtifactStore, Digest, DirsConfig, DirsConfigError, Removal, Spool, StoreError,
     TransportDirs, UploadWriter,
 };
 pub use export::{
@@ -21,6 +22,11 @@ pub use export::{
     RefInfo,
 };
 pub use metrics::{CacheStatus, FetchRecord, Metrics, Outcome, ProposeOutcome, ProposeRecord};
+pub use proposals::{
+    DETAIL_PATCH_LIMIT, Detail, LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX, Page, PatchEntry,
+    ProposalConfig, ProposalError, ProposalService, REASON_MAX_CHARS, Retention, RevisionView,
+    StateFilter, Summary, SweepReport, record_digest,
+};
 pub use propose::{
     IncompleteCause, MetaError, Plan, ProposeConfig, ProposeError, ProposeMeta, ProposeService,
     Proposed, Submitter, Upload, Uploaded,

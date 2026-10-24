@@ -104,6 +104,13 @@ pub struct Snapshot {
     pub propose_lease_wait_total: Duration,
     pub propose_attempts_total: u64,
     pub propose_attempts_max: u32,
+    /// Runs of the retention sweep, and what they did in all (RFC 005 part 5, T6).
+    pub sweeps: u64,
+    pub sweep_examined: u64,
+    pub sweep_removed: u64,
+    pub sweep_removed_bytes: u64,
+    pub sweep_kept: u64,
+    pub sweep_errors: u64,
 }
 
 /// The counters. Cheap to share (`Arc`); every method takes `&self`.
@@ -189,6 +196,25 @@ impl Metrics {
             r.wall.as_millis(),
             r.lease_wait.as_millis()
         );
+    }
+
+    /// One run of the retention sweep ended.
+    pub fn sweep(
+        &self,
+        examined: usize,
+        removed: usize,
+        removed_bytes: u64,
+        kept: usize,
+        errors: usize,
+    ) {
+        self.with(|m| {
+            m.sweeps += 1;
+            m.sweep_examined += examined as u64;
+            m.sweep_removed += removed as u64;
+            m.sweep_removed_bytes += removed_bytes;
+            m.sweep_kept += kept as u64;
+            m.sweep_errors += errors as u64;
+        });
     }
 
     /// One run of the recovery procedure ended (or was left to an administrator).
