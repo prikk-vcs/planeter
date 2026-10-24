@@ -404,3 +404,70 @@ fn orphaned_working_directories_are_removed_when_the_spool_opens() {
     );
     let _ = fs::remove_dir_all(&d);
 }
+
+// -- removal (RFC 005 part 5, T6)
+
+#[test]
+fn a_removed_object_is_gone_for_every_lookup_and_the_others_stay() {
+    let d = dir("remove");
+    let store = ArtifactStore::open(&d).unwrap();
+    let (a, b) = (put_bytes(&store, b"first"), put_bytes(&store, b"second"));
+    assert!(store.remove(&a).unwrap());
+    assert!(!store.contains(&a) && store.get(&a).is_none());
+    assert!(store.contains(&b));
+    assert_eq!(store.list().unwrap(), vec![b.clone()]);
+    assert!(
+        !store.remove(&a).unwrap(),
+        "removing what is not there is not an error"
+    );
+    assert_eq!(fs::read_dir(d.join("trash")).unwrap().count(), 0);
+    // The same bytes can be stored again afterwards.
+    assert_eq!(put_bytes(&store, b"first"), a);
+    assert!(store.contains(&a));
+}
+
+#[test]
+fn a_reader_that_opened_the_file_keeps_reading_it_after_the_object_is_removed() {
+    let d = dir("remove-reader");
+    let store = ArtifactStore::open(&d).unwrap();
+    let a = put_bytes(&store, b"still being read");
+    let open = store.get(&a).unwrap();
+    assert!(store.remove(&a).unwrap());
+    assert_eq!(bytes_of(open), b"still being read");
+}
+
+#[test]
+fn a_kill_between_the_rename_and_the_unlink_leaves_no_object_and_the_next_start_clears_the_trash() {
+    let d = dir("remove-kill");
+    let store = ArtifactStore::open(&d).unwrap();
+    let a = put_bytes(&store, b"half removed");
+    let trashed = store.remove_until_unlink(&a).unwrap().unwrap();
+    // As a kill would leave it: the object is already gone by digest, the file is in the trash.
+    assert!(!store.contains(&a) && trashed.is_file());
+    assert!(store.list().unwrap().is_empty());
+    drop(store);
+    let store = ArtifactStore::open(&d).unwrap();
+    assert!(!trashed.exists(), "the start-up unlinked it");
+    assert_eq!(fs::read_dir(d.join("trash")).unwrap().count(), 0);
+    assert!(store.cleaned_partials() >= 1);
+    assert!(!store.contains(&a));
+}
+
+#[test]
+fn a_removal_can_be_undone_when_something_needs_the_object_after_all_and_never_overwrites_a_newer_copy()
+ {
+    let d = dir("remove-undo");
+    let store = ArtifactStore::open(&d).unwrap();
+    let a = put_bytes(&store, b"needed after all");
+    let removal = store.begin_remove(&a).unwrap().unwrap();
+    assert!(!store.contains(&a), "out of reach while it is in the trash");
+    store.undo_remove(removal).unwrap();
+    assert_eq!(bytes_of(store.get(&a).unwrap()), b"needed after all");
+    assert_eq!(fs::read_dir(d.join("trash")).unwrap().count(), 0);
+    // The object was stored again between the two halves: the trashed copy is dropped, the new one stays.
+    let removal = store.begin_remove(&a).unwrap().unwrap();
+    assert_eq!(put_bytes(&store, b"needed after all"), a);
+    store.undo_remove(removal).unwrap();
+    assert_eq!(bytes_of(store.get(&a).unwrap()), b"needed after all");
+    assert_eq!(fs::read_dir(d.join("trash")).unwrap().count(), 0);
+}

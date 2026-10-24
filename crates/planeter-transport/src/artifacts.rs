@@ -248,7 +248,15 @@ impl Dir {
 
 // ---------------------------------------------------------------------------------------------------- store
 
-/// The accepted-artifact store: content-addressed, atomic, **never evicting**. It has no delete method.
+/// An object taken out of the store and not yet gone: in the trash, to be unlinked or put back.
+#[derive(Debug)]
+pub struct Removal {
+    trashed: PathBuf,
+    original: PathBuf,
+}
+
+/// The accepted-artifact store: content-addressed, atomic, **never evicting**. The only way an object leaves is
+/// [`ArtifactStore::remove`], which the retention sweep (RFC 005 part 5) calls for an artifact nothing needs any more.
 pub struct ArtifactStore {
     dir: Dir,
     /// Partial files removed when this store was opened (a crash's leftovers).
@@ -259,6 +267,15 @@ impl ArtifactStore {
     /// Open (creating) the store at `root`, removing orphaned `.partial` files.
     pub fn open(root: impl AsRef<Path>) -> Result<ArtifactStore, StoreError> {
         let (dir, mut cleaned) = Dir::open(root.as_ref())?;
+        // The trash: objects renamed out of `objects/` by `remove` and not yet unlinked when a kill came. They are not
+        // objects any more (nothing finds them by digest); the start-up finishes the removal.
+        let trash = dir.root.join("trash");
+        fs::create_dir_all(&trash).map_err(io_err("cannot create the trash directory"))?;
+        for e in fs::read_dir(&trash).map_err(io_err("cannot read the trash directory"))? {
+            let e = e.map_err(io_err("cannot read the trash directory"))?;
+            let _ = fs::remove_file(e.path());
+            cleaned += 1;
+        }
         // Working directories left by a crashed proposal: removed whole (they hold only uploads and outputs that
         // were never recorded; whatever was retained is in `objects/`).
         let work = dir.root.join("work");
@@ -325,6 +342,67 @@ impl ArtifactStore {
     /// The directory (for the sandbox's read-only `artifact-in` mount).
     pub fn root(&self) -> &Path {
         &self.dir.root
+    }
+
+    /// Remove the object `digest`: **rename it into the trash, then unlink it**, so a kill between the two leaves
+    /// nothing half-removed (the object is already gone for every reader that looks it up; the next start-up
+    /// unlinks what the trash still holds). Returns whether an object was there. A reader that opened the file
+    /// before keeps reading it (the file lives until the last handle closes).
+    ///
+    /// The caller decides that nothing needs the artifact: this method knows nothing of proposals. A caller that has
+    /// to look again after the object is out of reach (the retention sweep: a proposal may take the same artifact in
+    /// between) uses [`ArtifactStore::begin_remove`] and then `finish_remove` or `undo_remove`.
+    pub fn remove(&self, digest: &Digest) -> Result<bool, StoreError> {
+        match self.begin_remove(digest)? {
+            Some(removal) => self.finish_remove(removal).map(|()| true),
+            None => Ok(false),
+        }
+    }
+
+    /// The first half of [`ArtifactStore::remove`]: the object is renamed into the trash and so is gone for every
+    /// lookup. `None` if it was not there.
+    pub fn begin_remove(&self, digest: &Digest) -> Result<Option<Removal>, StoreError> {
+        let from = self.dir.object_path(digest);
+        if !from.is_file() {
+            return Ok(None);
+        }
+        let n = UNIQUE.fetch_add(1, Ordering::Relaxed);
+        let to = self.dir.root.join("trash").join(format!(
+            "{}.{}-{n}.trash",
+            digest.0,
+            std::process::id()
+        ));
+        fs::rename(&from, &to).map_err(io_err("cannot move an object into the trash"))?;
+        if let Some(shard) = from.parent()
+            && let Ok(d) = File::open(shard)
+        {
+            let _ = d.sync_all();
+        }
+        Ok(Some(Removal {
+            trashed: to,
+            original: from,
+        }))
+    }
+
+    /// The second half: unlink what [`ArtifactStore::begin_remove`] put in the trash.
+    pub fn finish_remove(&self, removal: Removal) -> Result<(), StoreError> {
+        fs::remove_file(&removal.trashed).map_err(io_err("cannot unlink a removed object"))
+    }
+
+    /// Put back what [`ArtifactStore::begin_remove`] took out, because something needs it after all. If the object has
+    /// been stored again in the meantime (same digest: the same bytes), the trashed copy is simply unlinked.
+    pub fn undo_remove(&self, removal: Removal) -> Result<(), StoreError> {
+        if removal.original.exists() {
+            return fs::remove_file(&removal.trashed)
+                .map_err(io_err("cannot unlink a removed object"));
+        }
+        fs::rename(&removal.trashed, &removal.original).map_err(io_err("cannot put an object back"))
+    }
+
+    /// Test seam: remove as far as a kill would stop it (renamed, not unlinked).
+    #[cfg(test)]
+    fn remove_until_unlink(&self, digest: &Digest) -> Result<Option<PathBuf>, StoreError> {
+        Ok(self.begin_remove(digest)?.map(|r| r.trashed))
     }
 
     /// Test seam: write the bytes but stop before the rename, as a crash would.
