@@ -58,7 +58,21 @@ fn stand_in(base: &Path, body: &str) -> PathBuf {
     )
     .unwrap();
     std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+    wait_until_runnable(&bin);
     bin
+}
+
+/// A script that was written a moment ago may be "busy" (ETXTBSY) if another test thread forked while our write handle was open;
+/// the child holds the handle only until its own `exec`. Wait until the script can be run.
+fn wait_until_runnable(bin: &Path) {
+    for _ in 0..200 {
+        match Command::new(bin).arg("--version").output() {
+            Err(e) if e.raw_os_error() == Some(26) => {
+                std::thread::sleep(std::time::Duration::from_millis(10))
+            }
+            _ => return,
+        }
+    }
 }
 
 fn argv_log(base: &Path) -> Vec<String> {

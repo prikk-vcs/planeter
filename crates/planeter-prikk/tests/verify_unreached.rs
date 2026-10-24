@@ -83,6 +83,14 @@ fn the_driver_reads_a_stand_in_verify_that_carries_the_new_array() {
     )
     .unwrap();
     std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+    for _ in 0..200 {
+        match Command::new(&bin).arg("--version").output() {
+            Err(e) if e.raw_os_error() == Some(26) => {
+                std::thread::sleep(std::time::Duration::from_millis(10))
+            }
+            _ => break,
+        }
+    }
     let repo = CliPrikkRepo::with_binary(dir.join("repo"), &bin).with_sandbox(Sandbox::Unconfined);
     let report = repo.verify().unwrap();
     assert!(report.verdict.ok);

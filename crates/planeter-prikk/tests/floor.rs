@@ -14,6 +14,14 @@ fn stand_in(name: &str, version: &str) -> (PathBuf, PathBuf) {
     let bin = dir.join("prikk");
     std::fs::write(&bin, format!("#!/bin/sh\necho 'prikk {version}'\n")).unwrap();
     std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
+    for _ in 0..200 {
+        match std::process::Command::new(&bin).arg("--version").output() {
+            Err(e) if e.raw_os_error() == Some(26) => {
+                std::thread::sleep(std::time::Duration::from_millis(10))
+            }
+            _ => break,
+        }
+    }
     (dir.join("repo"), bin)
 }
 
