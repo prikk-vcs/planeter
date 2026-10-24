@@ -32,8 +32,8 @@ use planeter_store::{
     Subject, UserId, Visibility,
 };
 use planeter_transport::{
-    ArtifactStore, ExportConfig, ExportService, Metrics, ProposeConfig, ProposeService,
-    RecoveryConfig, RecoveryService, Spool,
+    ArtifactStore, ExportConfig, ExportService, Metrics, ProposalConfig, ProposalService,
+    ProposeConfig, ProposeService, RecoveryConfig, RecoveryService, Spool,
 };
 use planeter_web::{AppState, ContentOrigin, RateLimiter, TransportRuntime, router};
 
@@ -354,6 +354,7 @@ struct World {
     sessions: Arc<planeter_auth::InMemorySessionStore>,
     recovery: Arc<RecoveryService>,
     recoveries: Arc<InMemoryRecoveries>,
+    artifacts: Arc<ArtifactStore>,
 }
 
 fn world(name: &str, o: Opts) -> World {
@@ -439,6 +440,7 @@ fn world(name: &str, o: Opts) -> World {
         ("tok-alice-ro", "alice", ScopeAccess::ReadOnly),
         ("tok-bob", "bob", ScopeAccess::Write),
         ("tok-carol", "carol", ScopeAccess::Write),
+        ("tok-carol-ro", "carol", ScopeAccess::ReadOnly),
         ("tok-dave", "dave", ScopeAccess::Write),
     ] {
         creds
@@ -493,7 +495,7 @@ fn world(name: &str, o: Opts) -> World {
     );
     let mut propose = ProposeService::new(
         hosting.clone(),
-        artifacts,
+        artifacts.clone(),
         leases.clone(),
         changes.clone() as Arc<dyn ChangeStore>,
         export.clone(),
@@ -505,10 +507,22 @@ fn world(name: &str, o: Opts) -> World {
         propose = propose.with_recovery(recovery.clone());
     }
     let propose = Arc::new(propose);
+    let proposals = Arc::new(
+        ProposalService::new(
+            hosting.clone(),
+            changes.clone() as Arc<dyn ChangeStore>,
+            export.clone(),
+            artifacts.clone(),
+            metrics.clone(),
+            ProposalConfig::default(),
+        )
+        .with_clock(now),
+    );
     let transport = Some(Arc::new(TransportRuntime {
         export: export.clone(),
         propose: (!o.without_propose).then(|| propose.clone()),
         recovery: Some(recovery.clone()),
+        proposals: Some(proposals.clone()),
         ip_limit: RateLimiter::new(o.ip_limit, Duration::from_secs(60)),
         principal_limit: RateLimiter::new(o.ip_limit, Duration::from_secs(60)),
     }));
@@ -543,6 +557,7 @@ fn world(name: &str, o: Opts) -> World {
         sessions,
         recovery,
         recoveries,
+        artifacts,
     }
 }
 
@@ -581,17 +596,96 @@ fn frame(meta: &serde_json::Value, artifact: &[u8]) -> Vec<u8> {
 }
 
 async fn send(r: &Router, req: Request<Body>) -> Reply {
+    let asked = std::env::var("PROPOSALS_TRANSCRIPT")
+        .is_ok()
+        .then(|| describe_request(&req));
     let resp = r.clone().oneshot(req).await.unwrap();
     let (status, headers) = (resp.status(), resp.headers().clone());
     let body = axum::body::to_bytes(resp.into_body(), 1 << 30)
         .await
         .unwrap()
         .to_vec();
+    if let Some(asked) = asked {
+        record_transcript(&asked, status, &headers, &body);
+    }
     Reply {
         status,
         headers,
         body,
     }
+}
+
+/// `PROPOSALS_TRANSCRIPT=<file>` appends every request of the proposals tests and its answer (the review request quotes it).
+fn describe_request(req: &Request<Body>) -> String {
+    let mut line = format!("{} {}", req.method(), req.uri());
+    for name in [
+        "authorization",
+        "range",
+        "if-range",
+        "if-none-match",
+        "cookie",
+    ] {
+        if let Some(v) = req.headers().get(name).and_then(|v| v.to_str().ok()) {
+            let shown = match name {
+                "authorization" => v.to_owned(),
+                "cookie" => "(a signed-in session)".to_owned(),
+                _ => v.to_owned(),
+            };
+            line += &format!("\n    {name}: {shown}");
+        }
+    }
+    line
+}
+
+fn record_transcript(asked: &str, status: StatusCode, headers: &HeaderMap, body: &[u8]) {
+    use std::io::Write as _;
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    let Ok(path) = std::env::var("PROPOSALS_TRANSCRIPT") else {
+        return;
+    };
+    let _guard = LOCK
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let mut out = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+        .unwrap();
+    let test = std::thread::current().name().unwrap_or("?").to_owned();
+    let mut text = format!("[{test}]\n> {asked}\n< {status}\n");
+    for name in [
+        "content-type",
+        "content-length",
+        "content-range",
+        "content-disposition",
+        "etag",
+        "accept-ranges",
+        "retry-after",
+    ] {
+        if let Some(v) = headers.get(name).and_then(|v| v.to_str().ok()) {
+            text += &format!("    {name}: {v}\n");
+        }
+    }
+    let printable = std::str::from_utf8(body).ok().filter(|b| {
+        headers
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .is_some_and(|c| c.starts_with("application/json") || c.starts_with("text/"))
+            || b.is_empty()
+    });
+    match printable {
+        Some(b) if b.starts_with('{') => {
+            let shown: String = b.chars().take(1500).collect();
+            text += &format!(
+                "    {shown}{}\n",
+                if shown.len() < b.len() { " …" } else { "" }
+            );
+        }
+        Some(b) if b.is_empty() => {}
+        Some(b) => text += &format!("    (a page of {} bytes)\n", b.len()),
+        None => text += &format!("    ({} bytes of the artifact)\n", body.len()),
+    }
+    let _ = writeln!(out, "{text}");
 }
 
 fn post_req(
@@ -2749,4 +2843,1189 @@ async fn an_artifact_one_patch_over_the_object_bound_is_refused_by_prikk_and_one
         String::from_utf8_lossy(&r.body)
     );
     assert_eq!(pending(&at.forge).len(), 3);
+}
+
+// ================================================================================================ proposals you can see
+// RFC 005 part 5: the list, the detail, closing, the download for reviewers, the retention sweep, and the pages. Real
+// prikk (self-skipping). Landing is observed from facts: a patch counts as landed only when the repository no longer
+// holds it as pending **and** a block the repository lists contains it.
+
+#[allow(dead_code)]
+#[path = "structure/dom.rs"]
+mod dom;
+#[allow(dead_code)]
+#[path = "structure/rules.rs"]
+mod rules;
+
+static PROPOSAL_NAME: AtomicU64 = AtomicU64::new(0);
+
+async fn get_as(w: &World, uri: &str, token: Option<&str>, extra: &[(&str, &str)]) -> Reply {
+    let mut req = Request::builder().method("GET").uri(uri);
+    if let Some(t) = token {
+        req = req.header("authorization", format!("Bearer {t}"));
+    }
+    for (k, v) in extra {
+        req = req.header(*k, *v);
+    }
+    send(&w.router, req.body(Body::empty()).unwrap()).await
+}
+
+async fn close_as(w: &World, repo: &str, id: &str, token: Option<&str>, body: &str) -> Reply {
+    let mut req = Request::builder()
+        .method("POST")
+        .uri(format!("/api/v1/repos/alice/{repo}/proposals/{id}/close"))
+        .header("content-type", "application/json");
+    if let Some(t) = token {
+        req = req.header("authorization", format!("Bearer {t}"));
+    }
+    send(&w.router, req.body(Body::from(body.to_owned())).unwrap()).await
+}
+
+fn repo_dir(w: &World, repo: &str) -> PathBuf {
+    match repo {
+        "forge" => w.forge.clone(),
+        other => w.base.join(other),
+    }
+}
+
+/// Commit `n` patches in the client and propose them to `repo` as `token`; the id of the proposal.
+async fn make_proposal(w: &mut World, repo: &str, token: &str, title: &str, n: u32) -> String {
+    make_proposal_on(w, repo, token, title, n, true).await
+}
+
+/// As `make_proposal`; `with_base: false` leaves the base out (the repository may not hold the client's previous tip).
+async fn make_proposal_on(
+    w: &mut World,
+    repo: &str,
+    token: &str,
+    title: &str,
+    n: u32,
+    with_base: bool,
+) -> String {
+    w.client.commit(n);
+    let name = format!("p{}", PROPOSAL_NAME.fetch_add(1, Ordering::Relaxed));
+    let art = w.client.artifact(&repo_dir(w, repo), &name);
+    let declared = w.client.patch_ids(n as usize);
+    let reply = propose_as(
+        w,
+        repo,
+        token,
+        serde_json::json!({
+            "title": title,
+            "description": "Some *words* about it.\n\n<script>alert(1)</script>",
+            "target_ref": "heads/main",
+            "base": with_base.then(|| w.client.tip_before(n as usize)),
+            "declared_patches": with_base.then_some(declared),
+            "client": "tests/1"
+        }),
+        &art,
+    )
+    .await;
+    assert_eq!(
+        reply.status,
+        StatusCode::CREATED,
+        "{}",
+        String::from_utf8_lossy(&reply.body)
+    );
+    reply.json()["proposal_id"].as_str().unwrap().to_owned()
+}
+
+fn session_for(w: &World, user: &str) -> String {
+    use planeter_auth::SessionStore as _;
+    let s = w
+        .sessions
+        .create(UserId::new(user), now(), now() + 3600)
+        .unwrap();
+    format!("planeter_csrf=tok123; planeter_session={}", s.id.0)
+}
+
+async fn page_as(w: &World, method: &str, uri: &str, cookie: Option<&str>, lang: &str) -> Reply {
+    let mut req = Request::builder()
+        .method(method)
+        .uri(uri)
+        .header("host", "forge.example")
+        .header("accept-language", lang);
+    if let Some(c) = cookie {
+        req = req.header("cookie", c);
+    }
+    send(&w.router, req.body(Body::empty()).unwrap()).await
+}
+
+async fn form_as(w: &World, uri: &str, cookie: Option<&str>, form: &str) -> Reply {
+    let mut req = Request::builder()
+        .method("POST")
+        .uri(uri)
+        .header("host", "forge.example")
+        .header("content-type", "application/x-www-form-urlencoded");
+    if let Some(c) = cookie {
+        req = req.header("cookie", c);
+    }
+    send(&w.router, req.body(Body::from(form.to_owned())).unwrap()).await
+}
+
+fn text(r: &Reply) -> String {
+    String::from_utf8_lossy(&r.body).into_owned()
+}
+
+fn claims_of(w: &World, id: &str) -> Vec<String> {
+    w.changes
+        .revisions_of(id)
+        .unwrap()
+        .iter()
+        .flat_map(|r| r.claim_ids.clone())
+        .collect()
+}
+
+/// A maintainer seals one accepted claim into `heads/main` of the forge (what the owner does on their own computer; the
+/// test holds the key).
+fn seal_claim(w: &World, repo: &str, claim: &str) {
+    prikk(
+        &repo_dir(w, repo),
+        &w.client.keys,
+        &["sync", "seal", "heads/main", "--claim", claim],
+    );
+}
+
+#[tokio::test]
+async fn the_list_and_the_detail_show_what_is_held_for_review_and_say_nothing_more() {
+    if skip() {
+        return;
+    }
+    let mut w = world("pr-list", Opts::default());
+    let id = make_proposal(&mut w, "forge", "tok-alice", "Two small changes", 2).await;
+
+    // A reader, and an anonymous caller of a public repository, see it.
+    for token in [Some("tok-bob"), None] {
+        let r = get_as(&w, "/api/v1/repos/alice/forge/proposals", token, &[]).await;
+        assert_eq!(r.status, StatusCode::OK, "{}", text(&r));
+        let v = r.json();
+        let list = v["proposals"].as_array().unwrap();
+        assert_eq!(list.len(), 1);
+        let p = &list[0];
+        assert_eq!(p["id"], id.as_str());
+        assert_eq!(p["title"], "Two small changes");
+        assert_eq!(p["state"], "open");
+        assert_eq!(p["opened_by"], "alice");
+        assert_eq!(p["revision_count"], 1);
+        assert_eq!(p["patch_count"], 2);
+        assert_eq!(p["built_on"], true);
+        assert!(p["retention"].is_null(), "an open proposal has no end date");
+        assert!(v["next"].is_null());
+    }
+
+    let d = get_as(
+        &w,
+        &format!("/api/v1/repos/alice/forge/proposals/{id}"),
+        Some("tok-bob"),
+        &[],
+    )
+    .await;
+    assert_eq!(d.status, StatusCode::OK, "{}", text(&d));
+    let v = d.json();
+    assert_eq!(v["state"], "open");
+    assert!(v["landed_at"].is_null());
+    assert_eq!(v["still_pending"], 2);
+    assert_eq!(v["patch_total"], 2);
+    assert_eq!(v["truncated"], false);
+    let patches = v["patches"].as_array().unwrap();
+    assert_eq!(patches.len(), 2);
+    assert!(
+        patches
+            .iter()
+            .all(|p| p["assurance"] == "forge-approved-unsealed"),
+        "held, not signed in: never more than that"
+    );
+    // The description is shown as text and as sanitised HTML: the script is gone from the HTML.
+    assert!(
+        v["description"]["source"]
+            .as_str()
+            .unwrap()
+            .contains("<script>")
+    );
+    let html = v["description"]["html"].as_str().unwrap();
+    assert!(html.contains("<em>words</em>"), "{html}");
+    assert!(!html.contains("<script"), "{html}");
+    let rev = &v["revisions"][0];
+    assert_eq!(rev["seq"], 1);
+    assert_eq!(rev["submitter"], "alice");
+    assert_eq!(rev["declared"], true);
+    assert_eq!(rev["added_count"], 2);
+    assert_eq!(rev["artifact_available"], true);
+    assert_eq!(rev["claims"].as_array().unwrap().len(), 2);
+    assert!(
+        v["note"]
+            .as_str()
+            .unwrap()
+            .contains("does not merge anything")
+    );
+
+    // Nothing about another repository's proposal, or an unknown one, differs from "no such proposal".
+    let unknown = get_as(
+        &w,
+        "/api/v1/repos/alice/forge/proposals/nope",
+        Some("tok-bob"),
+        &[],
+    )
+    .await;
+    let other_repo = get_as(
+        &w,
+        &format!("/api/v1/repos/alice/anyauth/proposals/{id}"),
+        Some("tok-bob"),
+        &[],
+    )
+    .await;
+    assert_eq!(unknown.status, StatusCode::NOT_FOUND);
+    assert_eq!(other_repo.status, StatusCode::NOT_FOUND);
+    assert_eq!(unknown.body, other_repo.body);
+
+    // A private repository: a stranger is told nothing, for the list and for an id alike.
+    for uri in [
+        "/api/v1/repos/alice/private/proposals".to_owned(),
+        format!("/api/v1/repos/alice/private/proposals/{id}"),
+    ] {
+        let r = get_as(&w, &uri, Some("tok-carol"), &[]).await;
+        assert_eq!(r.status, StatusCode::NOT_FOUND, "{uri}");
+    }
+
+    // Bad queries are refused by name.
+    for (q, reason) in [("state=weird", "unknown_state"), ("limit=0", "limit_zero")] {
+        let r = get_as(
+            &w,
+            &format!("/api/v1/repos/alice/forge/proposals?{q}"),
+            Some("tok-bob"),
+            &[],
+        )
+        .await;
+        assert_eq!(r.status, StatusCode::BAD_REQUEST, "{q}");
+        assert_eq!(r.json()["reason"], reason);
+    }
+    let r = get_as(
+        &w,
+        "/api/v1/repos/alice/forge/proposals?state=landed",
+        Some("tok-bob"),
+        &[],
+    )
+    .await;
+    assert_eq!(r.json()["proposals"].as_array().unwrap().len(), 0);
+}
+
+#[tokio::test]
+async fn a_proposal_lands_only_when_every_patch_is_in_a_sealed_block_and_none_is_pending() {
+    if skip() {
+        return;
+    }
+    let mut w = world("pr-landing", Opts::default());
+    let id = make_proposal(&mut w, "forge", "tok-alice", "Two patches", 2).await;
+    let claims = claims_of(&w, &id);
+    assert_eq!(claims.len(), 2);
+    assert_eq!(detail_of(&w, &id).await["state"], "open");
+
+    // One of the two claims sealed: one patch is in a block, the other is still pending. Not landed.
+    seal_claim(&w, "forge", &claims[0]);
+    let v = detail_of(&w, &id).await;
+    assert_eq!(v["state"], "open", "half of it is in the history");
+    assert_eq!(v["still_pending"], 1);
+    let mut kinds: Vec<String> = v["patches"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| p["assurance"].as_str().unwrap_or("none").to_owned())
+        .collect();
+    kinds.sort();
+    assert_eq!(kinds, ["forge-approved-unsealed", "sealed"]);
+
+    // The other sealed too: every patch is in a block and none is pending. Landed, observed from the repository.
+    seal_claim(&w, "forge", &claims[1]);
+    let v = detail_of(&w, &id).await;
+    assert_eq!(v["state"], "landed", "{v}");
+    assert!(v["landed_at"].is_number());
+    assert_eq!(v["still_pending"], 0);
+    assert!(
+        v["patches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|p| p["assurance"] == "sealed")
+    );
+    // A landed proposal keeps its artifacts for the grace period.
+    assert_eq!(v["retention"]["state"], "kept");
+    let open = get_as(
+        &w,
+        "/api/v1/repos/alice/forge/proposals",
+        Some("tok-bob"),
+        &[],
+    )
+    .await
+    .json();
+    assert_eq!(open["proposals"].as_array().unwrap().len(), 0);
+    let landed = get_as(
+        &w,
+        "/api/v1/repos/alice/forge/proposals?state=landed",
+        Some("tok-bob"),
+        &[],
+    )
+    .await
+    .json();
+    assert_eq!(landed["proposals"][0]["id"], id.as_str());
+
+    // Landed is final: it cannot be closed any more.
+    let r = close_as(&w, "forge", &id, Some("tok-alice"), r#"{"reason":"late"}"#).await;
+    assert_eq!(r.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(r.code(), "proposal_final");
+    assert_eq!(r.json()["state"], "landed");
+}
+
+/// Patches that are not pending and are in no block the repository lists have not landed: leaving the pending list
+/// is not landing. (The records are seeded: the forge cannot be made to drop a pending patch without sealing it.)
+#[tokio::test]
+async fn a_patch_that_is_merely_absent_from_pending_is_not_landed() {
+    if skip() {
+        return;
+    }
+    let w = world("pr-negative", Opts::default());
+    let repo = RepoId::new("r-forge");
+    let ids: Vec<String> = (1..=2).map(|n| format!("{n:064x}")).collect();
+    let revision = planeter_store::RevisionRecord {
+        revision_id: "v-neg".into(),
+        change_id: "c-neg".into(),
+        repo_id: repo.clone(),
+        seq: 1,
+        artifact_digest: format!("sha256:{:064x}", 7),
+        artifact_bytes: 10,
+        declared_base: None,
+        claim_ids: vec![format!("{:064x}", 9)],
+        added_patch_ids: ids.clone(),
+        declared_patch_ids: Some(ids.clone()),
+        claim_outcomes: vec![],
+        submitter: "alice".into(),
+        author_key_ids: vec![],
+        created_at: now(),
+    };
+    let change = planeter_store::ChangeRecord {
+        change_id: "c-neg".into(),
+        repo_id: repo.clone(),
+        title: "Gone from pending, never sealed".into(),
+        description: String::new(),
+        target_ref: None,
+        state: ChangeState::Open,
+        closed_reason: None,
+        opened_by: "alice".into(),
+        opened_at: now(),
+        updated_at: now(),
+        retain_until: None,
+    };
+    w.changes
+        .open_or_resume_intent(
+            "i-neg",
+            &repo,
+            &revision.artifact_digest,
+            0,
+            &[],
+            "alice",
+            now(),
+        )
+        .unwrap();
+    w.changes
+        .complete_intent_with_revision("i-neg", Some(&change), &revision, now())
+        .unwrap();
+    assert!(pending(&w.forge).is_empty());
+
+    let v = get_as(
+        &w,
+        "/api/v1/repos/alice/forge/proposals/c-neg",
+        Some("tok-bob"),
+        &[],
+    )
+    .await
+    .json();
+    assert_eq!(v["state"], "open", "{v}");
+    assert!(
+        v["patches"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|p| p["assurance"].is_null()),
+        "nothing is claimed about a patch that is neither held nor in the history"
+    );
+    assert_eq!(v["still_pending"], 0);
+}
+
+#[tokio::test]
+async fn closing_needs_a_reason_and_belongs_to_the_opener_or_to_whoever_may_close() {
+    if skip() {
+        return;
+    }
+    let mut w = world("pr-close", Opts::default());
+    // carol may propose to `anyauth` (any signed-in account) but holds no role there.
+    let mine = make_proposal(&mut w, "anyauth", "tok-carol", "Carol's", 1).await;
+    let uri = format!("/api/v1/repos/alice/anyauth/proposals/{mine}");
+
+    // A stranger who can read the repository: refused, by name, with the hint.
+    for (who, body) in [
+        (Some("tok-bob"), r#"{"reason":"no"}"#),
+        (None, r#"{"reason":"no"}"#),
+    ] {
+        let r = close_as(&w, "anyauth", &mine, who, body).await;
+        assert_eq!(r.status, StatusCode::FORBIDDEN, "{who:?}");
+        assert_eq!(r.code(), "forbidden");
+    }
+    // The opener with a read-only credential: the proposal is theirs, the token is not allowed to close anything.
+    let r = close_as(
+        &w,
+        "anyauth",
+        &mine,
+        Some("tok-carol-ro"),
+        r#"{"reason":"no"}"#,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::FORBIDDEN, "{}", text(&r));
+    assert_eq!(r.code(), "forbidden");
+    // The reason is required, and bounded.
+    for body in ["{}", r#"{"reason":""}"#, r#"{"reason":"   "}"#] {
+        let r = close_as(&w, "anyauth", &mine, Some("tok-carol"), body).await;
+        assert_eq!(r.status, StatusCode::UNPROCESSABLE_ENTITY, "{body}");
+        assert_eq!(r.code(), "reason_required");
+    }
+    let long = format!(r#"{{"reason":"{}"}}"#, "x".repeat(1001));
+    let r = close_as(&w, "anyauth", &mine, Some("tok-carol"), &long).await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST);
+    assert_eq!(r.json()["reason"], "reason_too_long");
+    let r = close_as(
+        &w,
+        "anyauth",
+        &mine,
+        Some("tok-carol"),
+        r#"{"reason":"x","extra":1}"#,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST);
+    assert_eq!(r.json()["reason"], "unknown_field");
+    let r = close_as(&w, "anyauth", &mine, Some("tok-carol"), "not json").await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST);
+    assert_eq!(r.json()["reason"], "not_json");
+
+    // Nothing changed so far.
+    let v = get_as(&w, &uri, None, &[]).await.json();
+    assert_eq!(v["state"], "open");
+
+    // The opener closes it, with a reason; the record and the files stay.
+    let r = close_as(
+        &w,
+        "anyauth",
+        &mine,
+        Some("tok-carol"),
+        r#"{"reason":"Superseded by another way"}"#,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{}", text(&r));
+    let v = r.json();
+    assert_eq!(v["state"], "closed");
+    assert_eq!(v["closed_reason"], "Superseded by another way");
+    assert!(v["retain_until"].as_u64().unwrap() > now());
+    let d = get_as(&w, &uri, None, &[]).await.json();
+    assert_eq!(d["state"], "closed");
+    assert_eq!(d["closed_reason"], "Superseded by another way");
+    assert_eq!(d["retention"]["state"], "kept");
+    assert_eq!(d["revisions"][0]["artifact_available"], true);
+
+    // Twice is refused: closed is final.
+    let r = close_as(
+        &w,
+        "anyauth",
+        &mine,
+        Some("tok-carol"),
+        r#"{"reason":"again"}"#,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(r.code(), "proposal_final");
+    assert_eq!(r.json()["state"], "closed");
+
+    // A read-only credential of the opener is not enough; a maintainer's (write) is, for anyone's proposal.
+    let theirs = make_proposal_on(&mut w, "forge", "tok-dave", "Dave's", 1, false).await;
+    let r = close_as(
+        &w,
+        "forge",
+        &theirs,
+        Some("tok-alice-ro"),
+        r#"{"reason":"x"}"#,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::FORBIDDEN);
+    let r = close_as(&w, "forge", &theirs, Some("tok-bob"), r#"{"reason":"x"}"#).await;
+    assert_eq!(r.status, StatusCode::FORBIDDEN, "bob only reads here");
+    let r = close_as(
+        &w,
+        "forge",
+        &theirs,
+        Some("tok-alice"),
+        r#"{"reason":"Not wanted"}"#,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{}", text(&r));
+
+    // Unknown ids are `404` before anything is said about permission; a private repository is `404` to a stranger.
+    let r = close_as(&w, "forge", "nope", Some("tok-bob"), r#"{"reason":"x"}"#).await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND);
+    let r = close_as(&w, "private", &mine, Some("tok-carol"), r#"{"reason":"x"}"#).await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND);
+
+    // The cookie of a signed-in browser is not a credential here: the route is for tokens.
+    let cookie = session_for(&w, "alice");
+    let theirs2 = make_proposal_on(&mut w, "forge", "tok-dave", "Dave's second", 1, false).await;
+    let req = Request::builder()
+        .method("POST")
+        .uri(format!(
+            "/api/v1/repos/alice/forge/proposals/{theirs2}/close"
+        ))
+        .header("content-type", "application/json")
+        .header("cookie", cookie)
+        .body(Body::from(r#"{"reason":"x"}"#))
+        .unwrap();
+    let r = send(&w.router, req).await;
+    assert_eq!(r.status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn reviewers_download_the_accepted_files_byte_for_byte_and_the_sweep_removes_them_after_the_grace()
+ {
+    if skip() {
+        return;
+    }
+    let mut w = world("pr-download", Opts::default());
+    w.client.commit(1);
+    let art = w.client.artifact(&w.forge, "dl");
+    let reply = propose_as(
+        &w,
+        "forge",
+        "tok-alice",
+        serde_json::json!({"title": "To download", "base": w.client.tip_before(1), "client": "tests/1"}),
+        &art,
+    )
+    .await;
+    assert_eq!(reply.status, StatusCode::CREATED, "{}", text(&reply));
+    let id = reply.json()["proposal_id"].as_str().unwrap().to_owned();
+    let uri = format!("/api/v1/repos/alice/forge/proposals/{id}/revisions/1/artifact");
+
+    // dave writes here (he may review); bob only reads; an anonymous caller reads a public repository.
+    let r = get_as(&w, &uri, Some("tok-dave"), &[]).await;
+    assert_eq!(r.status, StatusCode::OK);
+    assert_eq!(r.body, art, "byte for byte what was accepted");
+    assert_eq!(r.h("content-type"), "application/octet-stream");
+    assert!(r.h("content-disposition").contains("attachment"));
+    assert!(
+        r.h("content-disposition")
+            .contains(&format!("forge-proposal-{id}-r1.prikk-sync"))
+    );
+    let digest = planeter_auth::sha256_hex(&art);
+    assert_eq!(r.h("etag"), format!("\"{digest}\""));
+    for who in [Some("tok-bob"), None] {
+        let r = get_as(&w, &uri, who, &[]).await;
+        assert_eq!(r.status, StatusCode::FORBIDDEN, "{who:?}");
+        assert_eq!(r.code(), "forbidden");
+    }
+    // A private repository: `404` to a stranger.
+    let r = get_as(
+        &w,
+        &format!("/api/v1/repos/alice/private/proposals/{id}/revisions/1/artifact"),
+        Some("tok-carol"),
+        &[],
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::NOT_FOUND);
+    // No such revision, or not a number.
+    for tail in ["2", "0", "x"] {
+        let r = get_as(
+            &w,
+            &format!("/api/v1/repos/alice/forge/proposals/{id}/revisions/{tail}/artifact"),
+            Some("tok-dave"),
+            &[],
+        )
+        .await;
+        assert_eq!(r.status, StatusCode::NOT_FOUND, "{tail}");
+    }
+
+    // Ranges: a part, and the rest from a point; a conditional request; an unsatisfiable one.
+    let etag = r_etag(&w, &uri).await;
+    let part = get_as(&w, &uri, Some("tok-dave"), &[("range", "bytes=10-99")]).await;
+    assert_eq!(part.status, StatusCode::PARTIAL_CONTENT);
+    assert_eq!(part.body, art[10..100]);
+    assert_eq!(
+        part.h("content-range"),
+        format!("bytes 10-99/{}", art.len())
+    );
+    let rest = get_as(&w, &uri, Some("tok-dave"), &[("range", "bytes=100-")]).await;
+    assert_eq!([&art[..100], &rest.body[..]].concat(), art);
+    let same = get_as(&w, &uri, Some("tok-dave"), &[("if-none-match", &etag)]).await;
+    assert_eq!(same.status, StatusCode::NOT_MODIFIED);
+    let stale = get_as(
+        &w,
+        &uri,
+        Some("tok-dave"),
+        &[("range", "bytes=10-99"), ("if-range", "\"other\"")],
+    )
+    .await;
+    assert_eq!(
+        stale.status,
+        StatusCode::OK,
+        "a stale validator gets the whole file"
+    );
+    let big = get_as(
+        &w,
+        &uri,
+        Some("tok-dave"),
+        &[("range", &format!("bytes={}-", art.len() + 5))],
+    )
+    .await;
+    assert_eq!(big.status, StatusCode::RANGE_NOT_SATISFIABLE);
+
+    // The sweep: nothing before the grace ends, and nothing while the proposal is open.
+    let sweeper = |later: fn() -> u64| {
+        ProposalService::new(
+            w.hosting.clone(),
+            w.changes.clone() as Arc<dyn ChangeStore>,
+            w.export.clone(),
+            w.artifacts.clone(),
+            w.metrics.clone(),
+            ProposalConfig::default(),
+        )
+        .with_clock(later)
+    };
+    fn after_grace() -> u64 {
+        now() + 31 * 86_400
+    }
+    let report = sweeper(after_grace).sweep();
+    assert_eq!(report.removed, 0, "an open proposal's files are kept");
+    let r = close_as(
+        &w,
+        "forge",
+        &id,
+        Some("tok-alice"),
+        r#"{"reason":"Done with"}"#,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK);
+    fn within_grace() -> u64 {
+        now() + 29 * 86_400
+    }
+    assert_eq!(
+        sweeper(within_grace).sweep().removed,
+        0,
+        "kept until the grace ends"
+    );
+    assert_eq!(
+        get_as(&w, &uri, Some("tok-dave"), &[]).await.status,
+        StatusCode::OK
+    );
+    let report = sweeper(after_grace).sweep();
+    assert_eq!(report.removed, 1, "{report:?}");
+    let gone = get_as(&w, &uri, Some("tok-dave"), &[]).await;
+    assert_eq!(gone.status, StatusCode::GONE);
+    assert_eq!(gone.code(), "artifact_removed");
+    assert!(gone.json()["kept_until"].as_u64().unwrap() > now());
+    assert!(
+        gone.json()["message"]
+            .as_str()
+            .unwrap()
+            .contains("kept until 19"),
+        "{}",
+        text(&gone)
+    );
+    // The record stays and says what became of the files.
+    let d = get_as(
+        &w,
+        &format!("/api/v1/repos/alice/forge/proposals/{id}"),
+        Some("tok-bob"),
+        &[],
+    )
+    .await
+    .json();
+    assert_eq!(d["state"], "closed");
+    assert_eq!(d["retention"]["state"], "removed");
+    assert_eq!(d["revisions"][0]["artifact_available"], false);
+    // The page says the same in words, and no longer offers the download.
+    let owner = session_for(&w, "alice");
+    let page = text(
+        &page_as(
+            &w,
+            "GET",
+            &format!("/alice/forge/proposals/{id}"),
+            Some(&owner),
+            "en",
+        )
+        .await,
+    );
+    assert!(
+        page.contains("The files of this proposal were kept until 19"),
+        "{page}"
+    );
+    assert!(page.contains("have since been removed."), "{page}");
+    assert!(page.contains("Removed"), "{page}");
+    assert!(!page.contains("/artifact"), "{page}");
+    // Running it again finds nothing to do.
+    assert_eq!(sweeper(after_grace).sweep().removed, 0);
+}
+
+async fn detail_of(w: &World, id: &str) -> serde_json::Value {
+    get_as(
+        w,
+        &format!("/api/v1/repos/alice/forge/proposals/{id}"),
+        Some("tok-bob"),
+        &[],
+    )
+    .await
+    .json()
+}
+
+async fn r_etag(w: &World, uri: &str) -> String {
+    get_as(w, uri, Some("tok-dave"), &[])
+        .await
+        .h("etag")
+        .to_owned()
+}
+
+fn violations(html: &str) -> Vec<String> {
+    rules::check(&dom::parse(html))
+        .into_iter()
+        .map(|v| format!("{}: {}", v.rule, v.detail))
+        .collect()
+}
+
+fn unfilled(page: &str) -> Option<String> {
+    let b: Vec<char> = page.chars().collect();
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == '{' {
+            let mut j = i + 1;
+            while j < b.len() && (b[j].is_ascii_lowercase() || b[j] == '_') {
+                j += 1;
+            }
+            if j > i + 1 && j < b.len() && b[j] == '}' {
+                return Some(b[i..=j].iter().collect());
+            }
+        }
+        i += 1;
+    }
+    None
+}
+
+#[tokio::test]
+async fn the_pages_say_the_default_view_in_plain_words_and_keep_the_rest_under_details() {
+    if skip() {
+        return;
+    }
+    let mut w = world("pr-pages", Opts::default());
+    // Before any proposal: bob may not propose here (members only) and the repository has none: no link.
+    let home = page_as(&w, "GET", "/alice/forge", None, "en").await;
+    assert_eq!(home.status, StatusCode::OK);
+    assert!(
+        !text(&home).contains("/alice/forge/proposals"),
+        "no link without a proposal and without the right to propose"
+    );
+    let write = session_for(&w, "dave");
+    let home = page_as(&w, "GET", "/alice/forge", Some(&write), "en").await;
+    assert!(
+        text(&home).contains(">Proposals</a>"),
+        "a person who may propose sees the link"
+    );
+
+    let id = make_proposal(&mut w, "forge", "tok-alice", "Two small changes", 2).await;
+    let anon_home = page_as(&w, "GET", "/alice/forge", None, "en").await;
+    let h = text(&anon_home);
+    assert!(h.contains(">Proposals</a>"), "{h}");
+    assert!(h.contains("1 open proposal"), "{h}");
+    assert!(!h.contains("1 open proposals"));
+
+    // The list.
+    let list = page_as(&w, "GET", "/alice/forge/proposals", None, "en").await;
+    assert_eq!(list.status, StatusCode::OK, "{}", text(&list));
+    let l = text(&list);
+    assert!(
+        l.contains("<title>Proposals · alice/forge · planeter</title>"),
+        "{l}"
+    );
+    assert!(
+        l.contains(&format!(
+            "<a href=\"/alice/forge/proposals/{id}\">Two small changes</a>"
+        )),
+        "{l}"
+    );
+    assert!(l.contains("2 patches in 1 revision"), "{l}");
+    assert!(l.contains("<span class=\"badge\">Open</span>"), "{l}");
+    assert!(l.contains("aria-current=\"page\""), "{l}");
+    assert_eq!(violations(&l), Vec::<String>::new(), "{l}");
+    assert_eq!(unfilled(&l), None);
+
+    // The detail: the default view, then everything else under one <details>.
+    let d = page_as(
+        &w,
+        "GET",
+        &format!("/alice/forge/proposals/{id}"),
+        None,
+        "en",
+    )
+    .await;
+    assert_eq!(d.status, StatusCode::OK, "{}", text(&d));
+    let p = text(&d);
+    assert!(
+        p.contains("<title>Two small changes · Proposals · alice/forge · planeter</title>"),
+        "{p}"
+    );
+    assert!(
+        p.contains("<h1>Two small changes <span class=\"badge\">Open</span></h1>"),
+        "{p}"
+    );
+    assert!(
+        p.contains("Held for review: not yet part of the project&#39;s history.")
+            || p.contains("Held for review: not yet part of the project's history."),
+        "{p}"
+    );
+    assert!(p.contains("Proposed by alice"), "{p}");
+    assert!(p.contains("2 patches in 1 revision"), "{p}");
+    assert!(
+        p.contains("The file-by-file view is not available yet."),
+        "{p}"
+    );
+    assert_eq!(
+        p.matches("<details").count() - p.matches("<details class=\"explain\"").count(),
+        1,
+        "one Details"
+    );
+    let (before, after) = p
+        .split_once("<summary>Details</summary>")
+        .expect("a Details section");
+    for later in ["Revisions", "Description", "Patches", "ed25519"] {
+        assert!(
+            !before.contains(later) || later == "Patches" && before.contains("2 patches"),
+            "{later} is under Details:\n{before}"
+        );
+    }
+    assert!(after.contains("<h2>Revisions</h2>"), "{after}");
+    assert!(after.contains("<h2>Patches</h2>"), "{after}");
+    assert!(
+        after.contains("<em>words</em>"),
+        "the description is rendered: {after}"
+    );
+    assert!(!p.contains("<script"), "the description is sanitised");
+    assert!(
+        p.contains("badge warn") || after.contains("Queued"),
+        "the existing badge for a held patch: {after}"
+    );
+    assert!(
+        !before.contains("Download"),
+        "an anonymous reader has no download"
+    );
+    assert!(
+        !p.contains("/artifact"),
+        "no download link anywhere on the page, Details included"
+    );
+    assert!(
+        !p.contains("Removed"),
+        "files that are kept are not called removed, whoever is looking"
+    );
+    assert!(
+        !p.contains("<details open"),
+        "Details is closed until it is opened"
+    );
+    assert!(
+        !p.contains("Close proposal"),
+        "an anonymous reader has no close form"
+    );
+    assert!(
+        !p.contains("Review state") && !p.contains("Checks"),
+        "nothing about things that do not exist yet"
+    );
+    assert_eq!(violations(&p), Vec::<String>::new(), "{p}");
+    assert_eq!(unfilled(&p), None);
+
+    // A reviewer sees the download; the owner sees the form.
+    let owner = session_for(&w, "alice");
+    let d = text(
+        &page_as(
+            &w,
+            "GET",
+            &format!("/alice/forge/proposals/{id}"),
+            Some(&owner),
+            "en",
+        )
+        .await,
+    );
+    assert!(
+        d.contains(&format!(
+            "/api/v1/repos/alice/forge/proposals/{id}/revisions/1/artifact"
+        )),
+        "{d}"
+    );
+    assert!(d.contains("Download the files of revision 1"), "{d}");
+    assert!(
+        d.contains("Closing keeps the record and the files; nobody can reopen it."),
+        "{d}"
+    );
+    assert!(
+        d.contains("<button type=\"submit\">Close proposal</button>"),
+        "{d}"
+    );
+    assert_eq!(violations(&d), Vec::<String>::new(), "{d}");
+
+    // Two languages beside English: the Japanese draft (previewed) passes the same structural rules, and the test language
+    // (right to left, every catalog message wrapped in ‹ ›) fills every placeholder and shows no catalog sentence unwrapped.
+    planeter_web::catalog::enable_preview_languages("ja").expect("ja is previewable");
+    register_qaa();
+    let dump = std::env::var("PROPOSALS_HTML_DUMP").ok().map(PathBuf::from);
+    if let Some(dir) = &dump {
+        std::fs::create_dir_all(dir).unwrap();
+        std::fs::write(dir.join("list-en.html"), &l).unwrap();
+        std::fs::write(dir.join("detail-en.html"), &p).unwrap();
+        std::fs::write(dir.join("detail-owner-en.html"), &d).unwrap();
+    }
+    for (name, uri) in [
+        ("list", "/alice/forge/proposals".to_owned()),
+        ("detail", format!("/alice/forge/proposals/{id}")),
+        ("repo", "/alice/forge".to_owned()),
+    ] {
+        let ja = page_as(&w, "GET", &uri, Some(&owner), "ja").await;
+        assert_eq!(ja.status, StatusCode::OK, "ja {uri}");
+        let ja = text(&ja);
+        assert!(
+            ja.contains("<html lang=\"ja\""),
+            "ja {uri}: not served in Japanese"
+        );
+        assert!(ja.contains("提案"), "ja {uri}");
+        assert_eq!(unfilled(&ja), None, "ja {uri}");
+        assert_eq!(violations(&ja), Vec::<String>::new(), "ja {uri}: {ja}");
+        let qaa = text(&page_as(&w, "GET", &uri, Some(&owner), "qaa").await);
+        assert!(qaa.contains("<html lang=\"qaa\" dir=\"rtl\">"), "qaa {uri}");
+        assert_eq!(unfilled(&qaa), None, "qaa {uri}");
+        assert!(
+            qaa.contains("‹Proposals›") || name == "repo",
+            "qaa {uri}: the nav is not from the catalog"
+        );
+        if let Some(dir) = &dump {
+            std::fs::write(dir.join(format!("{name}-ja.html")), &ja).unwrap();
+            std::fs::write(dir.join(format!("{name}-qaa.html")), &qaa).unwrap();
+        }
+    }
+
+    // Closing from the page: a wrong token and a stranger are refused; the owner's form works and lands on the page.
+    let uri = format!("/alice/forge/proposals/{id}/close");
+    let r = form_as(&w, &uri, Some(&owner), "csrf=bogus&reason=x").await;
+    assert_eq!(r.status, StatusCode::FORBIDDEN);
+    let bob = session_for(&w, "bob");
+    let r = form_as(&w, &uri, Some(&bob), "csrf=tok123&reason=because").await;
+    assert_eq!(r.status, StatusCode::FORBIDDEN, "{}", text(&r));
+    assert!(
+        text(&r).contains("only the person who made this proposal, or a maintainer, can close it")
+    );
+    let r = form_as(&w, &uri, Some(&owner), "csrf=tok123&reason=").await;
+    assert_eq!(r.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(text(&r).contains("A proposal is closed with a reason"));
+    let r = form_as(
+        &w,
+        &uri,
+        Some(&owner),
+        "csrf=tok123&reason=Not+needed+any+more",
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::SEE_OTHER, "{}", text(&r));
+    assert_eq!(r.h("location"), format!("/alice/forge/proposals/{id}"));
+    let closed = text(
+        &page_as(
+            &w,
+            "GET",
+            &format!("/alice/forge/proposals/{id}"),
+            Some(&owner),
+            "en",
+        )
+        .await,
+    );
+    assert!(
+        closed.contains("<span class=\"badge\">Closed</span>"),
+        "{closed}"
+    );
+    assert!(
+        closed.contains("Closed: it will not become part of the project&#39;s history.")
+            || closed.contains("Closed: it will not become part of the project's history."),
+        "{closed}"
+    );
+    assert!(closed.contains("Reason: Not needed any more"), "{closed}");
+    assert!(
+        !closed.contains("Close proposal"),
+        "a closed proposal has no form"
+    );
+    assert_eq!(violations(&closed), Vec::<String>::new(), "{closed}");
+    let r = form_as(&w, &uri, Some(&owner), "csrf=tok123&reason=again").await;
+    assert_eq!(r.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(text(&r).contains("already landed or been closed"));
+    // The default list no longer shows it; "Closed" does.
+    let l = text(&page_as(&w, "GET", "/alice/forge/proposals", None, "en").await);
+    assert!(l.contains("There are no proposals to show."), "{l}");
+    let l = text(&page_as(&w, "GET", "/alice/forge/proposals?state=closed", None, "en").await);
+    assert!(l.contains("Two small changes"), "{l}");
+
+    // A private repository: a stranger gets the same not-found page as for a repository that is not there.
+    let stranger = session_for(&w, "carol");
+    let hidden = page_as(&w, "GET", "/alice/private/proposals", Some(&stranger), "en").await;
+    let absent = page_as(
+        &w,
+        "GET",
+        "/alice/nothing-here/proposals",
+        Some(&stranger),
+        "en",
+    )
+    .await;
+    assert_eq!(hidden.status, StatusCode::NOT_FOUND);
+    assert_eq!(hidden.status, absent.status);
+}
+
+/// `prikk log` shows the newest 20 blocks unless it is told otherwise; a patch sealed longer ago than that is still in the
+/// history, and its proposal still lands.
+#[tokio::test]
+async fn a_patch_sealed_more_than_twenty_blocks_ago_still_counts_as_in_the_history() {
+    if skip() {
+        return;
+    }
+    let mut w = world("pr-old-block", Opts::default());
+    let early = make_proposal(&mut w, "forge", "tok-alice", "Early", 1).await;
+    let later = make_proposal_on(&mut w, "forge", "tok-alice", "Many after it", 25, false).await;
+    let (early_claims, later_claims) = (claims_of(&w, &early), claims_of(&w, &later));
+    // The second artifact carries the first one's claim again (the forge held it as pending); a claim is sealed once.
+    let mut claims = early_claims.clone();
+    claims.extend(
+        later_claims
+            .iter()
+            .filter(|c| !early_claims.contains(c))
+            .cloned(),
+    );
+    assert_eq!(claims.len(), 26);
+    for c in &claims {
+        seal_claim(&w, "forge", c);
+    }
+    let v = detail_of(&w, &early).await;
+    assert_eq!(v["state"], "landed", "{v}");
+    assert_eq!(v["patches"][0]["assurance"], "sealed");
+    assert_eq!(detail_of(&w, &later).await["state"], "landed");
+}
+
+#[tokio::test]
+async fn revisions_appear_in_order_and_a_push_without_a_list_is_labelled_so() {
+    if skip() {
+        return;
+    }
+    let mut w = world("pr-revisions", Opts::default());
+    let id = make_proposal(&mut w, "forge", "tok-alice", "Grows", 1).await;
+    // A second revision with no declaration (what a plain prikk push is): two more patches, and the proposal's set is
+    // its first revision's declared patch plus these.
+    w.client.commit(2);
+    let art = w.client.artifact(&w.forge, "second");
+    let second = propose_as(
+        &w,
+        "forge",
+        "tok-alice",
+        serde_json::json!({"proposal": id}),
+        &art,
+    )
+    .await;
+    assert_eq!(second.status, StatusCode::OK, "{}", text(&second));
+
+    let v = detail_of(&w, &id).await;
+    let revs = v["revisions"].as_array().unwrap();
+    assert_eq!(
+        revs.iter()
+            .map(|r| r["seq"].as_u64().unwrap())
+            .collect::<Vec<_>>(),
+        [1, 2]
+    );
+    assert_eq!(
+        (revs[0]["declared"].clone(), revs[1]["declared"].clone()),
+        (true.into(), false.into())
+    );
+    assert_eq!(
+        (
+            revs[0]["added_count"].clone(),
+            revs[1]["added_count"].clone()
+        ),
+        (1.into(), 2.into())
+    );
+    assert_eq!(
+        v["patch_total"], 3,
+        "the first revision's declared patch and the two later ones"
+    );
+    let list = get_as(&w, "/api/v1/repos/alice/forge/proposals", None, &[])
+        .await
+        .json();
+    assert_eq!(list["proposals"][0]["revision_count"], 2);
+    assert_eq!(list["proposals"][0]["patch_count"], 3);
+
+    // The page: both revisions, in order, and the undeclared one says so; the summary counts both.
+    let p = text(
+        &page_as(
+            &w,
+            "GET",
+            &format!("/alice/forge/proposals/{id}"),
+            None,
+            "en",
+        )
+        .await,
+    );
+    assert!(p.contains("3 patches in 2 revisions"), "{p}");
+    assert!(p.contains("Listed by the sender"), "{p}");
+    assert!(
+        p.contains("Not listed by the sender, so the patches may be incomplete"),
+        "{p}"
+    );
+    assert!(
+        p.find("Listed by the sender").unwrap() < p.find("Not listed by the sender").unwrap(),
+        "revision 1 before revision 2"
+    );
+    assert_eq!(violations(&p), Vec::<String>::new());
+    // Each revision has its own download for a reviewer.
+    let owner = session_for(&w, "alice");
+    let p = text(
+        &page_as(
+            &w,
+            "GET",
+            &format!("/alice/forge/proposals/{id}"),
+            Some(&owner),
+            "en",
+        )
+        .await,
+    );
+    for seq in [1, 2] {
+        assert!(
+            p.contains(&format!("/proposals/{id}/revisions/{seq}/artifact")),
+            "{seq}"
+        );
+    }
+}
+
+/// The test language: right to left, every message of the English catalog wrapped in `‹ ›` (registered once).
+fn register_qaa() {
+    static ONCE: std::sync::Once = std::sync::Once::new();
+    ONCE.call_once(|| {
+        use planeter_web::catalog::{Dir, Entry, LangDef, Plural, register_test_language, shipped};
+        fn other_only(_: u64) -> Plural {
+            Plural::Other
+        }
+        let entries: Vec<Entry> = shipped()[0]
+            .entries
+            .iter()
+            .map(|e| {
+                let text: &'static str = Box::leak(format!("‹{}›", e.other).into_boxed_str());
+                Entry {
+                    key: e.key,
+                    one: text,
+                    other: text,
+                }
+            })
+            .collect();
+        register_test_language(Box::leak(Box::new(LangDef {
+            tag: "qaa",
+            endonym: "Test language",
+            dir: Dir::Rtl,
+            plural: other_only,
+            group_separator: ',',
+            decimal_separator: '.',
+            entries: Box::leak(entries.into_boxed_slice()),
+        })));
+    });
 }

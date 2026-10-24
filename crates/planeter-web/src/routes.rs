@@ -8,6 +8,7 @@
 //!   from behaviour, not from the declaration: an **anonymous** caller asking for a **private** repository must be
 //!   answered `404` (existence-neutral), while the same request for a public repository whose store is unreadable
 //!   is *not* a `404`. A handler that skipped the check would answer the stranger like the public one;
+//! * [`Class::AuthorizedAny`]: the same, for a route that either of several actions opens (RFC 005 part 5);
 //! * [`Class::Public`]: no repository data is involved; a **reason** is part of the entry, and an empty reason
 //!   does not compile into a table (it panics at registration, so a test that builds the router fails).
 //!
@@ -42,6 +43,11 @@ pub enum Class {
     /// The handler decides through `authorize(principal, action, resource, ctx)` before it touches repository
     /// data.
     Authorized(Action),
+    /// Like [`Class::Authorized`], for a route that **either** of several actions opens (RFC 005 part 5, T5: the download of
+    /// an accepted artifact is for whoever holds `review` or `merge-seal`). The handler decides through `authorize` for
+    /// each and allows the request if any allows; the probe holds it to the same word as `Authorized`: an anonymous
+    /// caller asking for a private repository is answered `404`. The table lists every action.
+    AuthorizedAny(&'static [Action]),
     /// No repository data is served; the reason says why that is safe. Never empty.
     Public(&'static str),
 }

@@ -105,11 +105,17 @@ pub enum ErrorCode {
     UnknownIntent,
     /// 503: the accept did not finish; the body names the intent, and the same artifact can be sent again once the repository has recovered.
     Incomplete,
+    /// 422: a proposal is closed with a reason and none was given.
+    ReasonRequired,
+    /// 422: the proposal has landed or been closed (the body's `state` says which), and a final proposal is closed no more.
+    ProposalFinal,
+    /// 410: the files of that revision were kept until a date and have been removed since (the body's `kept_until` is it).
+    ArtifactRemoved,
 }
 
 impl ErrorCode {
     /// Every code, in a fixed order (the OpenAPI enum).
-    pub const ALL: [ErrorCode; 32] = [
+    pub const ALL: [ErrorCode; 35] = [
         ErrorCode::NotFound,
         ErrorCode::Unavailable,
         ErrorCode::Busy,
@@ -142,6 +148,9 @@ impl ErrorCode {
         ErrorCode::IntentPending,
         ErrorCode::Incomplete,
         ErrorCode::UnknownIntent,
+        ErrorCode::ReasonRequired,
+        ErrorCode::ProposalFinal,
+        ErrorCode::ArtifactRemoved,
     ];
 
     /// The stable snake_case code.
@@ -179,6 +188,9 @@ impl ErrorCode {
             ErrorCode::IntentPending => "intent_pending",
             ErrorCode::Incomplete => "incomplete",
             ErrorCode::UnknownIntent => "unknown_intent",
+            ErrorCode::ReasonRequired => "reason_required",
+            ErrorCode::ProposalFinal => "proposal_final",
+            ErrorCode::ArtifactRemoved => "artifact_removed",
         }
     }
 
@@ -214,6 +226,10 @@ impl ErrorCode {
             ErrorCode::IntentPending => StatusCode::CONFLICT,
             ErrorCode::Incomplete => StatusCode::SERVICE_UNAVAILABLE,
             ErrorCode::UnknownIntent => StatusCode::UNPROCESSABLE_ENTITY,
+            ErrorCode::ReasonRequired | ErrorCode::ProposalFinal => {
+                StatusCode::UNPROCESSABLE_ENTITY
+            }
+            ErrorCode::ArtifactRemoved => StatusCode::GONE,
             ErrorCode::InvalidRequest => StatusCode::BAD_REQUEST,
             ErrorCode::Internal => StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -277,6 +293,13 @@ impl ErrorCode {
             ErrorCode::IntentPending => (Key::ErrIntentPendingMessage, Key::ErrIntentPendingHint),
             ErrorCode::Incomplete => (Key::ErrIncompleteMessage, Key::ErrIncompleteHint),
             ErrorCode::UnknownIntent => (Key::ErrUnknownIntentMessage, Key::ErrUnknownIntentHint),
+            ErrorCode::ReasonRequired => {
+                (Key::ErrReasonRequiredMessage, Key::ErrReasonRequiredHint)
+            }
+            ErrorCode::ProposalFinal => (Key::ErrProposalFinalMessage, Key::ErrProposalFinalHint),
+            ErrorCode::ArtifactRemoved => {
+                (Key::ErrArtifactRemovedMessage, Key::ErrArtifactRemovedHint)
+            }
         };
         ErrorKeys { message, hint }
     }
@@ -298,6 +321,19 @@ impl ErrorCode {
     pub const FORBIDDEN_ADMIN: ErrorKeys = ErrorKeys {
         message: Key::ErrForbiddenAdminMessage,
         hint: Key::ErrForbiddenAdminHint,
+    };
+
+    /// `forbidden` on the download of an accepted artifact: the caller can read the repository but holds neither `review` nor
+    /// `merge-seal`.
+    pub const FORBIDDEN_REVIEW: ErrorKeys = ErrorKeys {
+        message: Key::ErrForbiddenReviewMessage,
+        hint: Key::ErrForbiddenReviewHint,
+    };
+
+    /// `forbidden` on closing a proposal: the caller can read the repository but is neither the opener nor allowed to close.
+    pub const FORBIDDEN_CLOSE: ErrorKeys = ErrorKeys {
+        message: Key::ErrForbiddenCloseMessage,
+        hint: Key::ErrForbiddenCloseHint,
     };
 
     /// `transport_off` for a proposal: fetches may be set up while the artifact store, which proposals need, is not.
@@ -427,6 +463,13 @@ impl ErrorCode {
             }
             ErrorCode::UnknownIntent => {
                 "an intent to abandon is not an open intent of this repository"
+            }
+            ErrorCode::ReasonRequired => "a proposal is closed with a reason, and none was given",
+            ErrorCode::ProposalFinal => {
+                "the proposal has landed or been closed (the body's `state` says which) and is closed no more"
+            }
+            ErrorCode::ArtifactRemoved => {
+                "the files of that revision were kept until a date and have been removed since (the body's `kept_until` is that date)"
             }
         }
     }

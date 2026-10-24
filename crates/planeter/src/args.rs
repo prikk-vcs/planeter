@@ -109,7 +109,10 @@ environment:
   PLANETER_PROPOSE_LEASE_WAIT_SECS  seconds a proposal waits for an upload slot and the repository's write lease
                                 before 503 busy (default 5)
   PLANETER_PROPOSAL_CAPACITY_MB  most megabytes of artifacts a repository retains for open and recently
-                                finished changes before proposals are refused for repository capacity (default 4096)
+                                finished proposals before proposals are refused for repository capacity (default 4096)
+  PLANETER_PROPOSAL_GRACE_DAYS  days a landed or closed proposal keeps its files before the retention sweep may
+                                remove them (default 30; the records stay)
+  PLANETER_RETENTION_SWEEP_MINUTES  minutes between runs of the retention sweep, which also runs at start (default 60)
   PLANETER_PROPOSER_QUOTA_MB    most megabytes of artifacts one person may have accepted in one repository, in all
                                 (default 512, or 64 where proposals are open to any signed-in user)
   PLANETER_AUTOMATIC_RECOVERY   on (default) or off: whether the server recovers a repository left unfinished by a

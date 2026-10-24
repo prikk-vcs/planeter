@@ -22,10 +22,12 @@ pub mod headers;
 pub mod lang_switch;
 pub mod openapi;
 pub mod principal;
+pub mod proposals;
 pub mod quota;
 pub mod routes;
 pub mod sanitize;
 pub mod security;
+pub mod timefmt;
 pub mod transport;
 pub mod ui;
 

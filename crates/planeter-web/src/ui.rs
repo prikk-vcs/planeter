@@ -38,6 +38,8 @@ use crate::gate::GateError;
 use crate::principal::principal_from_request;
 use crate::sanitize::render_markdown;
 
+mod proposal_pages;
+
 const HISTORY_PAGE: usize = 50;
 const CSRF_TTL_SECS: u64 = 30 * 24 * 3600;
 
@@ -46,6 +48,7 @@ const CSRF_TTL_SECS: u64 = 30 * 24 * 3600;
 pub fn routes() -> Routes {
     // Every page that shows repository data reads through `ReadService`: `authorize(_, Read, _)` first.
     let read = Class::Authorized(Action::Read);
+    let close = Class::Authorized(Action::Close);
     Routes::new()
         .route(
             "/",
@@ -102,6 +105,9 @@ pub fn routes() -> Routes {
         .route("/{owner}/{name}/change/{target}", read, &["GET"], get(change_page))
         .route("/{owner}/{name}/refs", read, &["GET"], get(refs_page))
         .route("/{owner}/{name}/verify", read, &["GET"], get(verify_page))
+        .route("/{owner}/{name}/proposals", read, &["GET"], get(proposal_pages::list_page))
+        .route("/{owner}/{name}/proposals/{id}", read, &["GET"], get(proposal_pages::detail_page))
+        .route("/{owner}/{name}/proposals/{id}/close", close, &["POST"], post(proposal_pages::close_submit))
 }
 
 pub fn router(state: AppState) -> Router {
@@ -610,6 +616,8 @@ struct RepoTpl {
     user: Option<Who>,
     csrf: String,
     t: T,
+    proposals_nav: bool,
+    open_proposals: Option<String>,
     owner: String,
     name: String,
     /// `owner/name`, the repository's address.
@@ -630,6 +638,7 @@ struct TreeTpl {
     user: Option<Who>,
     csrf: String,
     t: T,
+    proposals_nav: bool,
     owner: String,
     name: String,
     repo: String,
@@ -645,6 +654,7 @@ struct FileTpl {
     user: Option<Who>,
     csrf: String,
     t: T,
+    proposals_nav: bool,
     owner: String,
     name: String,
     repo: String,
@@ -674,6 +684,7 @@ struct HistoryTpl {
     user: Option<Who>,
     csrf: String,
     t: T,
+    proposals_nav: bool,
     owner: String,
     name: String,
     repo: String,
@@ -699,6 +710,7 @@ struct ChangeTpl {
     user: Option<Who>,
     csrf: String,
     t: T,
+    proposals_nav: bool,
     owner: String,
     name: String,
     repo: String,
@@ -725,6 +737,7 @@ struct RefsTpl {
     user: Option<Who>,
     csrf: String,
     t: T,
+    proposals_nav: bool,
     owner: String,
     name: String,
     repo: String,
@@ -750,6 +763,7 @@ struct VerifyTpl {
     user: Option<Who>,
     csrf: String,
     t: T,
+    proposals_nav: bool,
     owner: String,
     name: String,
     repo: String,
@@ -1400,10 +1414,13 @@ async fn repo_home(
     };
     let readme_html = readme.map(|raw| render_markdown(&String::from_utf8_lossy(&raw.bytes)));
     let (dirs, files) = listing(&tree.entries, "");
+    let (proposals_nav, open_proposals) = proposal_pages::nav_for(&state, &c, &owner, &name).await;
     render(
         &state,
         StatusCode::OK,
         &RepoTpl {
+            proposals_nav,
+            open_proposals: open_proposals.map(|n| c.t.msg(Key::RepoOpenProposals).n(n).text()),
             user: c.user.clone(),
             csrf: c.csrf.clone(),
             t: c.t,
@@ -1469,10 +1486,12 @@ async fn tree_page(
         }
     };
     let (dirs, files) = listing(&tree.entries, &format!("{prefix}/"));
+    let (proposals_nav, _) = proposal_pages::nav_for(&state, &c, &owner, &name).await;
     render(
         &state,
         StatusCode::OK,
         &TreeTpl {
+            proposals_nav,
             user: c.user.clone(),
             csrf: c.csrf.clone(),
             t: c.t,
@@ -1555,10 +1574,12 @@ async fn file_page(
     } else {
         (None, None)
     };
+    let (proposals_nav, _) = proposal_pages::nav_for(&state, &c, &owner, &name).await;
     render(
         &state,
         StatusCode::OK,
         &FileTpl {
+            proposals_nav,
             user: c.user.clone(),
             csrf: c.csrf.clone(),
             t: c.t,
@@ -1623,10 +1644,12 @@ async fn history_page(
             text: Key::ExplainRollback,
         });
     }
+    let (proposals_nav, _) = proposal_pages::nav_for(&state, &c, &owner, &name).await;
     render(
         &state,
         StatusCode::OK,
         &HistoryTpl {
+            proposals_nav,
             user: c.user.clone(),
             csrf: c.csrf.clone(),
             t: c.t,
@@ -1707,10 +1730,12 @@ async fn change_page(
             }
         })
         .collect();
+    let (proposals_nav, _) = proposal_pages::nav_for(&state, &c, &owner, &name).await;
     render(
         &state,
         StatusCode::OK,
         &ChangeTpl {
+            proposals_nav,
             user: c.user.clone(),
             csrf: c.csrf.clone(),
             t: c.t,
@@ -1744,10 +1769,12 @@ async fn refs_page(
         Ok(v) => v,
         Err(e) => return error_page(&state, &c, &format!("/{owner}/{name}/refs"), e),
     };
+    let (proposals_nav, _) = proposal_pages::nav_for(&state, &c, &owner, &name).await;
     render(
         &state,
         StatusCode::OK,
         &RefsTpl {
+            proposals_nav,
             user: c.user.clone(),
             csrf: c.csrf.clone(),
             t: c.t,
@@ -1796,10 +1823,12 @@ async fn verify_page(
         Err(e) => return error_page(&state, &c, &format!("/{owner}/{name}/verify"), e),
     };
     let (ac, al) = assurance(v.assurance());
+    let (proposals_nav, _) = proposal_pages::nav_for(&state, &c, &owner, &name).await;
     render(
         &state,
         StatusCode::OK,
         &VerifyTpl {
+            proposals_nav,
             user: c.user.clone(),
             csrf: c.csrf.clone(),
             t: c.t,

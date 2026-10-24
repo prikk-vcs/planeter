@@ -32,6 +32,13 @@ fn files(dir: &Path, ext: &str) -> Vec<PathBuf> {
     out
 }
 
+/// The Rust sources that can hold messages and literals: `src/*.rs` and the UI's sub-modules `src/ui/*.rs`.
+fn rust_sources() -> Vec<PathBuf> {
+    let mut out = files(&root().join("src"), "rs");
+    out.extend(files(&root().join("src/ui"), "rs"));
+    out
+}
+
 // ---------------------------------------------------------------- the catalogs
 
 #[test]
@@ -241,7 +248,7 @@ fn sources_outside_the_catalog() -> String {
     for p in files(&root().join("templates"), "html") {
         all += &read(&p);
     }
-    for p in files(&root().join("src"), "rs") {
+    for p in rust_sources() {
         all += &read(&p);
     }
     // The catalog module uses a few keys itself (sizes); its key table (`Variant => "id"`) never says `Key::`.
@@ -514,7 +521,7 @@ fn rust_literals(src: &str) -> Vec<(usize, String)> {
 fn no_source_file_holds_user_visible_literal_text_outside_the_allowlist() {
     let allow = allowlist();
     let mut found = Vec::new();
-    for p in files(&root().join("src"), "rs") {
+    for p in rust_sources() {
         let name = p.file_name().unwrap().to_string_lossy().into_owned();
         if allow.scope.contains(&name) {
             continue;

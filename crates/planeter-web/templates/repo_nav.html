@@ -2,5 +2,6 @@
   <a href="/{{ owner }}/{{ name }}">{{ t.get(Key::NavCode) }}</a>
   <a href="/{{ owner }}/{{ name }}/history">{{ t.get(Key::NavHistory) }}</a>
   <a href="/{{ owner }}/{{ name }}/refs">{{ t.get(Key::NavRefs) }}</a>
-  <a href="/{{ owner }}/{{ name }}/verify">{{ t.get(Key::NavVerify) }}</a>
+  {% if proposals_nav %}<a href="/{{ owner }}/{{ name }}/proposals">{{ t.get(Key::NavProposals) }}</a>
+  {% endif %}  <a href="/{{ owner }}/{{ name }}/verify">{{ t.get(Key::NavVerify) }}</a>
 </nav>

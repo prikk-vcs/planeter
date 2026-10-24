@@ -283,7 +283,167 @@ fn schemas() -> Value {
     if let (Some(all), Some(more)) = (all.as_object_mut(), recovery_schemas().as_object()) {
         all.extend(more.clone());
     }
+    if let (Some(all), Some(more)) = (all.as_object_mut(), proposal_schemas().as_object()) {
+        all.extend(more.clone());
+    }
     all
+}
+
+/// The schemas of the proposals (RFC 005 part 5): a *proposal* is what the code calls a *change*.
+fn proposal_schemas() -> Value {
+    json!({
+        "ProposalRetention": obj(&["state", "until"], json!({
+            "state": {"type": "string", "enum": ["kept", "partly_removed", "removed"], "description": "What is left of the files of a proposal that landed or was closed."},
+            "until": {"type": "integer", "minimum": 0, "description": "Unix seconds: the files are kept until then; after it a sweep may remove them (the records stay)."}
+        })),
+        "ProposalItem": obj(&["id", "title", "state", "opened_by", "opened_at", "updated_at", "revision_count", "patch_count", "built_on", "retention"], json!({
+            "id": string_prop(), "title": string_prop(),
+            "state": {"type": "string", "enum": ["open", "landed", "closed"]},
+            "opened_by": string_prop(),
+            "opened_at": {"type": "integer", "minimum": 0}, "updated_at": {"type": "integer", "minimum": 0},
+            "revision_count": {"type": "integer", "minimum": 0},
+            "patch_count": {"type": "integer", "minimum": 0, "description": "The patches of the current set: the latest declared revision's declared set plus what every later revision added."},
+            "built_on": {"type": "boolean", "description": "Whether the latest revision says what it was built on."},
+            "retention": {"allOf": [{"$ref": "#/components/schemas/ProposalRetention"}], "nullable": true, "description": "Absent (null) while the proposal is open."}
+        })),
+        "ProposalList": obj(&["proposals", "next"], json!({
+            "proposals": array_of("ProposalItem"),
+            "next": {"type": "string", "nullable": true, "description": "The `after` cursor of the next page; null on the last page."}
+        })),
+        "ProposalClaim": obj(&["claim_id", "outcome"], json!({
+            "claim_id": string_prop(),
+            "outcome": {"type": "string", "description": "What `sync accept` reported for the claim, as prikk said it (stored, not re-asserted; English, not translated)."}
+        })),
+        "ProposalRevision": obj(&["seq", "created_at", "submitter", "claims", "author_key_ids", "built_on", "declared", "added_count", "artifact_digest", "artifact_bytes", "artifact_available"], json!({
+            "seq": {"type": "integer", "minimum": 1},
+            "created_at": {"type": "integer", "minimum": 0},
+            "submitter": string_prop(),
+            "claims": array_of("ProposalClaim"),
+            "author_key_ids": {"type": "array", "items": string_prop()},
+            "built_on": {"type": "string", "nullable": true, "description": "The block the sender says the work was built on (the declared base); null when none was given."},
+            "declared": {"type": "boolean", "description": "Whether the sender declared the patches the revision contains. A plain push by prikk does not, and then the list of patches may be incomplete."},
+            "added_count": {"type": "integer", "minimum": 0, "description": "How many patches this accept added."},
+            "artifact_digest": string_prop(),
+            "artifact_bytes": {"type": "integer", "minimum": 0},
+            "artifact_available": {"type": "boolean", "description": "The files are still in the store (derived each time; a retention sweep removes them after the grace)."}
+        })),
+        "ProposalPatch": obj(&["patch_id", "assurance"], json!({
+            "patch_id": string_prop(),
+            "assurance": {"allOf": [{"$ref": "#/components/schemas/Assurance"}], "nullable": true, "description": "`forge-approved-unsealed`: listed by `sync pending` (held by this server, nobody has signed it in). `sealed`: in a block `log` lists for a ref the repository holds. `null`: in neither; nothing is claimed. Never read from `queued`."}
+        })),
+        "ProposalDescription": obj(&["source", "html"], json!({
+            "source": {"type": "string", "description": "The text as sent."},
+            "html": {"type": "string", "description": "The same, rendered as Markdown through the sanitizer."}
+        })),
+        "ProposalDetail": obj(&["id", "title", "description", "state", "closed_reason", "landed_at", "target_ref", "opened_by", "opened_at", "updated_at", "retention", "revisions", "patches", "patch_total", "truncated", "still_pending", "note"], json!({
+            "id": string_prop(), "title": string_prop(),
+            "description": {"$ref": "#/components/schemas/ProposalDescription"},
+            "state": {"type": "string", "enum": ["open", "landed", "closed"]},
+            "closed_reason": nullable_string(),
+            "landed_at": {"type": "integer", "nullable": true, "description": "When the landing was observed, unix seconds (a landed proposal)."},
+            "target_ref": {"type": "string", "nullable": true, "description": "The ref the sender hoped it would reach (advisory)."},
+            "opened_by": string_prop(),
+            "opened_at": {"type": "integer", "minimum": 0}, "updated_at": {"type": "integer", "minimum": 0},
+            "retention": {"allOf": [{"$ref": "#/components/schemas/ProposalRetention"}], "nullable": true},
+            "revisions": array_of("ProposalRevision"),
+            "patches": {"type": "array", "items": {"$ref": "#/components/schemas/ProposalPatch"}, "description": "The patches of the current set, at most 1,000, in id order."},
+            "patch_total": {"type": "integer", "minimum": 0}, "truncated": {"type": "boolean"},
+            "still_pending": {"type": "integer", "minimum": 0, "description": "How many patches of the whole current set are still held by this server, not yet signed in."},
+            "note": {"type": "string", "description": "One plain sentence, in the language negotiated from `Accept-Language`, that is true under every answer to what happens after a maintainer signs the work."}
+        })),
+        "ProposalClosed": obj(&["id", "state", "closed_reason", "updated_at", "retain_until"], json!({
+            "id": string_prop(), "state": {"type": "string", "enum": ["closed"]},
+            "closed_reason": string_prop(), "updated_at": {"type": "integer", "minimum": 0},
+            "retain_until": {"type": "integer", "nullable": true, "description": "The files are kept at least until then (unix seconds)."}
+        })),
+    })
+}
+
+/// The proposal paths (RFC 005 part 5).
+fn proposal_paths(paths_obj: &mut serde_json::Map<String, Value>) {
+    let id_param = param(
+        "id",
+        "path",
+        true,
+        "The proposal's id (from the list, or `proposal_id` of a propose answer).",
+        json!({"type": "string"}),
+    );
+    let mut with_id = owner_name();
+    with_id.push(id_param.clone());
+    let read_security = json!([{"bearerToken": []}, {"sessionCookie": []}, {}]);
+    paths_obj.insert(
+        paths::PROPOSALS.into(),
+        with_errors(
+            json!({"get": {
+                "operationId": "getProposals",
+                "summary": "The proposals of a repository, newest-updated first",
+                "description": "`Authorized(Read)`: a hidden and an absent repository are both `404`. Rate limited like the fetch routes. **No prikk call is made per item**: the landing of an open proposal is observed once per repository per state fingerprint, from `sync pending` and (only when some proposal's patches have all left the pending list) `log`; a proposal is `landed` only when every patch of its current set is absent from the pending list **and** present in a block `log` lists. This server does not merge anything itself; a maintainer signs the work on their own computer.",
+                "parameters": owner_name().into_iter().chain([
+                    param("state", "query", false, "`open` (the default), `landed`, `closed` or `all`.", json!({"type": "string", "enum": ["open", "landed", "closed", "all"]})),
+                    param("limit", "query", false, "At most 100; 50 when omitted.", json!({"type": "integer", "minimum": 1, "maximum": 100})),
+                    param("after", "query", false, "The `next` cursor of the previous page.", json!({"type": "string"})),
+                ]).collect::<Vec<_>>(),
+                "security": read_security.clone(),
+                "responses": {"200": {"description": "A page of proposals.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ProposalList"}}}}},
+            }}),
+            &[ErrorCode::TransportOff, ErrorCode::RateLimited],
+        ),
+    );
+    paths_obj.insert(
+        paths::PROPOSAL.into(),
+        with_errors(
+            json!({"get": {
+                "operationId": "getProposal",
+                "summary": "One proposal, in full",
+                "description": "`Authorized(Read)`; an id of another repository is the same `404` as an unknown one. The description is rendered Markdown through the sanitizer (and given as sent); the revisions are in order, each with its claims **as accept reported them (stored, not re-asserted)**, its key ids and what it was built on; the patches are those of the **current** set (at most 1,000, `truncated` says when there are more), each classified from the facts of one observation, never from `queued`.",
+                "parameters": with_id.clone(),
+                "security": read_security.clone(),
+                "responses": {"200": {"description": "The proposal.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ProposalDetail"}}}}},
+            }}),
+            &[ErrorCode::TransportOff, ErrorCode::RateLimited],
+        ),
+    );
+    paths_obj.insert(
+        paths::PROPOSAL_CLOSE.into(),
+        with_errors(
+            json!({"post": {
+                "operationId": "postProposalClose",
+                "summary": "Close a proposal with a reason",
+                "description": "For the proposal's **opener** (with a credential that permits closing) and for whoever `authorize(Close)` allows (`write` and above); a stranger is `404`, a reader who may not close it `403`. **Bearer token only** (a cookie is not looked at), like `propose`. Closing keeps the record and the files (for the grace period, 30 days by default); nobody can reopen it. A landed or closed proposal is `proposal_final`.",
+                "parameters": with_id.clone(),
+                "security": [{"bearerToken": []}],
+                "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["reason"], "properties": {"reason": {"type": "string", "maxLength": 1000}}}}}},
+                "responses": {"200": {"description": "The proposal, closed.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ProposalClosed"}}}}},
+            }}),
+            &[ErrorCode::TransportOff, ErrorCode::RateLimited, ErrorCode::Forbidden, ErrorCode::ReasonRequired, ErrorCode::ProposalFinal],
+        ),
+    );
+    let mut download_params = with_id;
+    download_params.push(param(
+        "seq",
+        "path",
+        true,
+        "The revision's number (1, 2, …).",
+        json!({"type": "integer", "minimum": 1}),
+    ));
+    paths_obj.insert(
+        paths::PROPOSAL_ARTIFACT.into(),
+        with_errors(
+            json!({"get": {
+                "operationId": "getProposalArtifact",
+                "summary": "The artifact of an accepted revision, byte for byte",
+                "description": "For whoever holds `review` or `merge-seal` (either); a stranger is `404`, a reader who holds neither `403`. Served from the artifact store as the fetch route is (`Range`, `If-Range`, `ETag` = the digest, `Accept-Ranges`), never under a repository lease: the file is immutable. After the retention sweep it may be gone: `410` `artifact_removed`, with the date it was kept until.",
+                "parameters": download_params,
+                "security": read_security,
+                "responses": {
+                    "200": {"description": "The artifact.", "content": {"application/octet-stream": {"schema": {"type": "string", "format": "binary"}}}},
+                    "206": {"description": "A byte range of it."},
+                    "304": {"description": "Not modified."}
+                },
+            }}),
+            &[ErrorCode::TransportOff, ErrorCode::RateLimited, ErrorCode::Forbidden, ErrorCode::RangeNotSatisfiable, ErrorCode::ArtifactRemoved],
+        ),
+    );
 }
 
 /// The recovery schemas (RFC 004 part 4), in two parts so that no one `json!` is too deep for the compiler.
@@ -681,6 +841,7 @@ pub fn document(content_origin: &str) -> Value {
         item.insert("post".to_owned(), post.clone());
     }
     paths_obj.insert(paths::RECOVERY.into(), recovery);
+    proposal_paths(&mut paths_obj);
     paths_obj.insert(
         paths::OPENAPI.into(),
         json!({"get": {

@@ -274,6 +274,7 @@ fn fixture(name: &str, o: Opts) -> Fx {
             export: export.clone(),
             propose: None,
             recovery: None,
+            proposals: None,
             ip_limit: RateLimiter::new(o.ip_limit, Duration::from_secs(60)),
             principal_limit: RateLimiter::new(o.principal_limit, Duration::from_secs(60)),
         })

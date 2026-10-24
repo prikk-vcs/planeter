@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}{{ t.msg(Key::TitleProposal).with("title", title).with("repo", repo).product() }}{% endblock %}
+{% block nav %}{% include "repo_nav.html" %}{% endblock %}
+{% block body %}
+<h1>{{ title }} <span class="badge">{{ t.get(*state_label) }}</span></h1>
+<p>{{ t.get(*what) }}</p>
+<p class="muted">{{ t.msg(Key::ProposalBy).with("who", by) }} · {{ t.msg(Key::ProposalWhen).with("when", when) }}</p>
+<p>{{ summary }}</p>
+<p class="muted">{{ t.get(Key::ProposalFileViewMissing) }}</p>
+{% if let Some((seq, href)) = latest_download %}
+<p><a href="{{ href }}">{{ t.msg(Key::ProposalDownloadLink).with("seq", seq) }}</a></p>
+{% endif %}
+{% if may_close %}
+<form method="post" action="{{ close_action }}">
+<input type="hidden" name="csrf" value="{{ csrf }}">
+<p><label for="close-reason">{{ t.get(Key::ProposalCloseReason) }}</label><br>
+<textarea id="close-reason" name="reason" rows="3" cols="60" maxlength="1000" required></textarea></p>
+<p class="muted">{{ t.get(Key::ProposalCloseConsequence) }}</p>
+<p><button type="submit">{{ t.get(Key::ProposalCloseButton) }}</button></p>
+</form>
+{% endif %}
+<details>
+<summary>{{ t.get(Key::ProposalDetails) }}</summary>
+{% if let Some(reason) = closed_reason %}
+<p>{{ t.msg(Key::ProposalClosedReason).with("reason", reason) }}</p>
+{% endif %}
+<h2>{{ t.get(Key::ProposalDescription) }}</h2>
+{% if let Some(html) = description_html %}
+<section class="readme">{{ html|safe }}</section>
+{% else %}
+<p class="muted">{{ t.get(Key::ProposalNoDescription) }}</p>
+{% endif %}
+<h2>{{ t.get(Key::ProposalRevisionsHeading) }}</h2>
+<table>
+<caption class="visually-hidden">{{ t.get(Key::ProposalRevisionsHeading) }}</caption>
+<thead><tr><th scope="col">{{ t.get(Key::ProposalRevColRevision) }}</th><th scope="col">{{ t.get(Key::ProposalRevColBy) }}</th><th scope="col">{{ t.get(Key::ProposalRevColSent) }}</th><th scope="col">{{ t.get(Key::ProposalRevColAdded) }}</th><th scope="col">{{ t.get(Key::ProposalRevColBuiltOn) }}</th><th scope="col">{{ t.get(Key::ProposalRevColDeclared) }}</th><th scope="col">{{ t.get(Key::ProposalRevColFiles) }}</th></tr></thead>
+<tbody>{% for r in revisions %}<tr><th scope="row">{{ r.seq }}</th><td>{{ r.by }}</td><td>{{ r.sent }}</td><td>{{ r.added }}</td><td>{% if let Some(b) = r.built_on %}<code>{{ b }}</code>{% else %}{{ t.get(Key::ProposalRevNoBase) }}{% endif %}</td><td>{{ t.get(*r.declared) }}</td><td>{% if let Some(href) = r.download %}<a href="{{ href }}">{{ t.msg(Key::ProposalRevDownload).with("seq", r.seq) }}</a>{% else if !r.available %}{{ t.get(Key::ProposalRevRemoved) }}{% endif %} <code>{{ r.digest }}</code></td></tr>{% endfor %}</tbody>
+</table>
+{% for r in revisions %}{% if !r.claims.is_empty() || !r.key_ids.is_empty() %}
+<h3>{{ t.get(Key::ProposalRevColRevision) }} {{ r.seq }}</h3>
+{% if !r.claims.is_empty() %}<p>{{ t.get(Key::ProposalRevClaims) }}</p>
+<ul>{% for c in r.claims %}<li><code>{{ c.0 }}</code> {{ c.1 }}</li>{% endfor %}</ul>{% endif %}
+{% if !r.key_ids.is_empty() %}<p>{{ t.get(Key::ProposalRevKeys) }}</p>
+<ul>{% for k in r.key_ids %}<li><code>{{ k }}</code></li>{% endfor %}</ul>{% endif %}
+{% endif %}{% endfor %}
+<h2>{{ t.get(Key::ProposalPatchesHeading) }}</h2>
+{% if let Some(n) = pending_note %}<p>{{ n }}</p>{% endif %}
+{% if let Some(n) = patches_note %}<p class="muted">{{ n }}</p>{% endif %}
+{% if !explain.is_empty() %}{% include "explain.html" %}{% endif %}
+<table>
+<caption class="visually-hidden">{{ t.get(Key::ProposalPatchesHeading) }}</caption>
+<thead><tr><th scope="col">{{ t.get(Key::ProposalPatchColPatch) }}</th><th scope="col">{{ t.get(Key::ProposalPatchColStatus) }}</th></tr></thead>
+<tbody>{% for p in patches %}<tr><th scope="row"><code>{{ p.short_id }}</code></th><td>{% if let Some((class, label)) = p.badge %}<span class="badge {{ class }}">{{ t.get(label.clone()) }}</span>{% else %}<span class="muted">{{ t.get(Key::ProposalPatchNotListed) }}</span>{% endif %}</td></tr>{% endfor %}</tbody>
+</table>
+{% if let Some(n) = retention_note %}<p class="muted">{{ n }}</p>{% endif %}
+<p class="muted">{{ t.get(Key::ProposalsNoMerge) }}</p>
+</details>
+{% endblock %}

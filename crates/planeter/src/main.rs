@@ -226,6 +226,7 @@ async fn main() {
     // The configured size and object bounds of an accept (for the start-up message about the memory budget).
     let mut propose_cost: Option<(u64, u64)> = None;
     let mut recovery_service: Option<Arc<planeter_transport::RecoveryService>> = None;
+    let mut proposals_service: Option<Arc<planeter_transport::ProposalService>> = None;
     // RFC 004 part 2: advertise and fetch need the export spool; without it the routes answer `transport_off`
     // to a reader of the repository. Every setting is a positive whole number, refused at start otherwise.
     let transport = match &dirs.spool {
@@ -358,6 +359,39 @@ async fn main() {
                             "by an administrator only (PLANETER_AUTOMATIC_RECOVERY=off)"
                         }
                     );
+                    // RFC 005 part 5: what a person sees of the proposals, and the retention sweep of the artifacts
+                    // that nothing needs any more (records stay; only files go).
+                    let grace_days = positive_env("PLANETER_PROPOSAL_GRACE_DAYS", 30);
+                    let sweep_minutes = positive_env("PLANETER_RETENTION_SWEEP_MINUTES", 60);
+                    let proposals = Arc::new(planeter_transport::ProposalService::new(
+                        hosting.clone(),
+                        changes.clone(),
+                        export.clone(),
+                        artifacts.clone(),
+                        metrics.clone(),
+                        planeter_transport::ProposalConfig {
+                            grace_secs: grace_days.saturating_mul(24 * 60 * 60),
+                            ..planeter_transport::ProposalConfig::default()
+                        },
+                    ));
+                    eprintln!(
+                        "planeter: a closed or landed proposal keeps its files for {grace_days} day(s); the retention sweep runs at start and every {sweep_minutes} minute(s)"
+                    );
+                    let sweeper = proposals.clone();
+                    let spawned = std::thread::Builder::new()
+                        .name("retention-sweep".to_owned())
+                        .spawn(move || {
+                            loop {
+                                sweeper.sweep();
+                                std::thread::sleep(std::time::Duration::from_secs(
+                                    sweep_minutes.saturating_mul(60),
+                                ));
+                            }
+                        });
+                    if let Err(e) = spawned {
+                        eprintln!("planeter: cannot start the retention sweep: {e}");
+                    }
+                    proposals_service = Some(proposals);
                     let mut service = planeter_transport::ProposeService::new(
                         hosting.clone(),
                         artifacts.clone(),
@@ -400,6 +434,7 @@ async fn main() {
                 export,
                 propose,
                 recovery: recovery_service,
+                proposals: proposals_service,
                 ip_limit: planeter_web::RateLimiter::new(rate, std::time::Duration::from_secs(60)),
                 principal_limit: planeter_web::RateLimiter::new(
                     rate,

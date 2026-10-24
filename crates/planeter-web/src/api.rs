@@ -29,6 +29,7 @@ use planeter_store::Owner;
 
 use crate::errors::{ErrorBody, ErrorCode};
 use crate::gate::{AdmitError, PrikkGate, offload};
+use crate::proposals::{artifact_handler, close_handler, detail_handler, list_handler};
 use crate::routes::{Action, Class, Routes};
 use crate::security::{ContentOrigin, app_security_headers, raw_content_headers};
 use crate::transport::{
@@ -83,9 +84,14 @@ pub mod paths {
     pub const TRANSPORT_FETCH: &str = "/api/v1/repos/{owner}/{name}/transport/fetch";
     pub const TRANSPORT_PROPOSE: &str = "/api/v1/repos/{owner}/{name}/transport/propose";
     pub const RECOVERY: &str = "/api/v1/repos/{owner}/{name}/recovery";
+    pub const PROPOSALS: &str = "/api/v1/repos/{owner}/{name}/proposals";
+    pub const PROPOSAL: &str = "/api/v1/repos/{owner}/{name}/proposals/{id}";
+    pub const PROPOSAL_CLOSE: &str = "/api/v1/repos/{owner}/{name}/proposals/{id}/close";
+    pub const PROPOSAL_ARTIFACT: &str =
+        "/api/v1/repos/{owner}/{name}/proposals/{id}/revisions/{seq}/artifact";
     pub const OPENAPI: &str = "/api/v1/openapi.json";
     /// Every route, in document order.
-    pub const ALL: [&str; 12] = [
+    pub const ALL: [&str; 16] = [
         HISTORY,
         CHANGE,
         FILE,
@@ -97,6 +103,10 @@ pub mod paths {
         TRANSPORT_FETCH,
         TRANSPORT_PROPOSE,
         RECOVERY,
+        PROPOSALS,
+        PROPOSAL,
+        PROPOSAL_CLOSE,
+        PROPOSAL_ARTIFACT,
         OPENAPI,
     ];
 }
@@ -117,6 +127,11 @@ pub fn routes() -> Routes {
     // Recovery (RFC 004 part 4): the plan (GET) and the run (POST), for whoever may administer the repository.
     let admin_class = Class::Authorized(Action::RepoAdmin);
     let recovery = get(recovery_plan_handler).post(recovery_run_handler);
+    // Proposals you can see (RFC 005 part 5): the list and the detail are reads; closing is for the opener or whoever may
+    // `Close` (bearer only); the download of an accepted artifact is for whoever holds `Review` or `MergeSeal`.
+    let close_class = Class::Authorized(Action::Close);
+    let download_class = Class::AuthorizedAny(&[Action::Review, Action::MergeSeal]);
+    let (close, download) = (axum::routing::post(close_handler), get(artifact_handler));
     Routes::new()
         .route(paths::HISTORY, read, &["GET"], get(history_handler))
         .route(paths::CHANGE, read, &["GET"], get(change_handler))
@@ -129,6 +144,10 @@ pub fn routes() -> Routes {
         .route(paths::TRANSPORT_FETCH, read, &["GET"], fetch)
         .route(paths::TRANSPORT_PROPOSE, propose_class, &["POST"], propose)
         .route(paths::RECOVERY, admin_class, &["GET", "POST"], recovery)
+        .route(paths::PROPOSALS, read, &["GET"], get(list_handler))
+        .route(paths::PROPOSAL, read, &["GET"], get(detail_handler))
+        .route(paths::PROPOSAL_CLOSE, close_class, &["POST"], close)
+        .route(paths::PROPOSAL_ARTIFACT, download_class, &["GET"], download)
         .route(paths::OPENAPI, description, &["GET"], get(openapi_handler))
 }
 

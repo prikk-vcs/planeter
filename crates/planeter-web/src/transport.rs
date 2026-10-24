@@ -44,6 +44,9 @@ pub struct TransportRuntime {
     pub propose: Option<Arc<ProposeService>>,
     /// Recovery (RFC 004 part 4), when the write side is on; `None` otherwise.
     pub recovery: Option<Arc<planeter_transport::RecoveryService>>,
+    /// What a person sees of the proposals (RFC 005 part 5: the list, the detail, closing, the download), when the write
+    /// side is on; `None` otherwise.
+    pub proposals: Option<Arc<planeter_transport::ProposalService>>,
     pub ip_limit: RateLimiter,
     pub principal_limit: RateLimiter,
 }
@@ -139,12 +142,20 @@ fn offer_view(o: &Offer) -> OfferView {
 
 // ------------------------------------------------------------------------------------------------ helpers
 
-fn client_key(state: &AppState, peer: crate::client_ip::PeerAddr, headers: &HeaderMap) -> String {
+pub(crate) fn client_key(
+    state: &AppState,
+    peer: crate::client_ip::PeerAddr,
+    headers: &HeaderMap,
+) -> String {
     crate::client_ip::client_ip(peer.0.map(|a| a.ip()), headers, &state.trusted_proxies)
         .map_or_else(|| "ip:unknown".to_owned(), |ip| format!("ip:{ip}"))
 }
 
-fn rate_limited(state: &AppState, retry_after: u64, export: Option<&ExportService>) -> Response {
+pub(crate) fn rate_limited(
+    state: &AppState,
+    retry_after: u64,
+    export: Option<&ExportService>,
+) -> Response {
     if let Some(e) = export {
         e.metrics().refusal("rate_limited");
     }
@@ -156,7 +167,7 @@ fn rate_limited(state: &AppState, retry_after: u64, export: Option<&ExportServic
 }
 
 /// Apply the per-IP and (for a signed-in caller) per-principal limits. `None` = within the limits.
-fn limits(
+pub(crate) fn limits(
     state: &AppState,
     rt: &TransportRuntime,
     peer: crate::client_ip::PeerAddr,
@@ -178,7 +189,7 @@ fn limits(
 }
 
 /// The record of a repository the caller may read: the one read gate, existence-neutral.
-async fn readable(
+pub(crate) async fn readable(
     state: &AppState,
     principal: &Principal,
     owner: &str,
@@ -295,7 +306,7 @@ pub struct FetchQuery {
 }
 
 /// Does `If-None-Match` name `etag`? (`*`, a list, weak validators compared weakly.)
-fn none_match(headers: &HeaderMap, etag: &str) -> bool {
+pub(crate) fn none_match(headers: &HeaderMap, etag: &str) -> bool {
     headers
         .get(header::IF_NONE_MATCH)
         .and_then(|h| h.to_str().ok())
@@ -308,7 +319,7 @@ fn none_match(headers: &HeaderMap, etag: &str) -> bool {
 
 /// What a `Range` header asks of an artifact of `size` bytes.
 #[derive(Debug, PartialEq, Eq)]
-enum RangeAsk {
+pub(crate) enum RangeAsk {
     /// No range, an unsupported unit, several ranges or a malformed one: serve the whole artifact.
     Whole,
     /// A single satisfiable range: first and last byte, inclusive.
@@ -317,7 +328,7 @@ enum RangeAsk {
     Unsatisfiable,
 }
 
-fn parse_range(value: Option<&str>, size: u64) -> RangeAsk {
+pub(crate) fn parse_range(value: Option<&str>, size: u64) -> RangeAsk {
     let Some(v) = value.and_then(|v| v.trim().strip_prefix("bytes=")) else {
         return RangeAsk::Whole;
     };
@@ -369,10 +380,20 @@ type ChunkRead = std::io::Result<(File, Vec<u8>)>;
 
 /// A response body that reads `remaining` bytes of a spool file in chunks, each read on the blocking pool, so
 /// the async workers never block on the disk and a slow client simply stops pulling.
-struct FileStream {
+pub(crate) struct FileStream {
     file: Option<File>,
     remaining: u64,
     pending: Option<tokio::task::JoinHandle<ChunkRead>>,
+}
+
+impl FileStream {
+    pub(crate) fn new(file: File, remaining: u64) -> Self {
+        FileStream {
+            file: Some(file),
+            remaining,
+            pending: None,
+        }
+    }
 }
 
 impl Stream for FileStream {

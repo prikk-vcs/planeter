@@ -109,6 +109,8 @@ fn concrete(pattern: &str, repo: &str) -> String {
         .replace("{owner}", "alice")
         .replace("{name}", repo)
         .replace("{target}", "abcdef")
+        .replace("{id}", "p1")
+        .replace("{seq}", "1")
         .replace("{*path}", "some/path.txt");
     if p.ends_with("/file") || p.ends_with("/raw") {
         format!("{p}?path=README.md")
@@ -144,7 +146,7 @@ async fn violations(table: &[Entry], router: &Router) -> Vec<String> {
         let host = host_for(e.path);
         // 1. The declared methods are answered (not `405`), and a method that is not declared is refused (`405`).
         for m in e.methods {
-            let uri = if let Class::Authorized(_) = e.class {
+            let uri = if matches!(e.class, Class::Authorized(_) | Class::AuthorizedAny(_)) {
                 concrete(e.path, "secret")
             } else {
                 concrete(e.path, "open")
@@ -166,7 +168,12 @@ async fn violations(table: &[Entry], router: &Router) -> Vec<String> {
         }
         // 2. An authorized route denies a stranger: a private repository is `404`, and the control (public,
         //    unreadable store) is not, so the probe has power.
-        if let Class::Authorized(action) = e.class {
+        let declared = match e.class {
+            Class::Authorized(action) => Some(format!("{action:?}")),
+            Class::AuthorizedAny(actions) => Some(format!("any of {actions:?}")),
+            _ => None,
+        };
+        if let Some(action) = declared {
             for m in e.methods {
                 let hidden = status(router, m, &concrete(e.path, "secret"), host).await;
                 let control = status(router, m, &concrete(e.path, "open"), host).await;
@@ -210,6 +217,9 @@ fn the_table_lists_the_routes_the_contract_knows_and_every_public_entry_has_a_re
         "/{owner}/{name}/change/{target}",
         "/{owner}/{name}/refs",
         "/{owner}/{name}/verify",
+        "/{owner}/{name}/proposals",
+        "/{owner}/{name}/proposals/{id}",
+        "/{owner}/{name}/proposals/{id}/close",
     ]);
     let mut have: Vec<&str> = table.iter().map(|e| e.path).collect();
     have.sort_unstable();
@@ -233,8 +243,8 @@ fn the_table_lists_the_routes_the_contract_knows_and_every_public_entry_has_a_re
         .collect();
     assert_eq!(
         authorized.len(),
-        7 + 2 + 7,
-        "7 API reads, the transport's advertise and fetch, and 7 repository pages"
+        9 + 2 + 9,
+        "9 API reads, the transport's advertise and fetch, and 9 repository pages"
     );
     assert!(authorized.iter().all(|p| p.contains("{owner}")));
 }

@@ -5,6 +5,9 @@
 <h1>{{ repo }} <span class="badge {{ assurance_class }}">{{ t.get(*assurance_label) }}</span></h1>
 {% include "explain.html" %}
 <p class="muted">{% if let Some(b) = current_branch %}{{ t.msg(Key::RepoLocationBranch).code("point", point).code("branch", b).html() }}{% else %}{{ t.msg(Key::RepoLocation).code("point", point).html() }}{% endif %}</p>
+{% if let Some(line) = open_proposals %}
+<p class="muted"><a href="/{{ owner }}/{{ name }}/proposals">{{ line }}</a></p>
+{% endif %}
 {% include "listing.html" %}
 {% if let Some(html) = readme_html %}
 <section class="readme">{{ html|safe }}</section>
