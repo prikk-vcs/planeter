@@ -40,7 +40,7 @@
 - **RFC 004 part 3a built 2026-10-21, reviewed Approved** (`rfcs/handoffs/005-change-review/change-model-and-journal-handoff-v2.md`):
   the records (`changes`, `revisions`, `intents`, `repo_flags`; the atomic `complete_intent_with_revision`; usage queries), the
   pure rules (derivation from an intent, declarations, base, states, landing, quotas, the sealed-from-`log` rule) and their
-  tests, in `docs/changes.md`. No route yet. Also: the export sandbox mounts a working directory of its own, not the whole
+  tests, in `docs/proposals.md`. No route yet. Also: the export sandbox mounts a working directory of its own, not the whole
   spool (the part-2 review's decision). Part 2 itself was **reviewed Approved (2026-10-21)**.
 - **RFC 004 part 2 built 2026-10-21, reviewed Approved** (`rfcs/handoffs/004-transport/advertise-and-fetch-handoff-v2.md`): the
   transport's read side — `GET …/transport/advertise` and `…/transport/fetch` (whole, verified, spooled, cached,

@@ -87,7 +87,7 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 - **The database gains the tables behind proposed changes (RFC 004 part 3a; nothing uses them yet).** Opening an existing
   database now also creates `changes`, `revisions`, `intents` and `repo_flags` (idempotent; every earlier table is
   untouched, and reopening changes nothing). Nothing writes to them until the transport's write side is built, so a
-  server updated to this version behaves as before. The design note is `docs/changes.md`. The export sandbox now mounts
+  server updated to this version behaves as before. The design note is `docs/proposals.md`. The export sandbox now mounts
   only a working directory of its own, never the whole spool (`<spool>/work/<id>`, created and removed per export;
   leftovers from a crash are cleaned when the server starts).
 

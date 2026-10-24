@@ -1,8 +1,8 @@
-# Propose: putting an artifact on the forge as a change revision
+# Propose: putting an artifact on the forge as a revision of a proposal
 
 | | |
 |---|---|
-| Document | The write side of the transport (RFC 004 part 3b; D-3, D-5, D-6, D-7): the request, the order of the checks, the life of an intent, the operator's settings, and what the client and the operator see when something goes wrong. The records and rules it uses are in [`changes.md`](changes.md). |
+| Document | The write side of the transport (RFC 004 part 3b; D-3, D-5, D-6, D-7): the request, the order of the checks, the life of an intent, the operator's settings, and what the client and the operator see when something goes wrong. The records and rules it uses are in [`proposals.md`](proposals.md). |
 | Where | `crates/planeter-web/src/transport.rs` (the route), `crates/planeter-transport/src/propose.rs` (the service), `crates/planeter-transport/src/artifacts.rs` (the upload area). Tests: `crates/planeter-web/tests/transport_propose.rs`, `crates/planeter/tests/propose_kill.rs`. |
 
 **Nothing here seals, merges or publishes.** A proposal makes the work *held for review* on the forge; no branch changes.
@@ -27,12 +27,12 @@ at most `PRIKK_EXCHANGE_MAX_BYTES` (default 100 MiB): the declared length is che
 (`413`). The artifact is streamed to disk and hashed as it arrives, never held in memory; a client that goes quiet for 30 seconds,
 or takes more than 15 minutes, is cut off.
 
-Metadata (unknown fields are refused): `change` (an existing change's id, to add a revision; absent opens a change), `title`
-(required for a new change, at most 200 characters), `description` (at most 64 KiB), `target_ref` (advisory), `base` (the block id
+Metadata (unknown fields are refused): `proposal` (an existing proposal's id, to add a revision; absent opens a proposal), `title`
+(required for a new proposal, at most 200 characters), `description` (at most 64 KiB), `target_ref` (advisory), `base` (the block id
 the artifact was built against), `declared_patches` (the 64-hex patch ids the artifact contains; absent for a push by plain
-prikk), `client` (name and version). An existing change takes no `title`, `description` or `target_ref`.
+prikk), `client` (name and version). An existing proposal takes no `title`, `description` or `target_ref`.
 
-The answer is `201` (a change was opened) or `200` (a revision was added, or the artifact was already recorded), with the change
+The answer is `201` (a proposal was opened) or `200` (a revision was added, or the artifact was already recorded), with the proposal (`proposal_id`, `created_proposal`)
 and revision ids, the claims and what accept said of each, how many patches the push added and the first 1,000 of them with their
 assurance, whether a declaration was kept, and a one-sentence message in the caller's language: the work is held for review and no
 branch has changed. A pending patch is `forge-approved-unsealed` (in plain words: **accepted and held by this server, not yet signed into the history; nobody has approved it for merging** — the word *approved* is part of a machine value that is in the 0.4.0 contract and is not a review decision): **never** `sealed` (that needs a block read from `log`), and
@@ -51,11 +51,11 @@ Everything before the accept is decided without writing anything; the first rule
 | 5 | the repository is not waiting for recovery | `503 needs_recovery` (reads are unaffected) |
 | 6 | the framing and the size: length, content type, magic, the metadata's length, the artifact's size | `411`, `400 invalid_request` (+ `reason`), `413 payload_too_large` |
 | 7 | the metadata: JSON, no unknown field, every field's shape | `400 invalid_request` (+ `reason`) |
-| 8 | the change it names exists here, is open, and is the caller's own or the caller holds `write` | `422 unknown_change`, `422 change_not_open`, `403 not_your_change` |
+| 8 | the proposal it names exists here, is open, and is the caller's own or the caller holds `write` | `422 unknown_proposal`, `422 proposal_not_open`, `403 not_your_proposal` |
 | 9 | the declared base is listed by `log` of a ref the repository holds (never `show <base>`, PK-57) | `422 base_unknown` |
 | 10 | a free upload slot (at most `PLANETER_PROPOSE_CONCURRENCY`), then the body is read to disk | `503 busy` + `Retry-After` |
 | 11 | **a repeat**: the artifact's digest already has a revision | `200`, that revision, nothing recorded |
-| 12 | the quota (RFC 005 Q-2: open changes, accepted bytes, revisions per change, repository capacity) | `422 quota_exceeded` (+ `quota`, `limit`, `used`, `unit`) |
+| 12 | the quota (RFC 005 Q-2: open proposals, accepted bytes, revisions per proposal, repository capacity) | `422 quota_exceeded` (+ `quota`, `limit`, `used`, `unit`) |
 | 13 | admission against the memory budget (heavy pool, cost 10 MiB + 4.2 × the artifact), then the repository's write lease | `422 too_large`, `503 busy` + `Retry-After` |
 | 14 | the accept itself (below) | see the failure table |
 
@@ -78,7 +78,7 @@ request that breaks the base and the quota gets the base's.
 ```
 
 * The intent is written **before** `sync accept` starts, holding the patches that were pending at the **first** attempt.
-* Exit 0 **and** a readable report **and** a derivable revision → one transaction records the revision (and the change) and closes
+* Exit 0 **and** a readable report **and** a derivable revision → one transaction records the revision (and the proposal) and closes
   the intent. Nothing else ever creates a revision.
 * A declaration that does not hold (`declaration_misses_added`, `declared_not_held`) leaves the accepted patches where they are
   (an accepted patch cannot be removed), leaves the intent **open** and the repository **not** flagged: a corrected re-send derives
@@ -118,7 +118,7 @@ uploaded artifact is kept in the store; the retry sends it again and resumes the
 | `PLANETER_ACCEPT_DEADLINE_SECS` | 600 | wall-time bound of one accept (never the 120 s read bound) |
 | `PLANETER_PROPOSE_CONCURRENCY` | 2 | proposals uploading or accepting at once |
 | `PLANETER_PROPOSE_LEASE_WAIT_SECS` | 5 | the wait for an upload slot and the write lease before `503 busy` |
-| `PLANETER_PROPOSAL_CAPACITY_MB` | 4096 | artifacts a repository retains for open and recently finished changes |
+| `PLANETER_PROPOSAL_CAPACITY_MB` | 4096 | artifacts a repository retains for open and recently finished proposals |
 | `PLANETER_PRIKK_MEMORY_BUDGET_MB` | see `--help` | the budget an accept draws from, like a read, always from the **heavy** pool |
 
 An accept of an artifact of *A* bytes under an object bound of *N* is admitted at **10 MiB + 7.0 × *A* + 2 KiB × *N*** and given a
