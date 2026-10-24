@@ -350,8 +350,8 @@ fn prikk_is_asked_once_per_state_however_many_proposals_and_requests() {
 fn log_is_read_only_for_proposals_whose_patches_have_all_left_pending() {
     let f = Fixture::new("candidates", now, 200);
     let (a, b, c) = (pid(1), pid(2), pid(3));
-    f.propose("held", "alice", &[a.clone()], 101);
-    f.propose("left", "alice", &[b.clone()], 102);
+    f.propose("held", "alice", std::slice::from_ref(&a), 101);
+    f.propose("left", "alice", std::slice::from_ref(&b), 102);
     f.propose("half", "alice", &[b.clone(), c.clone()], 103);
     // `held` is still pending; `left` has left pending; `half` has one patch pending.
     f.pending(&[a.clone(), c.clone()]);
@@ -391,8 +391,8 @@ fn a_patch_in_a_block_of_a_received_ref_counts_and_one_that_is_in_no_block_does_
     f.propose("neither", "alice", &[pid(3)], 102);
     f.pending(&[]);
     // One patch in the published ref's log, the other only in the received ref's.
-    f.log("heads/main", &[a.clone()]);
-    f.log("remotes/heads/main", &[b.clone()]);
+    f.log("heads/main", std::slice::from_ref(&a));
+    f.log("remotes/heads/main", std::slice::from_ref(&b));
     assert_eq!(f.list(StateFilter::Landed), vec!["both"]);
     assert_eq!(f.state_of("neither"), ChangeState::Open);
     let d = f.svc.detail(&f.repo, "both").unwrap();

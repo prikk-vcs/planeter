@@ -681,7 +681,7 @@ fn record_transcript(asked: &str, status: StatusCode, headers: &HeaderMap, body:
                 if shown.len() < b.len() { " …" } else { "" }
             );
         }
-        Some(b) if b.is_empty() => {}
+        Some("") => {}
         Some(b) => text += &format!("    (a page of {} bytes)\n", b.len()),
         None => text += &format!("    ({} bytes of the artifact)\n", body.len()),
     }
