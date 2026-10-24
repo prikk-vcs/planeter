@@ -8,6 +8,9 @@
 
 ## Where we are
 
+- **RFC 004 part 4c built 2026-10-24, awaiting review** (`rfcs/handoffs/004-transport/accept-bound-default-handoff-v2.md`): the default
+  `PRIKK_EXCHANGE_MAX_BYTES` is 100 MiB (a 4 GiB host admits it; 256 MiB needs about 8.1 GiB); the start-up log names what the
+  configured budget admits and whether the bound fits. Part 4b was **reviewed Approved** (IS-52 closed).
 - **RFC 004 part 4b built 2026-10-22, awaiting review** (`rfcs/handoffs/004-transport/accept-cost-model-handoff-v2.md`): IS-52 — the
   accept's cost measured over twenty-odd artifacts (single blobs of 1 to 250 MiB, many files, many patches, an edited file) and
   modelled in one place (`cost_model`: 10 MiB + 7.0 × bytes + 2 KiB × the object bound, ceiling 1.5 ×); the object bound defaults to

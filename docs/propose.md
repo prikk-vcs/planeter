@@ -23,7 +23,7 @@ artifact                      the rest of the body: `prikk sync build` output (P
 ```
 
 `Content-Length` is required (`411`); `Content-Type`, if sent, is `application/octet-stream`. `M` is at most 4 MiB, the artifact
-at most `PRIKK_EXCHANGE_MAX_BYTES` (default 256 MiB): the declared length is checked **before a byte of the body is read**
+at most `PRIKK_EXCHANGE_MAX_BYTES` (default 100 MiB): the declared length is checked **before a byte of the body is read**
 (`413`). The artifact is streamed to disk and hashed as it arrives, never held in memory; a client that goes quiet for 30 seconds,
 or takes more than 15 minutes, is cut off.
 
@@ -113,7 +113,7 @@ uploaded artifact is kept in the store; the retry sends it again and resumes the
 | Variable | Default | Meaning |
 |---|---|---|
 | `PLANETER_ARTIFACT_DIR` | unset | the artifact store; **required** for proposals (unset: `503 transport_off`) |
-| `PRIKK_EXCHANGE_MAX_BYTES` | 268435456 | the largest artifact: refused at the edge and again by prikk |
+| `PRIKK_EXCHANGE_MAX_BYTES` | 104857600 | the largest artifact (100 MiB; was 256 MiB before part 4c): refused at the edge and again by prikk. Raise it only with the memory to match: at 256 MiB the largest accept needs about 1.8 GiB of the budget |
 | `PRIKK_EXCHANGE_MAX_OBJECTS` | 5000 | the most patches, and the most blobs, an artifact may declare (prikk refuses a larger one; nothing is accepted). Was 20000 before part 4b: the accept of 20,000 patches took 11 minutes, over the 600 s deadline |
 | `PLANETER_ACCEPT_DEADLINE_SECS` | 600 | wall-time bound of one accept (never the 120 s read bound) |
 | `PLANETER_PROPOSE_CONCURRENCY` | 2 | proposals uploading or accepting at once |
@@ -125,12 +125,18 @@ An accept of an artifact of *A* bytes under an object bound of *N* is admitted a
 data-segment ceiling (`RLIMIT_DATA`) of 1.5 times that. The constants are in one place, `cost_model` in
 `crates/planeter-transport/src/propose.rs`, each annotated with its measurement (prikk 0.53.0, 2026-10-22, part 4b): a single
 large blob needs 7.0 × its size whatever it holds, artifacts of many files or patches 4.0 to 4.3 ×, and each patch about 1.7 KiB more.
-At the default bounds (256 MiB, 5,000 objects) that is about **1.8 GiB** of the budget and a ceiling of about 2.7 GiB: the start-up log
-says whether the heavy pool admits it (it does on a host with about 8.1 GiB or more of usable memory at the default budget), and the
-operator raises the budget or lowers `PRIKK_EXCHANGE_MAX_BYTES` if it does not. A proposal larger than the heavy pool is refused as
+At the default bounds (100 MiB, 5,000 objects) that is about **0.7 GiB** of the budget and a ceiling of about 1.05 GiB: a host with about
+3.3 GiB or more of usable memory admits it at the default budget (a 4 GiB host admits artifacts up to 125 MiB). At a raised bound of
+256 MiB it is about 1.8 GiB, which needs about 8.1 GiB of usable memory (or a raised `PLANETER_PRIKK_MEMORY_BUDGET_MB`). The start-up
+log names the largest artifact the configured budget admits and the configured bound, and warns when the bound is the larger of the two:
+the operator raises the budget or lowers `PRIKK_EXCHANGE_MAX_BYTES`. A proposal larger than the heavy pool is refused as
 too large *before* anything is accepted; one that is admitted is not killed by its own ceiling.
 
 ## Limits worth knowing
+
+* **Why a proposal can be over the bound:** prikk keeps a full copy of a file for every edit it records, so a 4 MiB file edited fifty
+  times makes a 200 MiB artifact. That is the usual reason a proposal is refused with `413` (`payload_too_large`). The remedy is to
+  propose in smaller steps (a few edits at a time), or to ask the person who runs the server to raise `PRIKK_EXCHANGE_MAX_BYTES`.
 
 * A declaration that fails after a successful accept leaves its patches in the repository: an accepted patch cannot be removed
   from a prikk store. They are counted by nothing until a revision records the artifact; rate limits and the repository's disk are

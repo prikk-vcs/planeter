@@ -5,6 +5,13 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **The default size of a proposal is 100 MiB (RFC 004 part 4c).** `PRIKK_EXCHANGE_MAX_BYTES` defaults to 104857600 (was 256 MiB):
+  with the measured memory model the largest accept at 256 MiB needs about 1.8 GiB of the memory budget, which only a host with about
+  8.1 GiB of usable memory admits at the default budget; at 100 MiB it needs about 0.7 GiB, which a 4 GiB host admits (up to 125 MiB).
+  Operators with more memory raise it. The start-up log now says, in one sentence, what the configured memory budget admits and
+  whether the configured bound fits. A proposal over the bound is the usual 413; the usual cause is a file edited many times (prikk
+  keeps a full copy of the file for every edit it records), and `docs/propose.md` says so.
+
 - **The accept's memory model is measured (RFC 004 part 4b, IS-52).** A single large blob needed 7.0 × its size in the
   accept's data segment, not the 4.2 × the admission and the ceiling assumed, so a proposal carrying one file of about 22 MiB or
   more was killed at its ceiling and left the repository waiting for recovery. The cost of an accept is now
