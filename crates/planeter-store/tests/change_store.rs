@@ -118,7 +118,179 @@ suite!(
     an_intent_can_only_be_abandoned_while_open,
     an_open_intent_owes_its_bytes_until_a_revision_or_an_abandonment_replaces_it,
     flagged_repositories_are_listed,
+    leaving_open_on_an_observation_wins_only_if_nothing_was_recorded_since,
+    changes_are_counted_per_repository_and_state,
+    expired_revisions_are_those_of_final_changes_past_their_grace,
+    an_artifact_is_needed_by_an_open_change_a_change_in_grace_or_an_open_intent,
 );
+
+/// RFC 005 part 5, T1: the compare-and-set of landing.
+fn leaving_open_on_an_observation_wins_only_if_nothing_was_recorded_since(s: &dyn ChangeStore) {
+    let (cid, _) = push_new_change(s, 1, "alice", 10);
+    // The observation saw one revision; it is still the only one: applied.
+    assert!(
+        s.leave_open_observed(&cid, 1, ChangeState::Landed, None, 20, Some(120))
+            .unwrap()
+    );
+    let c = s.get_change(&cid).unwrap().unwrap();
+    assert_eq!(
+        (c.state, c.updated_at, c.retain_until),
+        (ChangeState::Landed, 20, Some(120))
+    );
+    // A final change is not touched again, by an observation or otherwise.
+    assert!(
+        !s.leave_open_observed(&cid, 1, ChangeState::Closed, Some("x"), 30, Some(130))
+            .unwrap()
+    );
+    assert_eq!(
+        s.get_change(&cid).unwrap().unwrap().state,
+        ChangeState::Landed
+    );
+
+    // A second revision recorded after the observation wins: the observation is discarded and the change stays open.
+    let (cid2, _) = push_new_change(s, 2, "alice", 10);
+    s.open_or_resume_intent("i2b", &repo(), &digest(22), 0, &[], "alice", 12)
+        .unwrap();
+    s.complete_intent_with_revision("i2b", None, &revision("v2b", &cid2, 2, 22, 10, "alice"), 13)
+        .unwrap();
+    assert!(
+        !s.leave_open_observed(&cid2, 1, ChangeState::Landed, None, 40, Some(140))
+            .unwrap(),
+        "it saw one revision, there are two"
+    );
+    let c2 = s.get_change(&cid2).unwrap().unwrap();
+    assert_eq!((c2.state, c2.retain_until), (ChangeState::Open, None));
+    // Observing both revisions applies it.
+    assert!(
+        s.leave_open_observed(&cid2, 2, ChangeState::Landed, None, 41, Some(141))
+            .unwrap()
+    );
+    // A close needs its reason here as everywhere; an unknown change is NotFound.
+    let (cid3, _) = push_new_change(s, 3, "alice", 10);
+    assert!(matches!(
+        s.leave_open_observed(&cid3, 1, ChangeState::Closed, None, 50, None),
+        Err(StoreError::Invalid(_))
+    ));
+    assert_eq!(
+        s.get_change(&cid3).unwrap().unwrap().state,
+        ChangeState::Open
+    );
+    assert!(matches!(
+        s.leave_open_observed("nope", 1, ChangeState::Landed, None, 50, None),
+        Err(StoreError::NotFound)
+    ));
+}
+
+fn changes_are_counted_per_repository_and_state(s: &dyn ChangeStore) {
+    let other = RepoId::new("elsewhere");
+    s.create_change(&change("a", "alice", 1)).unwrap();
+    s.create_change(&change("b", "alice", 2)).unwrap();
+    let mut c = change("c", "bob", 3);
+    c.repo_id = other.clone();
+    s.create_change(&c).unwrap();
+    s.leave_open("b", ChangeState::Closed, Some("done"), 5, Some(50))
+        .unwrap();
+    assert_eq!(s.count_changes(&repo(), None).unwrap(), 2);
+    assert_eq!(
+        s.count_changes(&repo(), Some(ChangeState::Open)).unwrap(),
+        1
+    );
+    assert_eq!(
+        s.count_changes(&repo(), Some(ChangeState::Closed)).unwrap(),
+        1
+    );
+    assert_eq!(
+        s.count_changes(&repo(), Some(ChangeState::Landed)).unwrap(),
+        0
+    );
+    assert_eq!(s.count_changes(&other, None).unwrap(), 1);
+    assert_eq!(s.count_changes(&RepoId::new("none"), None).unwrap(), 0);
+}
+
+fn expired_revisions_are_those_of_final_changes_past_their_grace(s: &dyn ChangeStore) {
+    let (open, _) = push_new_change(s, 1, "alice", 10);
+    let (landed, _) = push_new_change(s, 2, "alice", 10);
+    let (closed, _) = push_new_change(s, 3, "alice", 10);
+    let (late, _) = push_new_change(s, 4, "alice", 10);
+    s.leave_open(&landed, ChangeState::Landed, None, 20, Some(100))
+        .unwrap();
+    s.leave_open(&closed, ChangeState::Closed, Some("x"), 20, Some(200))
+        .unwrap();
+    s.leave_open(&late, ChangeState::Closed, Some("x"), 20, Some(1000))
+        .unwrap();
+    let ids = |now: u64, limit: usize| -> Vec<String> {
+        s.expired_revisions(now, None, limit)
+            .unwrap()
+            .into_iter()
+            .map(|r| r.change_id)
+            .collect()
+    };
+    assert!(
+        ids(100, 10).is_empty(),
+        "at retain_until itself it is still kept (the boundary is inclusive)"
+    );
+    assert_eq!(ids(101, 10), vec![landed.clone()]);
+    assert_eq!(ids(201, 10), vec![landed.clone(), closed.clone()]);
+    assert_eq!(ids(201, 1), vec![landed.clone()], "bounded work per call");
+    // The next call goes on after the last revision it was given, so the same ones are not asked for again.
+    let first = s.expired_revisions(5000, None, 2).unwrap();
+    assert_eq!(first.len(), 2);
+    let rest = s
+        .expired_revisions(5000, Some(&first[1].revision_id), 2)
+        .unwrap();
+    assert_eq!(rest.len(), 1);
+    assert!(first.iter().all(|r| r.revision_id < rest[0].revision_id));
+    assert!(
+        s.expired_revisions(5000, Some(&rest[0].revision_id), 2)
+            .unwrap()
+            .is_empty()
+    );
+    assert!(
+        !ids(5000, 10).contains(&open),
+        "an open change is never a candidate"
+    );
+    assert_eq!(ids(5000, 10).len(), 3);
+}
+
+fn an_artifact_is_needed_by_an_open_change_a_change_in_grace_or_an_open_intent(
+    s: &dyn ChangeStore,
+) {
+    let (open, _) = push_new_change(s, 1, "alice", 10);
+    let (done, _) = push_new_change(s, 2, "alice", 10);
+    s.leave_open(&done, ChangeState::Closed, Some("x"), 20, Some(100))
+        .unwrap();
+    assert!(s.artifact_needed(&digest(1), 5000).unwrap(), "open change");
+    assert!(
+        s.artifact_needed(&digest(2), 100).unwrap(),
+        "in grace at the boundary"
+    );
+    assert!(
+        !s.artifact_needed(&digest(2), 101).unwrap(),
+        "past its grace"
+    );
+    assert!(
+        !s.artifact_needed(&digest(99), 0).unwrap(),
+        "an unknown digest"
+    );
+    // An open intent names the digest of an artifact that is not recorded at all.
+    s.open_or_resume_intent("iX", &repo(), &digest(77), 5, &[], "alice", 30)
+        .unwrap();
+    assert!(s.artifact_needed(&digest(77), 5000).unwrap());
+    s.abandon_intent("iX", 31).unwrap();
+    assert!(!s.artifact_needed(&digest(77), 5000).unwrap());
+    // The same digest in a second repository: a revision of an open change there keeps it, whatever happened here.
+    let other = RepoId::new("elsewhere");
+    let mut c = change("other-c", "bob", 40);
+    c.repo_id = other.clone();
+    let mut r = revision("other-v", "other-c", 1, 2, 10, "bob");
+    r.repo_id = other.clone();
+    s.open_or_resume_intent("iO", &other, &digest(2), 0, &[], "bob", 40)
+        .unwrap();
+    s.complete_intent_with_revision("iO", Some(&c), &r, 41)
+        .unwrap();
+    assert!(s.artifact_needed(&digest(2), 5000).unwrap());
+    let _ = open;
+}
 
 fn changes_are_created_read_and_listed(s: &dyn ChangeStore) {
     let c = change("c1", "alice", 5);

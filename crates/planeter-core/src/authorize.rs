@@ -106,6 +106,11 @@ impl Scope {
         self.expires_at.is_some_and(|exp| now_unix >= exp)
     }
 
+    /// Whether the credential's access class permits `action` at all (before the user's own role is considered).
+    pub fn permits_action(&self, action: Action) -> bool {
+        self.access.permits(action)
+    }
+
     pub fn permits_repo(&self, repo_id: &RepoId) -> bool {
         match &self.repos {
             RepoScope::All => true,

@@ -249,9 +249,40 @@ pub trait ChangeStore: Send + Sync {
         retain_until: Option<u64>,
     ) -> Result<()>;
 
+    /// Like [`ChangeStore::leave_open`], **conditional on what was observed** (RFC 005 part 5, T1: a compare-and-set): it
+    /// applies only if the change is still `open` **and** has exactly `revisions_seen` revisions. `Ok(true)` — applied;
+    /// `Ok(false)` — not applied because a revision was recorded (or the change left `open`) since the observation, which
+    /// then wins and is discarded. A change that does not exist is [`StoreError::NotFound`].
+    fn leave_open_observed(
+        &self,
+        change_id: &str,
+        revisions_seen: u32,
+        to: ChangeState,
+        reason: Option<&str>,
+        now: u64,
+        retain_until: Option<u64>,
+    ) -> Result<bool>;
+    /// How many changes the repository has, optionally only those in `state`.
+    fn count_changes(&self, repo_id: &RepoId, state: Option<ChangeState>) -> Result<u64>;
+
     // -- revisions
     /// The change's revisions in `seq` order.
     fn revisions_of(&self, change_id: &str) -> Result<Vec<RevisionRecord>>;
+    /// The revisions of changes that left `open` and whose `retain_until` is **before** `now` (the grace boundary is
+    /// inclusive: at `retain_until` itself the artifact is still kept), in `revision_id` order, those after `after` (a
+    /// `revision_id`) when it is given, at most `limit`. The retention sweep's candidates: it goes on from the last one it
+    /// looked at, so a record whose files are long gone does not hold the sweep back from the ones after it. A candidate is
+    /// removed only if [`ChangeStore::artifact_needed`] says nothing needs it.
+    fn expired_revisions(
+        &self,
+        now: u64,
+        after: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<RevisionRecord>>;
+    /// Whether anything still needs the artifact with this digest: a revision of an `open` change, of a change that
+    /// left `open` and is still within its grace (`retain_until >= now`, or none recorded), or an `open` intent that
+    /// names it — in any repository.
+    fn artifact_needed(&self, artifact_digest: &str, now: u64) -> Result<bool>;
     /// The revision of an artifact (by digest) in a repository, if one was recorded.
     fn revision_by_digest(
         &self,
@@ -401,6 +432,77 @@ impl ChangeStore for InMemoryChangeStore {
         c.updated_at = now;
         c.retain_until = retain_until;
         Ok(())
+    }
+
+    fn leave_open_observed(
+        &self,
+        id: &str,
+        revisions_seen: u32,
+        to: ChangeState,
+        reason: Option<&str>,
+        now: u64,
+        retain_until: Option<u64>,
+    ) -> Result<bool> {
+        let mut m = self.lock()?;
+        let seen = m.revisions.iter().filter(|r| r.change_id == id).count();
+        let c = m.changes.get_mut(id).ok_or(StoreError::NotFound)?;
+        if c.state != ChangeState::Open || seen != revisions_seen as usize {
+            return Ok(false);
+        }
+        validate_leave(c.state, to, reason)?;
+        c.state = to;
+        c.closed_reason =
+            (to == ChangeState::Closed).then(|| reason.unwrap_or_default().to_owned());
+        c.updated_at = now;
+        c.retain_until = retain_until;
+        Ok(true)
+    }
+
+    fn count_changes(&self, repo: &RepoId, state: Option<ChangeState>) -> Result<u64> {
+        Ok(self
+            .lock()?
+            .changes
+            .values()
+            .filter(|c| &c.repo_id == repo && state.is_none_or(|s| c.state == s))
+            .count() as u64)
+    }
+
+    fn expired_revisions(
+        &self,
+        now: u64,
+        after: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<RevisionRecord>> {
+        let m = self.lock()?;
+        let mut out: Vec<RevisionRecord> = m
+            .revisions
+            .iter()
+            .filter(|r| after.is_none_or(|a| r.revision_id.as_str() > a))
+            .filter(|r| {
+                m.changes.get(&r.change_id).is_some_and(|c| {
+                    c.state != ChangeState::Open && c.retain_until.is_some_and(|u| u < now)
+                })
+            })
+            .cloned()
+            .collect();
+        out.sort_by(|a, b| a.revision_id.cmp(&b.revision_id));
+        out.truncate(limit);
+        Ok(out)
+    }
+
+    fn artifact_needed(&self, digest: &str, now: u64) -> Result<bool> {
+        let m = self.lock()?;
+        let by_revision = m.revisions.iter().any(|r| {
+            r.artifact_digest == digest
+                && m.changes.get(&r.change_id).is_none_or(|c| {
+                    c.state == ChangeState::Open || c.retain_until.is_none_or(|u| u >= now)
+                })
+        });
+        let by_intent = m
+            .intents
+            .iter()
+            .any(|i| i.state == IntentState::Open && i.artifact_digest == digest);
+        Ok(by_revision || by_intent)
     }
 
     fn revisions_of(&self, id: &str) -> Result<Vec<RevisionRecord>> {
@@ -1132,6 +1234,85 @@ impl ChangeStore for SqliteChangeStore {
         )
         .map_err(backend)?;
         tx.commit().map_err(backend)
+    }
+
+    fn leave_open_observed(
+        &self,
+        id: &str,
+        revisions_seen: u32,
+        to: ChangeState,
+        reason: Option<&str>,
+        now: u64,
+        retain_until: Option<u64>,
+    ) -> Result<bool> {
+        let mut conn = self.db.lock()?;
+        let tx = conn.transaction().map_err(backend)?;
+        let row: Option<(String, i64)> = tx
+            .query_row(
+                "SELECT state, (SELECT COUNT(*) FROM revisions WHERE change_id = ?1) FROM changes WHERE change_id = ?1",
+                params![id],
+                |r| Ok((r.get(0)?, r.get(1)?)),
+            )
+            .optional()
+            .map_err(backend)?;
+        let (state, seen) = row.ok_or(StoreError::NotFound)?;
+        let from = ChangeState::parse(&state)?;
+        if from != ChangeState::Open || seen != i64::from(revisions_seen) {
+            return Ok(false);
+        }
+        validate_leave(from, to, reason)?;
+        tx.execute(
+            "UPDATE changes SET state = ?2, closed_reason = ?3, updated_at = ?4, retain_until = ?5 WHERE change_id = ?1 AND state = 'open'",
+            params![id, to.as_str(), (to == ChangeState::Closed).then(|| reason.unwrap_or_default().to_owned()), now as i64, retain_until.map(|v| v as i64)],
+        )
+        .map_err(backend)?;
+        tx.commit().map_err(backend)?;
+        Ok(true)
+    }
+
+    fn count_changes(&self, repo: &RepoId, state: Option<ChangeState>) -> Result<u64> {
+        let conn = self.db.lock()?;
+        let n: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM changes WHERE repo_id = ?1 AND (?2 IS NULL OR state = ?2)",
+                params![repo.as_str(), state.map(ChangeState::as_str)],
+                |r| r.get(0),
+            )
+            .map_err(backend)?;
+        Ok(u64::try_from(n).unwrap_or(0))
+    }
+
+    fn expired_revisions(
+        &self,
+        now: u64,
+        after: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<RevisionRecord>> {
+        let conn = self.db.lock()?;
+        let mut stmt = conn
+            .prepare(&format!(
+                "{SELECT_REVISION} WHERE revision_id > ?3 AND change_id IN (SELECT change_id FROM changes WHERE state IN ('landed', 'closed') AND retain_until IS NOT NULL AND retain_until < ?1) ORDER BY revision_id LIMIT ?2"
+            ))
+            .map_err(backend)?;
+        let rows = stmt
+            .query_map(
+                params![now as i64, limit as i64, after.unwrap_or("")],
+                revision_from,
+            )
+            .map_err(backend)?;
+        rows.map(|r| r.map_err(backend)?).collect()
+    }
+
+    fn artifact_needed(&self, digest: &str, now: u64) -> Result<bool> {
+        let conn = self.db.lock()?;
+        let needed: i64 = conn
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM revisions r JOIN changes c ON c.change_id = r.change_id WHERE r.artifact_digest = ?1 AND (c.state = 'open' OR c.retain_until IS NULL OR c.retain_until >= ?2)) OR EXISTS(SELECT 1 FROM intents WHERE artifact_digest = ?1 AND state = 'open')",
+                params![digest, now as i64],
+                |r| r.get(0),
+            )
+            .map_err(backend)?;
+        Ok(needed != 0)
     }
 
     fn revisions_of(&self, id: &str) -> Result<Vec<RevisionRecord>> {

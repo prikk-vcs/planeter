@@ -571,6 +571,52 @@ impl ReadService {
             .map(|(record, _)| record)
     }
 
+    /// Whether the principal may do `action` in the repository `record` — a record the **caller has already obtained through
+    /// the read gate**. `Close`, `Review` and `Comment` are decided on the repository's items, the others on the repository.
+    /// A credential's own ceiling (its scope: the class of access, the repositories, the expiry) applies as everywhere
+    /// ([`authorize`]).
+    pub fn allowed(
+        &self,
+        principal: &Principal,
+        record: &RepositoryRecord,
+        action: Action,
+    ) -> Result<bool> {
+        let ctx = self.access_context(principal, record)?;
+        let repo = RepoResource {
+            repo_id: record.repo_id.clone(),
+            owner: record.owner.clone(),
+            visibility: record.visibility,
+            proposals: record.proposals,
+        };
+        let resource = match action {
+            Action::Close | Action::Review | Action::Comment => {
+                Resource::Item(crate::authorize::ItemResource { repo })
+            }
+            _ => Resource::Repo(repo),
+        };
+        Ok(authorize(principal, action, &resource, &ctx).is_allowed())
+    }
+
+    /// Whether the principal's **credential** permits `action` in this repository, whatever the user's own role: the
+    /// scope's class of access, its repositories and its expiry. A session or a token without a scope permits it. This is
+    /// what the opener of a proposal needs to close it (RFC 005 part 5, T3): their own proposal is theirs to close, but a
+    /// read-only token is never allowed to.
+    pub fn credential_permits(
+        &self,
+        principal: &Principal,
+        record: &RepositoryRecord,
+        action: Action,
+    ) -> bool {
+        match principal.scope() {
+            None => principal.is_authenticated(),
+            Some(scope) => {
+                !scope.is_expired((self.now_unix)())
+                    && scope.permits_repo(&record.repo_id)
+                    && scope.permits_action(action)
+            }
+        }
+    }
+
     fn action_access(
         &self,
         action: Action,
