@@ -10,7 +10,7 @@ use crate::catalog::{Key, Lang, T};
 /// The message and hint keys of a refusal.
 pub fn keys(refusal: &QuotaRefusal) -> (Key, Key) {
     match refusal.quota {
-        Quota::OpenChanges => (Key::QuotaOpenChangesMessage, Key::QuotaOpenChangesHint),
+        Quota::OpenChanges => (Key::QuotaOpenProposalsMessage, Key::QuotaOpenProposalsHint),
         Quota::AcceptedBytes => (Key::QuotaAcceptedBytesMessage, Key::QuotaAcceptedBytesHint),
         Quota::RevisionsPerChange => (Key::QuotaRevisionsMessage, Key::QuotaRevisionsHint),
         Quota::RepositoryCapacity => (Key::QuotaCapacityMessage, Key::QuotaCapacityHint),

@@ -1,9 +1,9 @@
 //! Propose: the write side of the transport (RFC 004 D-3, D-5, D-6, D-7; RFC 005 D-1…D-3, D-9).
 //!
-//! One authenticated request puts an artifact on the forge as a **change revision**:
+//! One authenticated request puts an artifact on the forge as a **proposal revision**:
 //!
 //! 1. [`ProposeService::check`] — before any byte of the artifact is read: the `needs-recovery` flag, the quotas,
-//!    the metadata, the change the push names, the declared base. Nothing here writes;
+//!    the metadata, the proposal the push names, the declared base. Nothing here writes;
 //! 2. [`ProposeService::start_upload`] — a bounded number of uploads at once, a working area of the proposal's own,
 //!    the artifact streamed into it and hashed, never held in memory;
 //! 3. [`ProposeService::accept`] — the same artifact already recorded answers with that revision; otherwise the
@@ -162,8 +162,9 @@ impl ProposeConfig {
 /// The validated metadata of a proposal (the JSON of the request, read by the web layer).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct ProposeMeta {
-    /// An existing change to add a revision to; absent opens one.
-    pub change: Option<String>,
+    /// An existing proposal to add a revision to; absent opens one. (A *proposal* in the product's words; the code's internal
+    /// name for it is *change*.)
+    pub proposal: Option<String>,
     pub title: Option<String>,
     pub description: Option<String>,
     /// The ref the submitter intends (advisory).
@@ -179,20 +180,20 @@ pub struct ProposeMeta {
 /// Why the metadata was refused. Each is a named reason the edge can show.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MetaError {
-    /// A new change needs a title.
+    /// A new proposal needs a title.
     TitleRequired,
     TitleTooLong,
     DescriptionTooLong,
     /// A target ref that is not a plain ref name.
     TargetRefInvalid,
-    /// A base, a declared patch or a change id that is not what it should be.
+    /// A base, a declared patch or a proposal id that is not what it should be.
     BaseInvalid,
     PatchIdInvalid,
     TooManyPatchIds,
-    ChangeIdInvalid,
+    ProposalIdInvalid,
     ClientInvalid,
-    /// A title, description or target ref was sent for a change that already exists.
-    FieldsForExistingChange,
+    /// A title, description or target ref was sent for a proposal that already exists.
+    FieldsForExistingProposal,
 }
 
 impl MetaError {
@@ -205,9 +206,9 @@ impl MetaError {
             MetaError::BaseInvalid => "base_invalid",
             MetaError::PatchIdInvalid => "patch_id_invalid",
             MetaError::TooManyPatchIds => "too_many_patch_ids",
-            MetaError::ChangeIdInvalid => "change_id_invalid",
+            MetaError::ProposalIdInvalid => "proposal_id_invalid",
             MetaError::ClientInvalid => "client_invalid",
-            MetaError::FieldsForExistingChange => "fields_for_existing_change",
+            MetaError::FieldsForExistingProposal => "fields_for_existing_proposal",
         }
     }
 }
@@ -219,7 +220,7 @@ fn is_hex64(s: &str) -> bool {
 impl ProposeMeta {
     /// Check the shape of every field. Nothing is trimmed or rewritten.
     pub fn validate(&self) -> Result<(), MetaError> {
-        match &self.change {
+        match &self.proposal {
             Some(id) => {
                 if id.is_empty()
                     || id.len() > 64
@@ -227,10 +228,10 @@ impl ProposeMeta {
                         .bytes()
                         .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'_')
                 {
-                    return Err(MetaError::ChangeIdInvalid);
+                    return Err(MetaError::ProposalIdInvalid);
                 }
                 if self.title.is_some() || self.description.is_some() || self.target_ref.is_some() {
-                    return Err(MetaError::FieldsForExistingChange);
+                    return Err(MetaError::FieldsForExistingProposal);
                 }
             }
             None => match &self.title {
@@ -328,12 +329,12 @@ pub enum ProposeError {
         reason: String,
     },
     Meta(MetaError),
-    /// The change the push names does not exist in this repository.
-    UnknownChange,
-    /// The change is not open any more.
-    ChangeNotOpen(ChangeState),
-    /// The change is somebody else's and the submitter does not hold `write`.
-    NotYourChange,
+    /// The proposal the push names does not exist in this repository.
+    UnknownProposal,
+    /// The proposal is not open any more.
+    ProposalNotOpen(ChangeState),
+    /// The proposal is somebody else's and the submitter does not hold `write`.
+    NotYourProposal,
     Quota(QuotaRefusal),
     /// The declared base is not held: push the base first.
     BaseUnknown,
@@ -363,9 +364,9 @@ impl ProposeError {
             ProposeError::Busy { .. } => "busy",
             ProposeError::NeedsRecovery { .. } => "needs_recovery",
             ProposeError::Meta(m) => m.reason(),
-            ProposeError::UnknownChange => "unknown_change",
-            ProposeError::ChangeNotOpen(_) => "change_not_open",
-            ProposeError::NotYourChange => "not_your_change",
+            ProposeError::UnknownProposal => "unknown_proposal",
+            ProposeError::ProposalNotOpen(_) => "proposal_not_open",
+            ProposeError::NotYourProposal => "not_your_proposal",
             ProposeError::Quota(_) => "quota_exceeded",
             ProposeError::BaseUnknown => "base_unknown",
             ProposeError::IntentHeldByAnother => "intent_held_by_another",
@@ -386,9 +387,9 @@ impl ProposeError {
 /// What the checks before the upload decided (see [`ProposeService::check`]).
 #[derive(Debug, Clone)]
 pub struct Plan {
-    /// The change this push adds a revision to; `None` when it opens one.
+    /// The proposal this push adds a revision to; `None` when it opens one.
     pub existing: Option<ChangeRecord>,
-    /// The number of the revision this push would be (1 for a new change).
+    /// The number of the revision this push would be (1 for a new proposal).
     pub next_seq: u32,
     /// A quota refusal that is held back until the artifact's digest is known: a repeat of an artifact that is
     /// already recorded is answered with its revision, whatever the quotas now say.
@@ -403,11 +404,11 @@ pub struct Plan {
 /// The result of a proposal.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Proposed {
-    pub change_id: String,
+    pub proposal_id: String,
     pub revision_id: String,
     pub seq: u32,
-    /// This push opened the change.
-    pub created_change: bool,
+    /// This push opened the proposal.
+    pub created_proposal: bool,
     /// The artifact had a revision already; nothing was recorded.
     pub already_recorded: bool,
     /// What accept said of each claim.
@@ -624,7 +625,7 @@ impl ProposeService {
     }
 
     /// Everything that can be decided before the artifact is read, in the order a person can act on it:
-    /// the `needs-recovery` flag → the quota → the metadata → the change the push names → the declared base.
+    /// the `needs-recovery` flag → the quota → the metadata → the proposal the push names → the declared base.
     /// `artifact_bytes` is the size the request declares (the framing makes it exact). Nothing is written.
     ///
     /// A quota refusal is **held back** (see [`Plan`]) rather than returned: the artifact may be a repeat of one
@@ -638,8 +639,8 @@ impl ProposeService {
     ) -> Result<Plan, ProposeError> {
         let repo = &record.repo_id;
         self.ensure_writable(record)?;
-        // The change the push names (looked up now; its refusals come after the metadata's).
-        let existing = match &meta.change {
+        // The proposal the push names (looked up now; its refusals come after the metadata's).
+        let existing = match &meta.proposal {
             Some(id) if id_is_plain(id) => self
                 .changes
                 .get_change(id)
@@ -675,13 +676,13 @@ impl ProposeService {
         };
         let deferred_quota = check_quota(&usage, &policy, &request).err();
         meta.validate().map_err(ProposeError::Meta)?;
-        if meta.change.is_some() {
-            let c = existing.as_ref().ok_or(ProposeError::UnknownChange)?;
+        if meta.proposal.is_some() {
+            let c = existing.as_ref().ok_or(ProposeError::UnknownProposal)?;
             if c.state != ChangeState::Open {
-                return Err(ProposeError::ChangeNotOpen(c.state));
+                return Err(ProposeError::ProposalNotOpen(c.state));
             }
             if c.opened_by != who.id && !who.can_write {
-                return Err(ProposeError::NotYourChange);
+                return Err(ProposeError::NotYourProposal);
             }
         }
         if let Some(base) = &meta.base
@@ -1091,10 +1092,10 @@ impl ProposeService {
             },
         );
         Ok(Proposed {
-            change_id,
+            proposal_id: change_id,
             revision_id: revision.revision_id,
             seq,
-            created_change: new_change.is_some(),
+            created_proposal: new_change.is_some(),
             already_recorded: false,
             claims: claim_outcomes,
             added_count: derived.added_patch_ids.len() as u64,
@@ -1128,10 +1129,10 @@ impl ProposeService {
     fn already_recorded(&self, r: &RevisionRecord) -> Proposed {
         let added = r.added_patch_ids.len() as u64;
         Proposed {
-            change_id: r.change_id.clone(),
+            proposal_id: r.change_id.clone(),
             revision_id: r.revision_id.clone(),
             seq: r.seq,
-            created_change: false,
+            created_proposal: false,
             already_recorded: true,
             claims: r.claim_outcomes.clone(),
             added_count: added,

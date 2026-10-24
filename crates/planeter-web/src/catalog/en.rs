@@ -324,14 +324,14 @@ pub const CATALOG: &[Entry] = &[
         "error.invalid_request.ref_hint",
         "A bundle needs a ref: add ref=NAME, taking the name from the advertisement.",
     ),
-    // quota refusals of a proposed change (RFC 005 D-9)
+    // quota refusals of a proposal (RFC 005 D-9)
     msg(
-        "quota.open_changes.message",
-        "You already have {used} open changes in this repository, and the limit is {limit}.",
+        "quota.open_proposals.message",
+        "You already have {used} open proposals in this repository, and the limit is {limit}.",
     ),
     msg(
-        "quota.open_changes.hint",
-        "Close one of your open changes, or ask a maintainer to raise the limit.",
+        "quota.open_proposals.hint",
+        "Close one of your open proposals, or ask a maintainer to raise the limit.",
     ),
     msg(
         "quota.accepted_bytes.message",
@@ -339,28 +339,28 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "quota.accepted_bytes.hint",
-        "Ask a maintainer to raise the limit, because what you have sent stays on the server even after a change is closed.",
+        "Ask a maintainer to raise the limit, because what you have sent stays on the server even after a proposal is closed.",
     ),
     msg(
         "quota.revisions.message",
-        "This change already has {used} revisions, and the limit is {limit}.",
+        "This proposal already has {used} revisions, and the limit is {limit}.",
     ),
     msg(
         "quota.revisions.hint",
-        "Open a new change for further work, or ask a maintainer to raise the limit.",
+        "Open a new proposal for further work, or ask a maintainer to raise the limit.",
     ),
     msg(
         "quota.capacity.message",
-        "This repository has reached its capacity for proposed changes: {used} MiB of {limit} MiB are in use.",
+        "This repository has reached its capacity for proposals: {used} MiB of {limit} MiB are in use.",
     ),
     msg(
         "quota.capacity.hint",
-        "Ask a maintainer to close finished changes, or ask the person who runs this server to raise the capacity.",
+        "Ask a maintainer to close finished proposals, or ask the person who runs this server to raise the capacity.",
     ),
-    // proposing a change (RFC 004 part 3b)
+    // making a proposal (RFC 004 part 3b)
     msg(
         "error.forbidden.message",
-        "You can read this repository, but you may not propose changes to it.",
+        "You can read this repository, but you may not make proposals to it.",
     ),
     msg(
         "error.forbidden.hint",
@@ -396,7 +396,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "error.quota_exceeded.hint",
-        "The details are in this response, so close a change or ask a maintainer to raise the limit.",
+        "The details are in this response, so close a proposal or ask a maintainer to raise the limit.",
     ),
     msg(
         "error.base_unknown.message",
@@ -431,25 +431,28 @@ pub const CATALOG: &[Entry] = &[
         "There is nothing to propose, so if you changed something, build the artifact again.",
     ),
     msg(
-        "error.unknown_change.message",
-        "This repository has no change with that id.",
+        "error.unknown_proposal.message",
+        "This repository has no proposal with that id.",
     ),
     msg(
-        "error.unknown_change.hint",
-        "Take the id from an earlier response, or leave it out to open a new change.",
+        "error.unknown_proposal.hint",
+        "Take the id from an earlier response, or leave it out to open a new proposal.",
     ),
     msg(
-        "error.change_not_open.message",
-        "That change has landed or been closed, so it takes no more revisions.",
-    ),
-    msg("error.change_not_open.hint", "Open a new change instead."),
-    msg(
-        "error.not_your_change.message",
-        "That change was opened by somebody else.",
+        "error.proposal_not_open.message",
+        "That proposal has landed or been closed, so it takes no more revisions.",
     ),
     msg(
-        "error.not_your_change.hint",
-        "Open a change of your own, or ask a maintainer.",
+        "error.proposal_not_open.hint",
+        "Open a new proposal instead.",
+    ),
+    msg(
+        "error.not_your_proposal.message",
+        "That proposal was opened by somebody else.",
+    ),
+    msg(
+        "error.not_your_proposal.hint",
+        "Open a proposal of your own, or ask a maintainer.",
     ),
     msg(
         "error.accept_refused.message",

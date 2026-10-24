@@ -627,7 +627,7 @@ const UPLOAD_TOTAL: Duration = Duration::from_secs(15 * 60);
 #[derive(Debug, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 struct MetaWire {
-    change: Option<String>,
+    proposal: Option<String>,
     title: Option<String>,
     description: Option<String>,
     target_ref: Option<String>,
@@ -639,7 +639,7 @@ struct MetaWire {
 impl From<MetaWire> for ProposeMeta {
     fn from(w: MetaWire) -> Self {
         ProposeMeta {
-            change: w.change,
+            proposal: w.proposal,
             title: w.title,
             description: w.description,
             target_ref: w.target_ref,
@@ -716,15 +716,15 @@ fn propose_failure(state: &AppState, e: &ProposeError) -> Response {
             Vec::new(),
             vec![("reason", m.reason().into())],
         ),
-        ProposeError::UnknownChange => code(ErrorCode::UnknownChange),
-        ProposeError::ChangeNotOpen(s) => detailed(
+        ProposeError::UnknownProposal => code(ErrorCode::UnknownProposal),
+        ProposeError::ProposalNotOpen(s) => detailed(
             state,
-            ErrorCode::ChangeNotOpen,
-            ErrorCode::ChangeNotOpen.keys(),
+            ErrorCode::ProposalNotOpen,
+            ErrorCode::ProposalNotOpen.keys(),
             Vec::new(),
             vec![("state", s.as_str().into())],
         ),
-        ProposeError::NotYourChange => code(ErrorCode::NotYourChange),
+        ProposeError::NotYourProposal => code(ErrorCode::NotYourProposal),
         ProposeError::Quota(r) => {
             let (limit, used) = r.figures();
             let (message, hint) = crate::quota::keys(r);
@@ -823,9 +823,9 @@ struct PatchAssuranceView {
 
 #[derive(Serialize)]
 pub struct ProposedView {
-    change_id: String,
+    proposal_id: String,
     revision: RevisionView,
-    created_change: bool,
+    created_proposal: bool,
     already_recorded: bool,
     claims: Vec<ClaimView>,
     added_count: u64,
@@ -1126,12 +1126,12 @@ pub(crate) async fn propose_handler(
         crate::catalog::Key::ProposeHeld
     };
     let view = ProposedView {
-        change_id: proposed.change_id,
+        proposal_id: proposed.proposal_id,
         revision: RevisionView {
             id: proposed.revision_id,
             seq: proposed.seq,
         },
-        created_change: proposed.created_change,
+        created_proposal: proposed.created_proposal,
         already_recorded: proposed.already_recorded,
         claims: proposed
             .claims
@@ -1155,7 +1155,7 @@ pub(crate) async fn propose_handler(
         assurance: planeter_core::Assurance::ForgeApprovedUnsealed,
         message: crate::catalog::T::new(lang).msg(key).text(),
     };
-    let status = if proposed.already_recorded || !proposed.created_change && proposed.seq > 1 {
+    let status = if proposed.already_recorded || !proposed.created_proposal && proposed.seq > 1 {
         StatusCode::OK
     } else {
         StatusCode::CREATED

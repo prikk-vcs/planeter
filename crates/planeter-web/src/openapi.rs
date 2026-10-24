@@ -156,11 +156,11 @@ fn schemas() -> Value {
             "message": {"type": "string", "description": "One plain sentence, in the language negotiated from `Accept-Language` (English by default). Never a path, a repository's existence, or tool output."},
             "hint": {"type": "string", "description": "What the caller can do next, in the same language."},
             "reason": {"type": "string", "description": "Only on `invalid_request` for a proposal: which part of the framing or the metadata was refused (for example `magic`, `truncated`, `title_required`, `unknown_field`)."},
-            "quota": {"type": "string", "enum": ["open_changes", "accepted_bytes", "revisions_per_change", "repository_capacity"], "description": "Only on `quota_exceeded`: which limit."},
+            "quota": {"type": "string", "enum": ["open_proposals", "accepted_bytes", "revisions_per_proposal", "repository_capacity"], "description": "Only on `quota_exceeded`: which limit."},
             "limit": {"type": "integer", "minimum": 0, "description": "Only on `quota_exceeded`: the limit, in `unit`."},
             "used": {"type": "integer", "minimum": 0, "description": "Only on `quota_exceeded`: the current use, in `unit`."},
             "unit": {"type": "string", "enum": ["count", "mebibytes"], "description": "Only on `quota_exceeded`: the unit of `limit` and `used`."},
-            "state": {"type": "string", "enum": ["landed", "closed"], "description": "Only on `change_not_open`."},
+            "state": {"type": "string", "enum": ["landed", "closed"], "description": "Only on `proposal_not_open`."},
             "count": {"type": "integer", "minimum": 0, "description": "Only on `declaration_misses_added` and `declared_not_held`: how many patches."},
             "patch_ids": {"type": "array", "items": {"type": "string"}, "description": "Only on `declaration_misses_added` and `declared_not_held`: the first patch ids concerned."},
             "detail": {"type": "string", "description": "Only on `accept_refused`: prikk's own text, verbatim (English, not translated)."},
@@ -255,10 +255,10 @@ fn schemas() -> Value {
         "ProposedPatch": obj(&["patch_id", "assurance"], json!({
             "patch_id": string_prop(), "assurance": {"$ref": "#/components/schemas/Assurance"}
         })),
-        "Proposed": obj(&["change_id", "revision", "created_change", "already_recorded", "claims", "added_count", "patches", "declared", "artifact_bytes", "assurance", "message"], json!({
-            "change_id": string_prop(),
+        "Proposed": obj(&["proposal_id", "revision", "created_proposal", "already_recorded", "claims", "added_count", "patches", "declared", "artifact_bytes", "assurance", "message"], json!({
+            "proposal_id": string_prop(),
             "revision": {"$ref": "#/components/schemas/ProposedRevision"},
-            "created_change": {"type": "boolean", "description": "This push opened the change."},
+            "created_proposal": {"type": "boolean", "description": "This push opened the proposal."},
             "already_recorded": {"type": "boolean", "description": "The artifact was already a revision; nothing was recorded."},
             "claims": array_of("ProposedClaim"),
             "added_count": {"type": "integer", "minimum": 0, "description": "How many patches the push added."},
@@ -594,7 +594,7 @@ pub fn document(content_origin: &str) -> Value {
         with_errors(
             json!({"post": {
                 "operationId": "postTransportPropose",
-                "summary": "Propose a change: put an artifact on the forge as a revision",
+                "summary": "Propose: put an artifact on the forge as a revision of a proposal",
                 "description": "Authorized for **propose** (`write` and above; any signed-in reader if the repository's `proposals` setting is `any-authenticated`; never a CI job) and authenticated by a **bearer token only** (a session cookie is not looked at, so another site cannot make this request on a browser's behalf). The body is framed, without multipart: `PLANETER-PROPOSE-1\\n`, an 8-byte big-endian length `M`, `M` bytes of JSON metadata, then the artifact (`sync build` output, `PEXCH002`) to the end of the body. `Content-Length` is required; `M` is at most 4 MiB and the artifact at most `PRIKK_EXCHANGE_MAX_BYTES` (default 100 MiB; `413` before the body is read) and at most `PRIKK_EXCHANGE_MAX_OBJECTS` (default 5,000) patches and as many blobs, which prikk checks and refuses with `422 accept_refused` (nothing is accepted); the artifact is streamed to disk and hashed, never held in memory. Metadata fields: `change` (an existing change id to add a revision to; absent opens a change), `title` (required for a new change, at most 200 characters), `description` (at most 64 KiB), `target_ref` (advisory), `base` (the block id the artifact was built on; it must be listed by `log` of a ref the repository holds), `declared_patches` (the 64-hex patch ids the artifact contains; absent for a push by plain prikk), `client` (name and version). Unknown fields are refused. The checks run in this order, all before any write: rate limit, read gate, propose authorization, `needs_recovery`, framing and size, quota (a refusal is held back only until the artifact's digest shows it is a repeat of one already recorded), metadata, the change named (open; opened by the caller or the caller holds `write`), the declared base. Then the artifact is accepted under the repository's write lease, with an intent journaled first. **Nothing here seals, merges or publishes**: the work is held for review and no branch changes. If the accept does not finish, the answer is `503 incomplete` with the intent's id, and sending the same artifact again once the repository has recovered resumes it and records exactly one revision. A repeat of an artifact already recorded answers `200` with its revision.",
                 "parameters": owner_name(),
                 "security": [{"bearerToken": []}],
@@ -605,11 +605,11 @@ pub fn document(content_origin: &str) -> Value {
                 },
                 "responses": {
                     "201": {
-                        "description": "A change was opened (or revision 1 of it recorded).",
+                        "description": "A proposal was opened (or revision 1 of it recorded).",
                         "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Proposed"}}}
                     },
                     "200": {
-                        "description": "A revision was added to an existing change, or the artifact was already recorded.",
+                        "description": "A revision was added to an existing proposal, or the artifact was already recorded.",
                         "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Proposed"}}}
                     }
                 },
@@ -627,9 +627,9 @@ pub fn document(content_origin: &str) -> Value {
                 ErrorCode::DeclarationMissesAdded,
                 ErrorCode::DeclaredNotHeld,
                 ErrorCode::NoNewContent,
-                ErrorCode::UnknownChange,
-                ErrorCode::ChangeNotOpen,
-                ErrorCode::NotYourChange,
+                ErrorCode::UnknownProposal,
+                ErrorCode::ProposalNotOpen,
+                ErrorCode::NotYourProposal,
                 ErrorCode::AcceptRefused,
                 ErrorCode::IntentPending,
                 ErrorCode::Incomplete,

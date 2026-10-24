@@ -73,7 +73,7 @@ pub enum ErrorCode {
     RateLimited,
     /// 416: a `Range` that cannot be satisfied by the one current artifact; carries `Content-Range: bytes */size`.
     RangeNotSatisfiable,
-    /// 403: the caller can read the repository but may not propose changes to it.
+    /// 403: the caller can read the repository but may not propose to it.
     Forbidden,
     /// 411: a proposal must declare its length (`Content-Length`).
     LengthRequired,
@@ -91,12 +91,12 @@ pub enum ErrorCode {
     DeclaredNotHeld,
     /// 422: the artifact added nothing the repository did not already hold.
     NoNewContent,
-    /// 422: the repository has no change with that id.
-    UnknownChange,
-    /// 422: the change is landed or closed and takes no more revisions.
-    ChangeNotOpen,
-    /// 403: the change was opened by somebody else, and the caller does not hold `write`.
-    NotYourChange,
+    /// 422: the repository has no proposal with that id.
+    UnknownProposal,
+    /// 422: the proposal is landed or closed and takes no more revisions.
+    ProposalNotOpen,
+    /// 403: the proposal was opened by somebody else, and the caller does not hold `write`.
+    NotYourProposal,
     /// 422: prikk refused the artifact and left nothing behind (its text is in the `detail` field).
     AcceptRefused,
     /// 409: somebody else has begun sending this exact artifact and it has not finished.
@@ -135,9 +135,9 @@ impl ErrorCode {
         ErrorCode::DeclarationMissesAdded,
         ErrorCode::DeclaredNotHeld,
         ErrorCode::NoNewContent,
-        ErrorCode::UnknownChange,
-        ErrorCode::ChangeNotOpen,
-        ErrorCode::NotYourChange,
+        ErrorCode::UnknownProposal,
+        ErrorCode::ProposalNotOpen,
+        ErrorCode::NotYourProposal,
         ErrorCode::AcceptRefused,
         ErrorCode::IntentPending,
         ErrorCode::Incomplete,
@@ -172,9 +172,9 @@ impl ErrorCode {
             ErrorCode::DeclarationMissesAdded => "declaration_misses_added",
             ErrorCode::DeclaredNotHeld => "declared_not_held",
             ErrorCode::NoNewContent => "no_new_content",
-            ErrorCode::UnknownChange => "unknown_change",
-            ErrorCode::ChangeNotOpen => "change_not_open",
-            ErrorCode::NotYourChange => "not_your_change",
+            ErrorCode::UnknownProposal => "unknown_proposal",
+            ErrorCode::ProposalNotOpen => "proposal_not_open",
+            ErrorCode::NotYourProposal => "not_your_proposal",
             ErrorCode::AcceptRefused => "accept_refused",
             ErrorCode::IntentPending => "intent_pending",
             ErrorCode::Incomplete => "incomplete",
@@ -207,9 +207,9 @@ impl ErrorCode {
             ErrorCode::DeclarationMissesAdded => StatusCode::UNPROCESSABLE_ENTITY,
             ErrorCode::DeclaredNotHeld => StatusCode::UNPROCESSABLE_ENTITY,
             ErrorCode::NoNewContent => StatusCode::UNPROCESSABLE_ENTITY,
-            ErrorCode::UnknownChange => StatusCode::UNPROCESSABLE_ENTITY,
-            ErrorCode::ChangeNotOpen => StatusCode::UNPROCESSABLE_ENTITY,
-            ErrorCode::NotYourChange => StatusCode::FORBIDDEN,
+            ErrorCode::UnknownProposal => StatusCode::UNPROCESSABLE_ENTITY,
+            ErrorCode::ProposalNotOpen => StatusCode::UNPROCESSABLE_ENTITY,
+            ErrorCode::NotYourProposal => StatusCode::FORBIDDEN,
             ErrorCode::AcceptRefused => StatusCode::UNPROCESSABLE_ENTITY,
             ErrorCode::IntentPending => StatusCode::CONFLICT,
             ErrorCode::Incomplete => StatusCode::SERVICE_UNAVAILABLE,
@@ -264,9 +264,15 @@ impl ErrorCode {
                 (Key::ErrDeclaredNotHeldMessage, Key::ErrDeclaredNotHeldHint)
             }
             ErrorCode::NoNewContent => (Key::ErrNoNewContentMessage, Key::ErrNoNewContentHint),
-            ErrorCode::UnknownChange => (Key::ErrUnknownChangeMessage, Key::ErrUnknownChangeHint),
-            ErrorCode::ChangeNotOpen => (Key::ErrChangeNotOpenMessage, Key::ErrChangeNotOpenHint),
-            ErrorCode::NotYourChange => (Key::ErrNotYourChangeMessage, Key::ErrNotYourChangeHint),
+            ErrorCode::UnknownProposal => {
+                (Key::ErrUnknownProposalMessage, Key::ErrUnknownProposalHint)
+            }
+            ErrorCode::ProposalNotOpen => {
+                (Key::ErrProposalNotOpenMessage, Key::ErrProposalNotOpenHint)
+            }
+            ErrorCode::NotYourProposal => {
+                (Key::ErrNotYourProposalMessage, Key::ErrNotYourProposalHint)
+            }
             ErrorCode::AcceptRefused => (Key::ErrAcceptRefusedMessage, Key::ErrAcceptRefusedHint),
             ErrorCode::IntentPending => (Key::ErrIntentPendingMessage, Key::ErrIntentPendingHint),
             ErrorCode::Incomplete => (Key::ErrIncompleteMessage, Key::ErrIncompleteHint),
@@ -382,9 +388,7 @@ impl ErrorCode {
             ErrorCode::RangeNotSatisfiable => {
                 "a byte range the current artifact cannot satisfy (carries `Content-Range: bytes */size`)"
             }
-            ErrorCode::Forbidden => {
-                "the caller can read the repository but may not propose changes to it"
-            }
+            ErrorCode::Forbidden => "the caller can read the repository but may not propose to it",
             ErrorCode::LengthRequired => "a proposal must declare its length with `Content-Length`",
             ErrorCode::PayloadTooLarge => {
                 "the proposal is larger than this server accepts (refused before the artifact is read)"
@@ -405,12 +409,12 @@ impl ErrorCode {
             ErrorCode::NoNewContent => {
                 "the artifact added nothing the repository did not already hold"
             }
-            ErrorCode::UnknownChange => "the repository has no change with that id",
-            ErrorCode::ChangeNotOpen => {
-                "the change is landed or closed and takes no more revisions"
+            ErrorCode::UnknownProposal => "the repository has no proposal with that id",
+            ErrorCode::ProposalNotOpen => {
+                "the proposal is landed or closed and takes no more revisions"
             }
-            ErrorCode::NotYourChange => {
-                "the change was opened by somebody else and the caller does not hold `write`"
+            ErrorCode::NotYourProposal => {
+                "the proposal was opened by somebody else and the caller does not hold `write`"
             }
             ErrorCode::AcceptRefused => {
                 "prikk refused the artifact and left nothing behind (its own text is in the `detail` field)"

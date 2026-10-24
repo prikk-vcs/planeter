@@ -33,7 +33,8 @@ use crate::store::{Result, StoreError};
 
 // ------------------------------------------------------------------------------------------------ states
 
-/// A change's state (RFC 005 D-2). `landed` and `closed` are final.
+/// A proposal's state (RFC 005 D-2) — a *proposal* in the product's words; the code's internal name for it is *change*.
+/// `landed` and `closed` are final.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum ChangeState {
     Open,
@@ -91,7 +92,8 @@ impl IntentState {
 
 // ------------------------------------------------------------------------------------------------ records
 
-/// A change (RFC 005 D-2). `description` is stored as text and rendered only through the sanitizer, later.
+/// A *proposal* in the product's words (the code's internal name is *change*; in the glossary a *change* is a recorded unit of
+/// history, prikk's block). RFC 005 D-2. `description` is stored as text and rendered only through the sanitizer.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ChangeRecord {
     pub change_id: String,
@@ -117,7 +119,7 @@ pub struct ClaimOutcome {
     pub outcome: String,
 }
 
-/// One revision of a change: one accepted artifact. Ids only.
+/// One revision of a proposal (internally a *change*): one accepted artifact. Ids only.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RevisionRecord {
     pub revision_id: String,
@@ -224,7 +226,7 @@ pub fn unpack_ids(blob: &[u8]) -> Result<Vec<String>> {
 
 // ------------------------------------------------------------------------------------------------ the trait
 
-/// Persistence of changes, revisions, intents and the recovery flag. Safe to share across threads.
+/// Persistence of proposals (internally *changes*), revisions, intents and the recovery flag. Safe to share across threads.
 pub trait ChangeStore: Send + Sync {
     // -- changes
     /// Insert a change. [`StoreError::Conflict`] if its id exists.

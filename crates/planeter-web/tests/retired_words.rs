@@ -21,6 +21,27 @@ const WORDS: &[&str] = &[
     "session",
     "sessions",
 ];
+/// RFC 005 part 5 T0 (decision D-38): **change** is the glossary's word for a recorded unit of history (prikk's block). What a person
+/// proposes is a **proposal**. These phrases are the old uses of "change" for a proposal; a message may not contain them. Whole
+/// phrases, not the word: "a recorded change" in the history pages is right, "open changes" is not.
+const CHANGE_MEANING_PROPOSAL: &[&str] = &[
+    "open change",
+    "open changes",
+    "new change",
+    "new changes",
+    "proposed change",
+    "proposed changes",
+    "propose changes",
+    "close a change",
+    "finished changes",
+    "change of your own",
+    "change with that id",
+    "your change",
+    "your changes",
+    "that change has landed",
+    "an existing change",
+];
+
 /// Old navigation words that may not be a whole message (a label); `Verification` and `error code` are fine.
 const LABELS: &[&str] = &["code", "history", "verify"];
 
@@ -83,6 +104,12 @@ fn terms_in(text: &str) -> Vec<&'static str> {
         .filter(|w| contains_word(&text, w))
         .collect();
     out.extend(LABELS.iter().copied().filter(|l| text.trim() == *l));
+    out.extend(
+        CHANGE_MEANING_PROPOSAL
+            .iter()
+            .copied()
+            .filter(|p| contains_word(&text, p)),
+    );
     out
 }
 
@@ -174,6 +201,11 @@ fn every_retired_word_is_found_wherever_it_hides() {
         ("3 of 4 sessions verified.", "sessions"),
         ("1 of 1 session verified.", "session"),
         ("sign in with sso", "SSO"),
+        // "change" for a proposal (D-38)
+        ("You already have 3 open changes.", "open changes"),
+        ("Open a new change instead.", "new change"),
+        ("Close one of your open changes.", "open changes"),
+        ("You may not propose changes to it.", "propose changes"),
         // a whole message that is an old navigation label
         ("code", "code"),
         ("history", "history"),
@@ -208,6 +240,12 @@ fn ordinary_words_and_placeholders_are_not_mistaken_for_retired_ones() {
         "Sign in with single sign-on",
         "The checks were reevaluated by hand",
         "This history is empty.",
+        // "change" in its glossary sense, a recorded unit of history, is not a proposal
+        "A recorded change.",
+        "There are no signed changes on this branch yet.",
+        "This change was approved on this server.",
+        "A rollback is a change that undoes an earlier change.",
+        "No branch has changed.",
     ] {
         let l = planted(vec![message("planted.key", text)]);
         let (problems, _) = check(&[l], &[]);
@@ -279,6 +317,20 @@ const JA_FORBIDDEN: &[(&str, &str)] = &[
         "不正な",
         "implies wrongdoing; say \"not correct\" / \"not recognised\"",
     ),
+    // RFC 005 part 5 T0 (D-38): 変更 is the one word for a recorded unit of history; a proposal is 提案.
+    (
+        "開いている変更",
+        "a proposal is 提案; 変更 is a recorded unit of history (D-38)",
+    ),
+    ("新しい変更", "a proposal is 提案 (D-38)"),
+    ("提案された変更", "say 提案 (D-38)"),
+    ("変更を提案", "say 提案する (D-38)"),
+    ("変更を閉じ", "a proposal is closed: 提案を閉じ (D-38)"),
+    ("変更を開", "a proposal is opened: 提案を開 (D-38)"),
+    ("自分の変更", "say 自分の提案 (D-38)"),
+    ("完了した変更", "say 完了した提案 (D-38)"),
+    ("その変更は", "a proposal is 提案 (D-38)"),
+    ("ID の変更", "a proposal is 提案 (D-38)"),
     ("彼女", "gendered wording (D-6)"),
     ("彼は", "gendered wording (D-6)"),
     ("男性", "gendered wording (D-6)"),
@@ -347,6 +399,11 @@ fn every_forbidden_japanese_term_is_found_and_ordinary_words_are_not_mistaken_fo
         "ブランチとタグ",
         "シングルサインオンでログイン",
         "このサーバーで承認されました。",
+        "記録された変更です。",
+        "この変更は、このサーバーで承認されました。",
+        "ロールバックとは、以前の変更を取り消す変更のことです。",
+        "このブランチには、署名済みの変更がまだありません。",
+        "開いている提案がすでに{used}件あり、上限は{limit}件です。",
     ] {
         let l = planted(vec![message("planted.key", text)]);
         assert_eq!(ja_check(&[l]), Vec::<String>::new(), "{text:?}");

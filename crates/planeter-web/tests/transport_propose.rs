@@ -640,7 +640,7 @@ fn titled(title: &str) -> serde_json::Value {
 // ------------------------------------------------------------------------------------------------ the happy path
 
 #[tokio::test]
-async fn a_keyed_clients_artifact_becomes_a_change_with_one_revision_and_nothing_is_published() {
+async fn a_keyed_clients_artifact_becomes_a_proposal_with_one_revision_and_nothing_is_published() {
     if skip() {
         return;
     }
@@ -674,7 +674,7 @@ async fn a_keyed_clients_artifact_becomes_a_change_with_one_revision_and_nothing
         String::from_utf8_lossy(&reply.body)
     );
     let v = reply.json();
-    assert_eq!(v["created_change"], true);
+    assert_eq!(v["created_proposal"], true);
     assert_eq!(v["already_recorded"], false);
     assert_eq!(v["revision"]["seq"], 1);
     assert_eq!(v["added_count"], 2);
@@ -716,8 +716,8 @@ async fn a_keyed_clients_artifact_becomes_a_change_with_one_revision_and_nothing
         "the state fingerprint (and so the advertisement's ETag) changed"
     );
 
-    // The records: one change, one revision, the intent complete, the artifact retained by digest.
-    let change_id = v["change_id"].as_str().unwrap();
+    // The records: one proposal, one revision, the intent complete, the artifact retained by digest.
+    let change_id = v["proposal_id"].as_str().unwrap();
     let change = w.changes.get_change(change_id).unwrap().unwrap();
     assert_eq!(
         (
@@ -795,7 +795,7 @@ impl Client {
 // ------------------------------------------------------------------------------------------------ revisions and repeats
 
 #[tokio::test]
-async fn a_second_revision_to_the_same_change_and_a_resend_of_an_identical_artifact() {
+async fn a_second_revision_to_the_same_proposal_and_a_resend_of_an_identical_artifact() {
     if skip() {
         return;
     }
@@ -804,7 +804,7 @@ async fn a_second_revision_to_the_same_change_and_a_resend_of_an_identical_artif
     let a1 = w.client.artifact(&w.forge, "a1");
     let first = propose_as(&w, "forge", "tok-alice", titled("One"), &a1).await;
     assert_eq!(first.status, StatusCode::CREATED);
-    let change_id = first.json()["change_id"].as_str().unwrap().to_owned();
+    let change_id = first.json()["proposal_id"].as_str().unwrap().to_owned();
     let rev1 = first.json()["revision"]["id"].as_str().unwrap().to_owned();
 
     // A second revision: more commits, an artifact built against the forge as it now is (its pending patches are
@@ -816,7 +816,7 @@ async fn a_second_revision_to_the_same_change_and_a_resend_of_an_identical_artif
         &w,
         "forge",
         "tok-alice",
-        serde_json::json!({"change": change_id, "declared_patches": declared}),
+        serde_json::json!({"proposal": change_id, "declared_patches": declared}),
         &a2,
     )
     .await;
@@ -828,12 +828,12 @@ async fn a_second_revision_to_the_same_change_and_a_resend_of_an_identical_artif
     );
     let v = second.json();
     assert_eq!(
-        (v["created_change"].clone(), v["revision"]["seq"].clone()),
+        (v["created_proposal"].clone(), v["revision"]["seq"].clone()),
         (false.into(), 2.into())
     );
     assert_eq!(v["added_count"], 2, "only what this push added");
     assert_eq!(v["declared"], true);
-    assert_eq!(v["change_id"], change_id.as_str());
+    assert_eq!(v["proposal_id"], change_id.as_str());
     let revs = w.changes.revisions_of(&change_id).unwrap();
     assert_eq!(revs.len(), 2);
     assert_eq!(
@@ -988,7 +988,7 @@ async fn a_declaration_that_misses_an_added_patch_or_names_one_not_held_is_refus
     );
     let revs = w
         .changes
-        .revisions_of(ok.json()["change_id"].as_str().unwrap())
+        .revisions_of(ok.json()["proposal_id"].as_str().unwrap())
         .unwrap();
     assert_eq!(revs.len(), 1);
     assert_eq!(
@@ -1112,7 +1112,7 @@ async fn any_authenticated_opens_the_door_to_a_reader_and_the_quota_is_named_whe
     }
     let mut w = world("quota", Opts::default());
     let anyauth = w.base.join("anyauth");
-    // Under `any-authenticated` carol (no role at all) may propose: 3 open changes at most.
+    // Under `any-authenticated` carol (no role at all) may propose: 3 open proposals at most.
     let mut first_artifact = Vec::new();
     for i in 0..3 {
         w.client.commit(1);
@@ -1146,13 +1146,13 @@ async fn any_authenticated_opens_the_door_to_a_reader_and_the_quota_is_named_whe
     );
     let v = r.json();
     assert_eq!(v["code"], "quota_exceeded");
-    assert_eq!(v["quota"], "open_changes");
+    assert_eq!(v["quota"], "open_proposals");
     assert_eq!(
         (v["limit"].clone(), v["used"].clone(), v["unit"].clone()),
         (3.into(), 3.into(), "count".into())
     );
     assert!(
-        v["message"].as_str().unwrap().contains("3 open changes"),
+        v["message"].as_str().unwrap().contains("3 open proposals"),
         "{v}"
     );
     assert!(v["hint"].as_str().unwrap().contains("Close one"), "{v}");
@@ -1201,11 +1201,11 @@ async fn any_authenticated_opens_the_door_to_a_reader_and_the_quota_is_named_whe
     .await;
     assert_eq!(ja.code(), "quota_exceeded");
     // (Japanese is a draft and is not shipped yet, so the reply is English until its reviewers sign it off.)
-    assert_eq!(ja.json()["quota"], "open_changes");
+    assert_eq!(ja.json()["quota"], "open_proposals");
 }
 
 #[tokio::test]
-async fn only_the_opener_or_a_writer_adds_to_a_change_and_only_while_it_is_open() {
+async fn only_the_opener_or_a_writer_adds_to_a_proposal_and_only_while_it_is_open() {
     if skip() {
         return;
     }
@@ -1214,28 +1214,28 @@ async fn only_the_opener_or_a_writer_adds_to_a_change_and_only_while_it_is_open(
     let a1 = w.client.artifact(&w.forge, "a1");
     let first = propose_as(&w, "forge", "tok-dave", titled("Dave's"), &a1).await;
     assert_eq!(first.status, StatusCode::CREATED);
-    let change_id = first.json()["change_id"].as_str().unwrap().to_owned();
-    // An unknown change.
+    let change_id = first.json()["proposal_id"].as_str().unwrap().to_owned();
+    // An unknown proposal.
     w.client.commit(1);
     let a2 = w.client.artifact(&w.forge, "a2");
     let unknown = propose_as(
         &w,
         "forge",
         "tok-dave",
-        serde_json::json!({"change": "c-nope"}),
+        serde_json::json!({"proposal": "c-nope"}),
         &a2,
     )
     .await;
     assert_eq!(
         (unknown.status, unknown.code().as_str()),
-        (StatusCode::UNPROCESSABLE_ENTITY, "unknown_change")
+        (StatusCode::UNPROCESSABLE_ENTITY, "unknown_proposal")
     );
-    // Alice (the owner, a writer) may append to dave's change; carol, no role, may not append to anything here.
+    // Alice (the owner, a writer) may append to dave's proposal; carol, no role, may not append to anything here.
     let by_alice = propose_as(
         &w,
         "forge",
         "tok-alice",
-        serde_json::json!({"change": change_id}),
+        serde_json::json!({"proposal": change_id}),
         &a2,
     )
     .await;
@@ -1252,20 +1252,20 @@ async fn only_the_opener_or_a_writer_adds_to_a_change_and_only_while_it_is_open(
         propose_as(&w, "anyauth", "tok-carol", titled("Carol's"), &art).await
     };
     assert_eq!(own.status, StatusCode::CREATED);
-    let carols = own.json()["change_id"].as_str().unwrap().to_owned();
+    let carols = own.json()["proposal_id"].as_str().unwrap().to_owned();
     w.client.commit(1);
     let art = w.client.artifact(&w.base.join("anyauth"), "c2");
     let other = propose_as(
         &w,
         "anyauth",
         "tok-bob",
-        serde_json::json!({"change": carols}),
+        serde_json::json!({"proposal": carols}),
         &art,
     )
     .await;
     assert_eq!(
         (other.status, other.code().as_str()),
-        (StatusCode::FORBIDDEN, "not_your_change")
+        (StatusCode::FORBIDDEN, "not_your_proposal")
     );
     // Closed: no more revisions.
     w.changes
@@ -1281,13 +1281,13 @@ async fn only_the_opener_or_a_writer_adds_to_a_change_and_only_while_it_is_open(
         &w,
         "anyauth",
         "tok-carol",
-        serde_json::json!({"change": carols}),
+        serde_json::json!({"proposal": carols}),
         &art,
     )
     .await;
     assert_eq!(
         (closed.status, closed.code().as_str()),
-        (StatusCode::UNPROCESSABLE_ENTITY, "change_not_open")
+        (StatusCode::UNPROCESSABLE_ENTITY, "proposal_not_open")
     );
     assert_eq!(closed.json()["state"], "closed");
 }
@@ -1331,7 +1331,7 @@ async fn a_base_must_be_a_block_the_repository_holds() {
     let none = propose_as(&w, "forge", "tok-alice", titled("no base"), &art2).await;
     let revs = w
         .changes
-        .revisions_of(none.json()["change_id"].as_str().unwrap())
+        .revisions_of(none.json()["proposal_id"].as_str().unwrap())
         .unwrap();
     assert_eq!(revs[0].declared_base, None);
     assert_eq!(
@@ -1409,7 +1409,7 @@ async fn a_malformed_body_is_refused_with_a_named_reason_and_nothing_is_accepted
         (r.status, reason(&r).as_str()),
         (StatusCode::BAD_REQUEST, "unknown_field")
     );
-    // Field errors: a new change needs a title; an existing one takes none; bad ids.
+    // Field errors: a new proposal needs a title; an existing one takes none; bad ids.
     for (meta, why) in [
         (serde_json::json!({}), "title_required"),
         (
@@ -1429,12 +1429,12 @@ async fn a_malformed_body_is_refused_with_a_named_reason_and_nothing_is_accepted
             "target_ref_invalid",
         ),
         (
-            serde_json::json!({"change": "c-1", "title": "x"}),
-            "fields_for_existing_change",
+            serde_json::json!({"proposal": "c-1", "title": "x"}),
+            "fields_for_existing_proposal",
         ),
         (
-            serde_json::json!({"change": "bad id!"}),
-            "change_id_invalid",
+            serde_json::json!({"proposal": "bad id!"}),
+            "proposal_id_invalid",
         ),
     ] {
         let r = propose_as(&w, "forge", "tok-alice", meta, &art).await;
@@ -1843,7 +1843,7 @@ async fn a_run_that_dies_after_changing_the_repository_is_incomplete_and_a_resen
     );
     let revs = w
         .changes
-        .revisions_of(ok.json()["change_id"].as_str().unwrap())
+        .revisions_of(ok.json()["proposal_id"].as_str().unwrap())
         .unwrap();
     assert_eq!(revs.len(), 1, "exactly one revision");
     let done = w.changes.get_intent(&intent_id).unwrap().unwrap();
@@ -2285,30 +2285,30 @@ async fn the_checks_run_in_the_documented_order_and_each_refusal_is_the_earlier_
         code(&send(&w.router, req).await),
         (413, "payload_too_large".into())
     );
-    // 6. The metadata comes before the change it names: an unknown change id together with a title is a metadata
-    //    error (an existing change takes no title), not "unknown change".
+    // 6. The metadata comes before the change it names: an unknown proposal id together with a title is a metadata
+    //    error (an existing proposal takes no title), not "unknown proposal".
     let r = propose_as(
         &w,
         "forge",
         "tok-alice",
-        serde_json::json!({"change": "c-nope", "title": "x"}),
+        serde_json::json!({"proposal": "c-nope", "title": "x"}),
         &art,
     )
     .await;
     assert_eq!(
         (r.status.as_u16(), r.json()["reason"].clone()),
-        (400, "fields_for_existing_change".into())
+        (400, "fields_for_existing_proposal".into())
     );
-    // 7. The change comes before the base: an unknown change and an unknown base name the change.
+    // 7. The proposal comes before the base: an unknown proposal and an unknown base name the proposal.
     let r = propose_as(
         &w,
         "forge",
         "tok-alice",
-        serde_json::json!({"change": "c-nope", "base": "9".repeat(64)}),
+        serde_json::json!({"proposal": "c-nope", "base": "9".repeat(64)}),
         &art,
     )
     .await;
-    assert_eq!(code(&r), (422, "unknown_change".into()));
+    assert_eq!(code(&r), (422, "unknown_proposal".into()));
     // 8. The base comes before the quota: with the quota used up, an unknown base is still named.
     for i in 0..3 {
         w.changes
@@ -2644,7 +2644,7 @@ async fn after_an_unfinished_accept_recovery_runs_by_itself_and_the_same_artifac
     assert_eq!(ok.json()["added_count"], 2);
     assert_eq!(
         w.changes
-            .revisions_of(ok.json()["change_id"].as_str().unwrap())
+            .revisions_of(ok.json()["proposal_id"].as_str().unwrap())
             .unwrap()
             .len(),
         1

@@ -593,7 +593,7 @@ fn kill_and_recover(fx: &Fixture, tag: &str, kill_at: usize) -> Report {
         Some(u64::from(fx.patches)),
         "[{tag}] derived from the first attempt's list: all {n} patches, though {pending_at_kill} were pending when the retry began"
     );
-    let change_id = json_str(&reply, "change_id").expect("change_id");
+    let change_id = json_str(&reply, "proposal_id").expect("proposal_id");
     let changes = change_store(&inst);
     assert_eq!(
         changes.revisions_of(&change_id).unwrap().len(),

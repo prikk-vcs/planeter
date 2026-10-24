@@ -63,7 +63,7 @@ fn each_english_refusal_names_the_limit_and_the_use_and_says_what_to_do() {
     let lang = Lang::from_def(&EN_DEF);
     let said: Vec<(String, String)> = all().iter().map(|r| texts(r, lang)).collect();
     assert!(
-        said[0].0.contains("10 open changes") && said[0].0.contains("limit is 10"),
+        said[0].0.contains("10 open proposals") && said[0].0.contains("limit is 10"),
         "{:?}",
         said[0]
     );

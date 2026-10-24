@@ -349,14 +349,14 @@ pub const CATALOG: &[Entry] = &[
         "error.invalid_request.ref_hint",
         "バンドルには ref が必要です。アドバタイズから名前を確認して、ref=名前 を追加してください。",
     ),
-    // quota refusals of a proposed change (RFC 005 D-9)
+    // quota refusals of a proposal (RFC 005 D-9)
     msg(
-        "quota.open_changes.message",
-        "このリポジトリで開いている変更がすでに{used}件あり、上限は{limit}件です。",
+        "quota.open_proposals.message",
+        "このリポジトリで開いている提案がすでに{used}件あり、上限は{limit}件です。",
     ),
     msg(
-        "quota.open_changes.hint",
-        "開いている変更のどれかを閉じるか、メンテナーに上限の引き上げを依頼してください。",
+        "quota.open_proposals.hint",
+        "開いている提案のどれかを閉じるか、メンテナーに上限の引き上げを依頼してください。",
     ),
     msg(
         "quota.accepted_bytes.message",
@@ -364,28 +364,28 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "quota.accepted_bytes.hint",
-        "送信した内容は変更を閉じた後もサーバーに残るため、メンテナーに上限の引き上げを依頼してください。",
+        "送信した内容は提案を閉じた後もサーバーに残るため、メンテナーに上限の引き上げを依頼してください。",
     ),
     msg(
         "quota.revisions.message",
-        "この変更にはすでに{used}件のリビジョンがあり、上限は{limit}件です。",
+        "この提案にはすでに{used}件のリビジョンがあり、上限は{limit}件です。",
     ),
     msg(
         "quota.revisions.hint",
-        "続きの作業は新しい変更として開くか、メンテナーに上限の引き上げを依頼してください。",
+        "続きの作業は新しい提案として開くか、メンテナーに上限の引き上げを依頼してください。",
     ),
     msg(
         "quota.capacity.message",
-        "このリポジトリは、提案された変更を受け入れる容量の上限に達しています。{limit} MiB のうち {used} MiB が使用中です。",
+        "このリポジトリは、提案を受け入れる容量の上限に達しています。{limit} MiB のうち {used} MiB が使用中です。",
     ),
     msg(
         "quota.capacity.hint",
-        "メンテナーに完了した変更を閉じるよう依頼するか、このサーバーの管理者に容量の引き上げを依頼してください。",
+        "メンテナーに完了した提案を閉じるよう依頼するか、このサーバーの管理者に容量の引き上げを依頼してください。",
     ),
-    // proposing a change (RFC 004 part 3b)
+    // making a proposal (RFC 004 part 3b)
     msg(
         "error.forbidden.message",
-        "このリポジトリは読めますが、変更を提案する権限はありません。",
+        "このリポジトリは読めますが、提案する権限はありません。",
     ),
     msg(
         "error.forbidden.hint",
@@ -421,7 +421,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "error.quota_exceeded.hint",
-        "詳細はこのレスポンスに含まれているので、変更を閉じるか、メンテナーに上限の引き上げを依頼してください。",
+        "詳細はこのレスポンスに含まれているので、提案を閉じるか、メンテナーに上限の引き上げを依頼してください。",
     ),
     msg(
         "error.base_unknown.message",
@@ -456,28 +456,28 @@ pub const CATALOG: &[Entry] = &[
         "提案するものがないので、何かを変更した場合はアーティファクトを作り直してください。",
     ),
     msg(
-        "error.unknown_change.message",
-        "このリポジトリに、その ID の変更はありません。",
+        "error.unknown_proposal.message",
+        "このリポジトリに、その ID の提案はありません。",
     ),
     msg(
-        "error.unknown_change.hint",
-        "以前のレスポンスから ID を取るか、ID を省いて新しい変更を開いてください。",
+        "error.unknown_proposal.hint",
+        "以前のレスポンスから ID を取るか、ID を省いて新しい提案を開いてください。",
     ),
     msg(
-        "error.change_not_open.message",
-        "その変更は反映済みか閉じられているため、これ以上リビジョンを受け付けません。",
+        "error.proposal_not_open.message",
+        "その提案は反映済みか閉じられているため、これ以上リビジョンを受け付けません。",
     ),
     msg(
-        "error.change_not_open.hint",
-        "代わりに新しい変更を開いてください。",
+        "error.proposal_not_open.hint",
+        "代わりに新しい提案を開いてください。",
     ),
     msg(
-        "error.not_your_change.message",
-        "その変更は別の人が開いたものです。",
+        "error.not_your_proposal.message",
+        "その提案は別の人が開いたものです。",
     ),
     msg(
-        "error.not_your_change.hint",
-        "自分の変更を開くか、メンテナーに相談してください。",
+        "error.not_your_proposal.hint",
+        "自分の提案を開くか、メンテナーに相談してください。",
     ),
     msg(
         "error.accept_refused.message",

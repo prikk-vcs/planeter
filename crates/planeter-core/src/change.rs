@@ -1,6 +1,10 @@
-//! The pure rules of a proposed change (RFC 005 D-1…D-3, D-5…D-7, D-9, D-10; RFC 004 D-3): what a revision is
-//! derived from, when a declaration is accepted, when a base is held, how a change's state may move, when landing
+//! The pure rules of a proposal (RFC 005 D-1…D-3, D-5…D-7, D-9, D-10; RFC 004 D-3): what a revision is
+//! derived from, when a declaration is accepted, when a base is held, how a proposal's state may move, when landing
 //! is *observed*, what each quota allows, and how much assurance a patch carries.
+//!
+//! **Words.** The code's internal name for a proposal is *change* (`ChangeRecord`, `ChangeState`, `Quota::OpenChanges`, …); in
+//! everything a person or a program reads it is a **proposal**, and *change* keeps the glossary's meaning, a recorded unit of
+//! history (D-38). Nothing stored is renamed.
 //!
 //! **No I/O.** Everything takes the results of `sync accept`, `sync pending` and `log` as arguments; nothing here
 //! calls prikk, reads a clock or touches the store. The store ([`planeter_store::change`]) keeps the records; part 3b
@@ -452,9 +456,9 @@ impl Quota {
     /// The stable name (the API's `quota` field).
     pub fn name(self) -> &'static str {
         match self {
-            Quota::OpenChanges => "open_changes",
+            Quota::OpenChanges => "open_proposals",
             Quota::AcceptedBytes => "accepted_bytes",
-            Quota::RevisionsPerChange => "revisions_per_change",
+            Quota::RevisionsPerChange => "revisions_per_proposal",
             Quota::RepositoryCapacity => "repository_capacity",
         }
     }
@@ -477,7 +481,7 @@ impl QuotaRefusal {
     /// (see [`QuotaRefusal::figures`]).
     pub fn message_key(&self) -> &'static str {
         match self.quota {
-            Quota::OpenChanges => "quota.open_changes.message",
+            Quota::OpenChanges => "quota.open_proposals.message",
             Quota::AcceptedBytes => "quota.accepted_bytes.message",
             Quota::RevisionsPerChange => "quota.revisions.message",
             Quota::RepositoryCapacity => "quota.capacity.message",
@@ -487,7 +491,7 @@ impl QuotaRefusal {
     /// The catalog key of the one-sentence hint: what the person can do.
     pub fn hint_key(&self) -> &'static str {
         match self.quota {
-            Quota::OpenChanges => "quota.open_changes.hint",
+            Quota::OpenChanges => "quota.open_proposals.hint",
             Quota::AcceptedBytes => "quota.accepted_bytes.hint",
             Quota::RevisionsPerChange => "quota.revisions.hint",
             Quota::RepositoryCapacity => "quota.capacity.hint",
@@ -507,8 +511,8 @@ impl QuotaRefusal {
 
     /// Every catalog key this module can ask for (the web crate's tests check each exists in every language).
     pub const ALL_KEYS: [&'static str; 8] = [
-        "quota.open_changes.message",
-        "quota.open_changes.hint",
+        "quota.open_proposals.message",
+        "quota.open_proposals.hint",
         "quota.accepted_bytes.message",
         "quota.accepted_bytes.hint",
         "quota.revisions.message",

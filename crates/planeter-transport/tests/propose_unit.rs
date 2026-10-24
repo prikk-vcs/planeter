@@ -83,22 +83,22 @@ fn the_metadata_rules_each_have_a_named_reason() {
     assert_eq!(m.validate(), Err(MetaError::ClientInvalid));
     // An existing change takes no title, description or target ref, and its id is plain.
     let existing = ProposeMeta {
-        change: Some("c-0123456789abcdef".to_owned()),
+        proposal: Some("c-0123456789abcdef".to_owned()),
         ..ProposeMeta::default()
     };
     assert_eq!(existing.validate(), Ok(()));
     for bad in ["", "has space", &"x".repeat(65), "semi;colon"] {
         let m = ProposeMeta {
-            change: Some(bad.to_owned()),
+            proposal: Some(bad.to_owned()),
             ..ProposeMeta::default()
         };
-        assert_eq!(m.validate(), Err(MetaError::ChangeIdInvalid), "{bad:?}");
+        assert_eq!(m.validate(), Err(MetaError::ProposalIdInvalid), "{bad:?}");
     }
     let m = ProposeMeta {
         title: Some("t".to_owned()),
         ..existing
     };
-    assert_eq!(m.validate(), Err(MetaError::FieldsForExistingChange));
+    assert_eq!(m.validate(), Err(MetaError::FieldsForExistingProposal));
 }
 
 const MIB: u64 = 1 << 20;
