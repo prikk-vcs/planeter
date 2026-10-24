@@ -404,6 +404,14 @@ impl W {
 /// A stand-in that passes everything to the real prikk except what its control file says, so a witness can be made to
 /// disagree: unreadable `unlock`, a `doctor` that reports a warning naming a repair (until that repair has been run),
 /// a `doctor` error that names no repair, a `verify` that fails.
+/// Output captured from the real prikk 0.54.1 on a repository whose received ref was removed (`received remove`): two objects
+/// that nothing reaches. (Copied from `planeter-prikk/tests/fixtures`.)
+fn fixture(name: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("tests/fixtures")
+        .join(name)
+}
+
 fn standin(base: &Path) -> (PathBuf, PathBuf) {
     let real = String::from_utf8(
         Command::new("sh")
@@ -450,11 +458,15 @@ if [ "$1" = doctor ] && [ -z "$2" ]; then
   esac
 fi
 if [ "$1" = verify ] && [ "$MODE" = verify-fails ]; then echo "verify went wrong" >&2; exit 1; fi
+if [ "$1" = verify ] && [ "$MODE" = verify-unreached ]; then cat {verify_unreached}; exit 0; fi
+if [ "$1" = doctor ] && [ -z "$2" ] && [ "$MODE" = doctor-unreached ]; then cat {doctor_unreached}; exit 0; fi
 exec "$REAL" "$@"
 "#,
             ctrl = ctrl.display(),
             repaired = repaired.display(),
-            log = base.join("standin.log").display()
+            log = base.join("standin.log").display(),
+            verify_unreached = fixture("verify-0.54.1-unreached.json").display(),
+            doctor_unreached = fixture("doctor-0.54.1-unreached.txt").display()
         ),
     )
     .unwrap();
@@ -1305,6 +1317,61 @@ fn one_problem_without_a_repair_or_a_forbidden_repair_beside_an_allowed_one_refu
         assert!(w.flagged(), "{mode}");
         assert_eq!(locks_listed(&w.repo_path), 2, "{mode}");
     }
+}
+
+// ------------------------------------------------------------------------------------------------ prikk 0.54: unreached objects
+
+/// 0.54.0 prints `unreached objects: N` on every `verify` and adds `unreached_objects` to the JSON; an unreached object is a
+/// warning, not a trust failure, and `verify` exits 0 on it alone. Recovery's `verify` step reads the verdict and is unaffected.
+#[test]
+fn a_verify_that_reports_unreached_objects_is_still_a_pass_and_recovery_clears_the_flag() {
+    if skip() {
+        return;
+    }
+    let (w, ctrl) = standin_world("verify-unreached");
+    w.killed_accept();
+    std::fs::write(&ctrl, "verify-unreached").unwrap();
+    let r = w.svc.recover(&w.record, "alice", &[]).unwrap();
+    assert_eq!(r.outcome, RecoveryOutcome::Recovered, "{r:?}");
+    assert!(!w.flagged());
+    let steps = w.steps_of_last();
+    assert!(
+        steps
+            .iter()
+            .any(|(n, o)| n == "verify" && o.as_deref() == Some("ok")),
+        "{steps:?}"
+    );
+}
+
+/// What `doctor` of prikk 0.54.1 says of such a repository: two warnings (`PRIKK-DOCTOR-UNREACHED-OBJECT`) whose only
+/// recommendation names no repair ("the bytes stay; no command removes them yet"). Recovery's rule is that `doctor` must be
+/// clean, so **a repository with unreached objects is not recovered by the server, and not by an administrator either**: the
+/// plan's `doctor_problems` is not overridable (nothing to run). This test pins the behaviour as it is today; whether such a
+/// warning should be allowed through is the architect's question (the part 5b review request, deviation 3).
+#[test]
+fn doctors_unreached_object_warnings_keep_recovery_from_running_today() {
+    if skip() {
+        return;
+    }
+    let (w, ctrl) = standin_world("doctor-unreached");
+    w.killed_accept();
+    std::fs::write(&ctrl, "doctor-unreached").unwrap();
+    let plan = w.svc.plan(&w.record).unwrap();
+    assert_eq!(
+        plan.blockers
+            .iter()
+            .map(|b| (b.code, b.overridable))
+            .collect::<Vec<_>>(),
+        vec![("doctor_problems", false)]
+    );
+    let d = plan.doctor.as_ref().unwrap();
+    assert!(!d.clean && d.repairs_allowed.is_empty() && d.repair_refusal.is_some());
+    assert!(w.svc.auto(&w.record).is_none());
+    assert_eq!(
+        w.svc.recover(&w.record, "alice", &[]).unwrap().outcome,
+        RecoveryOutcome::Stopped
+    );
+    assert!(w.flagged());
 }
 
 // ------------------------------------------------------------------------------------------------ twice at once

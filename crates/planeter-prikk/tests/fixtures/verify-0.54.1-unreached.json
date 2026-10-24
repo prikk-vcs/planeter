@@ -1,0 +1,31 @@
+{
+  "schema_version": "verify-report-v1",
+  "verdict": {
+    "ok": true,
+    "failed_conditions": []
+  },
+  "active_sessions": {"count": 1, "verified_count": 1},
+  "stages": [
+    {"stage": "objects", "status": "evaluated"},
+    {"stage": "refs", "status": "evaluated"},
+    {"stage": "ref-update-schema-trust", "status": "evaluated"},
+    {"stage": "wal-replay", "status": "evaluated"},
+    {"stage": "wal-persistence", "status": "evaluated"},
+    {"stage": "rollback-drafts", "status": "evaluated"},
+    {"stage": "wal-record-schema", "status": "evaluated"},
+    {"stage": "active-wal-metadata", "status": "evaluated"},
+    {"stage": "commit-witness", "status": "evaluated"},
+    {"stage": "publication-reclassification", "status": "evaluated"},
+    {"stage": "commit-index", "status": "evaluated"},
+    {"stage": "lifecycle-cache", "status": "evaluated"},
+    {"stage": "wal-ordering", "status": "evaluated"},
+    {"stage": "received-refs", "status": "evaluated"},
+    {"stage": "local-tag-trust", "status": "evaluated"},
+    {"stage": "object-connectivity", "status": "evaluated"},
+    {"stage": "appended-file-tails", "status": "evaluated"}
+  ],
+  "unreached_objects": [
+    {"object_id": "414c9ed05898b53d32eabb3505d63d2f8d7090f404e2b10670e8b4c4fcfb5feb", "object_type": "block"},
+    {"object_id": "5d1f3e732752f9e0839f0850c5ab6fddf557d733efd6e0d93df012d9accc3def", "object_type": "ref-state"}
+  ]
+}

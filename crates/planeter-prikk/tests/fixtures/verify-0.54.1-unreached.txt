@@ -1,0 +1,71 @@
+verified repository: /tmp/p54/g/.prikk
+active sessions: 1 total, 1 covered by sealed-history verification (default only, by construction -- see `prikk doctor` for the rest)
+verification stages: 17
+stage objects: evaluated
+stage refs: evaluated
+stage received-refs: evaluated
+stage local-tag-trust: evaluated
+stage ref-update-schema-trust: evaluated
+stage wal-replay: evaluated
+stage wal-persistence: evaluated
+stage rollback-drafts: evaluated
+stage wal-record-schema: evaluated
+stage active-wal-metadata: evaluated
+stage commit-witness: evaluated
+stage publication-reclassification: evaluated
+stage commit-index: evaluated
+stage lifecycle-cache: evaluated
+stage wal-ordering: evaluated
+stage object-connectivity: evaluated
+stage appended-file-tails: evaluated
+object items: 5 scanned, 0 failed
+unverifiable author signatures: 0
+block state items: 1 checked, 0 incomplete
+ref files: 0 scanned, 0 failed
+ref items: 0 scanned, 0 failed
+checked objects: 5
+checked blocks: 1
+checked rollback blocks: 0
+checked sealed rollback patches: 0
+checked WAL records: 0
+persisted WAL patches: 0
+checked refs: 0
+checked ref-log records: 0
+ref publication issues: 0
+signature envelope warnings: 0
+checked rollback draft WAL records: 0
+checked publication trust records: 0
+publication trust issues: 0
+sealed blocks: 0
+object temp warnings: 0
+connectivity issues: 0
+interrupted appends: 0
+trailing partial patch container bytes: 0
+trailing partial block container bytes: 0
+trailing partial ref-state container bytes: 0
+trailing partial tag container bytes: 0
+trailing partial attestation container bytes: 0
+trailing partial blob container bytes: 0
+trailing partial recognition-claim container bytes: 0
+unreferenced remnants: 0
+unreached objects: 2
+warning: block 414c9ed05898b53d32eabb3505d63d2f8d7090f404e2b10670e8b4c4fcfb5feb is reached by nothing in this repository -- its publication trust was not checked; the bytes stay, and no command removes them yet
+warning: ref-state 5d1f3e732752f9e0839f0850c5ab6fddf557d733efd6e0d93df012d9accc3def is reached by nothing in this repository -- its publication trust was not checked; the bytes stay, and no command removes them yet
+trailing partial WAL bytes: 0
+trailing partial object index bytes: 0
+trailing partial pointer index bytes: 0
+trailing partial trust keys bytes: 0
+trailing partial trust policy bytes: 0
+trailing partial author keys bytes: 0
+trailing partial received index bytes: 0
+trailing partial pointer index generation log bytes: 0
+trailing partial received index generation log bytes: 0
+trailing partial trust policy generation log bytes: 0
+trailing partial ref log bytes: 0
+active WAL metadata: absent for empty WAL
+acknowledged commits: none recorded (the classification of a session written before 0.49.0 applies)
+commit-index divergences: 0
+lifecycle-cache divergences: 0
+merge-baseline divergences: 0
+active WAL ordering issues: 0
+received refs: 0, 0 failed

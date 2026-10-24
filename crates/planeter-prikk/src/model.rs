@@ -140,6 +140,45 @@ pub struct VerifyReport {
     pub verdict: Verdict,
     pub active_sessions: ActiveSessions,
     pub stages: Vec<Stage>,
+    /// prikk 0.54.0 (PK-70): the objects nothing in the repository reaches any more (after `received remove`), a **warning**:
+    /// their publication trust is not checked, the bytes stay, and `verify` still exits 0 on this alone. A 0.53-style report has
+    /// no such array (`default`: empty). **Recorded, not shown**: the verification page's verdict stays `verdict.ok`.
+    #[serde(default)]
+    pub unreached_objects: Vec<UnreachedObject>,
+}
+
+impl VerifyReport {
+    /// How many unreached objects prikk reported (the `unreached objects: N` line of the text report).
+    pub fn unreached_count(&self) -> usize {
+        self.unreached_objects.len()
+    }
+}
+
+/// One object that nothing reaches (`verify-report-v1`, 0.54.0).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct UnreachedObject {
+    pub object_id: String,
+    pub object_type: UnreachedKind,
+}
+
+/// The type of an unreached object: prikk documents `Block` or `RefState` (the two types publication trust applies to). Any
+/// other value is kept as it came, never mapped to one of these.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(from = "String")]
+pub enum UnreachedKind {
+    Block,
+    RefState,
+    Other(String),
+}
+
+impl From<String> for UnreachedKind {
+    fn from(s: String) -> Self {
+        match s.as_str() {
+            "block" => UnreachedKind::Block,
+            "ref-state" => UnreachedKind::RefState,
+            _ => UnreachedKind::Other(s),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
