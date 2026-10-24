@@ -178,7 +178,7 @@ fn a_timeout_on_raws_metadata_read_is_unavailable_not_notfound() {
     let script = dir.join("prikk");
     std::fs::write(
         &script,
-        "#!/bin/sh\ncase \"$1\" in --version) echo 'prikk 0.52.0';; *) sleep 30;; esac\n",
+        "#!/bin/sh\ncase \"$1\" in --version) echo 'prikk 0.54.1';; *) sleep 30;; esac\n",
     )
     .unwrap();
     {

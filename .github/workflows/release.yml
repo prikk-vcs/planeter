@@ -45,7 +45,7 @@ env:
   CARGO_INCREMENTAL: "0"
   CARGO_TERM_COLOR: always
   # The prikk release baked into the container image (dependency-ledger PK-26). Bump with the pin.
-  PRIKK_VERSION: "0.52.0"
+  PRIKK_VERSION: "0.54.0"
 
 jobs:
   gates:

@@ -282,7 +282,7 @@ docker run --rm ghcr.io/prikk-vcs/planeter:X.Y.Z --version
   unavailable`, one log line naming the verb and the ceiling), not the host. Every refusal logs one
   line (verb, cost, budget; no path, no repository name). The repository page shows its `verify` badge
   from a separate admission: a repository whose `verify` does not fit still gets its page, with
-  "verify unavailable". The costs are measured on a prikk release (0.52.0) and are re-measured at every
+  "verify unavailable". The costs are measured on a prikk release (0.54.1, since the 0.54 re-baseline) and are re-measured at every
   floor change (`docs/UPSTREAM.md`).
 - **Two pools (RFC 011 refinement R-1):** the budget is split so that a cheap read is never queued behind
   a large one that waits for memory (one FIFO would park a `log` behind a waiting `verify`, and refuse it

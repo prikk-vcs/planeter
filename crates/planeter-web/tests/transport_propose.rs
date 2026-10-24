@@ -1988,7 +1988,7 @@ fn sandbox_standin(base: &Path, accept_body: &str) -> PathBuf {
         &script,
         format!(
             r#"#!/bin/sh
-if [ "$1" = --version ]; then echo "prikk 0.53.0"; exit 0; fi
+if [ "$1" = --version ]; then echo "prikk 0.54.1"; exit 0; fi
 if [ "$1" = sync ] && [ "$2" = pending ]; then echo "pending (accepted, unsealed) patches: 0"; exit 0; fi
 if [ "$1" = sync ] && [ "$2" = accept ]; then
 {accept_body}

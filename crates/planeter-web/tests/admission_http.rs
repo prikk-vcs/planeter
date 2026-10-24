@@ -464,7 +464,7 @@ async fn each_call_runs_under_the_documented_ceiling() {
     let script = root.join("prikk");
     std::fs::write(
         &script,
-        "#!/bin/sh\ncase \"$1\" in --version) echo 'prikk 0.52.0';; *) grep 'Max data size' /proc/self/limits | awk '{print $4}' > \"$PWD/.prikk/observed\"; exit 1;; esac\n",
+        "#!/bin/sh\ncase \"$1\" in --version) echo 'prikk 0.54.1';; *) grep 'Max data size' /proc/self/limits | awk '{print $4}' > \"$PWD/.prikk/observed\"; exit 1;; esac\n",
     )
     .unwrap();
     {

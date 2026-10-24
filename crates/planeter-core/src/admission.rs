@@ -53,6 +53,9 @@ pub const SHOW_FLOOR: u64 = 32 * MIB;
 pub const CONTENT_MAX_BYTES: u64 = 4 * MIB;
 
 /// The prikk version the cost table was measured on (`MIN_PRIKK_VERSION` when the floor was last raised).
+///
+/// **The floor moved to 0.54.0 (the 0.54 re-baseline, first commit); the table has not been re-measured yet** and still
+/// says 0.52.0. The next commit of the same handoff (T4) re-measures it on 0.54.1 and sets this to `(0, 54, 1)`.
 pub const MEASURED_ON: (u64, u64, u64) = (0, 52, 0);
 
 /// The most entries a store walk will visit before giving up (a sane store has about forty files).

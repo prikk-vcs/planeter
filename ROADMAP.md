@@ -238,7 +238,8 @@ container does). `planeter-runner` stays unpublished until M4.
   neighbours.
 - **Security releases are out-of-band.** A dependency advisory or a threat-model control failure triggers
   a prompt patch release.
-- **Runtime prerequisites are release notes, not code:** **prikk ≥ 0.52.0** (the version pin, raised from
+- **Runtime prerequisites are release notes, not code:** **prikk ≥ 0.54.0** (the version pin, raised from
+  0.52.0 at the 0.54 re-baseline, 2026-10-24 — the `show <block-id>` fix and `extract` — and before that from
   0.46.0 at the 0.52.0 re-baseline, 2026-10-15, to the tested version; PK-26 as of 0.46.0 —
   it carries the `tree`/`cat`/`diff` read verbs, the 0.44.0 GHSA-px5q-233r-6hq5 import fix, the format-7
   signature union and the key-id fix), **bubblewrap** on the host (the sandbox, T4) and, for SSO,

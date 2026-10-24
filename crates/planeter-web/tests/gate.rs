@@ -29,7 +29,7 @@ use planeter_web::{AppState, ContentOrigin, PrikkGate, router};
 /// driver sets to the repository root, so one script serves every test.
 const STAND_IN: &str = r#"#!/bin/sh
 case "$1" in
-  --version) echo "prikk 0.52.0"; exit 0 ;;
+  --version) echo "prikk 0.54.1"; exit 0 ;;
   log)
     echo "start $$ $(date +%s%N)" >> "$PWD/events"
     sleep "$(cat "$PWD/sleep")"

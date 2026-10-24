@@ -3,7 +3,7 @@
 //! It shells out to the prikk binary against one repository directory (the one holding `.prikk`),
 //! parses `--format json` output into the [`crate::model`] types after checking the `schema_version`,
 //! and maps a non-zero exit to a typed [`PrikkError`] (never a panic). The version pin (D-3) refuses a
-//! prikk older than planeter's floor (PK-26/PK-42: planeter requires prikk ≥ 0.52.0). Confinement of the
+//! prikk older than planeter's floor (PK-26/PK-42: planeter requires prikk ≥ 0.54.0). Confinement of the
 //! subprocess (sandbox) is layered on in T4 — this module invokes prikk directly.
 
 use std::ffi::OsString;
@@ -26,7 +26,12 @@ use crate::sandbox::{CallLimits, Run, Sandbox, TIMEOUT_EXIT_CODE};
 /// fix and accept size bound, the 0.49.0 crash-state recovery, dependency-ordered `bundle import` /
 /// `sync accept` writes and linear resync over hostile content, and the 0.52.0 archive closure fix.
 /// The pin refuses anything older rather than guess.
-pub const MIN_PRIKK_VERSION: (u64, u64, u64) = (0, 52, 0);
+///
+/// Raised to 0.54.0 (2026-10-24, the 0.54 re-baseline, ledger PK-70): it fixes `show <block-id>` for a block that edits a
+/// file three or more times (PK-57, planeter IS-46), ships `extract` with `largest_file_bytes`, `claim_parent_block_id` and
+/// the `refusal-v1` document (the three things planeter asked for, PK-56/PK-66), and adds the `unreached objects` line to
+/// `verify`. 0.54.1 is an installer fix; prikk's code is 0.54.0's.
+pub const MIN_PRIKK_VERSION: (u64, u64, u64) = (0, 54, 0);
 
 /// A prikk repository driven through the prikk CLI as a subprocess.
 #[derive(Debug, Clone)]
@@ -662,10 +667,11 @@ mod tests {
 
     #[test]
     fn version_ordering_meets_the_floor() {
-        assert!((0, 52, 0) >= MIN_PRIKK_VERSION);
-        assert!((0, 52, 1) >= MIN_PRIKK_VERSION);
+        assert!((0, 54, 0) >= MIN_PRIKK_VERSION);
+        assert!((0, 54, 1) >= MIN_PRIKK_VERSION);
         assert!((1, 0, 0) >= MIN_PRIKK_VERSION);
-        assert!((0, 51, 9) < MIN_PRIKK_VERSION);
-        assert!((0, 46, 0) < MIN_PRIKK_VERSION);
+        assert!((0, 53, 9) < MIN_PRIKK_VERSION);
+        assert!((0, 53, 0) < MIN_PRIKK_VERSION);
+        assert!((0, 52, 0) < MIN_PRIKK_VERSION);
     }
 }

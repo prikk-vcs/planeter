@@ -168,7 +168,7 @@ fn a_sigkilled_server_leaves_no_bwrap_or_prikk_process_of_an_in_flight_call() {
     let script = bin_dir.join("prikk");
     std::fs::write(
         &script,
-        "#!/bin/sh\ncase \"$1\" in --version) echo 'prikk 0.52.0';; *) sleep 60;; esac\n",
+        "#!/bin/sh\ncase \"$1\" in --version) echo 'prikk 0.54.1';; *) sleep 60;; esac\n",
     )
     .unwrap();
     {

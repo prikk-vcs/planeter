@@ -5,6 +5,12 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **The prikk floor moves to 0.54.0 (the 0.54 re-baseline).** planeter now requires prikk **0.54.0 or later** (the container image carries it;
+  `MIN_PRIKK_VERSION`, the release workflow and the Dockerfile agree). Why: 0.54.0 fixes `show <block-id>` for a block that edits a
+  file three or more times, which made the change page and API answer "temporarily unavailable" for such a block (known as IS-46,
+  affecting 0.3.0 and 0.4.0 against prikk 0.52.0/0.53.0), and ships `extract` with the three things planeter asked for. An older prikk
+  is refused when a repository is opened, with "unsupported prikk version X; planeter requires >= 0.54.0".
+
 - **The default size of a proposal is 100 MiB (RFC 004 part 4c).** `PRIKK_EXCHANGE_MAX_BYTES` defaults to 104857600 (was 256 MiB):
   with the measured memory model the largest accept at 256 MiB needs about 1.8 GiB of the memory budget, which only a host with about
   8.1 GiB of usable memory admits at the default budget; at 100 MiB it needs about 0.7 GiB, which a 4 GiB host admits (up to 125 MiB).

@@ -64,7 +64,7 @@ fn stand_in(dir: &Path, secs: u32) -> PathBuf {
     std::fs::write(
         &script,
         format!(
-            "#!/bin/sh\ncase \"$1\" in --version) echo 'prikk 0.52.0';; *) sleep {secs};; esac\n"
+            "#!/bin/sh\ncase \"$1\" in --version) echo 'prikk 0.54.1';; *) sleep {secs};; esac\n"
         ),
     )
     .unwrap();

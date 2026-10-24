@@ -297,7 +297,7 @@ fn without_a_spool_the_routes_say_so() {
     }
     let bin = dir.join("bin");
     std::fs::create_dir_all(&bin).unwrap();
-    std::fs::write(bin.join("prikk"), "#!/bin/sh\necho 'prikk 0.52.0'\n").unwrap();
+    std::fs::write(bin.join("prikk"), "#!/bin/sh\necho 'prikk 0.54.1'\n").unwrap();
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(bin.join("prikk"), std::fs::Permissions::from_mode(0o755)).unwrap();
     let port = std::net::TcpListener::bind("127.0.0.1:0")

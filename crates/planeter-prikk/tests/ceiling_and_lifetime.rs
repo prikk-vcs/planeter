@@ -247,7 +247,7 @@ fn the_driver_reports_a_deadline_kill_as_the_status_timeout_used_to() {
     let script = dir.join("prikk");
     std::fs::write(
         &script,
-        "#!/bin/sh\ncase \"$1\" in --version) echo 'prikk 0.52.0';; *) sleep 30;; esac\n",
+        "#!/bin/sh\ncase \"$1\" in --version) echo 'prikk 0.54.1';; *) sleep 30;; esac\n",
     )
     .unwrap();
     {

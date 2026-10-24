@@ -30,7 +30,7 @@ fn stand_in_bin(dir: &Path) -> PathBuf {
     let bin_dir = dir.join("bin");
     std::fs::create_dir_all(&bin_dir).unwrap();
     let script = bin_dir.join("prikk");
-    std::fs::write(&script, "#!/bin/sh\necho 'prikk 0.52.0'\n").unwrap();
+    std::fs::write(&script, "#!/bin/sh\necho 'prikk 0.54.1'\n").unwrap();
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
     bin_dir
