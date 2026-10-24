@@ -223,8 +223,8 @@ async fn main() {
         Arc::new(NullAuditSink),
     ));
 
-    // The admission cost of the largest accept the configured bound allows (for the start-up message).
-    let mut propose_cost: Option<u64> = None;
+    // The configured size and object bounds of an accept (for the start-up message about the memory budget).
+    let mut propose_cost: Option<(u64, u64)> = None;
     let mut recovery_service: Option<Arc<planeter_transport::RecoveryService>> = None;
     // RFC 004 part 2: advertise and fetch need the export spool; without it the routes answer `transport_off`
     // to a reader of the repository. Every setting is a positive whole number, refused at start otherwise.
@@ -286,7 +286,10 @@ async fn main() {
                             }
                         };
                     let pcfg = planeter_transport::ProposeConfig {
-                        max_artifact_bytes: positive_env("PRIKK_EXCHANGE_MAX_BYTES", 256 << 20),
+                        max_artifact_bytes: positive_env(
+                            "PRIKK_EXCHANGE_MAX_BYTES",
+                            planeter_transport::propose::DEFAULT_MAX_ARTIFACT_BYTES,
+                        ),
                         max_objects: positive_env("PRIKK_EXCHANGE_MAX_OBJECTS", 5_000),
                         accept_deadline: std::time::Duration::from_secs(positive_env(
                             "PLANETER_ACCEPT_DEADLINE_SECS",
@@ -312,7 +315,7 @@ async fn main() {
                         pcfg.max_concurrent,
                         pcfg.repo_capacity_bytes >> 20
                     );
-                    propose_cost = Some(pcfg.accept_cost(pcfg.max_artifact_bytes));
+                    propose_cost = Some((pcfg.max_artifact_bytes, pcfg.max_objects));
                     // Recovery (RFC 004 part 4): the records of its runs, and the procedure itself.
                     let recoveries: Arc<dyn planeter_store::RecoveryStore> =
                         match planeter_store::SqliteRecoveries::new(db.clone()) {
@@ -468,20 +471,10 @@ async fn main() {
     );
 
     // A write draws from the heavy pool too (RFC 004 D-5.3): say whether the budget admits the largest accept.
-    if let Some(cost) = propose_cost {
-        if !planeter_web::budget::accept_admitted(cost, heavy_bytes, budget_bytes) {
-            eprintln!(
-                "planeter: WARNING: an accept of the largest allowed artifact needs about {} MiB of the memory budget, and the heavy pool is {} MiB, so such a proposal is refused as too large; raise {} or lower PRIKK_EXCHANGE_MAX_BYTES",
-                cost / planeter_web::budget::MIB,
-                heavy_bytes / planeter_web::budget::MIB,
-                planeter_web::budget::VAR
-            );
-        } else {
-            eprintln!(
-                "planeter: the memory budget admits an accept of the largest allowed artifact (about {} MiB)",
-                cost / planeter_web::budget::MIB
-            );
-        }
+    if let Some((bound, objects)) = propose_cost {
+        let (_, line) =
+            planeter_web::budget::accept_startup_line(bound, objects, heavy_bytes, budget_bytes);
+        eprintln!("planeter: {line}");
     }
 
     // The separate, small bound on password verification (IS-24). Logged once.

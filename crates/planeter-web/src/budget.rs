@@ -64,6 +64,61 @@ pub fn accept_admitted(cost_bytes: u64, heavy_pool_bytes: u64, budget_bytes: u64
     budget_bytes == 0 || cost_bytes <= heavy_pool_bytes
 }
 
+/// What the start-up log says about the largest accept (RFC 004 part 4c, T3): `(warn, sentences)`. One sentence names what the configured
+/// budget admits, the next the configured bound and whether the two agree, so an operator sees at once what to change.
+pub fn accept_startup_line(
+    bound_bytes: u64,
+    max_objects: u64,
+    heavy_pool_bytes: u64,
+    budget_bytes: u64,
+) -> (bool, String) {
+    use planeter_transport::propose::cost_model;
+    if budget_bytes == 0 {
+        return (
+            false,
+            format!(
+                "the memory budget is off, so no proposal is refused for memory; the configured bound is {} MiB (PRIKK_EXCHANGE_MAX_BYTES)",
+                bound_bytes / MIB
+            ),
+        );
+    }
+    let admits = cost_model::largest_artifact_admitted(heavy_pool_bytes, max_objects);
+    let admitted_text = match admits {
+        Some(a) => format!(
+            "the memory budget (heavy pool {} MiB) admits an accept of an artifact up to {} MiB",
+            heavy_pool_bytes / MIB,
+            a / MIB
+        ),
+        None => format!(
+            "the memory budget (heavy pool {} MiB) admits no accept at all",
+            heavy_pool_bytes / MIB
+        ),
+    };
+    let bound_ok = accept_admitted(
+        cost_model::cost(bound_bytes, max_objects),
+        heavy_pool_bytes,
+        budget_bytes,
+    );
+    if bound_ok {
+        (
+            false,
+            format!(
+                "{admitted_text}; PRIKK_EXCHANGE_MAX_BYTES is {} MiB, which fits",
+                bound_bytes / MIB
+            ),
+        )
+    } else {
+        (
+            true,
+            format!(
+                "WARNING: {admitted_text}, but PRIKK_EXCHANGE_MAX_BYTES is {} MiB, so a proposal larger than that is refused as too large; raise {VAR} or lower PRIKK_EXCHANGE_MAX_BYTES to {} MiB",
+                bound_bytes / MIB,
+                admits.map(|a| a / MIB).unwrap_or(0)
+            ),
+        )
+    }
+}
+
 /// The budget from the variable's value (`None`/empty = unset → the default for `usable_bytes`). An
 /// explicit value is a positive integer number of MiB and is **never capped**.
 pub fn budget_from_var(

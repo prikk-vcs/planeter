@@ -47,6 +47,10 @@ pub const TITLE_MAX_CHARS: usize = 200;
 pub const DESCRIPTION_MAX_BYTES: usize = 64 * 1024;
 /// The most patch ids a declaration may list (the object bound of an accept).
 pub const DECLARATION_MAX_IDS: usize = 20_000;
+/// The default of `PRIKK_EXCHANGE_MAX_BYTES`: 100 MiB (RFC 004 D-5.3 as amended, part 4c). With the measured cost model the
+/// largest accept at this bound needs about 0.7 GiB of the memory budget, which a host with 4 GiB admits at the default budget.
+pub const DEFAULT_MAX_ARTIFACT_BYTES: u64 = 100 << 20;
+
 /// The most patches a response lists with their assurance.
 pub const RESPONSE_PATCH_LIMIT: usize = 1000;
 
@@ -55,7 +59,7 @@ pub const RESPONSE_PATCH_LIMIT: usize = 1000;
 /// Operator settings of the propose path.
 #[derive(Debug, Clone)]
 pub struct ProposeConfig {
-    /// The largest artifact (`PRIKK_EXCHANGE_MAX_BYTES`), default 256 MiB: refused at the edge and again by prikk.
+    /// The largest artifact (`PRIKK_EXCHANGE_MAX_BYTES`), default 100 MiB: refused at the edge and again by prikk.
     pub max_artifact_bytes: u64,
     /// The most objects an artifact may declare (`PRIKK_EXCHANGE_MAX_OBJECTS`), default 5,000 (checked per kind: patches and blobs).
     pub max_objects: u64,
@@ -75,7 +79,7 @@ pub struct ProposeConfig {
 impl Default for ProposeConfig {
     fn default() -> Self {
         ProposeConfig {
-            max_artifact_bytes: 256 << 20,
+            max_artifact_bytes: DEFAULT_MAX_ARTIFACT_BYTES,
             max_objects: 5_000,
             accept_deadline: Duration::from_secs(600),
             lease_wait: Duration::from_secs(5),
@@ -124,6 +128,15 @@ pub mod cost_model {
         BASE_BYTES
             .saturating_add(bytes.saturating_mul(BYTES_TENTHS) / 10)
             .saturating_add(max_objects.saturating_mul(PER_OBJECT_BYTES))
+    }
+
+    /// The largest artifact an accept can have under an object bound of `max_objects` and a memory pool of `pool_bytes`
+    /// (the inverse of [`cost`]): `None` when the pool cannot hold even the fixed part and the object term.
+    pub fn largest_artifact_admitted(pool_bytes: u64, max_objects: u64) -> Option<u64> {
+        let fixed = BASE_BYTES.saturating_add(max_objects.saturating_mul(PER_OBJECT_BYTES));
+        pool_bytes
+            .checked_sub(fixed)
+            .map(|rest| rest.saturating_mul(10) / BYTES_TENTHS)
     }
 
     /// The `RLIMIT_DATA` of the accept: the cost × 1.5.

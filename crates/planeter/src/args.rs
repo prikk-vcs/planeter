@@ -99,7 +99,7 @@ environment:
   PLANETER_EXPORT_MEMORY_MB     memory ceiling of each prikk call of an export, in MiB (default 2048)
   PLANETER_TRANSPORT_RATE_PER_MIN  advertise and fetch requests a minute per client address and per signed-in
                                 user, before 429 (default 120)
-  PRIKK_EXCHANGE_MAX_BYTES      largest artifact a proposal may carry, in bytes (default 268435456 = 256 MiB):
+  PRIKK_EXCHANGE_MAX_BYTES      largest artifact a proposal may carry, in bytes (default 104857600 = 100 MiB):
                                 refused with 413 before it is read, and again by prikk (needs PLANETER_ARTIFACT_DIR)
   PRIKK_EXCHANGE_MAX_OBJECTS    most patches, and most blobs, an artifact may declare (default 5000); prikk refuses a
                                 larger one and nothing is accepted
