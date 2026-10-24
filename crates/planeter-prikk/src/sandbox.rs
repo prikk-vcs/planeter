@@ -285,6 +285,21 @@ impl Sandbox {
         }
     }
 
+    /// This policy with one directory mounted read-write and **nothing else added** (RFC 005 `extract`: the per-call
+    /// working directory's `out`), the wall-time bound untouched. It uses the spool-out slot, which is the same mount
+    /// (`--bind`, outside the repository, validated against it). The unconfined dev mode is returned as it is.
+    #[must_use]
+    pub fn with_out_mount(&self, dir: impl Into<PathBuf>) -> Sandbox {
+        match self {
+            Sandbox::Unconfined => Sandbox::Unconfined,
+            Sandbox::Bwrap(cfg) => {
+                let mut cfg = cfg.clone();
+                cfg.mounts.spool_out = Some(dir.into());
+                Sandbox::Bwrap(cfg)
+            }
+        }
+    }
+
     /// This policy with the wall-time bound of one call set to `timeout_secs` (for the calls that may legitimately
     /// run long: recovery's `doctor`, repairs and `verify`). The unconfined dev mode has none and is returned as it is.
     #[must_use]

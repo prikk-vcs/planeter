@@ -83,6 +83,24 @@ impl CliPrikkRepo {
         self
     }
 
+    /// The repository root this driver is bound to (the directory holding `.prikk`).
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
+    /// This driver with its sandbox replaced by `sandbox` (for a call that needs another mount).
+    pub(crate) fn sandboxed_as(&self, sandbox: Sandbox) -> Self {
+        Self {
+            sandbox,
+            ..self.clone()
+        }
+    }
+
+    /// The sandbox policy of this driver.
+    pub fn sandbox(&self) -> &Sandbox {
+        &self.sandbox
+    }
+
     /// Bind and **verify the prikk version is in planeter's supported range** (RFC 001 D-3): refuse an
     /// out-of-range binary rather than guess.
     pub fn open(root: impl Into<PathBuf>) -> Result<Self> {
@@ -143,7 +161,7 @@ impl CliPrikkRepo {
     }
 
     /// Run one prikk subcommand under the sandbox, the limits and the server-side wall-time bound.
-    fn execute(&self, args: &[&str]) -> Result<Run> {
+    pub(crate) fn execute(&self, args: &[&str]) -> Result<Run> {
         self.sandbox
             .run(&self.binary, &self.root, args, self.limits)
             .map_err(PrikkError::Spawn)
@@ -158,7 +176,7 @@ impl CliPrikkRepo {
     ///   verdict. (`verify` itself decides between a ceiling hit and a genuine failure from the report on
     ///   stdout, not from this text: see `verify`, IS-39.)
     /// - anything else: the plain non-zero exit.
-    fn failure(&self, args: &[&str], run: &Run) -> PrikkError {
+    pub(crate) fn failure(&self, args: &[&str], run: &Run) -> PrikkError {
         use std::os::unix::process::ExitStatusExt;
         if run.timed_out {
             return PrikkError::Command {
@@ -230,7 +248,10 @@ impl CliPrikkRepo {
 
 /// Parse a prikk `--format json` document: it must be JSON, carry `schema_version == expected_schema`
 /// (drift is refused loudly, PK-18), and deserialize into `T`.
-fn parse_schema_json<T: DeserializeOwned>(stdout: &str, expected_schema: &str) -> Result<T> {
+pub(crate) fn parse_schema_json<T: DeserializeOwned>(
+    stdout: &str,
+    expected_schema: &str,
+) -> Result<T> {
     let value: serde_json::Value = serde_json::from_str(stdout)
         .map_err(|e| PrikkError::Parse(format!("invalid JSON: {e}")))?;
     match value
