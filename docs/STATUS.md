@@ -8,6 +8,11 @@
 
 ## Where we are
 
+- **RFC 005 part 5 (proposals you can see) built 2026-10-25, awaiting review**
+  (`rfcs/handoffs/005-change-review/proposals-read-side-handoff-v2.md`): the word *proposal* in everything a person or a program reads
+  (D-38, T0); landing observed from facts (absent from `sync pending` and in a block `log` lists; one `sync pending` per repository per state);
+  the list, detail, close and reviewer-download API; the pages; the retention sweep of the files of finished proposals. Japanese texts
+  are drafts for the reviewers (addendum 6).
 - **RFC 005 part 5b (the prikk 0.54 re-baseline and the `extract` driver) built 2026-10-25, awaiting review**
   (`rfcs/handoffs/005-change-review/prikk-0-54-rebaseline-and-extract-driver-handoff-v2.md`): the floor is 0.54.0 (IS-46 closed); `verify`
   reads the `unreached objects` line; the `extract` driver with its strict readers, its own destination and the cost rule measured on

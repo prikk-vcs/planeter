@@ -184,6 +184,12 @@ says the same for every count; numbers group with commas (`1,200`).
 | patch | パッチ | yes | prikk's own word is *patch*; the interface explains it (`explain.patch`: 記録された編集1件). Alternative: 編集 would drop prikk's word. | Hard term — reviewers decide |
 | change | 変更 | yes | The one word for a recorded unit of history (prikk: *block*), as in English. Counted with 件 (`history.patch_count`). | Hard term — reviewers decide |
 | history | 履歴 | yes | The usual word for a repository's history. | Proposed |
+| proposal | 提案 | yes | What a person puts forward for review (RFC 005 part 5, D-38): the page headings, the state names and the API messages (`proposals.*`, `proposal.*`, `error.*_proposal.*`). The draft's word for *propose* already; *change* (変更) stays for the recorded unit of history. Counted with 件. | Hard term — reviewers decide |
+| revision (of a proposal) | リビジョン | yes | One version of a proposal, a re-sent artifact (`proposal.revisions.*`). Alternative: 版. | Hard term — reviewers decide |
+| landed (state) | 反映済み | yes | The state of a proposal whose patches are all in the project's history (`proposal.state.landed`, `error.proposal_not_open`). Alternatives: 取り込み済み (but 取り込み is the server's *accept*, below). | Hard term — reviewers decide |
+| held for review | レビュー待ちで保持中 | yes | The one sentence of an open proposal (`proposal.what.open`): the work is on this server and not yet in the history. | Hard term — reviewers decide |
+| built on | 土台とした履歴 | yes | The history a revision says it was made from (`proposal.revisions.col.built_on`). | Proposed |
+| close (a proposal) | 閉じる | yes | The action and the state 閉じている (`proposal.close.*`, `proposal.state.closed`). | Proposed |
 | rollback | ロールバック | yes | The usual loan word; explained in place (`explain.rollback`: 以前の変更を取り消す変更). | Hard term — reviewers decide |
 | verify / verification | 検証 | yes | The page and the navigation say 検証; the checks are チェック (`verify.col.stage`), so a *check* and the *verification* stay two words, as in English. Alternative: 確認 (used for *could not be checked*, 現在は確認できません). | Hard term — reviewers decide |
 | Verified (badge) | 検証済み | yes | A trust label. English: prikk ran all its checks just now and found no problems. 検証済み says *has been verified*; the explanation (`explain.verified`) says *just now*. The reviewers confirm the label does not read as a lasting guarantee. | Hard term — trust label, reviewers decide |

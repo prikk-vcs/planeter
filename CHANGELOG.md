@@ -5,6 +5,23 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **Proposals you can see, and the word "proposal" everywhere (RFC 005 part 5).** What a person puts forward for review is now a
+  **proposal** in every sentence and every name a person or a program reads: the pages, the API (`proposal_id`, `created_proposal`,
+  `unknown_proposal`, `proposal_not_open`, `not_your_proposal`, the quotas `open_proposals` and `revisions_per_proposal`), the messages in both
+  languages, and the documentation. (*Change* keeps its glossary meaning, a recorded unit of history; the code's internal name for a
+  proposal stays *change*, and nothing stored is renamed.) **This is a rename of the propose API's fields and error codes that no release
+  has carried yet**, so nothing outside the repository breaks.
+  New: `GET /api/v1/repos/{owner}/{name}/proposals` and `…/proposals/{id}` (anyone who may read), `POST …/proposals/{id}/close` (the
+  opener, or whoever may close; bearer token; a reason is required), and `GET …/proposals/{id}/revisions/{seq}/artifact` (for whoever holds
+  `review` or `merge-seal`: the accepted files byte for byte, with `Range`); the pages `/{owner}/{name}/proposals` and `/{owner}/{name}/proposals/{id}`
+  (the default view is a title, who proposed it, the state, one sentence, a one-line summary and the actions you may take; everything else is
+  under *Details*); the repository navigation shows *Proposals* when there are some or you may propose.
+  **A proposal now lands only when the repository says so:** every one of its patches has left `sync pending` **and** is in a block `log`
+  lists (a patch that merely left the pending list is not landed), observed with one `sync pending` per repository per state, never
+  one call per item. **A landed or closed proposal keeps its files for 30 days** (`PLANETER_PROPOSAL_GRACE_DAYS`), after which a retention
+  sweep (`PLANETER_RETENTION_SWEEP_MINUTES`, hourly, also at start) removes the files nothing else needs and never the records; the download
+  then answers `410 artifact_removed` with the date. See `docs/proposals.md`.
+
 - **The `extract` driver and the `verify` line of prikk 0.54 (no page, no API yet).** planeter can now ask prikk for the files of a
   point of history (`prikk extract`) into a working directory it makes itself, outside the repository, and removes afterwards:
   prikk 0.54 does not refuse a destination inside the repository, so the driver never takes one from a caller. The extracted tree is

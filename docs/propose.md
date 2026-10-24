@@ -119,6 +119,8 @@ uploaded artifact is kept in the store; the retry sends it again and resumes the
 | `PLANETER_PROPOSE_CONCURRENCY` | 2 | proposals uploading or accepting at once |
 | `PLANETER_PROPOSE_LEASE_WAIT_SECS` | 5 | the wait for an upload slot and the write lease before `503 busy` |
 | `PLANETER_PROPOSAL_CAPACITY_MB` | 4096 | artifacts a repository retains for open and recently finished proposals |
+| `PLANETER_PROPOSAL_GRACE_DAYS` | 30 | days a landed or closed proposal keeps its files before the retention sweep may remove them (the records stay) |
+| `PLANETER_RETENTION_SWEEP_MINUTES` | 60 | minutes between runs of the retention sweep, which also runs at start |
 | `PLANETER_PRIKK_MEMORY_BUDGET_MB` | see `--help` | the budget an accept draws from, like a read, always from the **heavy** pool |
 
 An accept of an artifact of *A* bytes under an object bound of *N* is admitted at **10 MiB + 7.0 × *A* + 2 KiB × *N*** and given a
