@@ -526,31 +526,31 @@ fn a_declared_patch_never_silently_drops_out_declared_then_undeclared_then_lande
     // Revision 1 declares 0..3; revision 2 is an undeclared push that added 3..5.
     let revs = [rev(1, 0..3, Some(0..3)), rev(2, 3..5, None)];
     let patches = current_patch_set(&revs);
-    // Observations of `sync pending` over time.
-    let pending = |ids: &[u64]| -> BTreeSet<String> { ids.iter().map(|n| pid(*n)).collect() };
-    // The later push's patches were sealed, but declared patch 1 is still pending: NOT landed.
+    // The ids found in the blocks of the published refs.
+    let in_blocks = |ids: &[u64]| -> BTreeSet<String> { ids.iter().map(|n| pid(*n)).collect() };
+    // The later push's patches are in the history, but declared patches 1 and 2 are not: NOT landed.
     assert_eq!(
-        observe_landing(&patches, &pending(&[1, 7])),
+        observe_landing(&patches, &in_blocks(&[0, 3, 4, 7])),
         Landing::NotYet {
-            remaining: vec![pid(1)]
+            remaining: vec![pid(1), pid(2)]
         }
     );
-    // Only when every declared and every later-added patch has left pending is it landed.
+    // Only when every declared and every later-added patch is in a block is it landed (other blocks do not matter).
     assert_eq!(
-        observe_landing(&patches, &pending(&[7, 8])),
+        observe_landing(&patches, &in_blocks(&[0, 1, 2, 3, 4, 7, 8])),
         Landing::Landed
     );
 }
 
 #[test]
-fn landing_is_observed_from_a_recorded_pending_sequence_and_never_asserted() {
+fn landing_is_observed_from_a_recorded_sequence_of_the_published_history_and_never_asserted() {
     let patches = set(10..13);
-    // The recorded sequence of `sync pending` observations, one per poll.
+    // The recorded sequence of observations of the published history, one per state.
     let observations: Vec<BTreeSet<String>> = vec![
-        set(10..16),                                        // all three pending
-        [10, 12, 14, 15].iter().map(|n| pid(*n)).collect(), // 11 left (sealed elsewhere, delivered)
-        [14, 15].iter().map(|n| pid(*n)).collect(),         // all three gone
-        set(10..16), // a later, odd observation (e.g. a stale read): not our business
+        BTreeSet::new(),                            // nothing of ours is in a published block
+        [11, 14].iter().map(|n| pid(*n)).collect(), // one of the three
+        set(10..16),                                // all three
+        BTreeSet::new(), // a later, odd observation (e.g. a stale read): not our business
     ];
     let outcomes: Vec<Landing> = observations
         .iter()
@@ -585,14 +585,20 @@ fn an_empty_patch_set_is_never_observed_as_landed() {
         observe_landing(&BTreeSet::new(), &BTreeSet::new()),
         Landing::NotYet { remaining: vec![] }
     );
+    assert_eq!(
+        observe_landing(&BTreeSet::new(), &set(0..5)),
+        Landing::NotYet { remaining: vec![] },
+        "nothing observed leaving is nothing landed, whatever else is in the history"
+    );
 }
 
 #[test]
 fn a_superseded_patch_that_no_one_seals_keeps_an_undeclared_change_open() {
     let revs = [rev(1, 0..2, None), rev(2, 2..4, None)];
-    let pending_now: BTreeSet<String> = [pid(0)].into_iter().collect(); // revision 1's patch 0 never sealed
+    // Revision 1's patch 0 never reached the history; the other three did.
+    let in_blocks: BTreeSet<String> = [pid(1), pid(2), pid(3)].into_iter().collect();
     assert_eq!(
-        observe_landing(&current_patch_set(&revs), &pending_now),
+        observe_landing(&current_patch_set(&revs), &in_blocks),
         Landing::NotYet {
             remaining: vec![pid(0)]
         }
@@ -879,7 +885,7 @@ fn every_refusal_names_its_quota_with_message_and_hint_keys_and_figures_in_the_u
 // ------------------------------------------------------------------------------------------------ assurance
 
 #[test]
-fn sealed_only_from_a_block_read_from_log() {
+fn sealed_only_from_a_block_of_a_published_ref_read_from_log() {
     let f = PatchFacts {
         in_block_from_log: true,
         listed_pending: false,
@@ -899,6 +905,18 @@ fn a_pending_patch_whose_queued_is_false_is_never_sealed() {
     assert_eq!(patch_assurance(&f), Some(Assurance::ForgeApprovedUnsealed));
 }
 
+/// D-40 reverses the part 3a precedence on purpose: a patch in a block of a published ref is signed into the history even
+/// if `sync pending` still lists it (an import puts it in both).
+#[test]
+fn a_patch_in_a_published_block_is_sealed_even_when_pending_still_lists_it() {
+    let f = PatchFacts {
+        in_block_from_log: true,
+        listed_pending: true,
+        reported_queued: false,
+    };
+    assert_eq!(patch_assurance(&f), Some(Assurance::Sealed));
+}
+
 #[test]
 fn a_patch_nothing_vouches_for_has_no_assurance_and_queued_does_not_change_that() {
     for queued in [false, true] {
@@ -915,10 +933,11 @@ fn a_patch_nothing_vouches_for_has_no_assurance_and_queued_does_not_change_that(
     }
 }
 
-/// Universal rule over all eight combinations: `Sealed` is returned only when a block from `log` contains the
-/// patch and `sync pending` does not list it; `queued` never changes the answer.
+/// Universal rule over all eight combinations (this test changed by design with D-40; it used to say that a pending patch
+/// is never sealed): `Sealed` exactly when a block of a published ref contains the patch; `ForgeApprovedUnsealed` exactly
+/// when it does not and `sync pending` lists it; `queued` never changes the answer.
 #[test]
-fn no_combination_makes_a_pending_patch_sealed_and_queued_never_matters() {
+fn the_eight_combinations_sealed_iff_in_a_published_block_and_queued_never_matters() {
     for bits in 0..8u8 {
         let facts = |queued| PatchFacts {
             in_block_from_log: bits & 1 != 0,
@@ -930,16 +949,16 @@ fn no_combination_makes_a_pending_patch_sealed_and_queued_never_matters() {
             patch_assurance(&facts(true)),
         );
         assert_eq!(a, b, "queued must not matter (bits {bits:03b})");
-        if bits & 2 != 0 {
-            assert_ne!(
-                a,
-                Some(Assurance::Sealed),
-                "a pending patch is never sealed (bits {bits:03b})"
-            );
-        }
-        if a == Some(Assurance::Sealed) {
-            assert!(bits & 1 != 0, "sealed only from a block read from log");
-        }
+        assert_eq!(
+            a == Some(Assurance::Sealed),
+            bits & 1 != 0,
+            "sealed iff in a published block (bits {bits:03b})"
+        );
+        assert_eq!(
+            a == Some(Assurance::ForgeApprovedUnsealed),
+            bits & 1 == 0 && bits & 2 != 0,
+            "held iff pending and in no published block (bits {bits:03b})"
+        );
         assert_ne!(
             a,
             Some(Assurance::PrikkVerified),

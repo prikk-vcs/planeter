@@ -2,14 +2,22 @@
 //! facts**, the list and the detail of proposals, closing, and the retention sweep. (A *proposal* is the code's *change*:
 //! `ChangeRecord`, `ChangeStore`; see `docs/proposals.md`.)
 //!
-//! **No decision here is made from `queued`**: a patch is *pending* if `sync pending` lists it and *signed into the history*
-//! if a block that `log` lists for a ref the repository holds contains it; a patch in neither is *not listed*, and the
-//! view says so (it is never called signed, and a proposal is never called landed because a patch merely vanished from
-//! the pending list).
+//! **No decision here is made from `queued`**: a patch is *signed into the history* if a block that `log` lists for a
+//! **published** ref of the repository contains it (and that wins over the queue); otherwise it is *pending* if `sync
+//! pending` lists it; a patch in neither is *not listed*, and the view says so.
+//!
+//! **Landing (RFC 005 D-6 as amended by D-40).** A proposal is `landed` when every patch of its current set is in a block of
+//! a *published* ref (`heads/*`, as `branch --all` reports them as branches). `sync pending` is not consulted: a patch can
+//! be at once in the queue and in an imported published block. A **received** ref is not evidence: it is last-writer-wins
+//! and unverified (PK-67), and a landed proposal never changes again, so a received history is shown only as a *sighting*
+//! in the detail, and no state is ever derived from one. On this forge a published ref advances only when a key-holding
+//! action puts history there (which D-8 will define), so until then a proposal usually stays open, and the page says
+//! what is true.
 //!
 //! **Cost.** One `sync pending` per repository per **state fingerprint** (the fetch routes' key), shared by every open
-//! proposal of that repository and kept in memory; `log` is read **only when some proposal's patches have all left
-//! pending** (the candidates), once per fingerprint. No prikk call is made per proposal listed.
+//! proposal of that repository and kept in memory. The logs of the published refs are read **once per fingerprint**, and
+//! only when some proposal is open (or a detail needs them); the logs of the received refs only for the detail of an open
+//! proposal. No prikk call is made per proposal listed.
 
 use std::collections::{BTreeSet, HashMap};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -191,6 +199,9 @@ pub struct Detail {
     pub truncated: bool,
     /// How many patches of the whole current set are still pending (open proposals).
     pub still_pending: usize,
+    /// For an open proposal: the received refs (names only) whose logs hold any of its patches. Shown for information; no
+    /// state is ever derived from it.
+    pub sightings: Vec<String>,
     pub retention: Retention,
 }
 
@@ -198,8 +209,12 @@ pub struct Detail {
 struct Observed {
     fingerprint: String,
     pending: Arc<BTreeSet<String>>,
-    /// The patch ids in the blocks `log` lists, read when first needed.
+    /// The patch ids in the blocks `log` lists for the **published** refs, read when first needed.
     sealed: Mutex<Option<Arc<BTreeSet<String>>>>,
+    /// The refs the repository holds (`branch --all`), listed once and shared by the two reads below.
+    refs: Mutex<Option<Arc<planeter_prikk::model::BranchList>>>,
+    /// For each **received** ref, the patch ids of its blocks, read when first needed (sightings only).
+    received: Mutex<Option<Arc<Vec<(String, BTreeSet<String>)>>>>,
     /// The landing pass has been made for this fingerprint.
     landing_done: AtomicBool,
 }
@@ -333,6 +348,8 @@ impl ProposalService {
             fingerprint,
             pending: Arc::new(pending.into_iter().collect()),
             sealed: Mutex::new(None),
+            received: Mutex::new(None),
+            refs: Mutex::new(None),
             landing_done: AtomicBool::new(false),
         });
         self.observed
@@ -342,8 +359,51 @@ impl ProposalService {
         Ok(observed)
     }
 
-    /// The patch ids in every block `log` lists, over every ref the repository holds (published or received): read once
-    /// per observation, and only when somebody needs it.
+    /// The patch ids of the blocks of one ref: `log` with a limit far above prikk's own default of the newest 20 blocks. A log
+    /// that fills the limit may have been cut short, so it is refused rather than read as complete.
+    fn patch_ids_of(
+        driver: &planeter_prikk::CliPrikkRepo,
+        ref_name: &str,
+    ) -> Result<BTreeSet<String>, ProposalError> {
+        let log = driver
+            .log(Some(ref_name), Some(LOG_BLOCK_LIMIT))
+            .map_err(|e| unavailable("cannot read a log", e))?;
+        if log.blocks.len() >= LOG_BLOCK_LIMIT {
+            return Err(unavailable(
+                "the history is longer than an observation reads",
+                ref_name,
+            ));
+        }
+        Ok(log
+            .blocks
+            .into_iter()
+            .flat_map(|b| b.patch_messages.into_iter().map(|p| p.patch_id))
+            .collect())
+    }
+
+    fn refs(
+        &self,
+        driver: &planeter_prikk::CliPrikkRepo,
+        obs: &Observed,
+    ) -> Result<Arc<planeter_prikk::model::BranchList>, ProposalError> {
+        let mut slot = obs
+            .refs
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(r) = &*slot {
+            return Ok(Arc::clone(r));
+        }
+        let refs = Arc::new(
+            driver
+                .branches(true)
+                .map_err(|e| unavailable("cannot list the refs", e))?,
+        );
+        *slot = Some(Arc::clone(&refs));
+        Ok(refs)
+    }
+
+    /// The patch ids in every block `log` lists for a **published** ref (D-40): read once per observation, and only when
+    /// somebody needs it. Closed branches are published refs too.
     fn sealed(
         &self,
         record: &RepositoryRecord,
@@ -357,40 +417,55 @@ impl ProposalService {
             return Ok(Arc::clone(s));
         }
         let driver = self.reader(record)?;
-        let refs = driver
-            .branches(true)
-            .map_err(|e| unavailable("cannot list the refs", e))?;
+        let refs = self.refs(&driver, obs)?;
         let mut ids = BTreeSet::new();
-        let names = refs
-            .branches
-            .iter()
-            .map(|b| b.ref_name.as_str())
-            .chain(refs.received.iter().map(|r| r.ref_name.as_str()));
-        for name in names {
-            // prikk's own default is the newest 20 blocks: a patch sealed longer ago would never be found.
-            let log = driver
-                .log(Some(name), Some(LOG_BLOCK_LIMIT))
-                .map_err(|e| unavailable("cannot read a log", e))?;
-            if log.blocks.len() >= LOG_BLOCK_LIMIT {
-                // Possibly cut short: a patch not found here cannot be told from one not looked for. Nothing lands.
-                return Err(unavailable(
-                    "the history is longer than an observation reads",
-                    name,
-                ));
-            }
-            for block in log.blocks {
-                ids.extend(block.patch_messages.into_iter().map(|p| p.patch_id));
-            }
+        for b in &refs.branches {
+            ids.extend(Self::patch_ids_of(&driver, &b.ref_name)?);
         }
         let ids = Arc::new(ids);
         *slot = Some(Arc::clone(&ids));
         Ok(ids)
     }
 
-    /// Observe the repository and move to `landed` every open proposal whose **whole** current patch set has left
-    /// `sync pending` and is present in a block `log` lists (RFC 005 D-6). Once per state fingerprint. The transition is a
-    /// compare-and-set: a revision recorded since the proposal's records were read wins, and the observation is discarded.
-    /// Returns the facts, for the caller's own classification.
+    /// For each received ref, the patch ids of its blocks: read once per observation, for sightings only. **A failure is
+    /// "no sightings", never an error**, and nothing is derived from the answer.
+    fn received_logs(
+        &self,
+        record: &RepositoryRecord,
+        obs: &Observed,
+    ) -> Arc<Vec<(String, BTreeSet<String>)>> {
+        let mut slot = obs
+            .received
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        if let Some(r) = &*slot {
+            return Arc::clone(r);
+        }
+        let read = || -> Result<Vec<(String, BTreeSet<String>)>, ProposalError> {
+            let driver = self.reader(record)?;
+            let refs = self.refs(&driver, obs)?;
+            refs.received
+                .iter()
+                .map(|r| {
+                    Ok((
+                        r.ref_name.clone(),
+                        Self::patch_ids_of(&driver, &r.ref_name)?,
+                    ))
+                })
+                .collect()
+        };
+        let logs = Arc::new(read().unwrap_or_else(|e| {
+            eprintln!("planeter: proposals: no sightings this time: {e}");
+            Vec::new()
+        }));
+        *slot = Some(Arc::clone(&logs));
+        logs
+    }
+
+    /// Observe the repository and move to `landed` every open proposal whose **whole** current patch set is in a block of a
+    /// published ref (RFC 005 D-6 as amended by D-40). Once per state fingerprint. The transition is a compare-and-set: a
+    /// revision recorded since the proposal's records were read wins, and the observation is discarded. Returns the facts,
+    /// for the caller's own classification.
     fn refresh(&self, record: &RepositoryRecord) -> Result<Arc<Observed>, ProposalError> {
         let obs = self.observation(record)?;
         if obs.landing_done.load(Ordering::Acquire) {
@@ -401,23 +476,17 @@ impl ProposalService {
             .changes
             .list_changes(repo, Some(ChangeState::Open))
             .map_err(|e| unavailable("cannot list the proposals", e))?;
-        // Candidates: every patch of the set has left the pending list. Absent from pending is not yet landed.
-        let mut candidates: Vec<(ChangeRecord, u32, BTreeSet<String>)> = Vec::new();
-        for c in open {
-            let revisions = self
-                .changes
-                .revisions_of(&c.change_id)
-                .map_err(|e| unavailable("cannot read the revisions", e))?;
-            let set = current_patch_set(&revisions);
-            if observe_landing(&set, &obs.pending) == Landing::Landed {
-                candidates.push((c, revisions.len() as u32, set));
-            }
-        }
-        if !candidates.is_empty() {
+        // Every open proposal is a candidate; the published history is read once, and only if there is one.
+        if !open.is_empty() {
             let sealed = self.sealed(record, &obs)?;
             let now = (self.now_unix)();
-            for (c, revisions_seen, set) in candidates {
-                if !set.iter().all(|id| sealed.contains(id)) {
+            for c in open {
+                let revisions = self
+                    .changes
+                    .revisions_of(&c.change_id)
+                    .map_err(|e| unavailable("cannot read the revisions", e))?;
+                let set = current_patch_set(&revisions);
+                if observe_landing(&set, &sealed) != Landing::Landed {
                     continue;
                 }
                 let t = transition(
@@ -429,7 +498,7 @@ impl ProposalService {
                 .map_err(|e| unavailable("cannot move a proposal to landed", e))?;
                 match self.changes.leave_open_observed(
                     &c.change_id,
-                    revisions_seen,
+                    revisions.len() as u32,
                     ChangeState::Landed,
                     None,
                     now,
@@ -548,19 +617,24 @@ impl ProposalService {
         let patch_total = set.len();
         let mut patches = Vec::new();
         let mut still_pending = 0;
-        if let Some(obs) = &obs {
-            still_pending = set.iter().filter(|id| obs.pending.contains(*id)).count();
-            // `log` is read only when a listed patch is not pending: otherwise nothing could be signed in.
-            let shown: Vec<&String> = set.iter().take(DETAIL_PATCH_LIMIT).collect();
-            let needs_log = shown.iter().any(|id| !obs.pending.contains(*id));
-            let sealed = if needs_log {
-                self.sealed(record, obs).ok()
-            } else {
+        let mut sightings = Vec::new();
+        // The facts of one observation: `sync pending`, and the logs of the published refs (cached per fingerprint). If
+        // either could not be read, nothing is claimed about any patch (a patch called "held" might be signed in).
+        let facts = obs.and_then(|obs| match self.sealed(record, &obs) {
+            Ok(sealed) => Some((obs, sealed)),
+            Err(e) => {
+                eprintln!("planeter: proposals: the published history could not be read: {e}");
                 None
-            };
-            for id in shown {
+            }
+        });
+        if let Some((obs, sealed)) = &facts {
+            still_pending = set
+                .iter()
+                .filter(|id| obs.pending.contains(*id) && !sealed.contains(*id))
+                .count();
+            for id in set.iter().take(DETAIL_PATCH_LIMIT) {
                 let facts = PatchFacts {
-                    in_block_from_log: sealed.as_ref().is_some_and(|s| s.contains(id)),
+                    in_block_from_log: sealed.contains(id),
                     listed_pending: obs.pending.contains(id),
                     reported_queued: false,
                 };
@@ -569,8 +643,15 @@ impl ProposalService {
                     assurance: patch_assurance(&facts),
                 });
             }
+            if proposal.state == ChangeState::Open {
+                sightings = self
+                    .received_logs(record, obs)
+                    .iter()
+                    .filter(|(_, ids)| set.iter().any(|id| ids.contains(id)))
+                    .map(|(name, _)| name.clone())
+                    .collect();
+            }
         } else {
-            // Without an observation nothing is claimed about any patch.
             patches.extend(set.iter().take(DETAIL_PATCH_LIMIT).map(|id| PatchEntry {
                 patch_id: id.clone(),
                 assurance: None,
@@ -591,6 +672,7 @@ impl ProposalService {
             patches,
             patch_total,
             still_pending,
+            sightings,
             retention,
         })
     }
@@ -816,7 +898,7 @@ const OBSERVATION_FLOOR: u64 = 64 << 20;
 
 /// How many blocks of one ref an observation reads (`prikk log --limit`). A log that fills it may have been cut short, so
 /// no proposal lands on it.
-const LOG_BLOCK_LIMIT: usize = 100_000;
+pub(crate) const LOG_BLOCK_LIMIT: usize = 100_000;
 
 /// The cursor of the page after `c`: its sort key, `<updated_at>.<id>`.
 fn cursor(c: &ChangeRecord) -> String {

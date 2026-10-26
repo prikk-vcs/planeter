@@ -171,6 +171,12 @@ pub struct PatchItem {
 }
 
 #[derive(Serialize)]
+pub struct SightingItem {
+    #[serde(rename = "ref")]
+    ref_name: String,
+}
+
+#[derive(Serialize)]
 pub struct DescriptionView {
     /// The text as sent.
     source: String,
@@ -201,6 +207,9 @@ pub struct DetailView {
     truncated: bool,
     /// How many patches of the whole current set are still held by this server, not yet signed in.
     still_pending: usize,
+    /// For an open proposal: the received refs whose logs hold any of its patches. Information only; no state is derived
+    /// from a received ref (it is replaceable and unverified).
+    received_sightings: Vec<SightingItem>,
     /// One plain sentence that is true under every answer to what happens after a maintainer signs the work.
     note: String,
 }
@@ -234,6 +243,13 @@ pub(crate) fn detail_view(d: &Detail, t: &crate::catalog::T) -> DetailView {
         patch_total: d.patch_total,
         truncated: d.truncated,
         still_pending: d.still_pending,
+        received_sightings: d
+            .sightings
+            .iter()
+            .map(|r| SightingItem {
+                ref_name: r.clone(),
+            })
+            .collect(),
         note: t.get(crate::catalog::Key::ProposalsNoMerge),
     }
 }

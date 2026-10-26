@@ -929,7 +929,10 @@ impl ProposeService {
                 ));
             }
         };
-        let sealed = if meta.declared_patches.is_some() {
+        // `in_logs`: every patch any ref's log lists, published or received (what the forge *holds*, for the declaration's
+        // check). `published`: only those of published refs (what is *signed into the history*, for the response's
+        // assurance, D-40). Read only for a declared push.
+        let (in_logs, published) = if meta.declared_patches.is_some() {
             match self.patches_in_logs(&reader) {
                 Ok(s) => s,
                 Err(_) => {
@@ -937,9 +940,9 @@ impl ProposeService {
                 }
             }
         } else {
-            BTreeSet::new()
+            (BTreeSet::new(), BTreeSet::new())
         };
-        let held = |id: &str| pending_after.contains(id) || sealed.contains(id);
+        let held = |id: &str| pending_after.contains(id) || in_logs.contains(id);
         let derived = match derive_revision(
             &intent,
             &pending_after,
@@ -1070,7 +1073,7 @@ impl ProposeService {
             .take(RESPONSE_PATCH_LIMIT)
             .map(|id| {
                 let facts = PatchFacts {
-                    in_block_from_log: sealed.contains(id),
+                    in_block_from_log: published.contains(id),
                     listed_pending: pending_after.contains(id),
                     reported_queued: false,
                 };
@@ -1105,25 +1108,32 @@ impl ProposeService {
         })
     }
 
-    /// The patch ids of every block `log` lists, over every ref the repository holds.
+    /// The patch ids of the blocks `log` lists: `(every ref the repository holds, published or received; the published
+    /// refs only)`. The first serves the declaration's *held* check; only the second may say a patch is signed in.
     fn patches_in_logs(
         &self,
         driver: &planeter_prikk::CliPrikkRepo,
-    ) -> Result<BTreeSet<String>, PrikkError> {
+    ) -> Result<(BTreeSet<String>, BTreeSet<String>), PrikkError> {
         let refs = driver.branches(true)?;
-        let mut out = BTreeSet::new();
+        let (mut all, mut published) = (BTreeSet::new(), BTreeSet::new());
         let names = refs
             .branches
             .iter()
-            .map(|b| b.ref_name.as_str())
-            .chain(refs.received.iter().map(|r| r.ref_name.as_str()));
-        for name in names {
-            let log = driver.log(Some(name), None)?;
+            .map(|b| (b.ref_name.as_str(), true))
+            .chain(refs.received.iter().map(|r| (r.ref_name.as_str(), false)));
+        for (name, is_published) in names {
+            // prikk's own default is the newest 20 blocks; a declared patch sealed longer ago is still held.
+            let log = driver.log(Some(name), Some(crate::proposals::LOG_BLOCK_LIMIT))?;
             for block in log.blocks {
-                out.extend(block.patch_messages.into_iter().map(|p| p.patch_id));
+                for p in block.patch_messages {
+                    if is_published {
+                        published.insert(p.patch_id.clone());
+                    }
+                    all.insert(p.patch_id);
+                }
             }
         }
-        Ok(out)
+        Ok((all, published))
     }
 
     fn already_recorded(&self, r: &RevisionRecord) -> Proposed {

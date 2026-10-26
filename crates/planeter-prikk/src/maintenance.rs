@@ -45,7 +45,40 @@ pub struct DoctorReport {
     pub diagnostics: Vec<Diagnostic>,
 }
 
+/// The code prikk 0.54 gives to an object that nothing refers to (`verify` reports the same as `unreached objects`).
+pub const UNREACHED_OBJECT_CODE: &str = "PRIKK-DOCTOR-UNREACHED-OBJECT";
+
+impl Diagnostic {
+    /// A **warning of exactly [`UNREACHED_OBJECT_CODE`] that names no repair** ("the bytes stay; no command removes them
+    /// yet"): there is nothing to do and nothing to wait for, so recovery notes it and goes on. An error of that code, a
+    /// differently coded warning, or one that names a repair is not this.
+    pub fn is_unreached_note(&self) -> bool {
+        self.severity == Severity::Warning
+            && self.code == UNREACHED_OBJECT_CODE
+            && self.named_flags().is_empty()
+    }
+}
+
 impl DoctorReport {
+    /// How many diagnostics are [`Diagnostic::is_unreached_note`]s.
+    pub fn unreached_notes(&self) -> u32 {
+        self.diagnostics
+            .iter()
+            .filter(|d| d.is_unreached_note())
+            .count() as u32
+    }
+
+    /// Whether recovery may go on: nothing but information and unreached-object notes. (A report with one of those beside any
+    /// other problem is not clean for recovery.)
+    pub fn is_clean_for_recovery(&self) -> bool {
+        self.errors == 0
+            && self.warnings == self.unreached_notes()
+            && self
+                .diagnostics
+                .iter()
+                .all(|d| d.severity == Severity::Info || d.is_unreached_note())
+    }
+
     /// Nothing but information: no error, no warning. (Stale locks are not a diagnostic of `doctor`.)
     pub fn is_clean(&self) -> bool {
         self.errors == 0
@@ -77,14 +110,14 @@ impl DoctorReport {
     /// repair, or naming any repair off the list (even beside an allowed one), makes the whole report unrepairable by
     /// planeter: a person decides.
     pub fn repair_plan(&self) -> RepairPlan {
-        if self.is_clean() {
+        if self.is_clean_for_recovery() {
             return RepairPlan::Nothing;
         }
         let mut repairs: Vec<Repair> = Vec::new();
         for d in self
             .diagnostics
             .iter()
-            .filter(|d| d.severity != Severity::Info)
+            .filter(|d| d.severity != Severity::Info && !d.is_unreached_note())
         {
             let flags = d.named_flags();
             if flags.is_empty() {

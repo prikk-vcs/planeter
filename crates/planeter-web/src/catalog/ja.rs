@@ -596,6 +596,11 @@ pub const CATALOG: &[Entry] = &[
         "recovery.blocker.processes_uninspected",
         "一部のプロセスを調べられなかったため、そのどれかがリポジトリを使用している可能性を除外できません。",
     ),
+    plural_msg(
+        "recovery.note.unreached_objects",
+        "リポジトリの点検で、どこからも使われていない保存データが {count} 件見つかりました。復旧は止まらず、対応は不要です。",
+        "リポジトリの点検で、どこからも使われていない保存データが {count} 件見つかりました。復旧は止まらず、対応は不要です。",
+    ),
     msg(
         "recovery.outcome.recovered",
         "リポジトリは再び書き込めるようになりました。",
@@ -896,5 +901,14 @@ pub const CATALOG: &[Entry] = &[
     msg(
         "proposal.close.too_long",
         "理由が 1,000 文字を超えています。短くして、もう一度お試しください。",
+    ),
+    msg("proposal.closed_line", "閉じています：{reason}"),
+    msg(
+        "proposal.sighting",
+        "ここで受信した履歴にも見つかりました（ここでは未検証）：{ref}",
+    ),
+    msg(
+        "proposal.sighting_explain",
+        "ここで受信した履歴は置き換えられることがあるため、この作業が反映済みであることを示すものではありません。",
     ),
 ];

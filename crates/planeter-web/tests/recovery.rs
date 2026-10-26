@@ -456,6 +456,20 @@ if [ "$1" = doctor ] && [ -z "$2" ]; then
       printf 'doctor repository: %s/.prikk\nerror [PRIKK-DOCTOR-INDEX]: the pointer index disagrees\n  recommendation: `--repair-index`, or else `--rebuild-pointer-index`\nissue summary: errors=1, warnings=0, info=0\n' "$PWD"; exit 1 ;;
     doctor-error)
       printf 'doctor repository: %s/.prikk\nerror [PRIKK-DOCTOR-DAMAGE]: an object container is damaged\n  recommendation: restore from a backup\nissue summary: errors=1, warnings=0, info=0\n' "$PWD"; exit 1 ;;
+    doctor-unreached-wal)
+      if [ ! -f {repaired} ]; then
+        printf 'doctor repository: %s/.prikk\nwarning [PRIKK-DOCTOR-UNREACHED-OBJECT]: block aa is reached by nothing in this repository\n  recommendation: the bytes stay; no command removes them yet\nwarning [PRIKK-DOCTOR-WAL-TAIL]: trailing partial WAL bytes: 12\n  recommendation: run `prikk doctor --repair-wal-tail`\nissue summary: errors=0, warnings=2, info=0\n' "$PWD"; exit 0
+      else
+        printf 'doctor repository: %s/.prikk\nwarning [PRIKK-DOCTOR-UNREACHED-OBJECT]: block aa is reached by nothing in this repository\n  recommendation: the bytes stay; no command removes them yet\nissue summary: errors=0, warnings=1, info=0\n' "$PWD"; exit 0
+      fi ;;
+    doctor-unreached-unknown)
+      printf 'doctor repository: %s/.prikk\nwarning [PRIKK-DOCTOR-UNREACHED-OBJECT]: block aa is reached by nothing in this repository\n  recommendation: the bytes stay; no command removes them yet\nwarning [PRIKK-DOCTOR-SOMETHING-NEW]: a thing planeter has never seen\n  recommendation: ask someone\nissue summary: errors=0, warnings=2, info=0\n' "$PWD"; exit 0 ;;
+    doctor-unknown-warning)
+      printf 'doctor repository: %s/.prikk\nwarning [PRIKK-DOCTOR-SOMETHING-NEW]: a thing planeter has never seen\n  recommendation: the bytes stay; no command removes them yet\nissue summary: errors=0, warnings=1, info=0\n' "$PWD"; exit 0 ;;
+    doctor-unreached-as-error)
+      printf 'doctor repository: %s/.prikk\nerror [PRIKK-DOCTOR-UNREACHED-OBJECT]: block aa is reached by nothing in this repository\n  recommendation: the bytes stay; no command removes them yet\nissue summary: errors=1, warnings=0, info=0\n' "$PWD"; exit 1 ;;
+    doctor-unreached-names-a-repair)
+      printf 'doctor repository: %s/.prikk\nwarning [PRIKK-DOCTOR-UNREACHED-OBJECT]: block aa is reached by nothing in this repository\n  recommendation: run `prikk doctor --repair-index`\nissue summary: errors=0, warnings=1, info=0\n' "$PWD"; exit 0 ;;
   esac
 fi
 if [ "$1" = verify ] && [ "$MODE" = verify-fails ]; then echo "verify went wrong" >&2; exit 1; fi
@@ -1345,12 +1359,11 @@ fn a_verify_that_reports_unreached_objects_is_still_a_pass_and_recovery_clears_t
 }
 
 /// What `doctor` of prikk 0.54.1 says of such a repository: two warnings (`PRIKK-DOCTOR-UNREACHED-OBJECT`) whose only
-/// recommendation names no repair ("the bytes stay; no command removes them yet"). Recovery's rule is that `doctor` must be
-/// clean, so **a repository with unreached objects is not recovered by the server, and not by an administrator either**: the
-/// plan's `doctor_problems` is not overridable (nothing to run). This test pins the behaviour as it is today; whether such a
-/// warning should be allowed through is the architect's question (the part 5b review request, deviation 3).
+/// recommendation names no repair ("the bytes stay; no command removes them yet"). **They are a note, not a blocker** (part
+/// 5a T3): this test used to pin the opposite (`..._keep_recovery_from_running_today`) and was changed on purpose. The plan
+/// lists the note with its count, the server recovers by itself, and the record of the `doctor` step says so.
 #[test]
-fn doctors_unreached_object_warnings_keep_recovery_from_running_today() {
+fn doctors_unreached_object_warnings_are_a_note_and_an_unattended_run_recovers() {
     if skip() {
         return;
     }
@@ -1358,21 +1371,118 @@ fn doctors_unreached_object_warnings_keep_recovery_from_running_today() {
     w.killed_accept();
     std::fs::write(&ctrl, "doctor-unreached").unwrap();
     let plan = w.svc.plan(&w.record).unwrap();
+    assert!(plan.blockers.is_empty(), "{:?}", plan.blockers);
+    assert_eq!(
+        plan.notes,
+        vec![planeter_transport::RecoveryNote {
+            code: "unreached_objects",
+            count: 2
+        }]
+    );
+    let d = plan.doctor.as_ref().unwrap();
+    assert_eq!(d.unreached_objects, 2);
+    assert!(
+        !d.clean && d.repairs_allowed.is_empty() && d.repair_refusal.is_none(),
+        "{d:?}: not clean to the letter, but there is nothing to repair"
+    );
+    assert!(plan.may_run_unattended);
+    let r = w.svc.auto(&w.record).expect("the server runs it by itself");
+    assert_eq!(r.outcome, RecoveryOutcome::Recovered, "{r:?}");
+    assert!(!w.flagged());
+    let rec = w.recoveries.recent(&repo_id(), 1).unwrap();
+    let doctor_step = rec[0].steps.iter().find(|s| s.name == "doctor").unwrap();
+    assert!(
+        doctor_step
+            .detail
+            .contains("note: 2 warning(s) of PRIKK-DOCTOR-UNREACHED-OBJECT"),
+        "{}",
+        doctor_step.detail
+    );
+    assert!(
+        standin_log(&ctrl).iter().all(|l| !l.starts_with("REPAIR")),
+        "nothing was repaired: there was nothing named"
+    );
+}
+
+/// The note is narrow: a warning of any other code, the same code as an error, or the same code that names a repair keeps
+/// `doctor_problems` as it is.
+#[test]
+fn only_an_unreached_object_warning_that_names_no_repair_is_let_through() {
+    if skip() {
+        return;
+    }
+    for (mode, overridable) in [
+        ("doctor-unknown-warning", false),
+        ("doctor-unreached-unknown", false),
+        ("doctor-unreached-as-error", false),
+        ("doctor-unreached-names-a-repair", true),
+    ] {
+        let (w, ctrl) = standin_world(&format!("narrow-{mode}"));
+        w.killed_accept();
+        std::fs::write(&ctrl, mode).unwrap();
+        let plan = w.svc.plan(&w.record).unwrap();
+        assert_eq!(
+            plan.blockers
+                .iter()
+                .map(|b| (b.code, b.overridable))
+                .collect::<Vec<_>>(),
+            vec![("doctor_problems", overridable)],
+            "{mode}"
+        );
+        assert!(!plan.may_run_unattended, "{mode}");
+        assert!(w.svc.auto(&w.record).is_none(), "{mode}");
+        if !overridable {
+            assert_eq!(
+                w.svc.recover(&w.record, "alice", &[]).unwrap().outcome,
+                RecoveryOutcome::Stopped,
+                "{mode}"
+            );
+            assert!(w.flagged(), "{mode}");
+        }
+        // The blocker's detail names the problem that stops it, not the note.
+        if mode == "doctor-unreached-unknown" {
+            assert!(
+                plan.blockers[0].detail.contains("SOMETHING-NEW"),
+                "{}",
+                plan.blockers[0].detail
+            );
+        }
+    }
+}
+
+/// Beside a repair-naming warning the note changes nothing: it stays an administrator's decision, the named repair runs, and
+/// the note is still there afterwards.
+#[test]
+fn the_note_beside_a_repairable_warning_stays_an_administrators_decision() {
+    if skip() {
+        return;
+    }
+    let (w, ctrl) = standin_world("doctor-unreached-wal");
+    w.killed_accept();
+    std::fs::write(&ctrl, "doctor-unreached-wal").unwrap();
+    let plan = w.svc.plan(&w.record).unwrap();
     assert_eq!(
         plan.blockers
             .iter()
             .map(|b| (b.code, b.overridable))
             .collect::<Vec<_>>(),
-        vec![("doctor_problems", false)]
+        vec![("doctor_problems", true)]
     );
-    let d = plan.doctor.as_ref().unwrap();
-    assert!(!d.clean && d.repairs_allowed.is_empty() && d.repair_refusal.is_some());
-    assert!(w.svc.auto(&w.record).is_none());
     assert_eq!(
-        w.svc.recover(&w.record, "alice", &[]).unwrap().outcome,
-        RecoveryOutcome::Stopped
+        plan.doctor.as_ref().unwrap().repairs_allowed,
+        vec!["--repair-wal-tail"]
     );
-    assert!(w.flagged());
+    assert!(w.svc.auto(&w.record).is_none(), "never unattended");
+    let r = w.svc.recover(&w.record, "alice", &[]).unwrap();
+    assert_eq!(r.outcome, RecoveryOutcome::Recovered, "{r:?}");
+    assert_eq!(
+        standin_log(&ctrl),
+        vec![
+            "BEGIN repair".to_owned(),
+            "REPAIR --repair-wal-tail".to_owned()
+        ]
+    );
+    assert!(!w.flagged());
 }
 
 // ------------------------------------------------------------------------------------------------ twice at once

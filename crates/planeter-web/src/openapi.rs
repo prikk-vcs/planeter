@@ -329,13 +329,16 @@ fn proposal_schemas() -> Value {
         })),
         "ProposalPatch": obj(&["patch_id", "assurance"], json!({
             "patch_id": string_prop(),
-            "assurance": {"allOf": [{"$ref": "#/components/schemas/Assurance"}], "nullable": true, "description": "`forge-approved-unsealed`: listed by `sync pending` (held by this server, nobody has signed it in). `sealed`: in a block `log` lists for a ref the repository holds. `null`: in neither; nothing is claimed. Never read from `queued`."}
+            "assurance": {"allOf": [{"$ref": "#/components/schemas/Assurance"}], "nullable": true, "description": "`forge-approved-unsealed`: listed by `sync pending` (held by this server, nobody has signed it in). `sealed`: in a block `log` lists for a **published** ref of the repository (this wins over `sync pending`, which an import can leave listing the patch). `null`: in neither; nothing is claimed. Never read from `queued`."}
+        })),
+        "ProposalSighting": obj(&["ref"], json!({
+            "ref": {"type": "string", "description": "The name of the received ref."}
         })),
         "ProposalDescription": obj(&["source", "html"], json!({
             "source": {"type": "string", "description": "The text as sent."},
             "html": {"type": "string", "description": "The same, rendered as Markdown through the sanitizer."}
         })),
-        "ProposalDetail": obj(&["id", "title", "description", "state", "closed_reason", "landed_at", "target_ref", "opened_by", "opened_at", "updated_at", "retention", "revisions", "patches", "patch_total", "truncated", "still_pending", "note"], json!({
+        "ProposalDetail": obj(&["id", "title", "description", "state", "closed_reason", "landed_at", "target_ref", "opened_by", "opened_at", "updated_at", "retention", "revisions", "patches", "patch_total", "truncated", "still_pending", "received_sightings", "note"], json!({
             "id": string_prop(), "title": string_prop(),
             "description": {"$ref": "#/components/schemas/ProposalDescription"},
             "state": {"type": "string", "enum": ["open", "landed", "closed"]},
@@ -349,6 +352,7 @@ fn proposal_schemas() -> Value {
             "patches": {"type": "array", "items": {"$ref": "#/components/schemas/ProposalPatch"}, "description": "The patches of the current set, at most 1,000, in id order."},
             "patch_total": {"type": "integer", "minimum": 0}, "truncated": {"type": "boolean"},
             "still_pending": {"type": "integer", "minimum": 0, "description": "How many patches of the whole current set are still held by this server, not yet signed in."},
+            "received_sightings": {"type": "array", "items": {"$ref": "#/components/schemas/ProposalSighting"}, "description": "For an open proposal: the received refs whose logs hold any of its patches. Shown for information only: a received ref is replaceable and unverified, so no state is ever derived from one (an empty list otherwise, and when the logs could not be read)."},
             "note": {"type": "string", "description": "One plain sentence, in the language negotiated from `Accept-Language`, that is true under every answer to what happens after a maintainer signs the work."}
         })),
         "ProposalClosed": obj(&["id", "state", "closed_reason", "updated_at", "retain_until"], json!({
@@ -469,9 +473,10 @@ fn recovery_schemas() -> Value {
             "liveness": {"type": "string", "description": "prikk's own words, kept for the record and never trusted (inside our PID namespace they are wrong)."},
             "expected": {"type": "boolean", "description": "Of a kind an accept leaves, inside the repository's own `.prikk` directory."}
         })),
-        "RecoveryDoctor": obj(&["errors", "warnings", "info", "clean", "repairs_named", "repairs_allowed", "repair_refusal"], json!({
+        "RecoveryDoctor": obj(&["errors", "warnings", "info", "clean", "unreached_objects", "repairs_named", "repairs_allowed", "repair_refusal"], json!({
             "errors": {"type": "integer", "minimum": 0}, "warnings": {"type": "integer", "minimum": 0}, "info": {"type": "integer", "minimum": 0},
-            "clean": {"type": "boolean"},
+            "clean": {"type": "boolean", "description": "No warning and no error (an unreached-object warning counts as one here; see `unreached_objects`)."},
+            "unreached_objects": {"type": "integer", "minimum": 0, "description": "How many warnings are prikk's `PRIKK-DOCTOR-UNREACHED-OBJECT` that name no repair (an object nothing refers to; the bytes stay and no command removes them yet). They do not keep recovery from running: they are listed in the plan's `notes`."},
             "repairs_named": {"type": "array", "items": {"type": "string"}, "description": "Flags the report's recommendations name."},
             "repairs_allowed": {"type": "array", "items": {"type": "string"}, "description": "The repairs an administrator's run would run: only when **every** problem is covered by a repair the report names that is on the idempotent allow-list (`--repair-wal-tail`, `--repair-index`, `--repair-pointer-index-tail`, `--repair-tails`)."},
             "repair_refusal": {"type": "string", "nullable": true, "description": "Why planeter repairs nothing here, when the report has problems that are not all covered that way (a problem with no named repair, or one that names a repair off the list): a person decides."}
@@ -484,7 +489,12 @@ fn recovery_schemas() -> Value {
         })),
     });
     let b = json!({
-        "RecoveryPlan": obj(&["flagged", "flag_reason", "flag_since", "cause", "holders", "processes", "processes_uninspected", "intents", "locks", "doctor", "blockers", "commands", "may_run_unattended", "steps"], json!({
+        "RecoveryNote": obj(&["code", "text", "count"], json!({
+            "code": {"type": "string", "enum": ["unreached_objects"]},
+            "text": string_prop(),
+            "count": {"type": "integer", "minimum": 1}
+        })),
+        "RecoveryPlan": obj(&["flagged", "flag_reason", "flag_since", "cause", "holders", "processes", "processes_uninspected", "intents", "locks", "doctor", "notes", "blockers", "commands", "may_run_unattended", "steps"], json!({
             "flagged": {"type": "boolean"}, "flag_reason": nullable_string(),
             "flag_since": {"type": "integer", "minimum": 0, "nullable": true},
             "cause": {"$ref": "#/components/schemas/RecoveryCause"},
@@ -492,6 +502,7 @@ fn recovery_schemas() -> Value {
             "processes_uninspected": {"type": "integer", "minimum": 0, "description": "How many `prikk` or `bwrap` processes (or processes that could not be identified) could not be inspected: another user's, or hidden. A warning that stops an unattended run and not an administrator's."}, "intents": array_of("RecoveryIntent"),
             "locks": array_of("RecoveryLock"),
             "doctor": {"allOf": [{"$ref": "#/components/schemas/RecoveryDoctor"}], "nullable": true},
+            "notes": {"type": "array", "items": {"$ref": "#/components/schemas/RecoveryNote"}, "description": "What was seen that does not stop recovery (today: unreached objects that `doctor` warns of and that nothing can remove yet)."},
             "blockers": array_of("RecoveryBlocker"),
             "commands": {"type": "array", "items": {"type": "string"}, "description": "The exact commands for an operator when the procedure stays stopped; run them in the shell of the server's host."},
             "may_run_unattended": {"type": "boolean", "description": "Every witness agrees and the cause is ours: the server may run it by itself."},

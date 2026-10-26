@@ -125,7 +125,7 @@ re :: transport.rs :: ^(accept_deadline|accept_ceiling|accept_failed|accept_unre
 exact :: lib.rs :: GET, POST :: the value of the `Allow` header of the recovery path
 
 # --- proposals over HTTP (RFC 005 part 5): JSON field names and values, protocol tokens, never words a person reads
-re :: proposals.rs :: ^(kept|partly_removed|removed|reason_too_long|state|reason|unknown_state|limit_zero|too_large|unknown_field|not_json|date|kept_until|bytes)$ :: a JSON field name or a stable machine-readable value
+re :: proposals.rs :: ^(kept|partly_removed|removed|reason_too_long|state|reason|unknown_state|limit_zero|too_large|unknown_field|not_json|date|kept_until|bytes|ref)$ :: a JSON field name or a stable machine-readable value
 exact :: proposals.rs :: unknown field :: the text of serde's error, matched to tell an unknown field from invalid JSON
 exact :: proposals.rs :: application/json :: a media type
 exact :: proposals.rs :: application/octet-stream :: a media type
@@ -136,7 +136,7 @@ exact :: proposals.rs :: attachment; filename="{filename}" :: a Content-Disposit
 exact :: timefmt.rs :: {} {:02}:{:02} UTC :: an ISO time: digits and the zone's code, which is not translated
 
 # --- the proposal pages (RFC 005 part 5, ui/proposal_pages.rs): placeholder names and query values, never shown as words
-re :: proposal_pages.rs :: ^(revisions|date|limit|repo)$ :: a placeholder name of a catalog message
+re :: proposal_pages.rs :: ^(revisions|date|limit|repo|reason|ref)$ :: a placeholder name of a catalog message
 re :: proposal_pages.rs :: ^(open|landed|closed|all)$ :: the value of the `state` query parameter (matches the API's)
 exact :: proposal_pages.rs :: {at}?state={} :: a format string of a link: identifiers and separators
 exact :: proposal_pages.rs :: {at}?state={}&after={} :: a format string of a link: identifiers and separators

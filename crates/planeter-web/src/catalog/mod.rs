@@ -522,6 +522,7 @@ keys! {
     RecoveryBlockerUnexpectedLock => "recovery.blocker.unexpected_lock",
     RecoveryBlockerTooManyOpenIntents => "recovery.blocker.too_many_open_intents",
     RecoveryBlockerProcessesUninspected => "recovery.blocker.processes_uninspected",
+    RecoveryNoteUnreachedObjects => "recovery.note.unreached_objects",
     RecoveryOutcomeRecovered => "recovery.outcome.recovered",
     RecoveryOutcomeStopped => "recovery.outcome.stopped",
     RecoveryOutcomeNotNow => "recovery.outcome.not_now",
@@ -636,6 +637,9 @@ keys! {
     RepoOpenProposals => "repo.open_proposals",
     ProposalBack => "proposal.back",
     ProposalCloseTooLong => "proposal.close.too_long",
+    ProposalClosedLine => "proposal.closed_line",
+    ProposalSighting => "proposal.sighting",
+    ProposalSightingExplain => "proposal.sighting_explain",
 }
 
 /// Marks a response whose text depends on the caller's language, so that the response-policy layer adds

@@ -105,6 +105,64 @@ fn the_doctor_text_of_0_54_1_with_unreached_objects_is_read_and_is_not_clean() {
     assert!(!r.is_clean());
     assert_eq!(r.diagnostics.iter().filter(|d| d.code == "PRIKK-DOCTOR-UNREACHED-OBJECT" && d.severity == Severity::Warning).count(), 2);
     assert!(r.named_repairs().is_empty());
+    // For recovery they are a note (part 5a T3): two of them, and nothing else, is clean for recovery.
+    assert_eq!(r.unreached_notes(), 2);
+    assert!(r.is_clean_for_recovery());
+    assert_eq!(
+        r.repair_plan(),
+        planeter_prikk::maintenance::RepairPlan::Nothing
+    );
+}
+
+/// The note is exactly "a warning of that code that names no repair": change any part and it is a problem again.
+#[test]
+fn the_unreached_note_is_exactly_a_warning_of_that_code_with_no_named_repair() {
+    let base = std::fs::read_to_string(
+        std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures/doctor-0.54.1-unreached.txt"),
+    )
+    .unwrap();
+    let variants = [
+        // an error of the same code (the summary is kept in step)
+        base.replacen(
+            "warning [PRIKK-DOCTOR-UNREACHED-OBJECT]",
+            "error [PRIKK-DOCTOR-UNREACHED-OBJECT]",
+            1,
+        )
+        .replace("errors=0, warnings=2", "errors=1, warnings=1"),
+        // the code with a different ending
+        base.replacen(
+            "PRIKK-DOCTOR-UNREACHED-OBJECT]",
+            "PRIKK-DOCTOR-UNREACHED-OBJECTS]",
+            1,
+        ),
+        // a recommendation that names a repair
+        base.replacen(
+            "recommendation: the bytes stay; no command removes them yet",
+            "recommendation: run `prikk doctor --repair-index`",
+            1,
+        ),
+    ];
+    for (i, text) in variants.iter().enumerate() {
+        let r = parse_doctor_output(text).unwrap();
+        assert!(!r.is_clean_for_recovery(), "variant {i}");
+        assert!(r.unreached_notes() < 2, "variant {i}");
+    }
+    // One note beside an unrelated warning is not clean either.
+    let beside = base
+        .replacen(
+            "info [PRIKK-DOCTOR-VERIFY-OK]",
+            "warning [PRIKK-DOCTOR-SOMETHING]: new\n  recommendation: ask\ninfo [PRIKK-DOCTOR-VERIFY-OK]",
+            1,
+        )
+        .replace("warnings=2", "warnings=3");
+    let r = parse_doctor_output(&beside).unwrap();
+    assert!(!r.is_clean_for_recovery());
+    assert_eq!(r.unreached_notes(), 2);
+    assert!(matches!(
+        r.repair_plan(),
+        planeter_prikk::maintenance::RepairPlan::Refused(_)
+    ));
 }
 
 fn have_prikk() -> bool {

@@ -366,6 +366,9 @@ pub struct DoctorView {
     pub warnings: u32,
     pub info: u32,
     pub clean: bool,
+    /// How many warnings are prikk's "unreached object" (nothing refers to the object; no command removes it yet). They do
+    /// not keep recovery from running; see [`Plan::notes`].
+    pub unreached_objects: u32,
     /// Flags its recommendations name.
     pub repairs_named: Vec<String>,
     /// The repairs an administrator's run would run: there are some only when **every** problem is covered by a named,
@@ -373,6 +376,15 @@ pub struct DoctorView {
     pub repairs_allowed: Vec<String>,
     /// Why planeter repairs nothing here, when the report has problems that are not all covered that way.
     pub repair_refusal: Option<String>,
+}
+
+/// Something seen that does not stop recovery.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Note {
+    /// `unreached_objects`.
+    pub code: &'static str,
+    /// How many of it.
+    pub count: u32,
 }
 
 /// What recovery would do and why — read-only.
@@ -390,6 +402,8 @@ pub struct Plan {
     pub intents: Vec<IntentView>,
     pub locks: Vec<LockView>,
     pub doctor: Option<DoctorView>,
+    /// What was seen that does not stop anything, in the administrator's view (not a blocker).
+    pub notes: Vec<Note>,
     pub blockers: Vec<Blocker>,
     /// The exact commands for an operator when the procedure stays stopped (run in the repository's directory).
     pub commands: Vec<String>,
@@ -549,15 +563,21 @@ fn evaluate(
             detail: format!("doctor: {text}"),
             overridable: false,
         }),
-        Ok((report, text)) if !report.is_clean() => out.push(Blocker {
+        Ok((report, _)) if !report.is_clean_for_recovery() => out.push(Blocker {
             code: "doctor_problems",
             detail: format!(
                 "errors={} warnings={}; {}",
                 report.errors,
                 report.warnings,
-                text.lines()
-                    .find(|l| l.starts_with("error [") || l.starts_with("warning ["))
-                    .unwrap_or("")
+                // The first problem that is not a mere note (the notes are not why this stops). (This used to look for the
+                // problem in a text whose lines start with a capital, and found nothing: the detail ended after the counts.)
+                report
+                    .diagnostics
+                    .iter()
+                    .filter(|d| d.severity != planeter_prikk::maintenance::Severity::Info)
+                    .find(|d| !d.is_unreached_note())
+                    .map(|d| format!("{:?} [{}]: {}", d.severity, d.code, d.message))
+                    .unwrap_or_default()
             ),
             // An administrator's run may go on only when every problem is covered by a named, allow-listed,
             // idempotent repair (RFC 004 part 4a). One problem without such a repair keeps it a stop for everyone,
@@ -820,6 +840,7 @@ impl RecoveryService {
                 warnings: r.warnings,
                 info: r.info,
                 clean: r.is_clean(),
+                unreached_objects: r.unreached_notes(),
                 repairs_named: r.named_repairs(),
                 repairs_allowed,
                 repair_refusal,
@@ -878,6 +899,13 @@ impl RecoveryService {
                 })
                 .collect(),
             locks,
+            notes: match doctor.as_ref().map(|d| d.unreached_objects) {
+                Some(n) if n > 0 => vec![Note {
+                    code: "unreached_objects",
+                    count: n,
+                }],
+                _ => Vec::new(),
+            },
             doctor,
             blockers,
             commands,
@@ -1076,7 +1104,14 @@ impl RecoveryService {
         let s = rec.begin("doctor")?;
         let mut doctor = match &g.doctor {
             Ok((r, text)) => {
-                rec.end(s, "ok", text);
+                let note = match r.unreached_notes() {
+                    0 => String::new(),
+                    n => format!(
+                        "\nnote: {n} warning(s) of {} (an object nothing refers to; the bytes stay, no command removes them yet) do not keep recovery from running",
+                        planeter_prikk::maintenance::UNREACHED_OBJECT_CODE
+                    ),
+                };
+                rec.end(s, "ok", &format!("{text}{note}"));
                 r.clone()
             }
             Err(text) => {
@@ -1113,7 +1148,7 @@ impl RecoveryService {
         };
 
         // 4. repairs: only what `doctor` names, only the idempotent ones, only when a person asked.
-        if !doctor.is_clean() {
+        if !doctor.is_clean_for_recovery() {
             // Only when every problem is covered by a named, allow-listed, idempotent repair, and only for a person.
             let wanted: Vec<Repair> = match doctor.repair_plan() {
                 RepairPlan::Allowed(v) if admin => v,
@@ -1147,7 +1182,7 @@ impl RecoveryService {
             }
             let s = rec.begin("doctor")?;
             match driver.doctor_report() {
-                Ok(r) if r.is_clean() => {
+                Ok(r) if r.is_clean_for_recovery() => {
                     rec.end(s, "ok", "clean after the repairs");
                     doctor = r;
                 }

@@ -568,6 +568,11 @@ pub const CATALOG: &[Entry] = &[
         "recovery.blocker.processes_uninspected",
         "Some processes could not be inspected, so it cannot be ruled out that one of them is using the repository.",
     ),
+    plural_msg(
+        "recovery.note.unreached_objects",
+        "The repository check found {count} stored item that nothing uses. This does not stop recovery, and nothing needs to be done about it.",
+        "The repository check found {count} stored items that nothing uses. This does not stop recovery, and nothing needs to be done about it.",
+    ),
     msg(
         "recovery.outcome.recovered",
         "The repository is writable again.",
@@ -856,5 +861,14 @@ pub const CATALOG: &[Entry] = &[
     msg(
         "proposal.close.too_long",
         "The reason is longer than 1,000 characters. Shorten it and try again.",
+    ),
+    msg("proposal.closed_line", "Closed: {reason}"),
+    msg(
+        "proposal.sighting",
+        "Also found in history received here (not verified here): {ref}",
+    ),
+    msg(
+        "proposal.sighting_explain",
+        "A history received here can be replaced, so this does not show that the work has landed.",
     ),
 ];

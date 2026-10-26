@@ -4,7 +4,8 @@
 {% block body %}
 <h1>{{ title }} <span class="badge">{{ t.get(*state_label) }}</span></h1>
 <p>{{ t.get(*what) }}</p>
-<p class="muted">{{ t.msg(Key::ProposalBy).with("who", by) }} · {{ t.msg(Key::ProposalWhen).with("when", when) }}</p>
+{% if let Some(line) = closed_line %}<p>{{ line }}</p>
+{% endif %}<p class="muted">{{ t.msg(Key::ProposalBy).with("who", by) }} · {{ t.msg(Key::ProposalWhen).with("when", when) }}</p>
 <p>{{ summary }}</p>
 <p class="muted">{{ t.get(Key::ProposalFileViewMissing) }}</p>
 {% if let Some((seq, href)) = latest_download %}
@@ -52,6 +53,10 @@
 <thead><tr><th scope="col">{{ t.get(Key::ProposalPatchColPatch) }}</th><th scope="col">{{ t.get(Key::ProposalPatchColStatus) }}</th></tr></thead>
 <tbody>{% for p in patches %}<tr><th scope="row"><code>{{ p.short_id }}</code></th><td>{% if let Some((class, label)) = p.badge %}<span class="badge {{ class }}">{{ t.get(label.clone()) }}</span>{% else %}<span class="muted">{{ t.get(Key::ProposalPatchNotListed) }}</span>{% endif %}</td></tr>{% endfor %}</tbody>
 </table>
+{% if !sightings.is_empty() %}
+<ul>{% for r in sightings %}<li>{{ t.msg(Key::ProposalSighting).code("ref", r).html() }}</li>{% endfor %}</ul>
+<p class="muted">{{ t.get(Key::ProposalSightingExplain) }}</p>
+{% endif %}
 {% if let Some(n) = retention_note %}<p class="muted">{{ n }}</p>{% endif %}
 <p class="muted">{{ t.get(Key::ProposalsNoMerge) }}</p>
 </details>

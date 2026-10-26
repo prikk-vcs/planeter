@@ -1239,9 +1239,17 @@ struct DoctorJson {
     warnings: u32,
     info: u32,
     clean: bool,
+    unreached_objects: u32,
     repairs_named: Vec<String>,
     repairs_allowed: Vec<String>,
     repair_refusal: Option<String>,
+}
+
+#[derive(Serialize)]
+struct NoteJson {
+    code: &'static str,
+    text: String,
+    count: u32,
 }
 
 #[derive(Serialize)]
@@ -1264,6 +1272,7 @@ pub struct PlanJson {
     intents: Vec<IntentJson>,
     locks: Vec<LockJson>,
     doctor: Option<DoctorJson>,
+    notes: Vec<NoteJson>,
     blockers: Vec<BlockerJson>,
     commands: Vec<String>,
     may_run_unattended: bool,
@@ -1330,6 +1339,11 @@ fn blocker_key(code: &str) -> crate::catalog::Key {
         "processes_uninspected" => Key::RecoveryBlockerProcessesUninspected,
         _ => Key::RecoveryBlockerOutputUnreadable,
     }
+}
+
+fn note_key(_code: &str) -> crate::catalog::Key {
+    // One note today: `unreached_objects`.
+    crate::catalog::Key::RecoveryNoteUnreachedObjects
 }
 
 fn outcome_key(o: planeter_transport::RecoveryOutcome) -> crate::catalog::Key {
@@ -1401,10 +1415,20 @@ fn plan_json(p: &planeter_transport::RecoveryPlan, lang: crate::catalog::Lang) -
             warnings: d.warnings,
             info: d.info,
             clean: d.clean,
+            unreached_objects: d.unreached_objects,
             repairs_named: d.repairs_named.clone(),
             repairs_allowed: d.repairs_allowed.clone(),
             repair_refusal: d.repair_refusal.clone(),
         }),
+        notes: p
+            .notes
+            .iter()
+            .map(|n| NoteJson {
+                code: n.code,
+                text: t.msg(note_key(n.code)).n(u64::from(n.count)).text(),
+                count: n.count,
+            })
+            .collect(),
         blockers: p
             .blockers
             .iter()

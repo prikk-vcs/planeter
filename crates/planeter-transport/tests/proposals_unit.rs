@@ -307,9 +307,9 @@ fn a_digest_in_a_record_is_the_stores_digest_without_its_prefix() {
 }
 
 #[test]
-fn prikk_is_asked_once_per_state_however_many_proposals_and_requests() {
+fn the_published_logs_are_read_once_per_state_however_many_proposals_and_requests() {
     let f = Fixture::new("once", now, 200);
-    // Ten proposals, all still pending: nobody could have landed, so `sync pending` is all that is read.
+    // Ten open proposals, all still pending and in no published block.
     let all: Vec<String> = (1..=10).map(pid).collect();
     for (i, id) in all.iter().enumerate() {
         f.propose(
@@ -333,42 +333,49 @@ fn prikk_is_asked_once_per_state_however_many_proposals_and_requests() {
     assert_eq!(f.count("sync pending"), 1, "{:?}", f.calls());
     assert_eq!(
         f.count("branch"),
-        0,
-        "no proposal could have landed: no log is read"
+        1,
+        "the refs are listed once: {:?}",
+        f.calls()
     );
-    assert_eq!(f.count("log"), 0);
+    // One log of the one published ref, and one of the one received ref (read for the sightings of the details).
+    assert_eq!(f.count("log"), 2, "{:?}", f.calls());
 
-    // The state moves: one more `sync pending`, once.
+    // The state moves: everything is read once more, once, however many requests.
     f.move_state();
     for _ in 0..3 {
         f.list(StateFilter::All);
+        f.svc.detail(&f.repo, "c0").unwrap();
     }
     assert_eq!(f.count("sync pending"), 2, "{:?}", f.calls());
+    assert_eq!(f.count("branch"), 2, "{:?}", f.calls());
+    assert_eq!(f.count("log"), 4, "{:?}", f.calls());
 }
 
 #[test]
-fn log_is_read_only_for_proposals_whose_patches_have_all_left_pending() {
-    let f = Fixture::new("candidates", now, 200);
+fn no_log_is_read_when_no_proposal_is_open() {
+    let f = Fixture::new("none-open", now, 200);
+    f.pending(&[]);
+    // Nothing at all: a list reads `sync pending` and nothing else.
+    assert!(f.list(StateFilter::All).is_empty());
+    // A closed proposal is not a reason to read history for the list.
+    f.propose("done", "alice", &[pid(1)], 101);
+    f.close("done");
+    f.move_state();
+    assert_eq!(f.list(StateFilter::All), vec!["done"]);
+    assert_eq!(f.count("branch"), 0, "{:?}", f.calls());
+    assert_eq!(f.count("log"), 0, "{:?}", f.calls());
+}
+
+#[test]
+fn a_proposal_whose_patches_left_pending_but_are_in_no_published_block_stays_open() {
+    let f = Fixture::new("not-landed", now, 200);
     let (a, b, c) = (pid(1), pid(2), pid(3));
     f.propose("held", "alice", std::slice::from_ref(&a), 101);
     f.propose("left", "alice", std::slice::from_ref(&b), 102);
     f.propose("half", "alice", &[b.clone(), c.clone()], 103);
-    // `held` is still pending; `left` has left pending; `half` has one patch pending.
+    // `held` is still pending; `left` has left pending without reaching any history; `half` has one patch pending.
     f.pending(&[a.clone(), c.clone()]);
-    f.log("heads/main", &[]);
     f.list(StateFilter::Open);
-    assert_eq!(f.count("sync pending"), 1);
-    assert_eq!(
-        f.count("branch"),
-        1,
-        "`left` is a candidate, so the refs are listed"
-    );
-    assert_eq!(
-        f.count("log"),
-        2,
-        "one log per ref the repository holds: {:?}",
-        f.calls()
-    );
     assert_eq!(
         f.state_of("left"),
         ChangeState::Open,
@@ -376,25 +383,25 @@ fn log_is_read_only_for_proposals_whose_patches_have_all_left_pending() {
     );
     assert_eq!(f.state_of("held"), ChangeState::Open);
     assert_eq!(f.state_of("half"), ChangeState::Open);
-    // Asking again in the same state reads nothing more.
-    f.list(StateFilter::Open);
-    f.svc.detail(&f.repo, "left").unwrap();
-    assert_eq!(f.count("sync pending"), 1);
-    assert_eq!(f.count("log"), 2);
+    let d = f.svc.detail(&f.repo, "left").unwrap();
+    assert_eq!(d.patches[0].assurance, None, "nothing is claimed");
 }
 
+/// D-40: a patch in a block of a published ref is signed in, `sync pending` or not (an import leaves it listed).
 #[test]
-fn a_patch_in_a_block_of_a_received_ref_counts_and_one_that_is_in_no_block_does_not() {
-    let f = Fixture::new("received", now, 200);
+fn a_proposal_lands_when_every_patch_is_in_a_published_block_even_if_pending_still_lists_it() {
+    let f = Fixture::new("published", now, 200);
     let (a, b) = (pid(1), pid(2));
     f.propose("both", "alice", &[a.clone(), b.clone()], 101);
-    f.propose("neither", "alice", &[pid(3)], 102);
-    f.pending(&[]);
-    // One patch in the published ref's log, the other only in the received ref's.
-    f.log("heads/main", std::slice::from_ref(&a));
-    f.log("remotes/heads/main", std::slice::from_ref(&b));
+    f.propose("one", "alice", &[a.clone(), pid(3)], 102);
+    f.pending(&[a.clone(), b.clone(), pid(3)]); // still listed, all of them
+    f.log("heads/main", &[a.clone(), b.clone()]);
     assert_eq!(f.list(StateFilter::Landed), vec!["both"]);
-    assert_eq!(f.state_of("neither"), ChangeState::Open);
+    assert_eq!(
+        f.state_of("one"),
+        ChangeState::Open,
+        "patch 3 is in no block"
+    );
     let d = f.svc.detail(&f.repo, "both").unwrap();
     assert_eq!(d.proposal.state, ChangeState::Landed);
     assert_eq!(
@@ -405,14 +412,86 @@ fn a_patch_in_a_block_of_a_received_ref_counts_and_one_that_is_in_no_block_does_
     assert!(
         d.patches
             .iter()
-            .all(|p| p.assurance == Some(Assurance::Sealed))
+            .all(|p| p.assurance == Some(Assurance::Sealed)),
+        "sealed wins over the queue"
     );
-    let n = f.svc.detail(&f.repo, "neither").unwrap();
+    assert_eq!(d.still_pending, 0, "a signed-in patch is not 'still held'");
+    // The open one: patch 1 is signed in, patch 3 is held.
+    let o = f.svc.detail(&f.repo, "one").unwrap();
+    assert_eq!(o.still_pending, 1);
+    let mut kinds: Vec<_> = o.patches.iter().map(|p| p.assurance).collect();
+    kinds.sort_by_key(|k| format!("{k:?}"));
     assert_eq!(
-        n.patches[0].assurance, None,
-        "nothing is claimed about a patch that is neither held nor in a block"
+        kinds,
+        [
+            Some(Assurance::ForgeApprovedUnsealed),
+            Some(Assurance::Sealed)
+        ]
     );
-    assert_eq!(n.still_pending, 0);
+}
+
+/// D-40: a block of a received ref is not evidence. It lands nothing, it shows as a sighting, and the patch stays held.
+#[test]
+fn a_patch_in_a_block_of_a_received_ref_does_not_land_the_proposal_and_is_a_sighting() {
+    let f = Fixture::new("received", now, 200);
+    let (a, b) = (pid(1), pid(2));
+    f.propose("seen", "alice", &[a.clone(), b.clone()], 101);
+    f.propose("unseen", "alice", &[pid(3)], 102);
+    f.pending(&[a.clone(), b.clone(), pid(3)]);
+    f.log("remotes/heads/main", &[a.clone(), b.clone()]);
+    assert_eq!(f.list(StateFilter::Landed), Vec::<String>::new());
+    assert_eq!(f.state_of("seen"), ChangeState::Open);
+    // Even with nothing pending any more: a received block does not make a state final.
+    f.pending(&[]);
+    f.move_state();
+    assert_eq!(f.list(StateFilter::Landed), Vec::<String>::new());
+    assert_eq!(f.state_of("seen"), ChangeState::Open);
+    let d = f.svc.detail(&f.repo, "seen").unwrap();
+    assert_eq!(d.sightings, vec!["remotes/heads/main"]);
+    assert!(
+        d.patches.iter().all(|p| p.assurance.is_none()),
+        "not pending, not in a published block: nothing is claimed"
+    );
+    // With the queue still listing them they are held, as before.
+    f.pending(&[a.clone(), b.clone()]);
+    f.move_state();
+    let d = f.svc.detail(&f.repo, "seen").unwrap();
+    assert!(
+        d.patches
+            .iter()
+            .all(|p| p.assurance == Some(Assurance::ForgeApprovedUnsealed))
+    );
+    assert_eq!(d.still_pending, 2);
+    assert!(
+        f.svc
+            .detail(&f.repo, "unseen")
+            .unwrap()
+            .sightings
+            .is_empty()
+    );
+}
+
+#[test]
+fn sightings_are_for_open_proposals_only_and_a_failure_to_read_them_is_none_not_an_error() {
+    let f = Fixture::new("sightings-failure", now, 200);
+    f.propose("p", "alice", &[pid(1)], 101);
+    f.pending(&[pid(1)]);
+    f.log("remotes/heads/main", &[pid(1)]);
+    assert_eq!(f.svc.detail(&f.repo, "p").unwrap().sightings.len(), 1);
+    // The received log cannot be read: the detail still answers, with no sightings.
+    f.move_state();
+    std::fs::remove_file(f.standin().join("log-remotes_heads_main.json")).unwrap();
+    let d = f.svc.detail(&f.repo, "p").unwrap();
+    assert!(d.sightings.is_empty());
+    assert_eq!(
+        d.patches[0].assurance,
+        Some(Assurance::ForgeApprovedUnsealed)
+    );
+    // A closed proposal has none, whatever the logs say.
+    f.log("remotes/heads/main", &[pid(1)]);
+    f.close("p");
+    f.move_state();
+    assert!(f.svc.detail(&f.repo, "p").unwrap().sightings.is_empty());
 }
 
 #[test]

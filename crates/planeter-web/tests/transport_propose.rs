@@ -4029,3 +4029,242 @@ fn register_qaa() {
         })));
     });
 }
+
+// ================================================================================================ the landing rule, corrected (D-40)
+
+/// The transcript of part 5's open question 1, now pinned: the maintainer's sealed history is imported into the forge
+/// (`archive import`, no `--adopt`): it lands as a **received** ref, `sync pending` still lists the patch, and the proposal
+/// stays open, with the received ref shown as a sighting and nothing derived from it.
+#[tokio::test]
+async fn history_received_by_import_is_a_sighting_and_never_lands_the_proposal() {
+    if skip() {
+        return;
+    }
+    let mut w = world("pr-sighting", Opts::default());
+    let id = make_proposal(&mut w, "forge", "tok-alice", "Seen elsewhere", 1).await;
+    let archive = w.base.join("client-sighting.archive");
+    prikk(
+        &w.client.repo,
+        &w.client.keys,
+        &["archive", "export", archive.to_str().unwrap()],
+    );
+    let forge_keys = w.base.join("forge-keys");
+    let out = prikk(
+        &w.forge,
+        &forge_keys,
+        &["archive", "import", archive.to_str().unwrap()],
+    );
+    assert!(out.contains("landed as remotes/heads/main"), "{out}");
+    assert_eq!(
+        pending(&w.forge).len(),
+        1,
+        "the import did not take the patch out of sync pending (prikk 0.54.1)"
+    );
+
+    let v = detail_of(&w, &id).await;
+    assert_eq!(v["state"], "open", "{v}");
+    assert_eq!(
+        v["received_sightings"],
+        serde_json::json!([{"ref": "remotes/heads/main"}])
+    );
+    assert_eq!(v["patches"][0]["assurance"], "forge-approved-unsealed");
+    assert_eq!(v["still_pending"], 1);
+    let landed = get_as(
+        &w,
+        "/api/v1/repos/alice/forge/proposals?state=landed",
+        Some("tok-bob"),
+        &[],
+    )
+    .await
+    .json();
+    assert!(landed["proposals"].as_array().unwrap().is_empty());
+
+    // The page: the sighting is under Details only, with its explanation, and the default view is unchanged.
+    let p = text(
+        &page_as(
+            &w,
+            "GET",
+            &format!("/alice/forge/proposals/{id}"),
+            None,
+            "en",
+        )
+        .await,
+    );
+    let (before, after) = p.split_once("<summary>Details</summary>").unwrap();
+    assert!(!before.contains("received here"), "{before}");
+    assert!(
+        after.contains("Also found in history received here (not verified here): <code>remotes/heads/main</code>"),
+        "{after}"
+    );
+    assert!(after.contains("can be replaced"), "{after}");
+    assert!(before.contains("Held for review"), "{before}");
+    assert_eq!(violations(&p), Vec::<String>::new(), "{p}");
+    register_qaa();
+    planeter_web::catalog::enable_preview_languages("ja").unwrap();
+    let ja = text(
+        &page_as(
+            &w,
+            "GET",
+            &format!("/alice/forge/proposals/{id}"),
+            None,
+            "ja",
+        )
+        .await,
+    );
+    assert!(ja.contains("ここで受信した履歴にも見つかりました"), "{ja}");
+    assert_eq!(violations(&ja), Vec::<String>::new(), "{ja}");
+    assert_eq!(unfilled(&ja), None);
+    let dump = std::env::var("PROPOSALS_HTML_DUMP").ok().map(PathBuf::from);
+    if let Some(dir) = dump {
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("detail-sighting-en.html"), &p).unwrap();
+        std::fs::write(dir.join("detail-sighting-ja.html"), &ja).unwrap();
+    }
+    // Sealing on the forge itself (a key-holding action; it models "a key-holding action published it") lands it, and the
+    // sighting is gone from the landed proposal.
+    let claims = claims_of(&w, &id);
+    seal_claim(&w, "forge", &claims[0]);
+    let v = detail_of(&w, &id).await;
+    assert_eq!(v["state"], "landed", "{v}");
+    assert_eq!(v["patches"][0]["assurance"], "sealed");
+    assert_eq!(v["received_sightings"], serde_json::json!([]));
+}
+
+#[tokio::test]
+async fn a_closed_proposal_shows_its_reason_beside_the_state_cut_at_200_characters() {
+    if skip() {
+        return;
+    }
+    let mut w = world("pr-closed-line", Opts::default());
+    let short = make_proposal(&mut w, "forge", "tok-alice", "Short reason", 1).await;
+    let long = make_proposal_on(&mut w, "forge", "tok-alice", "Long reason", 1, false).await;
+    let r = close_as(
+        &w,
+        "forge",
+        &short,
+        Some("tok-alice"),
+        r#"{"reason":"<b>Not</b> needed & done"}"#,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{}", text(&r));
+    let reason = format!("{}{}", "é".repeat(199), "TAIL-THAT-IS-CUT");
+    let r = close_as(
+        &w,
+        "forge",
+        &long,
+        Some("tok-alice"),
+        &serde_json::json!({"reason": reason}).to_string(),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{}", text(&r));
+
+    let p = text(
+        &page_as(
+            &w,
+            "GET",
+            &format!("/alice/forge/proposals/{short}"),
+            None,
+            "en",
+        )
+        .await,
+    );
+    let (before, after) = p.split_once("<summary>Details</summary>").unwrap();
+    assert!(
+        before.contains("<p>Closed: &#60;b&#62;Not&#60;/b&#62; needed &#38; done</p>"),
+        "escaped, in the default view: {before}"
+    );
+    assert!(!before.contains("<b>"), "{before}");
+    assert!(
+        after.contains("Reason: &#60;b&#62;Not&#60;/b&#62; needed &#38; done"),
+        "{after}"
+    );
+    assert_eq!(violations(&p), Vec::<String>::new(), "{p}");
+
+    let p = text(
+        &page_as(
+            &w,
+            "GET",
+            &format!("/alice/forge/proposals/{long}"),
+            None,
+            "en",
+        )
+        .await,
+    );
+    let (before, after) = p.split_once("<summary>Details</summary>").unwrap();
+    let cut = format!("Closed: {}…", "é".repeat(199) + "T");
+    assert!(
+        before.contains(&cut),
+        "cut at 200 characters with an ellipsis: {before}"
+    );
+    assert!(!before.contains("TAIL-THAT-IS-CUT"), "{before}");
+    assert!(
+        after.contains("TAIL-THAT-IS-CUT"),
+        "the full text is under Details: {after}"
+    );
+    assert_eq!(violations(&p), Vec::<String>::new());
+    let dump = std::env::var("PROPOSALS_HTML_DUMP").ok().map(PathBuf::from);
+    if let Some(dir) = dump {
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("detail-closed-en.html"), &p).unwrap();
+        planeter_web::catalog::enable_preview_languages("ja").unwrap();
+        let ja = text(
+            &page_as(
+                &w,
+                "GET",
+                &format!("/alice/forge/proposals/{long}"),
+                None,
+                "ja",
+            )
+            .await,
+        );
+        assert_eq!(violations(&ja), Vec::<String>::new());
+        assert!(ja.contains("閉じています："));
+        std::fs::write(dir.join("detail-closed-ja.html"), &ja).unwrap();
+    }
+}
+
+/// D-40 for the propose route: the declaration's check (does the forge hold every declared patch?) still counts history that was
+/// merely *received* — it is the forge's, held — while only a published ref may call a patch signed in. (That the answer never
+/// calls a patch signed in on the strength of received history cannot be driven end to end: an artifact whose patch the forge
+/// already holds in any ref adds nothing, and prikk says so; the published-only filter of the answer is `patches_in_logs`.)
+#[tokio::test]
+async fn a_declared_patch_held_only_as_received_history_is_held() {
+    if skip() {
+        return;
+    }
+    let mut w = world("pr-declared-received", Opts::default());
+    w.client.commit(1);
+    let first = w.client.patch_ids(1);
+    // The maintainer's history, with that patch in it, was received here before the push.
+    let archive = w.base.join("client-before.archive");
+    prikk(
+        &w.client.repo,
+        &w.client.keys,
+        &["archive", "export", archive.to_str().unwrap()],
+    );
+    prikk(
+        &w.forge,
+        &w.base.join("forge-keys"),
+        &["archive", "import", archive.to_str().unwrap()],
+    );
+    w.client.commit(1);
+    let art = w.client.artifact(&w.forge, "after-received");
+    let both = w.client.patch_ids(2);
+    assert!(both.contains(&first[0]) && both.len() == 2);
+    let r = propose_as(
+        &w,
+        "forge",
+        "tok-alice",
+        serde_json::json!({
+            "title": "On top of received history",
+            "declared_patches": both,
+            "client": "tests/1"
+        }),
+        &art,
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::CREATED, "{}", text(&r));
+    let v = r.json();
+    assert_eq!(v["declared"], true);
+    assert_eq!(v["added_count"], 1, "only the patch this push added: {v}");
+}

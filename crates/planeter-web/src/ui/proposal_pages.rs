@@ -301,6 +301,10 @@ struct DetailTpl {
     what: Key,
     summary: String,
     closed_reason: Option<String>,
+    /// The one line of the default view: "Closed: <reason>", the reason cut at 200 characters (the full text is under Details).
+    closed_line: Option<String>,
+    /// The received refs that hold a patch of this open proposal (Details only; information, never a state).
+    sightings: Vec<String>,
     description_html: Option<String>,
     revisions: Vec<RevRow>,
     patches: Vec<PatchRow>,
@@ -320,6 +324,19 @@ fn artifact_href(owner: &str, name: &str, id: &str, seq: u32) -> String {
         "/api/v1/repos/{owner}/{name}/proposals/{}/revisions/{seq}/artifact",
         pct(id)
     )
+}
+
+/// How many characters of a closing reason the default view shows.
+const REASON_SHOWN: usize = 200;
+
+/// "Closed: <reason>", the reason cut at [`REASON_SHOWN`] characters with an ellipsis (the template escapes it).
+fn closed_line(t: &T, reason: &str) -> String {
+    let shown: String = if reason.chars().count() > REASON_SHOWN {
+        reason.chars().take(REASON_SHOWN).collect::<String>() + "…"
+    } else {
+        reason.to_owned()
+    };
+    t.msg(Key::ProposalClosedLine).with("reason", shown).text()
 }
 
 fn retention_note(t: &T, r: Retention) -> Option<String> {
@@ -462,6 +479,8 @@ fn detail_tpl(
         what: what_sentence(p.state),
         summary: summary_line(&t, d.patch_total, d.revisions.len() as u32),
         closed_reason: p.closed_reason.clone(),
+        closed_line: p.closed_reason.as_deref().map(|r| closed_line(&t, r)),
+        sightings: d.sightings.clone(),
         description_html: (!p.description.trim().is_empty())
             .then(|| crate::sanitize::render_markdown(&p.description)),
         revisions,

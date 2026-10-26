@@ -18,10 +18,12 @@
 //!   **first** attempt (the store never overwrites it on a retry).
 //! * A declaration (the submitter's list of the patch ids its artifact contains) is a claim, checked: it must
 //!   include everything the accept added and name only patches the forge holds.
-//! * A change leaves `open` once; `landed` is only ever an observation; nothing reopens.
+//! * A change leaves `open` once; `landed` is only ever an observation of **published** history (D-40: a block of a
+//!   published ref; never `sync pending`, never a received ref); nothing reopens.
 //! * A quota is read from the records at the moment of the request and refused with its name, its limit, what is
 //!   used, and what the person can do.
-//! * `Sealed` comes from a block read from `log`; "pending" comes from `sync pending`; **`queued` is never read**.
+//! * `Sealed` comes from a block of a **published** ref read from `log`, and wins over `sync pending`; "pending" comes from
+//!   `sync pending`; **`queued` is never read**.
 
 use std::collections::BTreeSet;
 use std::fmt;
@@ -241,7 +243,7 @@ pub const DEFAULT_RETENTION_GRACE_SECS: u64 = 30 * 24 * 60 * 60;
 /// What drives a change out of `open`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Transition {
-    /// Prikk reported every patch of the current set no longer pending (see [`observe_landing`]).
+    /// Every patch of the current set is in a block of a published ref (see [`observe_landing`]).
     Landed,
     /// A principal the caller has **already authorized** (`Close`) closed it, with a reason.
     Closed { reason: String },
@@ -314,7 +316,7 @@ pub fn transition(
 /// The change's **current patch set** (RFC 005 D-6, as decided in the review of part 3a): the **latest declared**
 /// revision's declared set **plus the `added` sets of every revision after it**; when no revision is declared, the
 /// union of all the `added` sets. A declared set therefore never drops out because a later push was undeclared, and
-/// a change is never reported landed while an earlier declared patch is still pending. (A change with no revision
+/// a change is never reported landed while an earlier declared patch is not in the history. (A change with no revision
 /// has an empty set, which is never observed as landed.)
 pub fn current_patch_set(revisions: &[RevisionRecord]) -> BTreeSet<String> {
     let latest_declared = revisions
@@ -335,18 +337,24 @@ pub fn current_patch_set(revisions: &[RevisionRecord]) -> BTreeSet<String> {
     set
 }
 
-/// What an observation of `sync pending` says about a change.
+/// What an observation of the published history says about a change.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Landing {
-    /// Every patch of the set has left the pending set.
+    /// Every patch of the set is in a block of a published ref.
     Landed,
-    /// These are still pending.
+    /// These are not (yet).
     NotYet { remaining: Vec<String> },
 }
 
-/// Landing is **observed, never asserted** (D-6): the caller feeds the pending set it just read; this reports
-/// what that observation implies. An empty patch set is never landed (nothing was observed to leave).
-pub fn observe_landing(patch_set: &BTreeSet<String>, pending_now: &BTreeSet<String>) -> Landing {
+/// Landing is **observed, never asserted** (D-6, as amended by D-40): the caller feeds the patch ids of the blocks that `log`
+/// lists for the repository's **published** refs; this reports what that observation implies. `sync pending` is not
+/// consulted: a patch can be at once in the queue and in an imported published block. A **received** ref is not evidence
+/// either: it is replaceable and unverified (PK-67), and a landed change never changes again. An empty patch set is never
+/// landed (nothing was observed).
+pub fn observe_landing(
+    patch_set: &BTreeSet<String>,
+    in_published_blocks: &BTreeSet<String>,
+) -> Landing {
     if patch_set.is_empty() {
         return Landing::NotYet {
             remaining: Vec::new(),
@@ -354,7 +362,7 @@ pub fn observe_landing(patch_set: &BTreeSet<String>, pending_now: &BTreeSet<Stri
     }
     let remaining: Vec<String> = patch_set
         .iter()
-        .filter(|id| pending_now.contains(*id))
+        .filter(|id| !in_published_blocks.contains(*id))
         .cloned()
         .collect();
     if remaining.is_empty() {
@@ -577,7 +585,8 @@ pub fn check_quota(
 /// and is **deliberately never consulted**: a pending patch reports `queued: false` (U-10, IS-47).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct PatchFacts {
-    /// The patch id is in a block listed by `log` of a ref the forge holds.
+    /// The patch id is in a block listed by `log` of a **published** ref of the repository (not a received one: a received
+    /// ref is replaceable and unverified).
     pub in_block_from_log: bool,
     /// `sync pending` lists the patch id.
     pub listed_pending: bool,
@@ -585,15 +594,15 @@ pub struct PatchFacts {
     pub reported_queued: bool,
 }
 
-/// The assurance of one patch (RFC 005 D-10): `Sealed` only from membership in a block read from `log`;
-/// `ForgeApprovedUnsealed` only from `sync pending`; otherwise nothing is known, and `None` says so. A patch in
-/// both (a block reaches it and it is still listed) is not claimed sealed until the listing agrees: pending wins,
-/// the cautious reading.
+/// The assurance of one patch (RFC 005 D-10, precedence reversed by D-40): `Sealed` only from membership in a block of a
+/// published ref read from `log`, and it **wins**: a patch can be in an imported published block and still listed by
+/// `sync pending` (part 3a assumed one store never had a patch both queued and sealed; imports break that). Without such a
+/// block, `ForgeApprovedUnsealed` only from `sync pending`; otherwise nothing is known, and `None` says so.
 pub fn patch_assurance(facts: &PatchFacts) -> Option<Assurance> {
-    if facts.listed_pending {
-        Some(Assurance::ForgeApprovedUnsealed)
-    } else if facts.in_block_from_log {
+    if facts.in_block_from_log {
         Some(Assurance::Sealed)
+    } else if facts.listed_pending {
+        Some(Assurance::ForgeApprovedUnsealed)
     } else {
         None
     }
