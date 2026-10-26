@@ -33,6 +33,71 @@ use crate::sandbox::{CallLimits, Run, Sandbox, TIMEOUT_EXIT_CODE};
 /// `verify`. 0.54.1 is an installer fix; prikk's code is 0.54.0's.
 pub const MIN_PRIKK_VERSION: (u64, u64, u64) = (0, 54, 0);
 
+/// What the start-up probe of the prikk binary found ([`probe_binary`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BinaryProbe {
+    /// This version, at or above [`MIN_PRIKK_VERSION`].
+    Supported(String),
+    /// Below the floor: the pin's own sentence (`unsupported prikk version X; planeter requires >= 0.54.0`).
+    Unsupported(String),
+    /// There is no such program. Reported as it always was: when a repository is first opened.
+    Missing,
+    /// It ran and said something this code cannot read, or it failed: the text.
+    Unreadable(String),
+}
+
+/// Ask the prikk binary its version, once, at start-up (under `prlimit`, so a broken binary cannot take the host's memory),
+/// and apply the same pin that every repository open applies. The server refuses to start on [`BinaryProbe::Unsupported`]
+/// instead of answering every read with "temporarily unavailable".
+pub fn probe_binary(binary: &std::ffi::OsStr) -> BinaryProbe {
+    use std::process::{Command, Stdio};
+    let out = Command::new(crate::sandbox::PRLIMIT)
+        .arg("--cpu=20")
+        .arg(format!("--data={}", 512u64 << 20))
+        .arg("--")
+        .arg(binary)
+        .arg("--version")
+        .stdin(Stdio::null())
+        .stderr(Stdio::piped())
+        .output();
+    let out = match out {
+        Ok(o) => o,
+        Err(e) => return BinaryProbe::Unreadable(e.to_string()),
+    };
+    if !out.status.success() {
+        // `prlimit` itself cannot find the program: exit 127 (or 126), and its own message on stderr.
+        let err = String::from_utf8_lossy(&out.stderr);
+        if matches!(out.status.code(), Some(126 | 127))
+            && (err.contains("No such file") || err.contains("not found"))
+        {
+            return BinaryProbe::Missing;
+        }
+        return BinaryProbe::Unreadable(format!(
+            "`--version` exited with {}: {}",
+            out.status,
+            err.trim()
+        ));
+    }
+    let text = String::from_utf8_lossy(&out.stdout);
+    let Some(found) = parse_version_line(&text) else {
+        return BinaryProbe::Unreadable(format!("unrecognized --version output: {text:?}"));
+    };
+    match parse_semver(found) {
+        Some(v) if v >= MIN_PRIKK_VERSION => BinaryProbe::Supported(found.to_owned()),
+        Some(_) => BinaryProbe::Unsupported(
+            PrikkError::UnsupportedVersion {
+                found: found.to_owned(),
+                required: format!(
+                    ">= {}.{}.{}",
+                    MIN_PRIKK_VERSION.0, MIN_PRIKK_VERSION.1, MIN_PRIKK_VERSION.2
+                ),
+            }
+            .to_string(),
+        ),
+        None => BinaryProbe::Unreadable(format!("unparsable prikk version {found:?}")),
+    }
+}
+
 /// A prikk repository driven through the prikk CLI as a subprocess.
 #[derive(Debug, Clone)]
 pub struct CliPrikkRepo {

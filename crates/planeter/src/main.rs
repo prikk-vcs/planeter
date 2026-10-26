@@ -97,8 +97,7 @@ async fn main() {
     }
 
     // RFC 011 D-2: `prlimit` (util-linux) bounds the memory of every prikk call. Without it a read would
-    // fail later with a misleading "No such file or directory", so a missing one refuses to start here,
-    // in the same way a prikk below the floor does.
+    // fail later with a misleading "No such file or directory", so a missing one refuses to start here.
     if let Err(detail) = planeter_prikk::sandbox::probe_prlimit(std::ffi::OsStr::new(
         planeter_prikk::sandbox::PRLIMIT,
     )) {
@@ -107,6 +106,24 @@ async fn main() {
              but it could not be run ({detail}). Install util-linux (the package that provides `prlimit`) and start again."
         );
         std::process::exit(1);
+    }
+
+    // The prikk binary is asked its version once, here, and the floor is applied: a prikk below `MIN_PRIKK_VERSION` refuses
+    // to start with the pin's own sentence, instead of answering every read with "temporarily unavailable" after start. A
+    // missing prikk is reported when a repository is first opened, as it always was; a prikk that runs and cannot be read
+    // is said once and left to the pin at that first open.
+    match planeter_prikk::cli::probe_binary(std::ffi::OsStr::new("prikk")) {
+        planeter_prikk::cli::BinaryProbe::Supported(_)
+        | planeter_prikk::cli::BinaryProbe::Missing => {}
+        planeter_prikk::cli::BinaryProbe::Unsupported(sentence) => {
+            eprintln!("planeter: refusing to start: {sentence}");
+            std::process::exit(1);
+        }
+        planeter_prikk::cli::BinaryProbe::Unreadable(why) => {
+            eprintln!(
+                "planeter: warning: could not read the version of prikk ({why}); each repository open applies the version pin"
+            );
+        }
     }
 
     // RFC 004 D-7: the repository lease is in-process, so a second server against one database is refused here,
