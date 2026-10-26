@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | One decision of the part 4b review (D-38), small by design: with the measured cost model (10 MiB + 7.0 × the artifact + 2 KiB × the object bound) the default 256 MiB bound needs 1.8 GiB of the memory budget, which only a host with about 8.1 GiB of usable memory admits at the default budget; a 4 GiB host (a common small server) would refuse every large proposal and warn at start-up. The default `PRIKK_EXCHANGE_MAX_BYTES` becomes **100 MiB** (a 4 GiB host admits up to 125 MiB). RFC 004 D-5.3, D-5.4, R-3 and Q-3 are amended in the same step by the architect (done 2026-10-22). |
-| Status | **Assigned** (2026-10-22), after part 4b was reviewed Approved. |
+| Status | **Done, reviewed Approved (2026-10-27; commits `e1f4221`…`d58be52`).** The handoff's "8 GiB admits a raised 256 MiB" was the architect's arithmetic error (1,812 MiB > 1,792 MiB); the test pins 9 GiB, correctly. |
 | Basis | [`../../accepted/004-transport.md`](../../accepted/004-transport.md) D-5.3 (amended); `accept-cost-model-review-request.md` §5 and §6 question 1; `crates/planeter-transport/src/propose.rs` (`cost_model`, `ProposeConfig`), `crates/planeter/src/args.rs` (`USAGE`), `docs/propose.md`, the OpenAPI text of the bounds. |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 

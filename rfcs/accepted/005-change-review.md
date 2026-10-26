@@ -160,10 +160,14 @@ the relay into a second repository works (U-13). **Refuted:** that the accept ev
   revision does **not** carry approvals over: they are shown on the revision they were given for, and a
   later revision shows "approved on revision N". This keeps "approved" from silently covering code the
   reviewer never saw.
-- **D-6 — Landing is observed, never asserted.** A change is `landed` when every patch id of its **current
-  patch set** has left the repository's pending set (they are now reachable from a block: `sync pending` no
-  longer lists them), re-derived from prikk. The current patch set is the latest revision's declared set; for
-  a change whose revisions have no declaration it is the union of their `added` sets, and the UI says that a
+- **D-6 — Landing is observed, never asserted.** *(Amended 2026-10-27, D-40: the first wording, "left the pending
+  set", was wrong on a keyless forge — a block that is *received* does not clear `sync pending`, ledger PK-71 — and a
+  received ref is replaceable and unverified, so it cannot make a final state.)* A change is `landed` when every
+  patch id of its **current patch set** is present in a block that `log` lists for a **published** ref of the
+  repository (`heads/*`); `sync pending` is not consulted, and received refs are shown as sightings, never as
+  landing. Until a key-holding action publishes history here (decision D-8) a proposal normally stays open, and
+  the page says so. The current patch set is the latest *declared* revision's declared set plus the `added` sets of
+  every later revision (the union of all `added` sets when none is declared), and the UI says that a
   superseded patch that no one seals keeps such a change open. The forge never marks a change landed by its own say-so, and
   records the first observation point (the ref or received ref that reaches them, where prikk reports it).
 - **D-7 — Checks and approvals are bound to (revision, base) and stale never counts.** As the owner
