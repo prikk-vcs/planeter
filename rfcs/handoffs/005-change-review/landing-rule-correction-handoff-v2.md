@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | Part 5's open question 1 exposed an **error in the architect's handoff**: it required a proposal's patches to be *absent from `sync pending` and present in a block*. On a keyless forge that can never be true for history that was **received** (prikk 0.54.1: a received block does not clear `sync pending`), and received refs are last-writer-wins and unverified, so they are not evidence that something landed. This handoff corrects the rule (D-40) and the assurance precedence, shows received sightings honestly, and fixes four small things from the part 5 and 5b reviews. |
-| Status | **Assigned** (2026-10-27), after parts 4c, 5b and 5 were reviewed Approved. |
+| Status | **Done, reviewed Approved (2026-10-27; commits `26240cc`…`ccb1335`).** IS-53 closed. |
 | Basis | `proposals-read-side-review-request.md` §11 (question 1, the transcript `observation/received-block-does-not-clear-pending.txt`); [`../../accepted/005-change-review.md`](../../accepted/005-change-review.md) D-6 (amended 2026-10-27 by the architect) and D-10; [`../../accepted/008-seal-one-click-merge.md`](../../accepted/008-seal-one-click-merge.md) and the D-8 text in RFC 004 (until the owner decides D-8, nothing here may promise that a proposal lands); ledger PK-67 (received refs), PK-71; `crates/planeter-transport/src/proposals.rs` (`sealed`, `refresh`), `crates/planeter-core/src/change.rs` (`patch_assurance`), `crates/planeter-transport/src/propose.rs` (`patches_in_logs`), `crates/planeter-transport/src/recovery.rs` (`evaluate`), `crates/planeter/src/main.rs`. |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 
