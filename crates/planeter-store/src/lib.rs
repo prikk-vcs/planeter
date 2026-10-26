@@ -11,6 +11,7 @@ pub mod membership;
 pub mod memory;
 pub mod model;
 pub mod recovery;
+pub mod review;
 pub mod revision;
 pub mod sqlite;
 pub mod store;
@@ -31,6 +32,10 @@ pub use model::{
 pub use recovery::{
     DETAIL_MAX_BYTES, InMemoryRecoveries, RecoveryRecord, RecoveryStep, RecoveryStore,
     SqliteRecoveries,
+};
+pub use review::{
+    CommentRecord, DecisionRecord, HiddenRecord, InMemoryReviewStore, ModerationEntry,
+    REVIEW_SCHEMA, ReviewFailPoint, ReviewStore, SqliteReviewStore,
 };
 pub use revision::{InMemoryRevisions, RevisionStore, SqliteRevisions};
 pub use sqlite::{SqliteDb, SqliteMembershipStore, SqliteRepositoryStore};

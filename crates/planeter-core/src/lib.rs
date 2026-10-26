@@ -28,6 +28,7 @@ pub mod lease;
 pub mod permission;
 pub mod process_lock;
 pub mod read;
+pub mod review;
 
 pub use audit::{AuditRecord, AuditSink, InMemoryAuditSink, NullAuditSink, audit_if_sensitive};
 pub use authorize::{
