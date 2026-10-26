@@ -4223,12 +4223,14 @@ async fn a_closed_proposal_shows_its_reason_beside_the_state_cut_at_200_characte
     }
 }
 
-/// D-40 for the propose route: the declaration's check (does the forge hold every declared patch?) still counts history that was
-/// merely *received* — it is the forge's, held — while only a published ref may call a patch signed in. (That the answer never
-/// calls a patch signed in on the strength of received history cannot be driven end to end: an artifact whose patch the forge
-/// already holds in any ref adds nothing, and prikk says so; the published-only filter of the answer is `patches_in_logs`.)
+/// D-40 for the propose route, as far as prikk 0.54.1 lets it be driven: `archive import` leaves the imported patches in
+/// `sync pending` (it is what keeps a received block from clearing the queue), so a declared patch that the forge holds
+/// only through received history is *held* by the queue, and the push is accepted with only the patch it added. (The check
+/// still reads the logs of the received refs too, in case a later prikk stops doing that; on 0.54.1 removing them changes no
+/// answer, which the part 5a review request reports as an equivalent mutation. And an answer never calls a patch signed in
+/// on the strength of a received ref: `patches_in_logs` hands the response only the published refs.)
 #[tokio::test]
-async fn a_declared_patch_held_only_as_received_history_is_held() {
+async fn a_declared_patch_that_an_import_left_pending_is_held() {
     if skip() {
         return;
     }

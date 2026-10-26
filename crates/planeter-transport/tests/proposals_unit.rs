@@ -765,3 +765,32 @@ fn a_sweep_names_what_it_did_in_the_metrics() {
     );
     let _ = (&f.export, &f.hosting);
 }
+
+/// The facts could not be read (here: the refs cannot be listed while `sync pending` can): nothing is claimed about any patch.
+/// A patch called "held" might be signed in, so the detail says nothing rather than that.
+#[test]
+fn when_the_published_history_cannot_be_read_no_patch_is_called_held() {
+    let f = Fixture::new("history-unreadable", now, 200);
+    f.propose("p", "alice", &[pid(1)], 101);
+    f.pending(&[pid(1)]);
+    std::fs::remove_file(f.standin().join("branches.json")).unwrap(); // `branch` now fails
+    let d = f.svc.detail(&f.repo, "p").unwrap();
+    assert_eq!(d.patches[0].assurance, None);
+    assert_eq!(d.still_pending, 0);
+    assert!(d.sightings.is_empty());
+    // The list still answers, from the records.
+    assert_eq!(f.list(StateFilter::Open), vec!["p"]);
+}
+
+/// The same for a proposal that is not open: no landing pass reads the history for it, so the detail itself finds that it cannot.
+#[test]
+fn a_closed_proposals_detail_claims_nothing_when_the_published_history_cannot_be_read() {
+    let f = Fixture::new("history-unreadable-closed", now, 200);
+    f.propose("p", "alice", &[pid(1)], 101);
+    f.close("p");
+    f.pending(&[pid(1)]);
+    std::fs::remove_file(f.standin().join("branches.json")).unwrap();
+    let d = f.svc.detail(&f.repo, "p").unwrap();
+    assert_eq!(d.patches[0].assurance, None);
+    assert_eq!(d.still_pending, 0);
+}
