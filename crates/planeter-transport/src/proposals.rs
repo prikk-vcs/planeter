@@ -205,6 +205,9 @@ pub struct Detail {
     pub retention: Retention,
 }
 
+/// For each received ref (by name), the patch ids of its blocks.
+type ReceivedLogs = Vec<(String, BTreeSet<String>)>;
+
 /// The facts of one observation of a repository: valid for one state fingerprint.
 struct Observed {
     fingerprint: String,
@@ -214,7 +217,7 @@ struct Observed {
     /// The refs the repository holds (`branch --all`), listed once and shared by the two reads below.
     refs: Mutex<Option<Arc<planeter_prikk::model::BranchList>>>,
     /// For each **received** ref, the patch ids of its blocks, read when first needed (sightings only).
-    received: Mutex<Option<Arc<Vec<(String, BTreeSet<String>)>>>>,
+    received: Mutex<Option<Arc<ReceivedLogs>>>,
     /// The landing pass has been made for this fingerprint.
     landing_done: AtomicBool,
 }
@@ -429,11 +432,7 @@ impl ProposalService {
 
     /// For each received ref, the patch ids of its blocks: read once per observation, for sightings only. **A failure is
     /// "no sightings", never an error**, and nothing is derived from the answer.
-    fn received_logs(
-        &self,
-        record: &RepositoryRecord,
-        obs: &Observed,
-    ) -> Arc<Vec<(String, BTreeSet<String>)>> {
+    fn received_logs(&self, record: &RepositoryRecord, obs: &Observed) -> Arc<ReceivedLogs> {
         let mut slot = obs
             .received
             .lock()
@@ -441,7 +440,7 @@ impl ProposalService {
         if let Some(r) = &*slot {
             return Arc::clone(r);
         }
-        let read = || -> Result<Vec<(String, BTreeSet<String>)>, ProposalError> {
+        let read = || -> Result<ReceivedLogs, ProposalError> {
             let driver = self.reader(record)?;
             let refs = self.refs(&driver, obs)?;
             refs.received
