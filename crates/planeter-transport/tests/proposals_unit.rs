@@ -349,6 +349,8 @@ fn the_published_logs_are_read_once_per_state_however_many_proposals_and_request
     assert_eq!(f.count("sync pending"), 2, "{:?}", f.calls());
     assert_eq!(f.count("branch"), 2, "{:?}", f.calls());
     assert_eq!(f.count("log"), 4, "{:?}", f.calls());
+    // The whole conversation with prikk for ten proposals, many requests and two states (`--nocapture` shows it).
+    eprintln!("prikk calls: {:#?}", f.calls());
 }
 
 #[test]

@@ -2976,8 +2976,10 @@ fn claims_of(w: &World, id: &str) -> Vec<String> {
         .collect()
 }
 
-/// A maintainer seals one accepted claim into `heads/main` of the forge (what the owner does on their own computer; the
-/// test holds the key).
+/// Seal one accepted claim into `heads/main` of the forge, with the client's key. This models **"a key-holding action published
+/// it"**: the one thing that makes a patch part of a *published* ref's history here (D-40), whatever D-8 turns out to define. (The
+/// real maintainer seals on their own computer, and history that is merely received here does not count; see
+/// `history_received_by_import_is_a_sighting_and_never_lands_the_proposal`.)
 fn seal_claim(w: &World, repo: &str, claim: &str) {
     prikk(
         &repo_dir(w, repo),
