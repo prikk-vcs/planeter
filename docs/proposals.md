@@ -45,17 +45,17 @@ about 50 ms (one short transaction on the shared connection).
 4. **A base counts only if the forge holds it** (listed by `log` of a ref it holds); no base is recorded as "no base", and
    its results never count. A result is stale when the base is no longer the target's tip; an approval belongs to the
    revision it was given for and is not carried to the next.
-5. **Landing is observed, not asserted.** A proposal has *landed* only when **every** patch of its current patch set has left
-   the pending list `sync pending` reports **and** is found in a block that `log` lists (see "Landing, observed from facts"
-   below). The current patch set is **the latest declared revision's declared set plus the patches every later revision
+5. **Landing is observed, not asserted.** A proposal has *landed* only when **every** patch of its current patch set is found in
+   a block that `log` lists for a **published** ref of the repository (D-40; see "Landing, observed from facts" below). The current patch set is **the latest declared revision's declared set plus the patches every later revision
    added** (all the added patches, if no revision is declared): a declared patch never silently drops out because a later push
    was undeclared. A superseded patch that nobody seals keeps such a proposal open, and the page says so.
 6. **Closing needs a reason** and a person already allowed to close. Landed and closed are final.
 7. **Quotas** (members / any-authenticated): open proposals 10 / 3, accepted bytes 512 / 64 MiB, revisions per proposal 20 / 10,
    and a repository ceiling of 4 GiB of **retained** bytes (the artifacts of open proposals and of proposals still within their 30-day grace: what occupies the disk). At the limit is allowed; one over is refused, naming the quota, the
    limit, the current use and what to do. The per-push bounds belong to the transport edge (part 3b).
-8. **A patch is "signed into the history" only if a block read from `log` contains it**, and "pending" only if `sync pending`
-   lists it. `queued` is never read: a pending patch reports `queued: false`.
+8. **A patch is "signed into the history" only if a block of a published ref, read from `log`, contains it** — and that wins over
+   `sync pending`, which an import can leave listing the patch (D-40 reversed part 3a's "pending wins"). Otherwise it is "held" if
+   `sync pending` lists it, and "not listed" if neither does. `queued` is never read: a pending patch reports `queued: false`.
 
 ## What part 3a did not do
 
@@ -68,33 +68,40 @@ recover.
 
 ## Landing, observed from facts
 
-A proposal moves from `open` to `landed` only because the repository says so. The rule, applied to the proposal's current patch
-set (rule 5 above):
+A proposal moves from `open` to `landed` only because the repository says so. The rule (RFC 005 D-6 as amended by D-40, applied to
+the proposal's current patch set, rule 5 above):
 
-* **absent from `sync pending`**, and
-* **present in a block that `log` lists** — over every ref the repository holds, published (`heads/…`) or received
-  (`remotes/…`).
+* **every patch is present in a block that `log` lists for a published ref** — `heads/*`, as `branch --all` reports them as
+  branches (closed ones too) — and nothing else.
 
-*Either alone is not enough.* A patch that merely left the pending list (it was discarded, or the repository was restored) is not in the
-history, so the proposal stays open and its patch shows no badge at all ("Not listed here"): nothing is claimed about what is
-neither held nor in the history. A patch that is in a block while another patch of the same proposal is still pending is half of a landing and
-also stays open.
+Why only that. `sync pending` is **not consulted**: a patch can be at once in the queue and in an imported published block, and a patch
+that merely left the queue (discarded, or the repository was restored) is not in the history. A **received** ref (`remotes/*`) is
+**not evidence**: it is last-writer-wins and unverified (PK-67), and a landed proposal never changes again, so history that was merely
+*received* here cannot make a state final. On this forge a published ref advances only when a key-holding action puts history there
+(which D-8 will define), so until then **a proposal usually stays open**, and the page says only what is true.
+
+A patch in a block of a published ref is shown as signed in (*Sealed*), even if `sync pending` still lists it; a patch that
+is listed there and in no published block is shown as held; a patch in neither shows no badge ("Not listed here"). A **received**
+ref that holds any patch of an *open* proposal is shown under *Details* as a **sighting** ("Also found in history received here (not
+verified here): `remotes/…`", and that a received history can be replaced); the JSON has `received_sightings: [{ref}]`. Nothing is
+derived from a sighting, and failing to read the received logs means no sightings, never an error.
 
 How often prikk is asked is bounded and does not grow with the number of proposals:
 
 * **one `sync pending` per repository per state fingerprint** (`ExportService::state`: the revision counter and the files cross-check);
   while the fingerprint is the same, every list, detail and landing pass in that state shares the answer;
-* **`branch` and `log` only if some open proposal's patches have all left pending** (a *candidate*), and then once per
-  fingerprint: one `log` for each ref, up to 100,000 blocks. (prikk's own default is the newest 20 blocks, so the limit is passed; a log that
-  fills the limit may have been cut short, and then nothing lands on it.)
-* **no prikk call per item**: a list of fifty proposals makes the same one call as a list of one.
+* **one `branch` and one `log` per published ref per fingerprint**, read only when some proposal is open (every open proposal is a
+  candidate) or a detail needs them; up to 100,000 blocks a ref. (prikk's own default is the newest 20 blocks, so the limit is passed; a
+  log that fills the limit may have been cut short, and then nothing lands on it.) The logs of the **received** refs are read only for
+  the detail of an open proposal, once per fingerprint;
+* **no prikk call per item**: a list of fifty proposals makes the same calls as a list of one; with no proposal open, a list reads no log.
 
 The transition is a **compare-and-set**: it applies only if the proposal is still open **and** has exactly the number of revisions the
 observation was made on. A revision recorded meanwhile wins and the observation is discarded; the next one starts from the new set. The
 transition starts the grace (`retain_until`, below). Landed is final.
 
 If the repository cannot be read (no prikk, a damaged store, a busy gate) the records are still listed as they stand and the patches
-carry no badge; the next request tries again.
+carry no badge (nothing is claimed about a patch whose history could not be read); the next request tries again.
 
 The observation's memory ceiling is at least 64 MiB. Measured on prikk 0.54.1 with 200 sealed blocks: under 1 MiB with nothing
 pending, under 6 MiB with 5,000 patches pending (about 1 KiB a patch), so 64 MiB holds some 60,000 pending patches; each call takes
@@ -122,10 +129,10 @@ The repository navigation shows *Proposals* only when the repository has at leas
 repository page says only how many are open.
 
 The default view of one proposal shows: the title, who proposed it, the state (*Open*, *Landed*, *Closed*, always the neutral badge), one
-sentence of what that means ("Held for review: not yet part of the project's history."), a one-line summary ("3 patches in 2 revisions"),
+sentence of what that means ("Held for review: not yet part of the project's history."), for a closed proposal one line "Closed: <reason>" (escaped, the reason cut at 200 characters), a one-line summary ("3 patches in 2 revisions"),
 "The file-by-file view is not available yet.", and the actions the viewer may take — the download of the latest revision for a
 reviewer, and the close form (a reason, the consequence stated: *Closing keeps the record and the files; nobody can reopen it.*) for whoever
-may close. **Everything else is under one *Details*:** the reason a proposal was closed, the description (through the sanitizer), the
+may close. **Everything else is under one *Details*:** the full reason a proposal was closed, the received-history sightings, the description (through the sanitizer), the
 revisions, the patches with their badges and the explanation of each, the claims and signature outcomes, key ids, the base each revision
 was built on, the digests, and what is left of the files. No review state and no checks are shown: they would be statements about things that
 do not exist yet. No script is needed; the close form is an ordinary form with a CSRF token, and a refusal (no reason, already final, not

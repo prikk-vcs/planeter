@@ -5,6 +5,17 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **Landing is observed from published history only (RFC 005 D-6 amended, D-40), and three small corrections.** A proposal has *landed*
+  when every one of its patches is in a block of a **published** branch of the repository; `sync pending` is no longer consulted, and
+  history merely **received** here (an archive import without `--adopt`) never counts — it is shown under *Details* as a sighting
+  ("Also found in history received here (not verified here)"; `received_sightings` in the JSON). A patch in a published block is shown
+  as signed in even if the queue still lists it. Until a key-holding action publishes history here, a proposal usually stays open; the
+  documentation says so. A closed proposal now shows its reason beside the state (cut at 200 characters; the full text under *Details*).
+  **Recovery no longer stops for prikk 0.54's "unreached object" warning** when it names no repair: it is a note in the plan and in the record
+  of the `doctor` step, and the server recovers by itself (any other warning or error still stops it). **The server refuses to start
+  with a prikk below 0.54.0**, with the pin's own sentence. The propose route's check that a declared patch is already held now reads all of a
+  ref's history (prikk's own default of the newest 20 blocks missed older patches). `tokio` 1.53.1 → 1.53.3 (lock only; RUSTSEC-2026-0386).
+
 - **Proposals you can see, and the word "proposal" everywhere (RFC 005 part 5).** What a person puts forward for review is now a
   **proposal** in every sentence and every name a person or a program reads: the pages, the API (`proposal_id`, `created_proposal`,
   `unknown_proposal`, `proposal_not_open`, `not_your_proposal`, the quotas `open_proposals` and `revisions_per_proposal`), the messages in both
