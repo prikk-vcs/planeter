@@ -121,11 +121,27 @@ pub enum ErrorCode {
     SelfApproval,
     /// 422: the comment is already hidden, or is not hidden (`hidden` says which it is now).
     CommentState,
+    /// 422: the owner already holds as many repositories as this server allows (`limit`, `used`).
+    RepositoryQuota,
+    /// 409: a repository with that name already exists (said only to someone who may create one there).
+    NameTaken,
+    /// 422: too many archives are waiting to be confirmed, for this principal or for the server (`limit`).
+    StageLimit,
+    /// 422: prikk refused the archive (its own words are in `detail`), or the archive lists keys this server cannot read.
+    ArchiveRefused,
+    /// 410: the archive was kept for a day and the day is over.
+    StageExpired,
+    /// 409: a confirmation is running on that archive.
+    StageInUse,
+    /// 422: the typed fingerprints do not match the keys the archive carries (`reason`, `key`).
+    AdoptionRefused,
+    /// 422: the repository the archive makes does not pass prikk's checks; nothing was kept (`conditions`).
+    CreationVerifyFailed,
 }
 
 impl ErrorCode {
     /// Every code, in a fixed order (the OpenAPI enum).
-    pub const ALL: [ErrorCode; 40] = [
+    pub const ALL: [ErrorCode; 48] = [
         ErrorCode::NotFound,
         ErrorCode::Unavailable,
         ErrorCode::Busy,
@@ -166,6 +182,14 @@ impl ErrorCode {
         ErrorCode::RevisionNotCurrent,
         ErrorCode::SelfApproval,
         ErrorCode::CommentState,
+        ErrorCode::RepositoryQuota,
+        ErrorCode::NameTaken,
+        ErrorCode::StageLimit,
+        ErrorCode::ArchiveRefused,
+        ErrorCode::StageExpired,
+        ErrorCode::StageInUse,
+        ErrorCode::AdoptionRefused,
+        ErrorCode::CreationVerifyFailed,
     ];
 
     /// The stable snake_case code.
@@ -211,6 +235,14 @@ impl ErrorCode {
             ErrorCode::RevisionNotCurrent => "revision_not_current",
             ErrorCode::SelfApproval => "self_approval",
             ErrorCode::CommentState => "comment_state",
+            ErrorCode::RepositoryQuota => "repository_quota",
+            ErrorCode::NameTaken => "name_taken",
+            ErrorCode::StageLimit => "stage_limit",
+            ErrorCode::ArchiveRefused => "archive_refused",
+            ErrorCode::StageExpired => "stage_expired",
+            ErrorCode::StageInUse => "stage_in_use",
+            ErrorCode::AdoptionRefused => "adoption_refused",
+            ErrorCode::CreationVerifyFailed => "creation_verify_failed",
         }
     }
 
@@ -254,7 +286,14 @@ impl ErrorCode {
             | ErrorCode::DecisionsClosed
             | ErrorCode::RevisionNotCurrent
             | ErrorCode::SelfApproval
-            | ErrorCode::CommentState => StatusCode::UNPROCESSABLE_ENTITY,
+            | ErrorCode::CommentState
+            | ErrorCode::RepositoryQuota
+            | ErrorCode::StageLimit
+            | ErrorCode::ArchiveRefused
+            | ErrorCode::AdoptionRefused
+            | ErrorCode::CreationVerifyFailed => StatusCode::UNPROCESSABLE_ENTITY,
+            ErrorCode::NameTaken | ErrorCode::StageInUse => StatusCode::CONFLICT,
+            ErrorCode::StageExpired => StatusCode::GONE,
             ErrorCode::InvalidRequest => StatusCode::BAD_REQUEST,
             ErrorCode::Internal => StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -337,6 +376,20 @@ impl ErrorCode {
             ),
             ErrorCode::SelfApproval => (Key::ErrSelfApprovalMessage, Key::ErrSelfApprovalHint),
             ErrorCode::CommentState => (Key::ErrCommentStateMessage, Key::ErrCommentStateHint),
+            ErrorCode::RepositoryQuota => {
+                (Key::ErrRepositoryQuotaMessage, Key::ErrRepositoryQuotaHint)
+            }
+            ErrorCode::NameTaken => (Key::ErrNameTakenMessage, Key::ErrNameTakenHint),
+            ErrorCode::StageLimit => (Key::ErrStageLimitMessage, Key::ErrStageLimitHint),
+            ErrorCode::ArchiveRefused => {
+                (Key::ErrArchiveRefusedMessage, Key::ErrArchiveRefusedHint)
+            }
+            ErrorCode::StageExpired => (Key::ErrStageExpiredMessage, Key::ErrStageExpiredHint),
+            ErrorCode::StageInUse => (Key::ErrStageInUseMessage, Key::ErrStageInUseHint),
+            ErrorCode::AdoptionRefused => (Key::ErrAdoptOtherMessage, Key::ErrAdoptOtherHint),
+            ErrorCode::CreationVerifyFailed => {
+                (Key::ErrCreationVerifyMessage, Key::ErrCreationVerifyHint)
+            }
         };
         ErrorKeys { message, hint }
     }
@@ -457,6 +510,97 @@ impl ErrorCode {
         hint: Key::ErrSpoolTooSmallHint,
     };
 
+    /// `stage_limit` because the server holds as many archives as its budget allows.
+    pub const STAGE_BUDGET: ErrorKeys = ErrorKeys {
+        message: Key::ErrStageBudgetMessage,
+        hint: Key::ErrStageBudgetHint,
+    };
+
+    /// `archive_refused` because the archive lists keys this server cannot read.
+    pub const ARCHIVE_KEYS: ErrorKeys = ErrorKeys {
+        message: Key::ErrArchiveKeysMessage,
+        hint: Key::ErrArchiveKeysHint,
+    };
+
+    /// `adoption_refused` because a typed fingerprint is not the carried key's.
+    pub const ADOPT_MISMATCH: ErrorKeys = ErrorKeys {
+        message: Key::ErrAdoptMismatchMessage,
+        hint: Key::ErrAdoptMismatchHint,
+    };
+
+    /// `adoption_refused` because what was typed is not a fingerprint.
+    pub const ADOPT_MALFORMED: ErrorKeys = ErrorKeys {
+        message: Key::ErrAdoptMalformedMessage,
+        hint: Key::ErrAdoptMalformedHint,
+    };
+
+    /// `adoption_refused` because some carried keys were neither adopted nor left out.
+    pub const ADOPT_UNADDRESSED: ErrorKeys = ErrorKeys {
+        message: Key::ErrAdoptUnaddressedMessage,
+        hint: Key::ErrAdoptUnaddressedHint,
+    };
+
+    /// `forbidden` on creating a repository: not there (someone else's name, an organization the caller is not in, one that does
+    /// not exist — one answer for all).
+    pub const FORBIDDEN_CREATE: ErrorKeys = ErrorKeys {
+        message: Key::ErrForbiddenCreateMessage,
+        hint: Key::ErrForbiddenCreateHint,
+    };
+
+    /// `forbidden` on creating a repository without an account.
+    pub const FORBIDDEN_CREATE_SIGNIN: ErrorKeys = ErrorKeys {
+        message: Key::ErrForbiddenCreateSigninMessage,
+        hint: Key::ErrForbiddenCreateSigninHint,
+    };
+
+    /// `invalid_request` for a value of a creation that is not allowed (the `field` and `reason` fields say which).
+    pub const BAD_NAME: ErrorKeys = ErrorKeys {
+        message: Key::ErrInvalidRequestMessage,
+        hint: Key::ErrInvalidRequestNameHint,
+    };
+
+    /// `transport_off` for creation from an archive: it needs the artifact directory.
+    pub const IMPORT_OFF: ErrorKeys = ErrorKeys {
+        message: Key::ErrImportOffMessage,
+        hint: Key::ErrImportOffHint,
+    };
+
+    /// `rate_limited`: too many new repositories in the last hour.
+    pub const RATE_CREATIONS: ErrorKeys = ErrorKeys {
+        message: Key::ErrRateCreationsMessage,
+        hint: Key::ErrRateCreationsHint,
+    };
+
+    /// `unavailable`: the creation hit its wall-time bound and nothing was kept.
+    pub const CREATE_TIMED_OUT: ErrorKeys = ErrorKeys {
+        message: Key::ErrCreateTimedOutMessage,
+        hint: Key::ErrCreateTimedOutHint,
+    };
+
+    /// `too_large`: the archive needs more memory than one creation may have.
+    pub const CREATE_TOO_BIG: ErrorKeys = ErrorKeys {
+        message: Key::ErrCreateTooBigMessage,
+        hint: Key::ErrCreateTooBigHint,
+    };
+
+    /// `payload_too_large` for an archive.
+    pub const IMPORT_TOO_LARGE: ErrorKeys = ErrorKeys {
+        message: Key::ErrImportTooLargeMessage,
+        hint: Key::ErrImportTooLargeHint,
+    };
+
+    /// `length_required` for an archive.
+    pub const IMPORT_LENGTH: ErrorKeys = ErrorKeys {
+        message: Key::ErrImportLengthMessage,
+        hint: Key::ErrImportLengthHint,
+    };
+
+    /// `invalid_request` for an archive whose body is not framed as the API document describes.
+    pub const BAD_IMPORT_FRAMING: ErrorKeys = ErrorKeys {
+        message: Key::ErrInvalidRequestMessage,
+        hint: Key::ErrInvalidRequestImportFramingHint,
+    };
+
     fn text(key: Key, lang: Lang) -> String {
         crate::catalog::T::new(lang)
             .msg(key)
@@ -570,6 +714,26 @@ impl ErrorCode {
             }
             ErrorCode::CommentState => {
                 "the comment is already hidden, or is not hidden (the body's `hidden` says which it is now)"
+            }
+            ErrorCode::RepositoryQuota => {
+                "the owner holds as many repositories as this server allows (the body names `limit` and `used`)"
+            }
+            ErrorCode::NameTaken => {
+                "a repository with that name exists (said only to someone who may create one there)"
+            }
+            ErrorCode::StageLimit => {
+                "too many archives are waiting to be confirmed, for the caller or for the server (the body's `limit`)"
+            }
+            ErrorCode::ArchiveRefused => {
+                "prikk refused the archive and nothing was kept (its own words are in `detail`), or the archive lists keys this server cannot read"
+            }
+            ErrorCode::StageExpired => "the archive was kept for a day and the day is over",
+            ErrorCode::StageInUse => "a confirmation is running on that archive",
+            ErrorCode::AdoptionRefused => {
+                "the typed fingerprints do not match the keys the archive carries (the body's `reason` and `key` say which; the expected value is never given)"
+            }
+            ErrorCode::CreationVerifyFailed => {
+                "the repository the archive makes does not pass prikk's checks and nothing was kept (the body's `conditions` lists what failed)"
             }
         }
     }

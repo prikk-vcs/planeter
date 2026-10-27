@@ -1152,4 +1152,394 @@ pub const CATALOG: &[Entry] = &[
         "非表示にするには、500 文字までの理由が必要です。",
     ),
     msg("proposals.col.review", "レビュー"),
+    // repository creation (RFC 004 part 7)
+    msg(
+        "error.repository_quota.message",
+        "{owner} にはすでにリポジトリが {used} 件あり、このサーバーが認める上限（{limit} 件）に達しています。",
+    ),
+    msg(
+        "error.repository_quota.hint",
+        "上限を上げるには、このサーバーを運用している人に頼んでください。",
+    ),
+    msg(
+        "error.name_taken.message",
+        "その名前のリポジトリはすでにあります。",
+    ),
+    msg(
+        "error.name_taken.hint",
+        "別の名前を選んで、もう一度送ってください。",
+    ),
+    msg(
+        "error.stage_limit.message",
+        "確認待ちのアーカイブがすでに {limit} 件あります。",
+    ),
+    msg(
+        "error.stage_limit.hint",
+        "どれかを確定するか、待ってください。確定されないアーカイブは 1 日たつと削除されます。",
+    ),
+    msg(
+        "error.stage_budget.message",
+        "このサーバーは、保持できる数のアーカイブをすでに預かっています。",
+    ),
+    msg(
+        "error.stage_budget.hint",
+        "しばらくしてからもう一度試し、続く場合はサーバーを運用している人に伝えてください。",
+    ),
+    msg(
+        "error.archive_refused.message",
+        "アーカイブは受け付けられませんでした。",
+    ),
+    msg(
+        "error.archive_refused.hint",
+        "prikk の説明は detail に入っているので、メンテナーに新しいアーカイブ（prikk archive export）を作ってもらい、それを送ってください。",
+    ),
+    msg(
+        "error.archive_keys.message",
+        "アーカイブに載っているメンテナーの鍵を、このサーバーは読み取れません。",
+    ),
+    msg(
+        "error.archive_keys.hint",
+        "最新の prikk で作ったアーカイブを、メンテナーに頼んでください。",
+    ),
+    msg(
+        "error.stage_expired.message",
+        "そのアーカイブは 1 日だけ保管され、その期間が過ぎました。",
+    ),
+    msg(
+        "error.stage_expired.hint",
+        "アーカイブをもう一度送ってください。",
+    ),
+    msg(
+        "error.stage_in_use.message",
+        "そのアーカイブは、いまリポジトリの作成に使われています。",
+    ),
+    msg(
+        "error.stage_in_use.hint",
+        "それが終わるまで待ってから、結果を見てください。",
+    ),
+    msg(
+        "error.adopt_mismatch.message",
+        "鍵 {key} について入力したフィンガープリントは、アーカイブに載っているものと一致しません。",
+    ),
+    msg(
+        "error.adopt_mismatch.hint",
+        "何も作成されていないので、メンテナーから聞いたものともう一度見比べてください。",
+    ),
+    msg(
+        "error.adopt_malformed.message",
+        "鍵 {key} について入力したものは、フィンガープリントではありません。",
+    ),
+    msg(
+        "error.adopt_malformed.hint",
+        "フィンガープリントは a〜f と 0〜9 の 64 文字（空白は可）で、何も作成されていません。",
+    ),
+    msg(
+        "error.adopt_unaddressed.message",
+        "{keys} をどうするかが指定されていません。",
+    ),
+    msg(
+        "error.adopt_unaddressed.hint",
+        "何も作成されていないので、信頼する鍵ごとにフィンガープリントを入力し、信頼しない鍵はその旨を選んでください。",
+    ),
+    msg(
+        "error.adopt_other.message",
+        "入力された内容が、このアーカイブの鍵と合いません。",
+    ),
+    msg(
+        "error.adopt_other.hint",
+        "何も作成されていないので、アーカイブの鍵は 1 つずつ、フィンガープリントを付けるか、除外する鍵として指定してください。",
+    ),
+    msg(
+        "error.creation_verify.message",
+        "このアーカイブから作られるリポジトリは prikk の検査に通らないため、作成されませんでした。",
+    ),
+    msg(
+        "error.creation_verify.hint",
+        "何も保存されておらず、失敗した内容は conditions にあるので、メンテナーに新しいアーカイブを頼んでください。",
+    ),
+    msg(
+        "error.forbidden_create.message",
+        "そこにはリポジトリを作成できません。",
+    ),
+    msg(
+        "error.forbidden_create.hint",
+        "自分のユーザー名か、所属している組織の名前を使ってください。",
+    ),
+    msg(
+        "error.forbidden_create_signin.message",
+        "リポジトリを作成するにはアカウントが必要です。",
+    ),
+    msg(
+        "error.forbidden_create_signin.hint",
+        "リポジトリを所有するアカウントのトークンを付けて送ってください。",
+    ),
+    msg(
+        "error.invalid_request.name_hint",
+        "この応答の field と reason が断られた値と理由を示しているので、直して、API 文書の項目の通りにもう一度送ってください。",
+    ),
+    msg(
+        "error.import_off.message",
+        "このサーバーは、アーカイブからのリポジトリ作成を設定していません。",
+    ),
+    msg(
+        "error.import_off.hint",
+        "アーティファクト用ディレクトリを設定するよう、サーバーを運用している人に頼んでください。",
+    ),
+    msg(
+        "error.rate_creations.message",
+        "この 1 時間に開始した新しいリポジトリが多すぎます。",
+    ),
+    msg(
+        "error.rate_creations.hint",
+        "Retry-After ヘッダーの秒数のあとにもう一度送ってください。",
+    ),
+    msg(
+        "error.create_timed_out.message",
+        "リポジトリの作成がこのサーバーの許す時間を超えたため、何も保存されていません。",
+    ),
+    msg(
+        "error.create_timed_out.hint",
+        "もう一度試し、続く場合はアーカイブがこのサーバーには大きすぎるので、運用している人に伝えてください。",
+    ),
+    msg(
+        "error.create_too_big.message",
+        "このアーカイブは、サーバーが 1 件に許すメモリを超えて必要とします。",
+    ),
+    msg(
+        "error.create_too_big.hint",
+        "何も保存されていないので、上限を上げられるか、サーバーを運用している人に尋ねてください。",
+    ),
+    msg(
+        "error.import_too_large.message",
+        "そのアーカイブは、このサーバーが受け付ける大きさを超えています。",
+    ),
+    msg(
+        "error.import_too_large.hint",
+        "もっと小さいアーカイブをメンテナーに頼むか、上限を上げるようサーバーを運用している人に頼んでください。",
+    ),
+    msg(
+        "error.import_length.message",
+        "リクエストの長さが示されていません。",
+    ),
+    msg(
+        "error.import_length.hint",
+        "Content-Length ヘッダーを付けてアーカイブを送ってください。",
+    ),
+    msg(
+        "error.invalid_request.import_framing_hint",
+        "本文は PLANETER-IMPORT-1 で始め、続けてメタデータの長さ、メタデータ、アーカイブの順に、API 文書の通りに送ってください。",
+    ),
+    msg("title.new", "新しいリポジトリ · {product}"),
+    msg("new.heading", "新しいリポジトリ"),
+    msg(
+        "new.intro",
+        "始め方を選んでください。選んだ方のボタンを押すまで、何も作成されません。",
+    ),
+    msg("new.owner", "所有者"),
+    msg(
+        "new.owner_hint",
+        "自分のユーザー名か、所属している組織の名前です。",
+    ),
+    msg("new.name", "リポジトリ名"),
+    msg(
+        "new.name_hint",
+        "小文字、数字、ドット、ハイフン、アンダースコアが使え、64 文字までです。",
+    ),
+    msg("new.visibility", "読める人"),
+    msg(
+        "new.visibility.public",
+        "誰でも（サインインの有無を問わない）",
+    ),
+    msg("new.visibility.internal", "サインインしている人なら誰でも"),
+    msg("new.visibility.private", "アクセスを与えた人だけ"),
+    msg("new.proposals", "提案を送れる人"),
+    msg("new.proposals.members", "書き込み権限を与えた人"),
+    msg("new.proposals.any", "読めるサインイン済みの人なら誰でも"),
+    msg(
+        "new.proposals.any_explain",
+        "知らない人からの貢献を受け付ける公開プロジェクトでは、後者を選びます。その人たちの作業はレビュー待ちで保持され、それだけでブランチが変わることはありません。",
+    ),
+    msg("new.empty.heading", "空のリポジトリ"),
+    msg("new.empty.explain", "履歴なしで始めます。"),
+    msg("new.empty.button", "空のリポジトリを作成する"),
+    msg(
+        "new.empty.consequence",
+        "リポジトリをいま作成します。あなたがその管理者になり、上で選んだ人が読めるようになります。",
+    ),
+    msg(
+        "new.import.heading",
+        "メンテナーから受け取ったアーカイブから",
+    ),
+    msg(
+        "new.import.explain",
+        "メンテナーは、リポジトリ全体を 1 つのアーカイブファイルとして書き出せます（prikk archive export）。ここにアップロードすると、その履歴をすべて持った状態で始められます。作成の前に、中身を確認できます。",
+    ),
+    msg("new.import.file", "アーカイブファイル"),
+    msg(
+        "new.import.max",
+        "このサーバーが受け付けるアーカイブは {size} までです。",
+    ),
+    msg("new.import.button", "アーカイブをアップロードして確認する"),
+    msg(
+        "new.import.consequence",
+        "アーカイブを確認し、1 日だけ保管します。リポジトリはまだ作成されず、中身は何も信頼されません。",
+    ),
+    msg(
+        "new.import.off",
+        "このサーバーは、アーカイブからのリポジトリ作成を設定していません。",
+    ),
+    msg("new.refused.heading", "リポジトリは作成されませんでした"),
+    msg("new.error.owner", "その所有者名は使えません。"),
+    msg("new.error.name.empty", "リポジトリに名前を付けてください。"),
+    msg("new.error.name.too_long", "名前は 64 文字までです。"),
+    msg(
+        "new.error.name.uppercase",
+        "大文字と小文字だけが違う 2 つの名前を避けるため、小文字だけを使ってください。",
+    ),
+    msg(
+        "new.error.name.bad_character",
+        "名前に使えるのは、小文字、数字、ドット、ハイフン、アンダースコアだけです。",
+    ),
+    msg(
+        "new.error.name.bad_start",
+        "名前は文字か数字で始めてください。",
+    ),
+    msg(
+        "new.error.name.dotted",
+        "名前にドットを 2 つ続けたり、ドットや .git で終えたりはできません。",
+    ),
+    msg(
+        "new.error.name.reserved",
+        "その名前はこのサーバー自身が使っています。別の名前にしてください。",
+    ),
+    msg("new.error.visibility", "読める人を選んでください。"),
+    msg("new.error.proposals", "提案を送れる人を選んでください。"),
+    msg(
+        "new.error.file",
+        "アップロードするアーカイブファイルを選んでください。",
+    ),
+    msg(
+        "new.error.upload",
+        "アップロードを、ファイル付きのフォームとして読み取れませんでした。何も保存されていません。",
+    ),
+    msg("title.stage", "アーカイブの確認 · {product}"),
+    msg("stage.heading", "{repo} 用のアーカイブ"),
+    msg(
+        "stage.intro",
+        "prikk はアーカイブの内部に問題を見つけませんでした。ただし、それで信頼できるとは限りません。まだ何も作成されていません。",
+    ),
+    msg("stage.size", "サイズ：{size}"),
+    msg("stage.digest", "SHA-256：{digest}"),
+    msg("stage.expires", "{when} まで保管し、その後削除します。"),
+    plural_msg(
+        "stage.objects",
+        "全部で {count} 件の項目を含みます。",
+        "全部で {count} 件の項目を含みます。",
+    ),
+    msg("stage.refs.heading", "アーカイブ内のブランチ"),
+    msg(
+        "stage.ref.published",
+        "{ref}：署名した鍵を信頼すれば、新しいリポジトリのブランチになります",
+    ),
+    msg(
+        "stage.ref.kept",
+        "{ref}：ブランチにはならず、受信したコピーとして保持されます（{reason}）",
+    ),
+    msg(
+        "stage.ref.received",
+        "{ref}：メンテナーが別の場所から受け取ったコピーで、常に受信したコピーとして保持されます",
+    ),
+    plural_msg(
+        "stage.ref.more",
+        "ほか {count} 件のブランチ",
+        "ほか {count} 件のブランチ",
+    ),
+    msg(
+        "stage.verifies.yes",
+        "下の鍵をすべて信頼すれば、新しいリポジトリは prikk のすべての検査に通ります。",
+    ),
+    msg(
+        "stage.verifies.no",
+        "下の鍵をすべて信頼しても、新しいリポジトリは prikk の検査に通りません（{problems}）。鍵を 1 つも信頼せずに作成することはできます。",
+    ),
+    msg("stage.keys.heading", "アーカイブ内のメンテナーの鍵"),
+    msg(
+        "stage.keys.explain",
+        "アーカイブは、これらをメンテナーの鍵として載せています。アーカイブには誰でも何でも書けるので、その一覧は何の証明にもなりません。このアーカイブとは別の方法でメンテナーに鍵のフィンガープリントを尋ね、下に入力してください。信頼されるのは、入力した鍵だけです。",
+    ),
+    msg(
+        "stage.keys.none",
+        "アーカイブにはメンテナーの鍵が載っていないため、信頼するものがありません。何も信頼せずにリポジトリを作成します。",
+    ),
+    msg("stage.key.id", "鍵 {key}"),
+    msg("stage.key.fingerprint", "照合するフィンガープリント："),
+    msg(
+        "stage.key.input",
+        "この鍵を信頼するには、フィンガープリントを入力してください",
+    ),
+    msg("stage.key.skip", "この鍵を信頼しない"),
+    msg(
+        "stage.confirm.button",
+        "リポジトリを作成し、入力した鍵を信頼する",
+    ),
+    msg(
+        "stage.confirm.consequence",
+        "{repo} を作成し、アーカイブを取り込み、フィンガープリントを入力した鍵だけを信頼します。途中で問題が起きた場合は、何も保存されません。",
+    ),
+    msg(
+        "stage.none.button",
+        "鍵を 1 つも信頼せずにリポジトリを作成する",
+    ),
+    msg(
+        "stage.none.consequence",
+        "{repo} を作成し、すべてを受信したコピーとして保持します。鍵を信頼するまで何も検証・信頼されず、このバージョンでは後から鍵を信頼することもできません。",
+    ),
+    msg("stage.back", "最初からやり直す"),
+    msg("stage.refused.heading", "リポジトリは作成されませんでした"),
+    msg("title.created", "{repo} を作成しました · {product}"),
+    msg("created.heading", "リポジトリ {repo} を作成しました"),
+    msg(
+        "created.branch.published",
+        "{ref}：リポジトリのブランチです",
+    ),
+    msg(
+        "created.branch.kept",
+        "{ref}：{landed} という名前の受信したコピーとして保持されています（{reason}）",
+    ),
+    msg(
+        "created.branch.kept_plain",
+        "{ref}：{landed} という名前の受信したコピーとして保持されています",
+    ),
+    msg(
+        "created.verified",
+        "リポジトリは prikk のすべての検査に通りました。",
+    ),
+    msg(
+        "created.unverified",
+        "信頼しなかった鍵で署名されたブランチがあるため、リポジトリは prikk のすべての検査には通りません。鍵を信頼するまで何も検証・信頼されず、このバージョンでは後から鍵を信頼することもできません。",
+    ),
+    msg("created.trusted", "信頼した鍵：{keys}。"),
+    msg("created.none_trusted", "信頼した鍵はありません。"),
+    msg("created.open", "{repo} を開く"),
+    msg(
+        "created.next",
+        "次は、リポジトリを開いて中身を見てください。",
+    ),
+    // repository creation (RFC 004 part 7)
+    msg(
+        "new.signin",
+        "リポジトリを作成するには、サインインしてください。",
+    ),
+    msg("new.nav", "新しいリポジトリ"),
+    msg("stage.prikk", "prikk の説明：{detail}"),
+    msg(
+        "stage.error.both",
+        "鍵 {key} について、フィンガープリントを入力し、同時に信頼しないことも選んでいます。どちらか一方にしてください。",
+    ),
+    msg("stage.error.verify", "失敗した検査：{conditions}。"),
+    msg(
+        "stage.gone",
+        "そのアーカイブはもうありません。すでに使われたか、保管期間が過ぎた可能性があります。",
+    ),
+    msg("stage.gone.link", "リポジトリを作成する"),
 ];

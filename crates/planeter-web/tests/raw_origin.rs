@@ -84,6 +84,7 @@ fn router_for(content: ContentOrigin) -> Router {
         trusted_proxies: Arc::new(TrustedProxies::parse("10.0.0.0/8").unwrap()),
         oidc: None,
         transport: None,
+        creation: None,
     })
 }
 

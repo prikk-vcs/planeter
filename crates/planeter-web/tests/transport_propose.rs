@@ -549,6 +549,7 @@ fn world(name: &str, o: Opts) -> World {
         trusted_proxies: Arc::new(planeter_web::TrustedProxies::default()),
         oidc: None,
         transport,
+        creation: None,
     });
     World {
         router,

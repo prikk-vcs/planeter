@@ -105,6 +105,7 @@ fn app(name: &str) -> Router {
         trusted_proxies: Arc::new(TrustedProxies::default()),
         oidc: None,
         transport: None,
+        creation: None,
     })
 }
 

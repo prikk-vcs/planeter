@@ -115,6 +115,14 @@ environment:
   PLANETER_RETENTION_SWEEP_MINUTES  minutes between runs of the retention sweep, which also runs at start (default 60)
   PLANETER_COMMENTS_PER_HOUR    most comments one person may add to one proposal in an hour (default 20)
   PLANETER_DECISIONS_PER_HOUR   most review decisions one person may record on one proposal in an hour (default 10)
+  PLANETER_IMPORT_MAX_MB        largest archive a repository can be created from, in MiB (default 100; needs
+                                PLANETER_ARTIFACT_DIR, under which the staged archives wait in `stages/`)
+  PLANETER_CREATE_DEADLINE_SECS wall-time bound of staging one archive and of confirming one (default 600)
+  PLANETER_STAGE_BUDGET_MB      most MiB of staged archives the server holds in all (default 1024; at most 2 per person,
+                                each kept for 24 hours)
+  PLANETER_REPO_QUOTA_USER      most repositories one user may own (default 50)
+  PLANETER_REPO_QUOTA_ORG       most repositories one organization may own (default 500)
+  PLANETER_CREATIONS_PER_HOUR   most repositories (or archives to create one from) one person may start in an hour (default 10)
   PLANETER_PROPOSER_QUOTA_MB    most megabytes of artifacts one person may have accepted in one repository, in all
                                 (default 512, or 64 where proposals are open to any signed-in user)
   PLANETER_AUTOMATIC_RECOVERY   on (default) or off: whether the server recovers a repository left unfinished by a

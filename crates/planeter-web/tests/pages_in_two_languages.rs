@@ -136,6 +136,7 @@ fn app(path: PathBuf) -> Router {
         trusted_proxies: Arc::new(TrustedProxies::default()),
         oidc: None,
         transport: None,
+        creation: None,
     })
 }
 

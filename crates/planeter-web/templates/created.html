@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}{{ t.msg(Key::TitleCreated).with("repo", repo).product() }}{% endblock %}
+{% block body %}
+<h1>{{ t.msg(Key::CreatedHeading).with("repo", repo) }}</h1>
+<p>{{ verified_line }}</p>
+{% if !landings.is_empty() %}<ul>
+{% for l in landings %}<li>{{ l }}</li>
+{% endfor %}</ul>
+{% endif %}{% if let Some(m) = landings_more %}<p class="muted">{{ m }}</p>
+{% endif %}<p>{{ trusted_line }}</p>
+<p>{{ t.get(Key::CreatedNext) }}</p>
+<p><a href="/{{ owner }}/{{ name }}">{{ t.msg(Key::CreatedOpen).with("repo", repo) }}</a></p>
+{% endblock %}

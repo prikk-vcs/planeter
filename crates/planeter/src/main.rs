@@ -232,13 +232,124 @@ async fn main() {
             exit_releasing_lock(1);
         }
     };
-    let hosting = Arc::new(HostingService::new(repos_root, repo_store));
+    let hosting = Arc::new(HostingService::new(repos_root, repo_store.clone()));
     let membership: Arc<dyn MembershipStore> = Arc::new(SqliteMembershipStore::new(db.clone()));
     let read = Arc::new(ReadService::new(
         hosting.clone(),
-        membership,
+        membership.clone(),
         Arc::new(NullAuditSink),
     ));
+
+    // RFC 004 part 7: creating a repository. **The start-up sweep runs first of everything that reads the repositories or the
+    // lease records**: a server that was killed while it was creating a repository left a `creating` record, perhaps a
+    // directory, a grant and a lease record, and all of it is removed (and logged) before any of it is looked at.
+    let (creation_runtime, import_bound) = {
+        let stage_store: Arc<dyn planeter_store::StageStore> =
+            match planeter_store::SqliteStageStore::new(db.clone()) {
+                Ok(s) => Arc::new(s),
+                Err(e) => {
+                    eprintln!("planeter: cannot initialise the stage records: {e}");
+                    exit_releasing_lock(1);
+                }
+            };
+        let defaults = planeter_transport::CreationConfig::default();
+        let cfg = planeter_transport::CreationConfig {
+            max_archive_bytes: positive_env(
+                "PLANETER_IMPORT_MAX_MB",
+                defaults.max_archive_bytes >> 20,
+            ) << 20,
+            deadline: std::time::Duration::from_secs(positive_env(
+                "PLANETER_CREATE_DEADLINE_SECS",
+                defaults.deadline.as_secs(),
+            )),
+            stage_limits: planeter_store::StageLimits {
+                per_principal: defaults.stage_limits.per_principal,
+                total_bytes: positive_env(
+                    "PLANETER_STAGE_BUDGET_MB",
+                    defaults.stage_limits.total_bytes >> 20,
+                ) << 20,
+            },
+            user_quota: positive_env("PLANETER_REPO_QUOTA_USER", defaults.user_quota),
+            org_quota: positive_env("PLANETER_REPO_QUOTA_ORG", defaults.org_quota),
+            ..defaults
+        };
+        let per_hour = positive_env(
+            "PLANETER_CREATIONS_PER_HOUR",
+            u64::from(planeter_core::creation::DEFAULT_CREATIONS_PER_HOUR),
+        ) as u32;
+        let stage_root = dirs.artifacts.as_ref().map(|a| a.root().join("stages"));
+        let service = match planeter_transport::CreationService::new(
+            hosting.clone(),
+            repo_store.clone(),
+            membership.clone(),
+            stage_store,
+            leases.clone(),
+            stage_root,
+            cfg.clone(),
+        ) {
+            Ok(s) => Arc::new(s),
+            Err(e) => {
+                eprintln!("planeter: cannot set up repository creation: {e}");
+                exit_releasing_lock(1);
+            }
+        };
+        let swept = service.sweep_at_start();
+        eprintln!(
+            "planeter: start-up sweep: {} unfinished creation(s) and {} stray director(ies) removed, {} stage(s) removed",
+            swept.repositories.removed_creating.len(),
+            swept.repositories.removed_orphans.len(),
+            swept.stages_removed.len()
+        );
+        for (path, why) in &swept.repositories.refused {
+            eprintln!(
+                "planeter: start-up sweep left {} alone: {why}",
+                path.display()
+            );
+        }
+        if service.import_enabled() {
+            eprintln!(
+                "planeter: repositories can be created from an archive: up to {} MiB, {} s deadline, {} MiB of staged archives, at most {} at once; {} creation(s) an hour per person; quotas {} per user and {} per organization",
+                cfg.max_archive_bytes >> 20,
+                cfg.deadline.as_secs(),
+                cfg.stage_limits.total_bytes >> 20,
+                cfg.stage_limits.per_principal,
+                per_hour,
+                cfg.user_quota,
+                cfg.org_quota
+            );
+            // Stages that are not confirmed in their day are removed every hour.
+            let sweeper = service.clone();
+            if let Err(e) = std::thread::Builder::new()
+                .name("stage-sweep".to_owned())
+                .spawn(move || {
+                    loop {
+                        std::thread::sleep(std::time::Duration::from_secs(3600));
+                        let n = sweeper.sweep_stages();
+                        if n > 0 {
+                            eprintln!("planeter: removed {n} expired archive stage(s)");
+                        }
+                    }
+                })
+            {
+                eprintln!("planeter: cannot start the stage sweep: {e}");
+            }
+        } else {
+            eprintln!(
+                "planeter: repositories cannot be created from an archive (no PLANETER_ARTIFACT_DIR); empty ones can"
+            );
+        }
+        let bound = service.import_enabled().then_some(cfg.max_archive_bytes);
+        (
+            Arc::new(planeter_web::creation::CreationRuntime {
+                service,
+                rate: planeter_web::RateLimiter::new(
+                    per_hour,
+                    std::time::Duration::from_secs(3600),
+                ),
+            }),
+            bound,
+        )
+    };
 
     // The configured size and object bounds of an accept (for the start-up message about the memory budget).
     let mut propose_cost: Option<(u64, u64)> = None;
@@ -560,6 +671,31 @@ async fn main() {
         eprintln!("planeter: {line}");
     }
 
+    // Creation from an archive draws from the heavy pool as well: say whether the budget admits the largest archive.
+    if let Some(bound) = import_bound {
+        let admitted = planeter_transport::creation::cost_model::admission_cost(bound);
+        if admitted <= heavy_bytes {
+            eprintln!(
+                "planeter: the largest archive ({} MiB) needs {} MiB of the heavy pool ({} MiB): admitted",
+                bound >> 20,
+                admitted >> 20,
+                heavy_bytes >> 20
+            );
+        } else {
+            let largest =
+                planeter_transport::creation::cost_model::largest_archive_admitted(heavy_bytes)
+                    .map_or(0, |b| b >> 20);
+            eprintln!(
+                "planeter: the largest archive ({} MiB) needs {} MiB of the heavy pool ({} MiB), so it is NOT admitted: archives above about {} MiB are refused; raise {} or lower PLANETER_IMPORT_MAX_MB",
+                bound >> 20,
+                admitted >> 20,
+                heavy_bytes >> 20,
+                largest,
+                planeter_web::budget::VAR
+            );
+        }
+    }
+
     // The separate, small bound on password verification (IS-24). Logged once.
     let auth_gate = match planeter_web::BlockingGate::auth_from_vars(
         std::env::var("PLANETER_AUTH_CONCURRENCY").ok().as_deref(),
@@ -641,6 +777,7 @@ async fn main() {
         trusted_proxies: Arc::new(trusted_proxies),
         oidc,
         transport,
+        creation: Some(creation_runtime),
         now_unix: || {
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)

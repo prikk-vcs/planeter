@@ -99,6 +99,7 @@ fn state() -> AppState {
         trusted_proxies: Arc::new(TrustedProxies::default()),
         oidc: None,
         transport: None,
+        creation: None,
     }
 }
 
@@ -211,6 +212,9 @@ fn the_table_lists_the_routes_the_contract_knows_and_every_public_entry_has_a_re
         "/login/oidc/callback",
         "/logout",
         "/lang",
+        "/new",
+        "/new/import",
+        "/new/import/{stage}",
         "/{owner}/{name}",
         "/{owner}/{name}/tree/{*path}",
         "/{owner}/{name}/blob/{*path}",

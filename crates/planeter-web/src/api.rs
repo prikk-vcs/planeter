@@ -19,7 +19,7 @@ use axum::extract::rejection::QueryRejection;
 use axum::extract::{Path, Query, State};
 use axum::http::{HeaderMap, StatusCode, header};
 use axum::response::Response;
-use axum::routing::get;
+use axum::routing::{get, post};
 use serde::Serialize;
 
 use planeter_auth::Authenticator;
@@ -27,6 +27,7 @@ use planeter_core::admission::{ReadVerb, ceiling_for};
 use planeter_core::{CallLimits, Principal, RawFile, RawTarget, ReadError, ReadService};
 use planeter_store::Owner;
 
+use crate::creation::{confirm_handler, create_handler, import_handler, stage_handler};
 use crate::errors::{ErrorBody, ErrorCode};
 use crate::gate::{AdmitError, PrikkGate, offload};
 use crate::proposals::{artifact_handler, close_handler, detail_handler, list_handler};
@@ -69,6 +70,9 @@ pub struct AppState {
     pub oidc: Option<Arc<planeter_auth::OidcProvider>>,
     /// The transport (advertise and fetch), when the operator configured an export spool; `None` otherwise.
     pub transport: Option<Arc<crate::transport::TransportRuntime>>,
+    /// Creating a repository (RFC 004 part 7): always on in a running server (an empty repository needs nothing but the
+    /// store and prikk); creation from an archive needs the artifact directory and says so when it is missing.
+    pub creation: Option<Arc<crate::creation::CreationRuntime>>,
 }
 
 /// The API's route paths. The router and the OpenAPI document both take their paths from here, and
@@ -96,9 +100,17 @@ pub mod paths {
         "/api/v1/repos/{owner}/{name}/proposals/{id}/comments/{cid}/hide";
     pub const COMMENT_UNHIDE: &str =
         "/api/v1/repos/{owner}/{name}/proposals/{id}/comments/{cid}/unhide";
+    /// Create an empty repository (RFC 004 part 7).
+    pub const REPOS: &str = "/api/v1/repos";
+    /// Stage an archive for a new repository.
+    pub const REPOS_IMPORT: &str = "/api/v1/repos/import";
+    /// A stage, as its creator sees it.
+    pub const REPOS_IMPORT_STAGE: &str = "/api/v1/repos/import/{stage}";
+    /// Confirm a stage with the typed fingerprints.
+    pub const REPOS_IMPORT_CONFIRM: &str = "/api/v1/repos/import/{stage}/confirm";
     pub const OPENAPI: &str = "/api/v1/openapi.json";
     /// Every route, in document order.
-    pub const ALL: [&str; 20] = [
+    pub const ALL: [&str; 24] = [
         HISTORY,
         CHANGE,
         FILE,
@@ -118,6 +130,10 @@ pub mod paths {
         PROPOSAL_DECISIONS,
         COMMENT_HIDE,
         COMMENT_UNHIDE,
+        REPOS,
+        REPOS_IMPORT,
+        REPOS_IMPORT_STAGE,
+        REPOS_IMPORT_CONFIRM,
         OPENAPI,
     ];
 }
@@ -152,6 +168,14 @@ pub fn routes() -> Routes {
         axum::routing::post(comment_handler),
         axum::routing::post(decision_handler),
     );
+    // Creating a repository (RFC 004 part 7): bearer only, no repository exists yet to read. Who may create where is
+    // `authorize(CreateRepo)` for an organization and the caller's own namespace otherwise (`creation_target`), asked before
+    // anything is read or written; the answer for "not there" is one for every cause.
+    let create = Class::public(
+        "creates a repository in the caller's own namespace or an organization they belong to: an anonymous caller is refused, every other refusal is one answer, and no repository data is read or served",
+    );
+    let (new_repo, upload) = (post(create_handler), post(import_handler));
+    let (staged, confirm) = (get(stage_handler), post(confirm_handler));
     let (hide, unhide) = (
         axum::routing::post(hide_handler),
         axum::routing::post(unhide_handler),
@@ -176,6 +200,10 @@ pub fn routes() -> Routes {
         .route(paths::PROPOSAL_DECISIONS, review_class, &["POST"], decision)
         .route(paths::COMMENT_HIDE, admin_class, &["POST"], hide)
         .route(paths::COMMENT_UNHIDE, admin_class, &["POST"], unhide)
+        .route(paths::REPOS, create, &["POST"], new_repo)
+        .route(paths::REPOS_IMPORT, create, &["POST"], upload)
+        .route(paths::REPOS_IMPORT_STAGE, create, &["GET"], staged)
+        .route(paths::REPOS_IMPORT_CONFIRM, create, &["POST"], confirm)
         .route(paths::OPENAPI, description, &["GET"], get(openapi_handler))
 }
 

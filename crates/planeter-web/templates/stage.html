@@ -1,0 +1,42 @@
+{% extends "base.html" %}
+{% block title %}{{ t.msg(Key::TitleStage).product() }}{% endblock %}
+{% block body %}
+<h1>{{ t.msg(Key::StageHeading).with("repo", repo) }}</h1>
+{% if let Some(e) = error %}<div id="stage-error" role="alert">
+<h2>{{ t.get(Key::StageRefusedHeading) }}</h2>
+<p class="badge bad">{{ e }}</p>
+{% if let Some(d) = error_detail %}<p class="muted">{{ d }}</p>
+{% endif %}</div>
+{% endif %}<p>{{ t.get(Key::StageIntro) }}</p>
+<ul>
+<li>{{ size_line }}</li>
+<li>{{ digest_line }}</li>
+<li>{{ objects_line }}</li>
+<li>{{ expires_line }}</li>
+</ul>
+<h2>{{ t.get(Key::StageRefsHeading) }}</h2>
+<ul>
+{% for r in refs %}<li>{{ r }}</li>
+{% endfor %}</ul>
+{% if let Some(m) = refs_more %}<p class="muted">{{ m }}</p>
+{% endif %}<p class="muted">{{ verifies_line }}</p>
+<form method="post" action="/new/import/{{ stage_id }}">
+<input type="hidden" name="csrf" value="{{ csrf }}">
+<h2>{{ t.get(Key::StageKeysHeading) }}</h2>
+{% if keys.is_empty() %}<p>{{ t.get(Key::StageKeysNone) }}</p>
+{% else %}<p>{{ t.get(Key::StageKeysExplain) }}</p>
+{% for k in keys %}<fieldset>
+<legend>{{ k.title }}</legend>
+<p class="muted">{{ k.fingerprint_label }}</p>
+<p><code dir="ltr" class="fingerprint">{{ k.grouped }}</code></p>
+<p><label for="fp-{{ k.index }}">{{ t.get(Key::StageKeyInput) }}</label><br>
+<input id="fp-{{ k.index }}" name="fp_{{ k.index }}" value="" size="80" maxlength="200" autocomplete="off" spellcheck="false" dir="ltr"></p>
+<p><label><input type="checkbox" name="skip_{{ k.index }}" value="1"> {{ t.get(Key::StageKeySkip) }}</label></p>
+</fieldset>
+{% endfor %}<p><button type="submit" name="mode" value="typed">{{ t.get(Key::StageConfirmButton) }}</button></p>
+<p class="muted">{{ confirm_note }}</p>
+{% endif %}<p><button type="submit" name="mode" value="none">{{ t.get(Key::StageNoneButton) }}</button></p>
+<p class="muted">{{ none_note }}</p>
+</form>
+<p><a href="/new">{{ t.get(Key::StageBack) }}</a></p>
+{% endblock %}

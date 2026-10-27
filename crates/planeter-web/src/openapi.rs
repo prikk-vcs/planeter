@@ -155,17 +155,23 @@ fn schemas() -> Value {
                      "description": "A stable, machine-readable code."},
             "message": {"type": "string", "description": "One plain sentence, in the language negotiated from `Accept-Language` (English by default). Never a path, a repository's existence, or tool output."},
             "hint": {"type": "string", "description": "What the caller can do next, in the same language."},
-            "reason": {"type": "string", "description": "Only on `invalid_request` for a proposal: which part of the framing or the metadata was refused (for example `magic`, `truncated`, `title_required`, `unknown_field`)."},
+            "reason": {"type": "string", "description": "Only on `invalid_request` for a proposal or for creating a repository: which part of the framing, the metadata or the value was refused (for example `magic`, `truncated`, `title_required`, `unknown_field`, `uppercase`, `reserved`); and on `adoption_refused`: `mismatch`, `malformed`, `unaddressed`, `conflicting`, `unknown_key` or `duplicate`."},
             "quota": {"type": "string", "enum": ["open_proposals", "accepted_bytes", "revisions_per_proposal", "repository_capacity"], "description": "Only on `quota_exceeded`: which limit."},
-            "limit": {"type": "integer", "minimum": 0, "description": "Only on `quota_exceeded`: the limit, in `unit`."},
-            "used": {"type": "integer", "minimum": 0, "description": "Only on `quota_exceeded`: the current use, in `unit`."},
+            "limit": {"type": "integer", "minimum": 0, "description": "Only on `quota_exceeded`: the limit, in `unit`; on `repository_quota` and `stage_limit`: the limit, a count; on `payload_too_large` for an archive: the largest archive, in bytes."},
+            "used": {"type": "integer", "minimum": 0, "description": "Only on `quota_exceeded`: the current use, in `unit`; on `repository_quota`: how many repositories the owner holds."},
             "unit": {"type": "string", "enum": ["count", "mebibytes"], "description": "Only on `quota_exceeded`: the unit of `limit` and `used`."},
             "state": {"type": "string", "enum": ["landed", "closed"], "description": "Only on `proposal_not_open`."},
             "count": {"type": "integer", "minimum": 0, "description": "Only on `declaration_misses_added` and `declared_not_held`: how many patches."},
             "patch_ids": {"type": "array", "items": {"type": "string"}, "description": "Only on `declaration_misses_added` and `declared_not_held`: the first patch ids concerned."},
             "detail": {"type": "string", "description": "Only on `accept_refused`: prikk's own text, verbatim (English, not translated)."},
             "intent": {"type": "string", "description": "Only on `incomplete`: the id of the intent left open; the same artifact, sent again, resumes it."},
-            "cause": {"type": "string", "description": "Only on `incomplete`: `accept_deadline`, `accept_ceiling`, `accept_failed`, `accept_unreadable` or `accept_not_recorded`."}
+            "cause": {"type": "string", "description": "Only on `incomplete`: `accept_deadline`, `accept_ceiling`, `accept_failed`, `accept_unreadable` or `accept_not_recorded`."},
+            "field": {"type": "string", "description": "Only on `invalid_request` for creating a repository: which value was refused (`owner`, `name`, `visibility`, `proposals` or `body`); `reason` says why."},
+            "key": {"type": "string", "description": "Only on `adoption_refused`: the id of the key the answer was refused for."},
+            "keys": {"type": "array", "items": {"type": "string"}, "description": "Only on `adoption_refused` with reason `unaddressed`: the ids of the carried keys that were neither adopted nor left out."},
+            "conditions": {"type": "array", "items": {"type": "string"}, "description": "Only on `creation_verify_failed`: prikk's ids of the conditions that failed."},
+            "limit_bytes": {"type": "integer", "minimum": 0, "description": "Only on `stage_limit` when the server's budget for staged archives is spent: that budget, in bytes."},
+            "carried": {"type": "integer", "minimum": 0, "description": "Only on `archive_refused` when the archive lists keys this server cannot read: how many keys it lists."}
         })),
         "Assurance": {"type": "string", "enum": ["prikk-verified", "sealed", "forge-approved-unsealed", "unverified"], "description": "`prikk-verified` only where the repository's verification ran and passed; a sealed patch on the change endpoint is `sealed` (signed into the history; nothing was verified for that view); a queued one is `forge-approved-unsealed`. **In plain words, `forge-approved-unsealed` means: accepted and held by this server, not yet signed into the history; nobody has approved it for merging.** (The word *approved* is part of the machine value, which is in the 0.4.0 contract and does not change; it is not a review decision.)"},
         "PatchMessage": obj(&["patch_id", "message"], json!({"patch_id": string_prop(), "message": string_prop()})),
@@ -281,6 +287,9 @@ fn schemas() -> Value {
         })),
     });
     if let (Some(all), Some(more)) = (all.as_object_mut(), recovery_schemas().as_object()) {
+        all.extend(more.clone());
+    }
+    if let (Some(all), Some(more)) = (all.as_object_mut(), creation_schemas().as_object()) {
         all.extend(more.clone());
     }
     if let (Some(all), Some(more)) = (all.as_object_mut(), proposal_schemas().as_object()) {
@@ -569,6 +578,169 @@ fn proposal_paths(paths_obj: &mut serde_json::Map<String, Value>) {
                 },
             }}),
             &[ErrorCode::TransportOff, ErrorCode::RateLimited, ErrorCode::Forbidden, ErrorCode::RangeNotSatisfiable, ErrorCode::ArtifactRemoved],
+        ),
+    );
+}
+
+/// The schemas of creating a repository (RFC 004 part 7).
+fn creation_schemas() -> Value {
+    json!({
+        "NewRepository": obj(&["owner", "name", "visibility"], json!({
+            "owner": {"type": "string", "description": "Your own username, or an organization you belong to."},
+            "name": {"type": "string", "maxLength": 64, "description": "Lowercase letters, digits, `.`, `_`, `-`; starts with a letter or digit; no `..`; does not end with `.` or `.git`; not a word this server uses for itself."},
+            "visibility": {"type": "string", "enum": ["public", "internal", "private"]},
+            "proposals": {"type": "string", "enum": ["members", "any-authenticated"], "default": "members"}
+        })),
+        "CreatedRepository": obj(&["owner", "name", "visibility", "proposals", "url", "created_at"], json!({
+            "owner": string_prop(), "name": string_prop(),
+            "visibility": {"type": "string", "enum": ["public", "internal", "private"]},
+            "proposals": {"type": "string", "enum": ["members", "any-authenticated"]},
+            "url": {"type": "string", "description": "The repository's page."},
+            "created_at": {"type": "integer"}
+        })),
+        "CarriedKey": obj(&["key_id", "fingerprint", "fingerprint_grouped", "public_key"], json!({
+            "key_id": {"type": "string", "description": "prikk's short id (`ed25519-` and 16 hexadecimal characters)."},
+            "fingerprint": {"type": "string", "description": "The whole public key, 64 hexadecimal characters: what the maintainer reads off their own machine with `prikk key public`. It is the same text as `public_key`; the creator compares this one, and `trust maintainer add` takes the other."},
+            "fingerprint_grouped": {"type": "string", "description": "The same, in eight groups of eight, for reading aloud."},
+            "public_key": string_prop()
+        })),
+        "StageRef": obj(&["ref_name", "publishable", "landed_as", "reason"], json!({
+            "ref_name": string_prop(),
+            "publishable": {"type": "boolean", "description": "With every carried key trusted it would be a published branch of the new repository."},
+            "landed_as": {"type": "string", "description": "The name it would land under (`remotes/…` when it would not be a branch)."},
+            "reason": nullable_string()
+        })),
+        "ImportStage": obj(&["stage_id", "owner", "name", "visibility", "proposals", "archive_bytes", "archive_sha256", "created_at", "expires_at", "internally_consistent", "keys", "refs", "refs_total", "objects", "object_total", "verifies_with_all_keys", "verify_failures", "note", "message"], json!({
+            "stage_id": string_prop(), "owner": string_prop(), "name": string_prop(),
+            "visibility": {"type": "string", "enum": ["public", "internal", "private"]},
+            "proposals": {"type": "string", "enum": ["members", "any-authenticated"]},
+            "archive_bytes": {"type": "integer"}, "archive_sha256": string_prop(),
+            "created_at": {"type": "integer"}, "expires_at": {"type": "integer", "description": "A day after `created_at`; then the archive is removed."},
+            "internally_consistent": {"type": "boolean", "description": "prikk found nothing wrong inside the archive. **Not a statement of trust**: nothing in the archive is trusted until the creator types the fingerprints."},
+            "keys": array_of("CarriedKey"),
+            "refs": array_of("StageRef"),
+            "refs_total": {"type": "integer"},
+            "objects": {"type": "object", "additionalProperties": {"type": "integer"}, "description": "Objects by kind, as the dry-run import wrote them."},
+            "object_total": {"type": "integer"},
+            "verifies_with_all_keys": {"type": "boolean", "description": "The repository made with every carried key trusted would pass prikk's checks."},
+            "verify_failures": {"type": "array", "items": {"type": "string"}, "description": "prikk's condition ids when it would not."},
+            "note": nullable_string(),
+            "message": string_prop()
+        })),
+        "ConfirmRequest": json!({"type": "object", "required": [], "properties": {
+            "adopt": {"type": "array", "description": "The keys to trust: the key id and the fingerprint **typed by the creator**. Each fingerprint must equal the carried key's (the whole 64 characters, ignoring case, spaces and colons).", "items": obj(&["key_id", "fingerprint"], json!({"key_id": string_prop(), "fingerprint": string_prop()}))},
+            "leave_out": {"type": "array", "items": {"type": "string"}, "description": "Key ids the creator explicitly does not trust."},
+            "no_adopt": {"type": "boolean", "description": "Trust none of them (every carried key is left out). Cannot be combined with `adopt` or `leave_out`."}
+        }, "description": "Every carried key must be in `adopt` (matched) or in `leave_out`, or `no_adopt` must be true."}),
+        "StageLanding": obj(&["ref_name", "landed_as", "published", "reason"], json!({
+            "ref_name": string_prop(), "landed_as": string_prop(),
+            "published": {"type": "boolean", "description": "A branch of the new repository; otherwise it is under `remotes/`."},
+            "reason": nullable_string()
+        })),
+        "ConfirmedRepository": obj(&["owner", "name", "url", "verified", "adopted", "left_out", "landings", "landings_total", "objects", "note", "message"], json!({
+            "owner": string_prop(), "name": string_prop(), "url": string_prop(),
+            "verified": {"type": "boolean", "description": "The repository passed prikk's checks. False only when keys were left out (or none was typed): the branches they sign are under `remotes/` and nothing is verified or trusted until a key is trusted."},
+            "adopted": array_of("CarriedKey"), "left_out": array_of("CarriedKey"),
+            "landings": array_of("StageLanding"), "landings_total": {"type": "integer"},
+            "objects": {"type": "integer"}, "note": nullable_string(), "message": string_prop()
+        })),
+    })
+}
+
+/// The paths of creating a repository (RFC 004 part 7).
+fn creation_paths(paths_obj: &mut serde_json::Map<String, Value>) {
+    let create_errors = [
+        ErrorCode::Forbidden,
+        ErrorCode::RateLimited,
+        ErrorCode::NameTaken,
+        ErrorCode::RepositoryQuota,
+        ErrorCode::Busy,
+    ];
+    paths_obj.insert(
+        paths::REPOS.into(),
+        with_errors(
+            json!({"post": {
+                "operationId": "postRepository",
+                "summary": "Create an empty repository",
+                "description": "**Bearer token only.** Creates the repository in the caller's own namespace (`owner` is their username) or in an organization they belong to (`authorize(CreateRepo)`). Every other `owner` is one `403`, whatever the reason, so the answer says nothing about which organizations exist; a taken `name` is `409` only after that check has passed. The caller becomes the repository's administrator. At most 10 creations or stagings per principal per hour; a quota of repositories per owner (50 for a user, 500 for an organization, operator-set). The repository is invisible until it is complete: a failure or a stop at any step removes it whole.",
+                "security": [{"bearerToken": []}],
+                "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/NewRepository"}}}},
+                "responses": {"201": {"description": "The repository.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CreatedRepository"}}}}},
+            }}),
+            &create_errors,
+        ),
+    );
+    paths_obj.insert(
+        paths::REPOS_IMPORT.into(),
+        with_errors(
+            json!({"post": {
+                "operationId": "postRepositoryImport",
+                "summary": "Stage an archive to create a repository from (step 1 of 2)",
+                "description": "**Bearer token only.** The body is `PLANETER-IMPORT-1\\n`, an 8-byte big-endian metadata length (at most 64 KiB), the JSON metadata (`NewRepository`), then the archive (`prikk archive export`). `Content-Length` is required and checked, with the other limits, before a byte of the archive is read. The archive is written outside every repository, checked by `prikk archive verify`, and imported into a scratch repository (with every carried key trusted **there only**) to learn where each of its branches would land. It is kept for **24 hours**; at most 2 per principal. The response lists the maintainer keys the archive carries. **Nothing is trusted and no repository exists yet.** An archive prikk refuses is `422` `archive_refused` with prikk's words, and nothing is kept.",
+                "security": [{"bearerToken": []}],
+                "requestBody": {"required": true, "content": {"application/octet-stream": {"schema": {"type": "string", "format": "binary"}}}},
+                "responses": {"201": {"description": "The stage.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportStage"}}}}},
+            }}),
+            &[
+                ErrorCode::Forbidden,
+                ErrorCode::RateLimited,
+                ErrorCode::NameTaken,
+                ErrorCode::RepositoryQuota,
+                ErrorCode::Busy,
+                ErrorCode::TransportOff,
+                ErrorCode::LengthRequired,
+                ErrorCode::PayloadTooLarge,
+                ErrorCode::StageLimit,
+                ErrorCode::ArchiveRefused,
+            ],
+        ),
+    );
+    let stage_param = param(
+        "stage",
+        "path",
+        true,
+        "The stage's id (from the response that staged the archive).",
+        json!({"type": "string"}),
+    );
+    paths_obj.insert(
+        paths::REPOS_IMPORT_STAGE.into(),
+        with_errors(
+            json!({"get": {
+                "operationId": "getRepositoryImportStage",
+                "summary": "A stage, as its creator sees it",
+                "description": "**Bearer token only.** Only the principal who staged the archive sees it; anyone else, an unknown id and a removed stage are the same `404`. After its day it is `410` `stage_expired`.",
+                "parameters": [stage_param.clone()],
+                "security": [{"bearerToken": []}],
+                "responses": {"200": {"description": "The stage.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ImportStage"}}}}},
+            }}),
+            &[ErrorCode::Forbidden, ErrorCode::TransportOff, ErrorCode::StageExpired],
+        ),
+    );
+    paths_obj.insert(
+        paths::REPOS_IMPORT_CONFIRM.into(),
+        with_errors(
+            json!({"post": {
+                "operationId": "postRepositoryImportConfirm",
+                "summary": "Create the repository from a stage, trusting the keys the creator typed (step 2 of 2)",
+                "description": "**Bearer token only**, by the principal who staged the archive. **Trust is the creator's act, never the archive's:** each `fingerprint` must be typed or pasted by the creator from what the maintainer told them through another channel, and must equal the carried key's whole fingerprint; a mismatch is `422` `adoption_refused` naming the key and never the expected value. Every carried key must be adopted or explicitly left out. The sequence runs as one operation under the new repository's write lease with its own deadline: reserve, `init`, `trust maintainer add` for exactly the typed keys, `archive import` (`--adopt` only when a key was typed), `verify`, the creator becomes administrator, `ready`. **Any failure, timeout or stop removes the repository whole.** With every carried key trusted `verify` must pass; with a key left out, the branches it signs are kept under `remotes/` and `verified` is `false`. A stage is confirmed once: a second confirmation is `404`, one running is `409`.",
+                "parameters": [stage_param],
+                "security": [{"bearerToken": []}],
+                "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ConfirmRequest"}}}},
+                "responses": {"201": {"description": "The repository and where each branch landed.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ConfirmedRepository"}}}}},
+            }}),
+            &[
+                ErrorCode::Forbidden,
+                ErrorCode::RateLimited,
+                ErrorCode::NameTaken,
+                ErrorCode::RepositoryQuota,
+                ErrorCode::Busy,
+                ErrorCode::TransportOff,
+                ErrorCode::StageExpired,
+                ErrorCode::StageInUse,
+                ErrorCode::AdoptionRefused,
+                ErrorCode::ArchiveRefused,
+                ErrorCode::CreationVerifyFailed,
+            ],
         ),
     );
 }
@@ -976,6 +1148,7 @@ pub fn document(content_origin: &str) -> Value {
     }
     paths_obj.insert(paths::RECOVERY.into(), recovery);
     proposal_paths(&mut paths_obj);
+    creation_paths(&mut paths_obj);
     paths_obj.insert(
         paths::OPENAPI.into(),
         json!({"get": {

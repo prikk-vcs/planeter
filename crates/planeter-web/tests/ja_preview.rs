@@ -54,6 +54,7 @@ fn app() -> Router {
         trusted_proxies: Arc::new(TrustedProxies::default()),
         oidc: None,
         transport: None,
+        creation: None,
     })
 }
 

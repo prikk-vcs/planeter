@@ -147,3 +147,18 @@ exact :: reviews.rs :: unknown field :: the text of serde's error, matched to te
 re :: review_pages.rs :: ^(patch|path|line|from|to|who|when|reason|revision|note|date|current)$ :: a placeholder name of a catalog message
 exact :: review_pages.rs :: {}#comment-{} :: a link to a comment: an address and an identifier
 exact :: review_pages.rs :: {}#comment-{cid} :: a link to a comment: an address and an identifier
+
+# --- repository creation (RFC 004 part 7)
+scope :: creation.rs :: * :: the creation API's handlers: JSON field names, machine reason words, the magic bytes of the body, media types and gate labels; every sentence a person reads is a catalog message
+scope :: multipart.rs :: * :: the multipart reader: header and parameter names and protocol tokens of a form body, never shown
+re :: creation_pages.rs :: ^[a-z_]+$ :: a placeholder name, a form field name or a machine token of the creation pages (never shown)
+exact :: creation_pages.rs :: skip_{i} :: a form field name built from a key's position
+exact :: creation_pages.rs :: remotes/ :: a ref-name prefix compared with (prikk's name for a received ref)
+exact :: creation_pages.rs :: {bytes} B :: a number and its unit symbol (the symbols are read the same in every language)
+exact :: creation_pages.rs :: {:.1} KiB :: a number and its unit symbol (the symbols are read the same in every language)
+exact :: creation_pages.rs :: {:.1} MiB :: a number and its unit symbol (the symbols are read the same in every language)
+exact :: creation_pages.rs :: {:.1} GiB :: a number and its unit symbol (the symbols are read the same in every language)
+re :: api.rs :: ^creates a repository in the caller's own namespace.* :: the reason a public route is public (route table, IS-14); never shown
+re :: ui.rs :: ^creates a repository for the signed-in person.* :: the reason a public route is public (route table, IS-14); never shown
+re :: errors.rs :: ^(repository_quota|name_taken|stage_limit|archive_refused|stage_expired|stage_in_use|adoption_refused|creation_verify_failed)$ :: a stable machine-readable error code (RFC 004 part 7)
+re :: errors.rs :: ^(the owner holds as many|a repository with that name exists|too many archives are waiting|prikk refused the archive and|the archive was kept for a day|a confirmation is running on|the typed fingerprints do not match|the repository the archive makes).* :: ErrorCode::description: OpenAPI prose for developers, English by decision (D-3d)

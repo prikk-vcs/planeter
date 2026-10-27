@@ -137,6 +137,7 @@ fn app(subdir: &str) -> (AppState, Arc<MockFetcher>) {
         trusted_proxies: Arc::new(planeter_web::TrustedProxies::default()),
         oidc: Some(oidc),
         transport: None,
+        creation: None,
     };
     (state, fetcher)
 }

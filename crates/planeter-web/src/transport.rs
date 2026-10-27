@@ -642,9 +642,9 @@ const MAGIC: &[u8] = b"PLANETER-PROPOSE-1\n";
 /// The magic and the 8-byte big-endian metadata length.
 const PREFIX_LEN: u64 = MAGIC.len() as u64 + 8;
 /// How long a client may be silent in the middle of an upload before it is cut off.
-const UPLOAD_IDLE: Duration = Duration::from_secs(30);
+pub(crate) const UPLOAD_IDLE: Duration = Duration::from_secs(30);
 /// The longest an upload may take in all.
-const UPLOAD_TOTAL: Duration = Duration::from_secs(15 * 60);
+pub(crate) const UPLOAD_TOTAL: Duration = Duration::from_secs(15 * 60);
 
 /// The metadata of a proposal as it arrives. Unknown fields are refused.
 #[derive(Debug, serde::Deserialize)]
@@ -673,10 +673,13 @@ impl From<MetaWire> for ProposeMeta {
     }
 }
 
-type BodyStream = axum::body::BodyDataStream;
+pub(crate) type BodyStream = axum::body::BodyDataStream;
 
 /// The next chunk of the body, or `None` at its end; an idle client is cut off.
-async fn next_chunk(stream: &mut BodyStream, deadline: Instant) -> Result<Option<Bytes>, ()> {
+pub(crate) async fn next_chunk(
+    stream: &mut BodyStream,
+    deadline: Instant,
+) -> Result<Option<Bytes>, ()> {
     let remaining = deadline.saturating_duration_since(Instant::now());
     let wait = UPLOAD_IDLE.min(remaining);
     if wait.is_zero() {

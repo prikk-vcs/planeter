@@ -345,6 +345,7 @@ fn world(name: &str, o: Opts) -> W {
             ip_limit: RateLimiter::new(10_000, Duration::from_secs(60)),
             principal_limit: RateLimiter::new(10_000, Duration::from_secs(60)),
         })),
+        creation: None,
     });
     W {
         router,

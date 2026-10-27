@@ -120,6 +120,7 @@ fn app(repos: Vec<(&'static str, PathBuf)>) -> Router {
         trusted_proxies: Arc::new(TrustedProxies::default()),
         oidc: None,
         transport: None,
+        creation: None,
     })
 }
 

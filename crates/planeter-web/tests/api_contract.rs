@@ -35,7 +35,7 @@ use planeter_web::errors::ErrorCode;
 use planeter_web::{AppState, BlockingGate, ContentOrigin, PrikkGate, TrustedProxies, router};
 
 /// The routes the API is meant to have, written down independently of `api::paths`.
-const EXPECTED_PATHS: [&str; 20] = [
+const EXPECTED_PATHS: [&str; 24] = [
     "/api/v1/repos/{owner}/{name}/history",
     "/api/v1/repos/{owner}/{name}/change/{target}",
     "/api/v1/repos/{owner}/{name}/file",
@@ -55,6 +55,10 @@ const EXPECTED_PATHS: [&str; 20] = [
     "/api/v1/repos/{owner}/{name}/proposals/{id}/decisions",
     "/api/v1/repos/{owner}/{name}/proposals/{id}/comments/{cid}/hide",
     "/api/v1/repos/{owner}/{name}/proposals/{id}/comments/{cid}/unhide",
+    "/api/v1/repos",
+    "/api/v1/repos/import",
+    "/api/v1/repos/import/{stage}",
+    "/api/v1/repos/import/{stage}/confirm",
     "/api/v1/openapi.json",
 ];
 
@@ -120,6 +124,7 @@ fn state(trusted: &str) -> AppState {
         trusted_proxies: Arc::new(TrustedProxies::parse(trusted).unwrap()),
         oidc: None,
         transport: None,
+        creation: None,
     }
 }
 
@@ -245,7 +250,7 @@ fn every_code_has_one_plain_sentence_and_the_shape_is_stable() {
             assert_eq!(text.matches(". ").count(), allowed, "sentences: {text:?}");
         }
     }
-    assert_eq!(seen.len(), 40);
+    assert_eq!(seen.len(), 48);
 }
 
 #[test]
@@ -403,6 +408,17 @@ async fn the_document_describes_parameters_responses_security_and_the_error_sche
             ("Error", "detail"),
             ("Error", "intent"),
             ("Error", "cause"),
+            ("Error", "field"),
+            ("Error", "key"),
+            ("Error", "keys"),
+            ("Error", "conditions"),
+            ("Error", "limit_bytes"),
+            ("Error", "carried"),
+            // Optional request fields (RFC 004 part 7): a request says what it needs.
+            ("NewRepository", "proposals"),
+            ("ConfirmRequest", "adopt"),
+            ("ConfirmRequest", "leave_out"),
+            ("ConfirmRequest", "no_adopt"),
         ];
         props.retain(|p| !additive.contains(&(name.as_str(), *p)));
         props.sort_unstable();
@@ -839,7 +855,7 @@ fn api_routes_are_registered_only_through_the_shared_paths() {
         .map(str::trim)
         .filter(|l| l.contains(".route("))
         .collect();
-    assert_eq!(route_lines.len(), 20, "{route_lines:?}");
+    assert_eq!(route_lines.len(), 24, "{route_lines:?}");
     assert!(
         route_lines.iter().all(|l| l.contains("paths::")),
         "a route is registered with a literal path: {route_lines:?}"

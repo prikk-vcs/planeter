@@ -313,6 +313,7 @@ fn build(o: Opts) -> Router {
         trusted_proxies: Arc::new(TrustedProxies::default()),
         oidc,
         transport: None,
+        creation: None,
     })
 }
 

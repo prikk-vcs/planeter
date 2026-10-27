@@ -72,6 +72,7 @@ fn app(names: &[(&str, &str)]) -> App {
         trusted_proxies: Arc::new(TrustedProxies::default()),
         oidc: None,
         transport: None,
+        creation: None,
     });
     App { router, sessions }
 }

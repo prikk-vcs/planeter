@@ -8,4 +8,5 @@
   <p><input id="repo" name="repo" value="{{ value }}" placeholder="{{ t.get(Key::HomeAddressExample) }}" autocomplete="off" spellcheck="false" required{% if error %} aria-invalid="true" aria-describedby="repo-error"{% endif %}> <button type="submit">{{ t.get(Key::HomeOpen) }}</button></p>
   {% if error %}<p id="repo-error" class="badge bad">{{ t.msg(Key::HomeAddressError).code("address", t.get(Key::HomeAddressExample)).html() }}</p>{% endif %}
 </form>
-{% endblock %}
+{% if user.is_some() %}<p><a href="/new">{{ t.get(Key::NewNav) }}</a></p>
+{% endif %}{% endblock %}

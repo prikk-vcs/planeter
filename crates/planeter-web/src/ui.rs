@@ -38,6 +38,7 @@ use crate::gate::GateError;
 use crate::principal::principal_from_request;
 use crate::sanitize::render_markdown;
 
+mod creation_pages;
 mod proposal_pages;
 mod review_pages;
 
@@ -56,6 +57,16 @@ pub fn routes() -> Routes {
         Class::Authorized(Action::Review),
         Class::Authorized(Action::RepoAdmin),
     );
+    // Creating a repository (RFC 004 part 7): forms with a CSRF token; the handlers decide who may create where
+    // (`creation_target`) before anything is read or written, and a stage is its stager's alone.
+    let create = Class::public(
+        "creates a repository for the signed-in person: an anonymous visitor is shown the sign-in sentence, every refusal for \"not there\" is one sentence, and no repository data is read or served",
+    );
+    let (new_get, import_post) = (
+        get(creation_pages::new_page).post(creation_pages::new_empty_submit),
+        post(creation_pages::new_import_submit),
+    );
+    let stage_both = get(creation_pages::stage_page).post(creation_pages::confirm_submit);
     Routes::new()
         .route(
             "/",
@@ -105,6 +116,9 @@ pub fn routes() -> Routes {
             &["POST"],
             post(logout),
         )
+        .route("/new", create, &["GET", "POST"], new_get)
+        .route("/new/import", create, &["POST"], import_post)
+        .route("/new/import/{stage}", create, &["GET", "POST"], stage_both)
         .route("/{owner}/{name}", read, &["GET"], get(repo_home))
         .route("/{owner}/{name}/tree/{*path}", read, &["GET"], get(tree_page))
         .route("/{owner}/{name}/blob/{*path}", read, &["GET"], get(file_page))

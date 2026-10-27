@@ -1117,4 +1117,382 @@ pub const CATALOG: &[Entry] = &[
         "Hiding needs a reason of up to 500 characters.",
     ),
     msg("proposals.col.review", "Review"),
+    // repository creation (RFC 004 part 7)
+    msg(
+        "error.repository_quota.message",
+        "{owner} already has {used} repositories, the most this server allows ({limit}).",
+    ),
+    msg(
+        "error.repository_quota.hint",
+        "Ask the person who runs this server to raise the limit.",
+    ),
+    msg(
+        "error.name_taken.message",
+        "There is already a repository with that name here.",
+    ),
+    msg(
+        "error.name_taken.hint",
+        "Choose another name and send the request again.",
+    ),
+    msg(
+        "error.stage_limit.message",
+        "You already have {limit} archives waiting to be confirmed.",
+    ),
+    msg(
+        "error.stage_limit.hint",
+        "Confirm one, or wait: an archive that is not confirmed is removed after a day.",
+    ),
+    msg(
+        "error.stage_budget.message",
+        "This server is already holding as many archives as it is allowed to.",
+    ),
+    msg(
+        "error.stage_budget.hint",
+        "Try again in a little while, and if it keeps happening, tell the person who runs this server.",
+    ),
+    msg(
+        "error.archive_refused.message",
+        "The archive was not accepted.",
+    ),
+    msg(
+        "error.archive_refused.hint",
+        "prikk's own words are in the detail field; ask the maintainer for a new archive (prikk archive export) and send that.",
+    ),
+    msg(
+        "error.archive_keys.message",
+        "The archive lists maintainer keys this server cannot read.",
+    ),
+    msg(
+        "error.archive_keys.hint",
+        "Ask the maintainer for a new archive made with a current prikk.",
+    ),
+    msg(
+        "error.stage_expired.message",
+        "That archive was kept for a day, and the day is over.",
+    ),
+    msg("error.stage_expired.hint", "Send the archive again."),
+    msg(
+        "error.stage_in_use.message",
+        "That archive is being used to create a repository right now.",
+    ),
+    msg(
+        "error.stage_in_use.hint",
+        "Wait for that to finish, then look at the result.",
+    ),
+    msg(
+        "error.adopt_mismatch.message",
+        "The fingerprint you typed for key {key} is not the one the archive carries.",
+    ),
+    msg(
+        "error.adopt_mismatch.hint",
+        "Nothing was created, so compare it again with what the maintainer told you.",
+    ),
+    msg(
+        "error.adopt_malformed.message",
+        "What you typed for key {key} is not a fingerprint.",
+    ),
+    msg(
+        "error.adopt_malformed.hint",
+        "A fingerprint is 64 letters and digits from a to f and 0 to 9, spaces are fine, and nothing was created.",
+    ),
+    msg(
+        "error.adopt_unaddressed.message",
+        "You have not said what to do with {keys}.",
+    ),
+    msg(
+        "error.adopt_unaddressed.hint",
+        "Nothing was created, so type the fingerprint of each key you trust and choose not to trust the others.",
+    ),
+    msg(
+        "error.adopt_other.message",
+        "Your answer does not match the keys in this archive.",
+    ),
+    msg(
+        "error.adopt_other.hint",
+        "Nothing was created, so name each key in the archive once, either with its fingerprint or as a key to leave out.",
+    ),
+    msg(
+        "error.creation_verify.message",
+        "The repository this archive makes does not pass prikk's checks, so it was not created.",
+    ),
+    msg(
+        "error.creation_verify.hint",
+        "Nothing was kept, the conditions field says what failed, and the maintainer can make a new archive.",
+    ),
+    msg(
+        "error.forbidden_create.message",
+        "You cannot create a repository there.",
+    ),
+    msg(
+        "error.forbidden_create.hint",
+        "Use your own username, or the name of an organization you belong to.",
+    ),
+    msg(
+        "error.forbidden_create_signin.message",
+        "Creating a repository needs an account.",
+    ),
+    msg(
+        "error.forbidden_create_signin.hint",
+        "Send the request with the token of the account that will own the repository.",
+    ),
+    msg(
+        "error.invalid_request.name_hint",
+        "The field and reason in this response say which value was refused, so fix it and send the request again as the API document lists the fields.",
+    ),
+    msg(
+        "error.import_off.message",
+        "This server is not set up to create repositories from an archive.",
+    ),
+    msg(
+        "error.import_off.hint",
+        "Ask the person who runs this server to configure the artifact directory.",
+    ),
+    msg(
+        "error.rate_creations.message",
+        "You have started too many new repositories in the last hour.",
+    ),
+    msg(
+        "error.rate_creations.hint",
+        "Retry after the number of seconds in the Retry-After header.",
+    ),
+    msg(
+        "error.create_timed_out.message",
+        "Creating the repository took longer than this server allows, so nothing was kept.",
+    ),
+    msg(
+        "error.create_timed_out.hint",
+        "Try again, and if it keeps happening the archive is too large for this server, so tell the person who runs it.",
+    ),
+    msg(
+        "error.create_too_big.message",
+        "The archive needs more memory than this server allows for one.",
+    ),
+    msg(
+        "error.create_too_big.hint",
+        "Nothing was kept, so ask the person who runs this server whether the limit can be raised.",
+    ),
+    msg(
+        "error.import_too_large.message",
+        "That archive is larger than this server accepts.",
+    ),
+    msg(
+        "error.import_too_large.hint",
+        "Ask the maintainer for a smaller archive, or ask the person who runs this server to raise the limit.",
+    ),
+    msg(
+        "error.import_length.message",
+        "The request did not say how long it is.",
+    ),
+    msg(
+        "error.import_length.hint",
+        "Send the archive with a Content-Length header.",
+    ),
+    msg(
+        "error.invalid_request.import_framing_hint",
+        "Start the body with PLANETER-IMPORT-1, then the metadata length, the metadata and the archive, as the API document describes.",
+    ),
+    msg("title.new", "New repository · {product}"),
+    msg("new.heading", "New repository"),
+    msg(
+        "new.intro",
+        "Choose how to start. Nothing is created until you press the button of the choice you made.",
+    ),
+    msg("new.owner", "Owner"),
+    msg(
+        "new.owner_hint",
+        "Your own username, or the name of an organization you belong to.",
+    ),
+    msg("new.name", "Repository name"),
+    msg(
+        "new.name_hint",
+        "Lowercase letters, digits, dots, hyphens and underscores, up to 64 characters.",
+    ),
+    msg("new.visibility", "Who can read it"),
+    msg("new.visibility.public", "Anyone, signed in or not"),
+    msg("new.visibility.internal", "Anyone who is signed in"),
+    msg("new.visibility.private", "Only people you give access to"),
+    msg("new.proposals", "Who can send proposals"),
+    msg("new.proposals.members", "People you give write access to"),
+    msg("new.proposals.any", "Any signed-in person who can read it"),
+    msg(
+        "new.proposals.any_explain",
+        "Choose the second one for a public project that takes contributions from people you do not know. Their work is held for review and never changes a branch by itself.",
+    ),
+    msg("new.empty.heading", "Empty repository"),
+    msg("new.empty.explain", "Start with no history."),
+    msg("new.empty.button", "Create empty repository"),
+    msg(
+        "new.empty.consequence",
+        "This creates the repository now. You will be its administrator, and the people you chose above can read it.",
+    ),
+    msg(
+        "new.import.heading",
+        "From an archive a maintainer gave you",
+    ),
+    msg(
+        "new.import.explain",
+        "A maintainer can export a whole repository as one archive file (prikk archive export). Upload it here to start with all of its history. You will see what it contains before anything is created.",
+    ),
+    msg("new.import.file", "Archive file"),
+    msg(
+        "new.import.max",
+        "The largest archive this server accepts is {size}.",
+    ),
+    msg("new.import.button", "Upload and check the archive"),
+    msg(
+        "new.import.consequence",
+        "The archive is checked and kept for one day. No repository is created yet, and nothing in it is trusted.",
+    ),
+    msg(
+        "new.import.off",
+        "This server is not set up to create a repository from an archive.",
+    ),
+    msg("new.refused.heading", "The repository was not created"),
+    msg("new.error.owner", "That owner is not a valid name."),
+    msg("new.error.name.empty", "Give the repository a name."),
+    msg(
+        "new.error.name.too_long",
+        "The name can be up to 64 characters.",
+    ),
+    msg(
+        "new.error.name.uppercase",
+        "Use lowercase letters only, so that two names never differ only by case.",
+    ),
+    msg(
+        "new.error.name.bad_character",
+        "The name can have lowercase letters, digits, dots, hyphens and underscores only.",
+    ),
+    msg(
+        "new.error.name.bad_start",
+        "The name must start with a letter or a digit.",
+    ),
+    msg(
+        "new.error.name.dotted",
+        "The name cannot contain two dots in a row, or end with a dot or with .git.",
+    ),
+    msg(
+        "new.error.name.reserved",
+        "This server uses that name for itself. Choose another.",
+    ),
+    msg(
+        "new.error.visibility",
+        "Choose who can read the repository.",
+    ),
+    msg("new.error.proposals", "Choose who can send proposals."),
+    msg("new.error.file", "Choose the archive file to upload."),
+    msg(
+        "new.error.upload",
+        "The upload could not be read as a form with a file. Nothing was kept.",
+    ),
+    msg("title.stage", "Check the archive · {product}"),
+    msg("stage.heading", "Archive for {repo}"),
+    msg(
+        "stage.intro",
+        "prikk found nothing wrong inside the archive. That does not make it trustworthy. Nothing has been created yet.",
+    ),
+    msg("stage.size", "Size: {size}"),
+    msg("stage.digest", "SHA-256: {digest}"),
+    msg("stage.expires", "Kept until {when}, then removed."),
+    plural_msg(
+        "stage.objects",
+        "It holds {count} item in all.",
+        "It holds {count} items in all.",
+    ),
+    msg("stage.refs.heading", "Branches in the archive"),
+    msg(
+        "stage.ref.published",
+        "{ref}: becomes a branch of the new repository if you trust the key that signed it",
+    ),
+    msg(
+        "stage.ref.kept",
+        "{ref}: would be kept as a received copy, not as a branch ({reason})",
+    ),
+    msg(
+        "stage.ref.received",
+        "{ref}: a copy the maintainer received from somewhere else; it is always kept as a received copy",
+    ),
+    plural_msg(
+        "stage.ref.more",
+        "and {count} more branch",
+        "and {count} more branches",
+    ),
+    msg(
+        "stage.verifies.yes",
+        "If you trust every key below, the new repository passes all of prikk's checks.",
+    ),
+    msg(
+        "stage.verifies.no",
+        "Even if you trust every key below, the new repository would fail prikk's checks ({problems}). You can still create it without trusting any key.",
+    ),
+    msg("stage.keys.heading", "Maintainer keys in the archive"),
+    msg(
+        "stage.keys.explain",
+        "The archive lists these as its maintainers' keys. Anyone can write anything into an archive, so its own list proves nothing. Ask the maintainer, by some way other than this archive, for the fingerprint of their key, and type it below. Only the keys you type are trusted.",
+    ),
+    msg(
+        "stage.keys.none",
+        "The archive lists no maintainer keys, so there is nothing to trust. The repository will be created without trusting anything.",
+    ),
+    msg("stage.key.id", "Key {key}"),
+    msg("stage.key.fingerprint", "Fingerprint to compare:"),
+    msg("stage.key.input", "Type the fingerprint to trust this key"),
+    msg("stage.key.skip", "Do not trust this key"),
+    msg(
+        "stage.confirm.button",
+        "Create the repository and trust the keys I typed",
+    ),
+    msg(
+        "stage.confirm.consequence",
+        "This creates {repo}, imports the archive and trusts exactly the keys whose fingerprints you typed. If anything goes wrong, nothing is kept.",
+    ),
+    msg(
+        "stage.none.button",
+        "Create the repository without trusting any key",
+    ),
+    msg(
+        "stage.none.consequence",
+        "This creates {repo} and keeps everything as received copies. Nothing is verified or trusted until a key is trusted, and this version cannot trust a key later.",
+    ),
+    msg("stage.back", "Start over"),
+    msg("stage.refused.heading", "The repository was not created"),
+    msg("title.created", "{repo} created · {product}"),
+    msg("created.heading", "Repository {repo} created"),
+    msg(
+        "created.branch.published",
+        "{ref}: a branch of the repository",
+    ),
+    msg(
+        "created.branch.kept",
+        "{ref}: kept as a received copy named {landed} ({reason})",
+    ),
+    msg(
+        "created.branch.kept_plain",
+        "{ref}: kept as a received copy named {landed}",
+    ),
+    msg(
+        "created.verified",
+        "The repository passed all of prikk's checks.",
+    ),
+    msg(
+        "created.unverified",
+        "The repository does not pass all of prikk's checks, because some branches are signed by keys you did not trust. Nothing is verified or trusted until a key is trusted, and this version cannot trust a key later.",
+    ),
+    msg("created.trusted", "Trusted keys: {keys}."),
+    msg("created.none_trusted", "No key was trusted."),
+    msg("created.open", "Open {repo}"),
+    msg("created.next", "Next: open the repository to look at it."),
+    // repository creation (RFC 004 part 7)
+    msg("new.signin", "Sign in to create a repository."),
+    msg("new.nav", "New repository"),
+    msg("stage.prikk", "prikk's own words: {detail}"),
+    msg(
+        "stage.error.both",
+        "You typed a fingerprint for key {key} and also chose not to trust it. Do one or the other.",
+    ),
+    msg("stage.error.verify", "The failed checks: {conditions}."),
+    msg(
+        "stage.gone",
+        "That archive is not here any more. It may have been used already, or its day may be over.",
+    ),
+    msg("stage.gone.link", "Create a repository"),
 ];

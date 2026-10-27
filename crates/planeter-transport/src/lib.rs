@@ -28,6 +28,7 @@ pub use export::{
     RefInfo,
 };
 pub use metrics::{CacheStatus, FetchRecord, Metrics, Outcome, ProposeOutcome, ProposeRecord};
+pub use planeter_prikk::findings::{ArchiveFindings, FoundKey, FoundRef};
 pub use proposals::{
     DETAIL_PATCH_LIMIT, Detail, LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX, Page, PatchEntry,
     ProposalConfig, ProposalError, ProposalService, REASON_MAX_CHARS, Retention, RevisionView,

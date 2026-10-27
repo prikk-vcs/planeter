@@ -87,6 +87,7 @@ fn app(name: &str, script: Option<&str>) -> Router {
         trusted_proxies: Arc::new(planeter_web::TrustedProxies::default()),
         oidc: None,
         transport: None,
+        creation: None,
     })
 }
 

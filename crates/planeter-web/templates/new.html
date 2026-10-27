@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}{{ t.msg(Key::TitleNew).product() }}{% endblock %}
+{% block body %}
+<h1>{{ t.get(Key::NewHeading) }}</h1>
+{% if user.is_none() %}
+<p>{{ t.get(Key::NewSignin) }}</p>
+<p><a href="/login">{{ t.get(Key::LayoutSignIn) }}</a></p>
+{% else %}
+<p class="muted">{{ t.get(Key::NewIntro) }}</p>
+{% if let Some(e) = error %}<div id="new-error" role="alert">
+<h2>{{ t.get(Key::NewRefusedHeading) }}</h2>
+<p class="badge bad">{{ e }}</p>
+</div>
+{% endif %}<section aria-labelledby="empty-h">
+<h2 id="empty-h">{{ t.get(Key::NewEmptyHeading) }}</h2>
+<p class="muted">{{ t.get(Key::NewEmptyExplain) }}</p>
+<form method="post" action="/new">
+<input type="hidden" name="csrf" value="{{ csrf }}">
+<p><label for="e-owner">{{ t.get(Key::NewOwner) }}</label><br>
+<input id="e-owner" name="owner" value="{{ v.owner }}" maxlength="128" size="40" required autocomplete="off" spellcheck="false" aria-describedby="e-owner-hint"></p>
+<p id="e-owner-hint" class="muted">{{ t.get(Key::NewOwnerHint) }}</p>
+<p><label for="e-name">{{ t.get(Key::NewName) }}</label><br>
+<input id="e-name" name="name" value="{{ v.name }}" maxlength="64" size="40" required autocomplete="off" spellcheck="false" aria-describedby="e-name-hint"></p>
+<p id="e-name-hint" class="muted">{{ t.get(Key::NewNameHint) }}</p>
+<fieldset>
+<legend>{{ t.get(Key::NewVisibility) }}</legend>
+<p><label><input type="radio" name="visibility" value="public"{% if v.visibility == "public" %} checked{% endif %}> {{ t.get(Key::NewVisibilityPublic) }}</label></p>
+<p><label><input type="radio" name="visibility" value="internal"{% if v.visibility == "internal" %} checked{% endif %}> {{ t.get(Key::NewVisibilityInternal) }}</label></p>
+<p><label><input type="radio" name="visibility" value="private"{% if v.visibility == "private" %} checked{% endif %}> {{ t.get(Key::NewVisibilityPrivate) }}</label></p>
+</fieldset>
+<fieldset>
+<legend>{{ t.get(Key::NewProposals) }}</legend>
+<p><label><input type="radio" name="proposals" value="members"{% if v.proposals == "members" %} checked{% endif %}> {{ t.get(Key::NewProposalsMembers) }}</label></p>
+<p><label><input type="radio" name="proposals" value="any-authenticated"{% if v.proposals == "any-authenticated" %} checked{% endif %} aria-describedby="e-any"> {{ t.get(Key::NewProposalsAny) }}</label></p>
+<p id="e-any" class="muted">{{ t.get(Key::NewProposalsAnyExplain) }}</p>
+</fieldset>
+<p class="muted">{{ t.get(Key::NewEmptyConsequence) }}</p>
+<p><button type="submit">{{ t.get(Key::NewEmptyButton) }}</button></p>
+</form>
+</section>
+<section aria-labelledby="import-h">
+<h2 id="import-h">{{ t.get(Key::NewImportHeading) }}</h2>
+<p class="muted">{{ t.get(Key::NewImportExplain) }}</p>
+{% if import_enabled %}<form method="post" action="/new/import" enctype="multipart/form-data">
+<input type="hidden" name="csrf" value="{{ csrf }}">
+<p><label for="i-owner">{{ t.get(Key::NewOwner) }}</label><br>
+<input id="i-owner" name="owner" value="{{ v.owner }}" maxlength="128" size="40" required autocomplete="off" spellcheck="false" aria-describedby="i-owner-hint"></p>
+<p id="i-owner-hint" class="muted">{{ t.get(Key::NewOwnerHint) }}</p>
+<p><label for="i-name">{{ t.get(Key::NewName) }}</label><br>
+<input id="i-name" name="name" value="{{ v.name }}" maxlength="64" size="40" required autocomplete="off" spellcheck="false" aria-describedby="i-name-hint"></p>
+<p id="i-name-hint" class="muted">{{ t.get(Key::NewNameHint) }}</p>
+<fieldset>
+<legend>{{ t.get(Key::NewVisibility) }}</legend>
+<p><label><input type="radio" name="visibility" value="public"{% if v.visibility == "public" %} checked{% endif %}> {{ t.get(Key::NewVisibilityPublic) }}</label></p>
+<p><label><input type="radio" name="visibility" value="internal"{% if v.visibility == "internal" %} checked{% endif %}> {{ t.get(Key::NewVisibilityInternal) }}</label></p>
+<p><label><input type="radio" name="visibility" value="private"{% if v.visibility == "private" %} checked{% endif %}> {{ t.get(Key::NewVisibilityPrivate) }}</label></p>
+</fieldset>
+<fieldset>
+<legend>{{ t.get(Key::NewProposals) }}</legend>
+<p><label><input type="radio" name="proposals" value="members"{% if v.proposals == "members" %} checked{% endif %}> {{ t.get(Key::NewProposalsMembers) }}</label></p>
+<p><label><input type="radio" name="proposals" value="any-authenticated"{% if v.proposals == "any-authenticated" %} checked{% endif %} aria-describedby="i-any"> {{ t.get(Key::NewProposalsAny) }}</label></p>
+<p id="i-any" class="muted">{{ t.get(Key::NewProposalsAnyExplain) }}</p>
+</fieldset>
+<p><label for="i-file">{{ t.get(Key::NewImportFile) }}</label><br>
+<input id="i-file" type="file" name="archive" required aria-describedby="i-file-hint"></p>
+<p id="i-file-hint" class="muted">{{ max_note }}</p>
+<p class="muted">{{ t.get(Key::NewImportConsequence) }}</p>
+<p><button type="submit">{{ t.get(Key::NewImportButton) }}</button></p>
+</form>
+{% else %}<p>{{ t.get(Key::NewImportOff) }}</p>
+{% endif %}</section>
+{% endif %}{% endblock %}

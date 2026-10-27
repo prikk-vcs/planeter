@@ -169,6 +169,7 @@ fn app(repos: Repos) -> App {
         trusted_proxies: Arc::new(TrustedProxies::default()),
         oidc: None,
         transport: None,
+        creation: None,
     });
     App {
         router,
