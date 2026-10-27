@@ -482,3 +482,96 @@ fn a_server_killed_while_an_archive_is_uploaded_leaves_a_stage_directory_the_nex
     let _ = second.child.kill();
     let _ = second.child.wait();
 }
+
+#[test]
+fn an_archive_creation_completes_through_the_real_server_and_the_real_sandbox() {
+    if !can_run() {
+        return;
+    }
+    // The whole path with nothing stubbed: upload, stage (verify and the dry-run import in the sandbox, under `prlimit`), the
+    // fingerprint typed, the confirmation (init, trust, import, verify), and the repository served by the same server.
+    let dir = scratch("complete");
+    let (archive, keys) = archives::simple_archive(&dir, "maint", 40, 64);
+    let bytes = std::fs::read(&archive).unwrap();
+    add_token(&dir);
+    let mut server = start(&dir);
+    let mut h = bearer();
+    h.push(("Content-Type", "application/octet-stream".to_owned()));
+    let meta = r#"{"owner":"alice","name":"whole","visibility":"public"}"#;
+    let (status, body) = http(
+        server.port,
+        "POST",
+        "/api/v1/repos/import",
+        &h,
+        &frame(meta, &bytes),
+    );
+    assert_eq!(status, 201, "{}", text_of(&body));
+    let reply = text_of(&body);
+    let stage = json_str(&reply, "stage_id").expect("stage_id");
+    assert!(reply.contains(&keys[0].public_key), "{reply}");
+    assert!(reply.contains("\"verifies_with_all_keys\":true"), "{reply}");
+    // The wrong fingerprint first: refused, nothing made.
+    let mut j = bearer();
+    j.push(("Content-Type", "application/json".to_owned()));
+    let path = format!("/api/v1/repos/import/{stage}/confirm");
+    let wrong = format!(
+        r#"{{"adopt":[{{"key_id":"{}","fingerprint":"{}"}}]}}"#,
+        keys[0].key_id,
+        "9".repeat(64)
+    );
+    let (status, body) = http(server.port, "POST", &path, &j, wrong.as_bytes());
+    assert_eq!(status, 422, "{}", text_of(&body));
+    assert!(dirs_in(&dir.join("repos")).is_empty());
+    let right = format!(
+        r#"{{"adopt":[{{"key_id":"{}","fingerprint":"{}"}}]}}"#,
+        keys[0].key_id, keys[0].public_key
+    );
+    let (status, body) = http(server.port, "POST", &path, &j, right.as_bytes());
+    assert_eq!(status, 201, "{}", text_of(&body));
+    let done = text_of(&body);
+    assert!(
+        done.contains("\"verified\":true") && done.contains("\"landed_as\":\"heads/main\""),
+        "{done}"
+    );
+    // Served by the same server: the published branch, the history, the verification — an anonymous reader (it is public).
+    let (status, refs) = http(
+        server.port,
+        "GET",
+        "/api/v1/repos/alice/whole/refs",
+        &[],
+        b"",
+    );
+    assert_eq!(status, 200);
+    assert!(text_of(&refs).contains("heads/main"), "{}", text_of(&refs));
+    let (status, hist) = http(
+        server.port,
+        "GET",
+        "/api/v1/repos/alice/whole/history?limit=5",
+        &[],
+        b"",
+    );
+    assert_eq!(status, 200, "{}", text_of(&hist));
+    assert!(text_of(&hist).contains("\"entries\""), "{}", text_of(&hist));
+    let (status, verify) = http(
+        server.port,
+        "GET",
+        "/api/v1/repos/alice/whole/verify",
+        &[],
+        b"",
+    );
+    assert_eq!(status, 200, "{}", text_of(&verify));
+    assert!(
+        text_of(&verify).contains("verified\":true") || text_of(&verify).contains("\"ok\":true"),
+        "{}",
+        text_of(&verify)
+    );
+    assert!(
+        std::fs::read_dir(dir.join("artifacts").join("stages"))
+            .map(|d| d.flatten().count())
+            .unwrap_or(0)
+            == 0,
+        "the stage is gone"
+    );
+    let _ = server.child.kill();
+    let _ = server.child.wait();
+}
