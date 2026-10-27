@@ -12,6 +12,7 @@ pub mod metrics;
 pub mod proposals;
 pub mod propose;
 pub mod recovery;
+pub mod reviews;
 
 pub use artifacts::{
     AcceptDir, ArtifactStore, Digest, DirsConfig, DirsConfigError, Removal, Spool, StoreError,
@@ -35,4 +36,8 @@ pub use recovery::{
     Blocker, Cause, Inspection, Note as RecoveryNote, Outcome as RecoveryOutcome,
     Plan as RecoveryPlan, ProcFs, ProcessInfo, ProcessTable, RecoveryConfig, RecoveryError,
     RecoveryResult, RecoveryService, classify_cause, inside_repository,
+};
+pub use reviews::{
+    DecisionView, Limited, NewComment, ReviewConfig, ReviewError, ReviewService, ReviewView,
+    THREADS_LIMIT_DEFAULT, THREADS_LIMIT_MAX, Thread, ThreadsPage,
 };
