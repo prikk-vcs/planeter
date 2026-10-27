@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | planeter Threat Model (security) |
-| Version | v0.4 (2026-10-17 — release 0.3.0 status lines under T-2, T-6, T-7 and T-9: constant-work sign-in and the auth gate, host-gated raw content, cache directives, the bounded read and auth paths; no new threat or control id; v0.3 2026-09-24 — 0.2.0: OpenID Connect under T-2/C-2a, the trusted-proxy client-IP rule and per-client-IP throttle under RR-11, the first egress-guard caller under T-8; the two residual risks v0.2 added are renumbered RR-10/RR-11 because v0.2 reused the ids RR-6/RR-7 already held by the CI-runner and supply-chain risks; v0.2 2026-09-23 recorded implementation status through 0.1.x under T-2/T-6/T-8; v0.1 2026-09-15 was the review draft) |
+| Version | v0.5 (2026-10-27 — the inbound write and review surfaces of RFC 004/005 as built: T-15 hostile proposals, T-16 review abuse and dishonest status, T-17 repository creation from a hostile archive and key trust; INV-10, INV-11; RR-12…RR-16; C-4f for `extract`; no change to T-1…T-14; v0.4 2026-10-17 — release 0.3.0 status lines under T-2, T-6, T-7 and T-9: constant-work sign-in and the auth gate, host-gated raw content, cache directives, the bounded read and auth paths; no new threat or control id; v0.3 2026-09-24 — 0.2.0: OpenID Connect under T-2/C-2a, the trusted-proxy client-IP rule and per-client-IP throttle under RR-11, the first egress-guard caller under T-8; the two residual risks v0.2 added are renumbered RR-10/RR-11 because v0.2 reused the ids RR-6/RR-7 already held by the CI-runner and supply-chain risks; v0.2 2026-09-23 recorded implementation status through 0.1.x under T-2/T-6/T-8; v0.1 2026-09-15 was the review draft) |
 | Date | 2026-09-24 (v0.3); 2026-09-23 (v0.2); 2026-09-15 (v0.1) |
 | Basis | planeter Requirements v0.1 (PU/NG/CAP/STD/SEC/INT/OPS/BN/UD/OQ) and External Design v0.1 (BD/AC/TX/WEB/API/AUTH/CI/REG/HOOK/PK/FL/CT/OP/GATED); **forge-commons** (the standards frame); prikk reality (2026-09-15 survey, prikk `HEAD f6cbd057`); project rules (a threat model is a first-class release deliverable) |
 | ID scheme | `A-` asset · `TB-` trust boundary · `T-` threat · `C-` control · `INV-` security invariant · `RR-` residual risk · `ASSUME-` assumption |
@@ -376,6 +376,75 @@ secret is exposed to everyone who could read that repository, for as long as it 
 
 ---
 
+### T-15 (Tampering / DoS / Elevation) — hostile proposals: the keyless accept (RFC 004 D-3, RFC 005; v0.5)
+Anyone permitted to `propose` (default: repository members; optionally any signed-in user, never anonymous) sends
+a prikk artifact that the forge **accepts into the repository** (`sync accept`). An accepted patch **cannot be
+removed** from a prikk store (PK-41), so the harm is not only exhaustion in the moment but permanent disk growth and
+a pending set that every later accept and read must carry (A-HOST, A-HISTORY).
+
+- **C-15a — authorization and bounds before the body.** `Propose` is default-deny; the route is **bearer-only** (a
+  browser's session cookie is removed before authentication, so a page on another site cannot propose); the read gate,
+  the `propose` check, the recovery flag, the declared length (required) and the size bound are all decided **before a
+  byte of the body is read**; the body is streamed to disk and hashed, never held in memory; per-caller rate limits.
+- **C-15b — the accept is confined and bounded by measurement.** `bwrap`-direct, the artifact mounted read-only from a
+  per-proposal working directory (no whole-directory mounts), a memory ceiling from a **measured** model (10 MiB +
+  7.0 × the artifact + 2 KiB × the object bound, ×1.5; ledger PK-69), an object bound (default 5,000) and a wall-time
+  deadline (600 s) from the measured one-flush-per-object cost (PK-68), admission against the same byte budget as
+  reads, and the repository's **write lease** (one writer; readers never wait).
+- **C-15c — nothing is derived from an incomplete run (INV-10).** An intent is journalled before the accept; a
+  revision is recorded only from a complete run, in one transaction; a killed, timed-out or ceiling-hit accept leaves
+  the repository `needs-recovery` and an open intent, and the same artifact sent again resumes it. Recovery
+  clears a flag only on **agreeing witnesses** (the flag's cause is ours, the lease table has only dead holders, no
+  foreign prikk process by command line, working directory or open file, `doctor` and `unlock` read strictly), takes
+  the write lease, writes each step before taking it, ignores prikk's PID advisory (wrong inside our PID namespace),
+  and demands a fresh `verify`; repairs run only for what `doctor` names, from an idempotent allow-list, and only in an
+  administrator's run.
+- **C-15d — accumulation is accounted.** Per-principal quotas (open proposals, cumulative accepted bytes, revisions per
+  proposal) and a repository capacity ceiling that count **every retained artifact and every open intent without a
+  revision** (a refused declaration is still disk used); retention with a stated grace and a sweep that never removes an
+  artifact an open proposal or intent needs; the accepted artifact is served back only to principals holding `review` or
+  `merge-seal`, with the fetch route's rate limits.
+- **C-4f — `extract` writes outside every repository.** The destination is a fresh path the driver allocates under a
+  per-call working directory outside all repositories (a destination inside one would be taken as content by the next
+  `commit --from-worktree`; prikk 0.54.x does not refuse it), mounted alone; the extracted tree is untrusted data that
+  the driver never reads.
+
+### T-16 (Tampering / Repudiation / Information disclosure) — review abuse and dishonest status (RFC 005; v0.5)
+Comments, decisions and states are shown to people who act on them; an attacker (or a mistake) can make a state look
+better than it is, or use the discussion as an abuse channel.
+
+- **C-16a — content and conduct.** Markdown goes through the one sanitizer (T-6); comments are **immutable in the
+  database** (triggers refuse any edit but the moderation columns, and every delete), a thread is one level deep and
+  inside one proposal; decisions are one current per reviewer per revision with an uneditable history; an
+  administrator may **hide** a comment (reason recorded, reversible, logged), and the hidden text leaves the system
+  through one function; rate limits per principal per proposal; **no self-approval**.
+- **C-16b — a shown state is observed, never asserted (INV-11).** An approval is bound to its revision and a stale one
+  counts for nothing; a patch is `Sealed` only when a block that `log` lists for a **published** ref contains it,
+  never from `queued`; a proposal is `landed` only by that observation, and **received refs are shown as sightings
+  only** (they are last-writer-wins and unverified, PK-67); the pages say what a state does not mean ("Approved here
+  … does not merge anything"; "This server does not merge anything itself").
+
+### T-17 (Spoofing / Elevation / DoS) — creating a repository from a hostile archive; trusting a key (RFC 004 D-4; v0.5)
+A creator uploads a whole-repository archive. It is arbitrary hostile bytes of up to the bound, and it carries
+maintainer public keys the creator may be tricked into trusting: a trusted key makes that signer's history
+`prikk-verified` here (T-1).
+
+- **C-17a — two steps, one human decision.** The archive is staged outside every repository and verified in the
+  sandbox (nothing kept if it fails); the stage lists the carried keys and refs; the creator **types the whole public key
+  of each key they trust, from their own channel — never prefilled, never shown back after a mismatch**; a key not typed
+  is not trusted; `no_adopt` lands everything under `remotes/` and says that nothing is verified. The creating principal
+  is the one trusting (an administrator of the new repository), and trust is recorded for **exactly the typed keys**.
+- **C-17b — all-or-nothing and kill-safe.** A repository is `creating` (invisible, unroutable, holding its name) until
+  its last step; any failure, timeout or kill removes it whole, and a start-up sweep removes unfinished repositories and
+  unreferenced directories **only inside the repository root, never through a link, never when the store is empty,
+  and logging every removal**. Names are lowercase, bounded and **derived-reserved** from the router's own routes;
+  repositories per owner and creations per hour are bounded.
+- **C-17c — compensating for what prikk does not bound.** prikk ignores every size/object bound for `archive verify`
+  and `archive import` (PK-72); the edge size bound (default 100 MiB), a measured memory ceiling (10 MiB + 3.0 ×/6.0 ×
+  the archive) and the deadline are the whole protection, and a stage count/byte budget with expiry limits what
+  waiting uploads can hold.
+
+
 ## 4. Security invariants (INV-…) — the non-negotiables
 
 A change that breaks one of these is a security bug, not a preference. Several must be enforced by test.
@@ -397,6 +466,12 @@ A change that breaks one of these is a security bug, not a preference. Several m
   crates `forbid(unsafe_code)` outside any isolated FFI. (T-11)
 - **INV-8 — Private content is access-controlled on every path; planeter does not worsen secrets-in-
   history exposure and states the risk.** (T-7/T-14)
+- **INV-10 — No record, state or revision is derived from an incomplete write.** (v0.5.) A write that did not
+  finish leaves the repository flagged and its intent open; only a complete run, in one transaction, produces a
+  revision; recovery clears a flag only on agreeing witnesses and a fresh `verify`. (T-15)
+- **INV-11 — A state a person sees is observed from prikk's facts, never asserted by the forge.** (v0.5.) `Sealed`,
+  `landed`, "verified" and an approval's standing come from `log`, `sync pending` and recorded decisions bound to their
+  revision — never from `queued`, never from a received ref, never from the forge's own say-so. (T-16, with INV-1)
 - **INV-9 — AI stays outside the trust boundary.** No AI holds autonomous authority (cannot push, merge,
   seal, or change permissions); repository content and context files are data, never instructions; no
   private content egresses to an external AI without explicit opt-in. (T-13)
@@ -442,6 +517,25 @@ A change that breaks one of these is a security bug, not a preference. Several m
 - **RR-9 — Secret scanning (C-14b) is detection, not prevention.** A committed secret is already exposed
   to everyone who could read the repository; scanning shortens time-to-rotate but cannot un-leak, and has
   false negatives. Rotation in the repository remains the operator's act (RR-1).
+- **RR-12 — An accepted patch cannot be removed (v0.5).** Quotas, the capacity ceiling and retention bound how much
+  a principal can add and how long artifacts are kept; they cannot give disk back from the prikk store (PK-41). A
+  determined member can use their quota; closing a proposal does not shrink the repository. The pending set grows
+  with every accepted proposal (about 1.1 MiB of accept memory per 1,000 pending patches, PK-69) until a key-holding
+  action seals it somewhere.
+- **RR-13 — Accept time is a disk flush per object (PK-68).** The deadline and the object bound are safe on the
+  measured hosts (70–260 s for 5,000 objects); an operator on slow storage must lower the bound. The limits that
+  count requests (rate limits) are in memory, per process, and reset on restart (as RR-11).
+- **RR-14 — The creator's trust decision (v0.5).** Typing a maintainer's whole public key makes the creator compare it
+  with what the maintainer told them through another channel; a creator who is deceived, or who types what the
+  archive's sender dictated, trusts the wrong key. The product makes comparing easy and skipping impossible; it cannot
+  make the creator careful.
+- **RR-15 — Reviewing is opinion, not a gate (v0.5).** Approvals, requested changes and comments inform a
+  maintainer; nothing in planeter merges, seals or publishes, and no ref protection can be enforced by it (INV-2).
+  Spam by many accounts is bounded by per-principal rate limits, moderation (hiding) and the account-creation policy of
+  the deployment.
+- **RR-16 — The driver buffers a prikk call's output in memory without a cap (v0.5; open, IS-55).** The memory ceiling
+  bounds the child, not planeter's buffer; a hostile archive with very many refs makes a report as large as the
+  archive (≤ the edge bound). To be closed by a per-call cap with a named refusal.
 - **ASSUME-1 — The operator and host are trusted; planeter defends against network actors and malicious
   users, not a hostile operator** (TB-8).
 - **ASSUME-2 — prikk's offline `verify` is correct and is the ultimate arbiter of history integrity.**
@@ -492,6 +586,9 @@ contributing; **C-14**a/b is the primary control for **T-14** (secrets at scale)
 | T-12 / C-12* | SEC-5, OPS-5, and OQ-1's attribution consequence |
 | T-13 / C-13* / INV-9 | forge-commons *AI-Assisted Development* verdict (DEF); the instruction-source discipline |
 | T-14 / C-14* / INV-8 | C-7b, and modern secret-scanning practice |
+| T-15 / C-15* / C-4f / INV-10 | RFC 004 D-3, D-5, D-6; RFC 005 D-1, D-8, D-9; RFC 011; ledger PK-41, PK-59, PK-68, PK-69 |
+| T-16 / C-16* / INV-11 | RFC 005 D-5, D-6, D-7, D-10, D-11; RFC 003 sanitizer |
+| T-17 / C-17* | RFC 004 D-4; ledger PK-32, PK-33, PK-67, PK-72 |
 
 *End of Threat Model v0.1. Per project rules, this document is revisited every release: changes that
 touch authentication/authorization, the transport or push path, the prikk-subprocess boundary, CI
