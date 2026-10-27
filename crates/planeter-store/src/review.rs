@@ -597,18 +597,18 @@ fn decision_from(r: &rusqlite::Row<'_>) -> rusqlite::Result<DecisionRecord> {
 /// A database rule that says no is the caller's mistake (`Invalid`), a taken key is a `Conflict`; anything else is the
 /// backend's.
 fn map_write(e: rusqlite::Error, taken: &str) -> StoreError {
-    if let rusqlite::Error::SqliteFailure(f, msg) = &e {
-        if f.code == rusqlite::ErrorCode::ConstraintViolation {
-            let m = msg.clone().unwrap_or_default();
-            if m.contains("UNIQUE") || m.contains("PRIMARY KEY") {
-                return StoreError::Conflict(taken.to_owned());
-            }
-            return StoreError::Invalid(if m.is_empty() {
-                "a rule of the store".to_owned()
-            } else {
-                m
-            });
+    if let rusqlite::Error::SqliteFailure(f, msg) = &e
+        && f.code == rusqlite::ErrorCode::ConstraintViolation
+    {
+        let m = msg.clone().unwrap_or_default();
+        if m.contains("UNIQUE") || m.contains("PRIMARY KEY") {
+            return StoreError::Conflict(taken.to_owned());
         }
+        return StoreError::Invalid(if m.is_empty() {
+            "a rule of the store".to_owned()
+        } else {
+            m
+        });
     }
     backend(e)
 }

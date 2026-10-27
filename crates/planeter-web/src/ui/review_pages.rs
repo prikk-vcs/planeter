@@ -555,49 +555,60 @@ struct Gate {
     at: String,
 }
 
-async fn gate<F>(
-    state: &AppState,
-    headers: &HeaderMap,
-    owner: &str,
-    name: &str,
-    id: &str,
-    form: Result<Form<F>, FormRejection>,
-    csrf_of: fn(&F) -> &str,
+/// What a form handler needs the viewer to be allowed to do, and the sentences to say when they are not.
+struct Need {
     action: Action,
     forbidden: Key,
     forbidden_hint: Key,
     heading: Key,
-) -> Result<(Gate, F), Response> {
+}
+
+async fn gate<F>(
+    state: &AppState,
+    headers: &HeaderMap,
+    (owner, name, id): (&str, &str, &str),
+    form: Result<Form<F>, FormRejection>,
+    csrf_of: fn(&F) -> &str,
+    need: Need,
+) -> Result<(Gate, F), Box<Response>> {
+    let Need {
+        action,
+        forbidden,
+        forbidden_hint,
+        heading,
+    } = need;
     let c = ctx(headers, state).await;
     let at = format!("/{owner}/{name}/proposals/{}", short(id));
     let back = back_to(owner, name, id);
     let record = match readable(state, &c.principal, owner, name).await {
         Ok(r) => r,
-        Err(e) => return Err(error_page(state, &c, &at, e)),
+        Err(e) => return Err(Box::new(error_page(state, &c, &at, e))),
     };
     let Some(service) = state.transport.as_ref().and_then(|rt| rt.reviews.clone()) else {
-        return Err(super::proposal_pages::off_page(state, &c, owner, name));
+        return Err(Box::new(super::proposal_pages::off_page(
+            state, &c, owner, name,
+        )));
     };
     let Ok(Form(form)) = form else {
-        return Err(super::notice(
+        return Err(Box::new(super::notice(
             state,
             &c,
             StatusCode::UNPROCESSABLE_ENTITY,
             super::Notice::FormIncomplete,
             super::Next::Home,
             vec![],
-        ));
+        )));
     };
     let cookie_csrf = get_cookie(headers, CSRF_COOKIE).unwrap_or_default();
     if cookie_csrf.is_empty() || !tokens_match(&cookie_csrf, csrf_of(&form)) {
-        return Err(super::notice(
+        return Err(Box::new(super::notice(
             state,
             &c,
             StatusCode::FORBIDDEN,
             super::Notice::CsrfFailed,
             super::Next::Home,
             vec![],
-        ));
+        )));
     }
     let (read, principal, rec) = (Arc::clone(&state.read), c.principal.clone(), record.clone());
     let allowed = offload(move || read.allowed(&principal, &rec, action).unwrap_or(false))
@@ -605,14 +616,14 @@ async fn gate<F>(
         .unwrap_or(false);
     let user = c.principal.user().map(|u| u.as_str().to_owned());
     let (true, Some(user)) = (allowed, user) else {
-        return Err(refusal_page(
+        return Err(Box::new(refusal_page(
             state,
             &c,
             StatusCode::FORBIDDEN,
             heading,
             both(&c.t, forbidden, forbidden_hint),
             &back,
-        ));
+        )));
     };
     Ok((
         Gate {
@@ -645,20 +656,20 @@ pub(super) async fn comment_submit(
     let (g, f) = match gate(
         &state,
         &headers,
-        &owner,
-        &name,
-        &id,
+        (&owner, &name, &id),
         form,
         |f| &f.csrf,
-        Action::Comment,
-        Key::ErrForbiddenCommentMessage,
-        Key::ErrForbiddenCommentHint,
-        Key::CommentRefusedHeading,
+        Need {
+            action: Action::Comment,
+            forbidden: Key::ErrForbiddenCommentMessage,
+            forbidden_hint: Key::ErrForbiddenCommentHint,
+            heading: Key::CommentRefusedHeading,
+        },
     )
     .await
     {
         Ok(x) => x,
-        Err(r) => return r,
+        Err(r) => return *r,
     };
     let refuse = |r: CommentRefusal| {
         refusal_page(
@@ -737,20 +748,20 @@ pub(super) async fn decision_submit(
     let (g, f) = match gate(
         &state,
         &headers,
-        &owner,
-        &name,
-        &id,
+        (&owner, &name, &id),
         form,
         |f| &f.csrf,
-        Action::Review,
-        Key::ErrForbiddenDecisionMessage,
-        Key::ErrForbiddenDecisionHint,
-        Key::DecisionRefusedHeading,
+        Need {
+            action: Action::Review,
+            forbidden: Key::ErrForbiddenDecisionMessage,
+            forbidden_hint: Key::ErrForbiddenDecisionHint,
+            heading: Key::DecisionRefusedHeading,
+        },
     )
     .await
     {
         Ok(x) => x,
-        Err(r) => return r,
+        Err(r) => return *r,
     };
     let Some(verdict) = Verdict::parse(f.decision.trim()) else {
         return super::notice(
@@ -801,20 +812,20 @@ pub(super) async fn hide_submit(
     let (g, f) = match gate(
         &state,
         &headers,
-        &owner,
-        &name,
-        &id,
+        (&owner, &name, &id),
         form,
         |f| &f.csrf,
-        Action::RepoAdmin,
-        Key::ErrForbiddenHideMessage,
-        Key::ErrForbiddenHideHint,
-        Key::HideRefusedHeading,
+        Need {
+            action: Action::RepoAdmin,
+            forbidden: Key::ErrForbiddenHideMessage,
+            forbidden_hint: Key::ErrForbiddenHideHint,
+            heading: Key::HideRefusedHeading,
+        },
     )
     .await
     {
         Ok(x) => x,
-        Err(r) => return r,
+        Err(r) => return *r,
     };
     let (svc, rec, pid, user, c2) = (
         Arc::clone(&g.service),
@@ -841,20 +852,20 @@ pub(super) async fn unhide_submit(
     let (g, _) = match gate(
         &state,
         &headers,
-        &owner,
-        &name,
-        &id,
+        (&owner, &name, &id),
         form,
         |f| &f.csrf,
-        Action::RepoAdmin,
-        Key::ErrForbiddenHideMessage,
-        Key::ErrForbiddenHideHint,
-        Key::HideRefusedHeading,
+        Need {
+            action: Action::RepoAdmin,
+            forbidden: Key::ErrForbiddenHideMessage,
+            forbidden_hint: Key::ErrForbiddenHideHint,
+            heading: Key::HideRefusedHeading,
+        },
     )
     .await
     {
         Ok(x) => x,
-        Err(r) => return r,
+        Err(r) => return *r,
     };
     let (svc, rec, pid, user, c2) = (
         Arc::clone(&g.service),

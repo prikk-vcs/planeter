@@ -8,6 +8,10 @@
 
 ## Where we are
 
+- **RFC 005 part 6 (comments and review decisions) built 2026-10-27, awaiting review**
+  (`rfcs/handoffs/005-change-review/comments-and-decisions-handoff-v2.md`): comments and decisions as records (SQLite triggers make a comment
+  immutable), the pure rules, the API, the review line and the forms on the proposal page, hiding. Part 5a and the advisory measurement were **reviewed Approved**;
+  IS-54 (the crypto-bigint advisory) waits for the owner.
 - **RFC 005 part 5 (proposals you can see) built 2026-10-25, awaiting review**
   (`rfcs/handoffs/005-change-review/proposals-read-side-handoff-v2.md`): the word *proposal* in everything a person or a program reads
   (D-38, T0); landing observed from facts (absent from `sync pending` and in a block `log` lists; one `sync pending` per repository per state);

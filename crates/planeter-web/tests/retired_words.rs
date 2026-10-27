@@ -433,3 +433,121 @@ fn the_english_retired_words_are_found_in_a_japanese_message_too() {
         );
     }
 }
+
+// ------------------------------------------------------------------------------------------------ "approved" (RFC 005 part 6, T5)
+
+/// *Approve* belongs to a **reviewer's decision**. A sentence about a proposal that says it without being about a decision —
+/// "Approved, awaiting signature" beside a proposal — would tell a reader that someone approved the proposal when nobody
+/// did: that badge is about work held on this server, and the owner is asked about its wording separately.
+const APPROVE_WORDS: &[&str] = &[
+    "approve",
+    "approved",
+    "approves",
+    "approval",
+    "approvals",
+    "承認",
+];
+
+/// The messages whose subject is a reviewer's decision, by key prefix.
+const DECISION_KEYS: &[&str] = &[
+    "review.",
+    "decision.",
+    "error.self_approval",
+    "error.forbidden_decision",
+    "error.decisions_closed",
+    "error.revision_not_current",
+    "error.rate_decisions",
+    "error.invalid_request.decision_hint",
+];
+
+/// Messages that say *approve* about a proposal outside the decision messages: `lang tag key`.
+fn approve_outside_decisions(langs: &[&LangDef]) -> Vec<String> {
+    let mut out = Vec::new();
+    for lang in langs {
+        for e in lang.entries {
+            if DECISION_KEYS.iter().any(|p| e.key.starts_with(p)) {
+                continue;
+            }
+            for form in [e.one, e.other] {
+                let text = without_placeholders(form);
+                let about_a_proposal = e.key.starts_with("proposal")
+                    || contains_word(&text, "proposal")
+                    || text.contains("提案");
+                let says_approve = APPROVE_WORDS.iter().any(|w| {
+                    if w.is_ascii() {
+                        contains_word(&text, w)
+                    } else {
+                        text.contains(w)
+                    }
+                });
+                if about_a_proposal && says_approve {
+                    out.push(format!(
+                        "{} `{}` says approve about a proposal: {form:?}",
+                        lang.tag, e.key
+                    ));
+                }
+            }
+        }
+    }
+    out.sort();
+    out.dedup();
+    out
+}
+
+#[test]
+fn no_shipped_sentence_about_a_proposal_says_approved_unless_it_is_about_a_reviewers_decision() {
+    assert_eq!(approve_outside_decisions(shipped()), Vec::<String>::new());
+}
+
+#[test]
+fn the_approved_rule_finds_the_planted_badge_beside_a_proposal_and_lets_decisions_through() {
+    for text in [
+        "Approved, awaiting signature",
+        "This proposal was approved on this server.",
+        "Your proposal has approval.",
+        "この提案は承認されました。",
+    ] {
+        let l = planted(vec![message(
+            "proposal.planted",
+            Box::leak(text.to_owned().into_boxed_str()),
+        )]);
+        assert_eq!(approve_outside_decisions(&[l]).len(), 1, "{text:?}");
+    }
+    // A sentence that is not about a proposal is not this rule's (the owner-approved badge on a patch stays as it is).
+    let badge = planted(vec![message(
+        "assurance.queued",
+        "Approved, awaiting signature",
+    )]);
+    assert_eq!(approve_outside_decisions(&[badge]), Vec::<String>::new());
+    // Decisions are exactly what the word is for.
+    for (key, text) in [
+        ("review.line.approved", "Approved by 2 people"),
+        (
+            "review.decision.approve",
+            "{who} approved revision {revision}",
+        ),
+        ("decision.form.approve", "Approve"),
+        (
+            "error.self_approval.message",
+            "You cannot approve work that you sent yourself.",
+        ),
+        (
+            "review.means.approved",
+            "Approved here means reviewers said they are happy with revision {revision}.",
+        ),
+        (
+            "review.decision.approve",
+            "{who} さんがリビジョン {revision} を承認しました",
+        ),
+    ] {
+        let l = planted(vec![message(
+            key,
+            Box::leak(text.to_owned().into_boxed_str()),
+        )]);
+        assert_eq!(
+            approve_outside_decisions(&[l]),
+            Vec::<String>::new(),
+            "{key}"
+        );
+    }
+}

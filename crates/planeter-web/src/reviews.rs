@@ -298,11 +298,11 @@ async fn may(
     principal: &Principal,
     record: &RepositoryRecord,
     action: Action,
-) -> Result<bool, Response> {
+) -> Result<bool, Box<Response>> {
     let (read, p, r) = (Arc::clone(&state.read), principal.clone(), record.clone());
     match offload(move || read.allowed(&p, &r, action)).await {
         Ok(Ok(b)) => Ok(b),
-        _ => Err(error_response(state, Failure::Internal)),
+        _ => Err(Box::new(error_response(state, Failure::Internal))),
     }
 }
 
@@ -334,14 +334,14 @@ fn parse<T: serde::de::DeserializeOwned>(
     state: &AppState,
     body: &[u8],
     keys: crate::errors::ErrorKeys,
-) -> Result<T, Response> {
+) -> Result<T, Box<Response>> {
     serde_json::from_slice::<T>(body).map_err(|e| {
         let reason = if e.to_string().contains("unknown field") {
             "unknown_field"
         } else {
             "not_json"
         };
-        invalid_with_keys(state, reason, keys)
+        Box::new(invalid_with_keys(state, reason, keys))
     })
 }
 
@@ -366,7 +366,7 @@ pub(crate) async fn comment_handler(
                 ErrorCode::FORBIDDEN_COMMENT,
             );
         }
-        Err(r) => return r,
+        Err(r) => return *r,
     }
     let Some(author) = principal.user().map(|u| u.as_str().to_owned()) else {
         return code_response_with_keys(&state, ErrorCode::Forbidden, ErrorCode::FORBIDDEN_COMMENT);
@@ -376,7 +376,7 @@ pub(crate) async fn comment_handler(
     }
     let b: CommentBody = match parse(&state, &body, ErrorCode::BAD_COMMENT) {
         Ok(b) => b,
-        Err(r) => return r,
+        Err(r) => return *r,
     };
     let new = NewComment {
         body: b.body.unwrap_or_default(),
@@ -433,7 +433,7 @@ pub(crate) async fn decision_handler(
                 ErrorCode::FORBIDDEN_DECISION,
             );
         }
-        Err(r) => return r,
+        Err(r) => return *r,
     }
     let Some(reviewer) = principal.user().map(|u| u.as_str().to_owned()) else {
         return code_response_with_keys(
@@ -447,7 +447,7 @@ pub(crate) async fn decision_handler(
     }
     let b: DecisionBody = match parse(&state, &body, ErrorCode::BAD_DECISION) {
         Ok(b) => b,
-        Err(r) => return r,
+        Err(r) => return *r,
     };
     let Some(verdict) = b.decision.as_deref().and_then(Verdict::parse) else {
         return invalid_with_keys(&state, "decision_unknown", ErrorCode::BAD_DECISION);
@@ -547,7 +547,7 @@ async fn moderate(
                 ErrorCode::FORBIDDEN_HIDE,
             );
         }
-        Err(r) => return r,
+        Err(r) => return *r,
     }
     let Some(by) = principal.user().map(|u| u.as_str().to_owned()) else {
         return code_response_with_keys(&state, ErrorCode::Forbidden, ErrorCode::FORBIDDEN_HIDE);
@@ -560,7 +560,7 @@ async fn moderate(
             }
             match parse::<HideBody>(&state, b, ErrorCode::BAD_HIDE) {
                 Ok(h) => Some(h.reason.unwrap_or_default()),
-                Err(r) => return r,
+                Err(r) => return *r,
             }
         }
     };

@@ -2,8 +2,8 @@
 
 | | |
 |---|---|
-| Document | The design note for the data and the rules behind a **proposal** (RFC 005 D-1…D-3, D-6, D-9, D-10; RFC 004 D-3, D-6), and — from RFC 005 part 5 — what a person sees of it: landing observed from facts, the read API and pages, closing, the download of an accepted artifact, and the retention sweep (the sections at the end). Records and pure rules were built in RFC 004 part 3a. |
-| Where | Records: `crates/planeter-store/src/change.rs`. Rules: `crates/planeter-core/src/change.rs`. Tests: `crates/planeter-store/tests/change_store.rs`, `crates/planeter-core/tests/change_model.rs`. |
+| Document | The design note for the data and the rules behind a **proposal** (RFC 005 D-1…D-3, D-6, D-9, D-10; RFC 004 D-3, D-6), and — from RFC 005 part 5 — what a person sees of it: landing observed from facts, the read API and pages, closing, the download of an accepted artifact, and the retention sweep; and — from part 6 — **review**: comments, decisions and moderation (the sections at the end). Records and pure rules were built in RFC 004 part 3a. |
+| Where | Records: `crates/planeter-store/src/change.rs`. Rules: `crates/planeter-core/src/change.rs`. Tests: `crates/planeter-store/tests/change_store.rs`, `crates/planeter-core/tests/change_model.rs`; for review `crates/planeter-store/tests/review_store.rs`, `crates/planeter-core/tests/review_model.rs`, `crates/planeter-transport/tests/reviews_unit.rs`, `crates/planeter-web/tests/reviews_http.rs`. |
 | **Words** | **The code's internal name for a proposal is *change*** (`ChangeRecord`, the `changes` table, `ChangeStore`, `change_id` columns): they were named before the vocabulary was settled, and nothing stored is renamed. In every word a person or a program reads — the pages, the API, the messages, the documentation — it is a **proposal**, its versions are **revisions**, and *change* keeps the glossary's meaning, a recorded unit of history (prikk's block). `docs/glossary.md` lists the words. |
 
 ## What is stored
@@ -158,3 +158,63 @@ at a time. After it, the record says *removed* and the download is `410 artifact
 |---|---|---|
 | `PLANETER_PROPOSAL_GRACE_DAYS` | 30 | days a landed or closed proposal keeps its files |
 | `PLANETER_RETENTION_SWEEP_MINUTES` | 60 | minutes between sweeps |
+
+# Review: comments, decisions and moderation (RFC 005 part 6)
+
+People talk about a proposal, and reviewers say what they think of a **revision**. Nothing here merges, blocks or lands anything: the
+state of a proposal still comes from the repository (landing) and from a person who closes it, and never from a comment or a decision.
+
+## The rules
+
+The pure rules are `crates/planeter-core/src/review.rs`; the service that applies them to the records is `planeter_transport::ReviewService`
+(no prikk call, and no counter: the limits are computed from the records). Each row is pinned by a test, and each has a negative.
+
+| # | Rule | Test (a negative in each) |
+|---|---|---|
+| 1 | **Who.** A comment needs `authorize(Comment)` (any signed-in caller who can read the repository, a read-only token included); a decision `authorize(Review)` (`write` and above, not a read-only token); hiding `authorize(RepoAdmin)`. All three read the repository through the one read gate first: a stranger is `404`. | `reviews_http.rs`: `who_may_comment_…`, `only_reviewers_decide_…`, `a_hidden_comments_text_is_released_to_administrators_only` |
+| 2 | **When.** Comments are accepted on an open proposal and, until its `retain_until` (inclusive; 30 days after it finished by default), on a landed or closed one. Decisions only while it is open. | `review_model.rs`: `comments_are_accepted_while_open_…`, `decisions_are_accepted_only_while_the_proposal_is_open`; `reviews_http.rs`: `comments_close_when_the_grace_…` |
+| 3 | **No self-approval.** The submitter of a revision cannot approve it, and nobody who submitted any revision of the proposal can approve its latest. Asking for changes and commenting are allowed. | `review_model.rs`: the two `…cannot_approve…` tests; `reviews_http.rs`: `nobody_approves_their_own_work_…` |
+| 4 | **A decision belongs to one revision**, the latest unless named; naming an older one is `revision_not_current`. Recording another for the same reviewer and revision replaces it (the replaced one stays in a history). | `review_model.rs`: `naming_another_revision_is_refused_…`; `review_store.rs`: `a_second_decision_replaces_…` |
+| 5 | **Never carried over.** What a later revision shows of an earlier approval is `approved_on: [1]`; it counts for nothing. | `review_model.rs`: `a_stale_approval_never_counts_…`; `reviews_http.rs`: `an_approval_of_revision_one_is_shown_on_revision_two_…` |
+| 6 | **The review state** is a function of the current decisions on the **latest** revision and of nothing else: `changes_requested` if any reviewer's current decision is `request-changes`; else `approved` if at least one is `approve`; else `awaiting_review`. Counts are of distinct reviewers. | `review_model.rs`: the `review_standing` tests |
+| 7 | **A comment** has a body (1 to 16 KiB of Markdown, shown through the sanitizer), and may be anchored to a patch of the proposal's *current* set (kept as written), a path (free text, never opened, at most 1,024 characters) and lines (positive, `from ≤ to`, only with a path). A thread is one level deep, inside one proposal. | `review_model.rs`: the `check_comment` tests; `reviews_http.rs`: `every_comment_rule_has_its_named_refusal` |
+| 8 | **Comments are immutable and never deleted**: no edit, no delete by the author (a typo is a new reply). SQLite refuses an edit or a delete itself (triggers). | `review_store.rs`: `sqlite_refuses_an_edit_or_a_delete_…` |
+| 9 | **Hiding** is the only moderation: `RepoAdmin`, with a reason (at most 500 characters), reversible, and logged. A hidden comment's text goes to administrators only (HTML and JSON alike); everyone else sees "Hidden by a maintainer: *reason*". | `reviews_http.rs`: `a_hidden_comments_text_is_released_…`, `a_hidden_comments_text_is_never_in_a_page_…` |
+| 10 | **Limits**, computed from the records: at most `PLANETER_COMMENTS_PER_HOUR` (20) comments and `PLANETER_DECISIONS_PER_HOUR` (10) decisions per principal per proposal per hour (a replaced decision still counts); `429` with `Retry-After`. A request refused for a rule was never recorded, so it never counts. | `review_model.rs`: `the_rate_limit_…`; `reviews_unit.rs`: `the_comment_limit_…`, `the_decision_limit_…`; `reviews_http.rs`: the two `…_429_…` tests |
+
+## The records
+
+`comments` and `decisions` (plus `decision_history` and `comment_moderation`, both append-only) sit beside the change tables in the same database, created
+idempotently the first time the store is opened (`planeter_store::review`). A proposal's id is the key (`change_id`). The database enforces what
+it can: the `CHECK`s on lengths, lines and the all-or-none moderation columns; a trigger that refuses any edit of a comment but its moderation columns and any delete;
+a trigger that keeps a thread one level deep within one proposal; the primary key `(proposal, revision, reviewer)` that makes "one current decision". Recording a decision
+is one transaction (the replaced decision moves to the history, the new one is written), so two writers at once leave exactly one current decision.
+
+## The API
+
+Writes are **bearer-token only** (a cookie is not looked at), like `propose` and `close`. All under `/api/v1/repos/{owner}/{name}/proposals/{id}`:
+
+| Route | Who | What |
+|---|---|---|
+| `POST …/comments` `{body, patch_id?, path?, line_from?, line_to?, parent?}` | `Comment` | `201` with the comment |
+| `POST …/decisions` `{decision: "approve"\|"request-changes", note?, revision?}` | `Review` | `200` with the decision and the review as it now stands |
+| `POST …/comments/{cid}/hide` `{reason}` and `…/unhide` | `RepoAdmin` | `200` with the comment as an administrator sees it |
+| `GET …/proposals/{id}?limit=&after=` | anyone who may read | gains `review` (state, revision, counts, current decisions with reviewer names and notes, `approved_on` / `requested_changes_on`, the decisions on earlier revisions) and `comments` (`total`, a page of threads oldest first with their replies nested, `next`) |
+| `GET …/proposals` | the same | each open proposal gains `review` (the same three words) |
+
+Refusals have their own codes: `comments_closed`, `decisions_closed`, `revision_not_current`, `self_approval`, `comment_state`, `rate_limited` (with `Retry-After`), and
+`invalid_request` with a `reason` for each rule of a comment, a decision and a hide.
+
+## The pages
+
+The default view of an **open** proposal gains one line — *Awaiting review*, *Approved by 2 people* or *Changes requested by 1 person* — with its plain meaning ("Approved here
+means reviewers said they are happy with revision 3. It does not merge anything."), and, when the only approvals were for earlier revisions, "Approved on an earlier
+revision; revision 3 has not been reviewed." Everything else is under *Details*: the decisions (who, which revision, the note), the decisions on earlier revisions (history), the thread of comments with
+their anchors, and the forms the viewer may use — a comment form for any signed-in reader (a patch is named by the first characters of its id), a reply form under each thread, a decision
+form for reviewers (the submitter's *Approve* is disabled, with the reason), hide and show for administrators. Each form says its consequence beside its button; each is an ordinary form with a CSRF token; a refusal is a page with a way back.
+The proposals list shows the review word of each open proposal. An anonymous reader sees the comments and no forms.
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `PLANETER_COMMENTS_PER_HOUR` | 20 | most comments one person may add to one proposal in an hour |
+| `PLANETER_DECISIONS_PER_HOUR` | 10 | most review decisions one person may record on one proposal in an hour |

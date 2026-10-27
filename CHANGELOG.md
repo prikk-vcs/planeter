@@ -5,6 +5,15 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **Comments and review decisions (RFC 005 part 6).** People can now talk about a proposal and say what they think of a revision. **Comments**
+  (Markdown, shown through the sanitizer) sit in one-level threads and may be anchored to a patch, a path and lines; they are never edited or deleted, and a maintainer
+  who administers the repository can **hide** one with a reason (its text is then shown to administrators only, everyone else sees the reason) and show it again. A reviewer
+  (`write` and above) records one **decision** per revision — approve or request changes — that is shown on that revision and **never carried to a later one**: a later revision shows
+  "approved on revision 1" and counts it for nothing. Nobody approves their own work. The proposal page gains one **review line** (*Awaiting review*, *Approved by 2 people*,
+  *Changes requested by 1 person*) and, under *Details*, the decisions, the comments and the forms; the list shows the word too. API: `POST …/comments`,
+  `…/decisions`, `…/comments/{cid}/hide` and `…/unhide` (bearer tokens only), and `review` and `comments` in the proposal's detail. Limits: 20 comments and 10 decisions per person per proposal per hour
+  (`PLANETER_COMMENTS_PER_HOUR`, `PLANETER_DECISIONS_PER_HOUR`). Nothing here merges or blocks anything. See `docs/proposals.md`.
+
 - **Landing is observed from published history only (RFC 005 D-6 amended, D-40), and three small corrections.** A proposal has *landed*
   when every one of its patches is in a block of a **published** branch of the repository; `sync pending` is no longer consulted, and
   history merely **received** here (an archive import without `--adopt`) never counts — it is shown under *Details* as a sighting

@@ -121,6 +121,8 @@ uploaded artifact is kept in the store; the retry sends it again and resumes the
 | `PLANETER_PROPOSAL_CAPACITY_MB` | 4096 | artifacts a repository retains for open and recently finished proposals |
 | `PLANETER_PROPOSAL_GRACE_DAYS` | 30 | days a landed or closed proposal keeps its files before the retention sweep may remove them (the records stay) |
 | `PLANETER_RETENTION_SWEEP_MINUTES` | 60 | minutes between runs of the retention sweep, which also runs at start |
+| `PLANETER_COMMENTS_PER_HOUR` | 20 | most comments one person may add to one proposal in an hour |
+| `PLANETER_DECISIONS_PER_HOUR` | 10 | most review decisions one person may record on one proposal in an hour |
 | `PLANETER_PRIKK_MEMORY_BUDGET_MB` | see `--help` | the budget an accept draws from, like a read, always from the **heavy** pool |
 
 **At start** the server asks the `prikk` on its `PATH` for its version once and applies the floor: a prikk below 0.54.0 refuses to start with `unsupported prikk version X; planeter requires >= 0.54.0` (it used to start and answer every read "temporarily unavailable"). A missing prikk is reported when a repository is first opened, as before; one that runs but prints something unreadable is warned of once and left to the same pin at each open.
