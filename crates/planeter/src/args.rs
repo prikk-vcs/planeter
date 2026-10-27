@@ -113,6 +113,8 @@ environment:
   PLANETER_PROPOSAL_GRACE_DAYS  days a landed or closed proposal keeps its files before the retention sweep may
                                 remove them (default 30; the records stay)
   PLANETER_RETENTION_SWEEP_MINUTES  minutes between runs of the retention sweep, which also runs at start (default 60)
+  PLANETER_COMMENTS_PER_HOUR    most comments one person may add to one proposal in an hour (default 20)
+  PLANETER_DECISIONS_PER_HOUR   most review decisions one person may record on one proposal in an hour (default 10)
   PLANETER_PROPOSER_QUOTA_MB    most megabytes of artifacts one person may have accepted in one repository, in all
                                 (default 512, or 64 where proposals are open to any signed-in user)
   PLANETER_AUTOMATIC_RECOVERY   on (default) or off: whether the server recovers a repository left unfinished by a

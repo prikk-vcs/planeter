@@ -24,6 +24,7 @@ pub mod openapi;
 pub mod principal;
 pub mod proposals;
 pub mod quota;
+pub mod reviews;
 pub mod routes;
 pub mod sanitize;
 pub mod security;

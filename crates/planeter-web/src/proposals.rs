@@ -78,6 +78,9 @@ pub struct ProposalItem {
     patch_count: usize,
     /// Whether the latest revision says what it was built on.
     built_on: bool,
+    /// The review word of an open proposal: `awaiting_review`, `approved` or `changes_requested`; `null` for one that is
+    /// not open (and when review is not set up).
+    review: Option<&'static str>,
     retention: Option<RetentionView>,
 }
 
@@ -92,6 +95,7 @@ fn item(s: &Summary) -> ProposalItem {
         revision_count: s.revisions,
         patch_count: s.patches,
         built_on: s.built_on,
+        review: None,
         retention: retention_view(s.retention),
     }
 }
@@ -210,11 +214,20 @@ pub struct DetailView {
     /// For an open proposal: the received refs whose logs hold any of its patches. Information only; no state is derived
     /// from a received ref (it is replaceable and unverified).
     received_sightings: Vec<SightingItem>,
+    /// The review: the state and the decisions (RFC 005 part 6). `null` when review is not set up on this server.
+    review: Option<crate::reviews::ReviewJson>,
+    /// The comments, a page of threads, oldest first. `null` when review is not set up on this server.
+    comments: Option<crate::reviews::CommentsJson>,
     /// One plain sentence that is true under every answer to what happens after a maintainer signs the work.
     note: String,
 }
 
-pub(crate) fn detail_view(d: &Detail, t: &crate::catalog::T) -> DetailView {
+pub(crate) fn detail_view(
+    d: &Detail,
+    t: &crate::catalog::T,
+    review: Option<crate::reviews::ReviewJson>,
+    comments: Option<crate::reviews::CommentsJson>,
+) -> DetailView {
     let p: &ChangeRecord = &d.proposal;
     DetailView {
         id: p.change_id.clone(),
@@ -250,6 +263,8 @@ pub(crate) fn detail_view(d: &Detail, t: &crate::catalog::T) -> DetailView {
                 ref_name: r.clone(),
             })
             .collect(),
+        review,
+        comments,
         note: t.get(crate::catalog::Key::ProposalsNoMerge),
     }
 }
@@ -266,6 +281,19 @@ async fn start(
     name: &str,
     cookie_ok: bool,
 ) -> Result<(Principal, RepositoryRecord, Arc<ProposalService>), Box<Response>> {
+    start_with(state, peer, headers, owner, name, cookie_ok, proposals_of).await
+}
+
+/// [`start`] for any service the transport runtime carries: `pick` takes it out of the runtime (`None` = not set up).
+pub(crate) async fn start_with<T>(
+    state: &AppState,
+    peer: crate::client_ip::PeerAddr,
+    headers: &HeaderMap,
+    owner: &str,
+    name: &str,
+    cookie_ok: bool,
+    pick: fn(&Arc<TransportRuntime>) -> Option<Arc<T>>,
+) -> Result<(Principal, RepositoryRecord, Arc<T>), Box<Response>> {
     let mut seen = headers.clone();
     if !cookie_ok {
         seen.remove(header::COOKIE);
@@ -282,7 +310,7 @@ async fn start(
         Ok(r) => r,
         Err(e) => return Err(Box::new(error_response(state, e))),
     };
-    let Some(service) = runtime.as_ref().and_then(proposals_of) else {
+    let Some(service) = runtime.as_ref().and_then(pick) else {
         return Err(Box::new(code_response_with_keys(
             state,
             ErrorCode::TransportOff,
@@ -329,7 +357,7 @@ fn invalid_with_reason(state: &AppState, reason: &'static str) -> Response {
     )
 }
 
-fn json_ok<T: Serialize>(state: &AppState, view: &T) -> Response {
+pub(crate) fn json_ok<T: Serialize>(state: &AppState, view: &T) -> Response {
     match serde_json::to_string(view) {
         Ok(body) => with_security_headers(
             state,
@@ -385,7 +413,25 @@ pub(crate) async fn list_handler(
         .run(move || service.list(&record, filter, limit, after.as_deref()))
         .await;
     match result {
-        Ok(Ok(page)) => json_ok(&state, &ListView::from(&page)),
+        Ok(Ok(page)) => {
+            let mut view = ListView::from(&page);
+            // The review word of each open proposal, from the decisions on its latest revision (the records; no prikk).
+            if let Some(reviews) = state.transport.as_ref().and_then(|rt| rt.reviews.clone()) {
+                let items: Vec<(String, u32)> = page
+                    .items
+                    .iter()
+                    .filter(|s| s.proposal.state == ChangeState::Open)
+                    .map(|s| (s.proposal.change_id.clone(), s.revisions))
+                    .collect();
+                let words = offload(move || reviews.review_words(&items))
+                    .await
+                    .unwrap_or_default();
+                for it in &mut view.proposals {
+                    it.review = words.get(&it.id).map(|w| w.as_str());
+                }
+            }
+            json_ok(&state, &view)
+        }
         Ok(Err(e)) => failure(&state, &e),
         Err(_) => error_response(&state, Failure::Busy),
     }
@@ -396,6 +442,7 @@ pub(crate) async fn list_handler(
 pub(crate) async fn detail_handler(
     State(state): State<AppState>,
     Path((owner, name, id)): Path<(String, String, String)>,
+    q: crate::reviews::DetailQueryResult,
     peer: crate::client_ip::PeerAddr,
     headers: HeaderMap,
 ) -> Response {
@@ -404,14 +451,62 @@ pub(crate) async fn detail_handler(
             Ok(t) => t,
             Err(r) => return *r,
         };
-    let _ = principal;
-    let result = state.gate.run(move || service.detail(&record, &id)).await;
+    let Ok(Query(q)) = q else {
+        return error_response(&state, Failure::Invalid);
+    };
+    let reviews = state.transport.as_ref().and_then(|rt| rt.reviews.clone());
+    let limit = q.limit.unwrap_or(planeter_transport::THREADS_LIMIT_DEFAULT);
+    if q.limit == Some(0) {
+        return invalid_with_reason(&state, "limit_zero");
+    }
+    let result = {
+        let (record, id) = (record.clone(), id.clone());
+        state.gate.run(move || service.detail(&record, &id)).await
+    };
     match result {
         Ok(Ok(d)) => {
+            // The review and the comments are read from the records (no prikk), after the detail, for the same proposal.
+            let parts = match &reviews {
+                None => None,
+                Some(svc) => {
+                    let revisions: Vec<planeter_store::RevisionRecord> =
+                        d.revisions.iter().map(|r| r.record.clone()).collect();
+                    let (svc, change) = (Arc::clone(svc), d.proposal.clone());
+                    let after = q.after.clone();
+                    match offload(move || {
+                        svc.detail_parts(&change, &revisions, limit, after.as_deref())
+                    })
+                    .await
+                    {
+                        Ok(Ok(p)) => Some(p),
+                        Ok(Err(planeter_transport::ReviewError::BadCursor)) => {
+                            return error_response(&state, Failure::Invalid);
+                        }
+                        _ => return code_response(&state, ErrorCode::Unavailable),
+                    }
+                }
+            };
+            let see_hidden = match &parts {
+                Some((_, page))
+                    if page.threads.iter().any(|t| {
+                        t.comment.hidden.is_some() || t.replies.iter().any(|r| r.hidden.is_some())
+                    }) =>
+                {
+                    crate::reviews::can_see_hidden(&state, &principal, &record).await
+                }
+                _ => false,
+            };
+            let (review, comments) = match &parts {
+                Some((r, page)) => (
+                    Some(crate::reviews::review_json(r)),
+                    Some(crate::reviews::comments_json(page, see_hidden)),
+                ),
+                None => (None, None),
+            };
             // The note is the catalog's, in the caller's language; the response layer does not rewrite a 200 body, so
             // the language is negotiated here.
             let t = crate::catalog::T::new(crate::catalog::negotiate_from_headers(&headers));
-            json_ok(&state, &detail_view(&d, &t))
+            json_ok(&state, &detail_view(&d, &t, review, comments))
         }
         Ok(Err(e)) => failure(&state, &e),
         Err(_) => error_response(&state, Failure::Busy),

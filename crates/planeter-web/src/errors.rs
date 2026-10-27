@@ -111,11 +111,21 @@ pub enum ErrorCode {
     ProposalFinal,
     /// 410: the files of that revision were kept until a date and have been removed since (the body's `kept_until` is it).
     ArtifactRemoved,
+    /// 422: the proposal finished more than its grace ago, and takes no more comments (`state`, `kept_until`).
+    CommentsClosed,
+    /// 422: the proposal has landed or been closed, and takes no more decisions (`state`).
+    DecisionsClosed,
+    /// 422: a decision was named for a revision that is not the latest (`current`).
+    RevisionNotCurrent,
+    /// 422: the submitter of a revision (or of any revision of the proposal) cannot approve it (`reason`).
+    SelfApproval,
+    /// 422: the comment is already hidden, or is not hidden (`hidden` says which it is now).
+    CommentState,
 }
 
 impl ErrorCode {
     /// Every code, in a fixed order (the OpenAPI enum).
-    pub const ALL: [ErrorCode; 35] = [
+    pub const ALL: [ErrorCode; 40] = [
         ErrorCode::NotFound,
         ErrorCode::Unavailable,
         ErrorCode::Busy,
@@ -151,6 +161,11 @@ impl ErrorCode {
         ErrorCode::ReasonRequired,
         ErrorCode::ProposalFinal,
         ErrorCode::ArtifactRemoved,
+        ErrorCode::CommentsClosed,
+        ErrorCode::DecisionsClosed,
+        ErrorCode::RevisionNotCurrent,
+        ErrorCode::SelfApproval,
+        ErrorCode::CommentState,
     ];
 
     /// The stable snake_case code.
@@ -191,6 +206,11 @@ impl ErrorCode {
             ErrorCode::ReasonRequired => "reason_required",
             ErrorCode::ProposalFinal => "proposal_final",
             ErrorCode::ArtifactRemoved => "artifact_removed",
+            ErrorCode::CommentsClosed => "comments_closed",
+            ErrorCode::DecisionsClosed => "decisions_closed",
+            ErrorCode::RevisionNotCurrent => "revision_not_current",
+            ErrorCode::SelfApproval => "self_approval",
+            ErrorCode::CommentState => "comment_state",
         }
     }
 
@@ -230,6 +250,11 @@ impl ErrorCode {
                 StatusCode::UNPROCESSABLE_ENTITY
             }
             ErrorCode::ArtifactRemoved => StatusCode::GONE,
+            ErrorCode::CommentsClosed
+            | ErrorCode::DecisionsClosed
+            | ErrorCode::RevisionNotCurrent
+            | ErrorCode::SelfApproval
+            | ErrorCode::CommentState => StatusCode::UNPROCESSABLE_ENTITY,
             ErrorCode::InvalidRequest => StatusCode::BAD_REQUEST,
             ErrorCode::Internal => StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -300,6 +325,18 @@ impl ErrorCode {
             ErrorCode::ArtifactRemoved => {
                 (Key::ErrArtifactRemovedMessage, Key::ErrArtifactRemovedHint)
             }
+            ErrorCode::CommentsClosed => {
+                (Key::ErrCommentsClosedMessage, Key::ErrCommentsClosedHint)
+            }
+            ErrorCode::DecisionsClosed => {
+                (Key::ErrDecisionsClosedMessage, Key::ErrDecisionsClosedHint)
+            }
+            ErrorCode::RevisionNotCurrent => (
+                Key::ErrRevisionNotCurrentMessage,
+                Key::ErrRevisionNotCurrentHint,
+            ),
+            ErrorCode::SelfApproval => (Key::ErrSelfApprovalMessage, Key::ErrSelfApprovalHint),
+            ErrorCode::CommentState => (Key::ErrCommentStateMessage, Key::ErrCommentStateHint),
         };
         ErrorKeys { message, hint }
     }
@@ -334,6 +371,54 @@ impl ErrorCode {
     pub const FORBIDDEN_CLOSE: ErrorKeys = ErrorKeys {
         message: Key::ErrForbiddenCloseMessage,
         hint: Key::ErrForbiddenCloseHint,
+    };
+
+    /// `forbidden` on commenting: the caller can read the repository but is not signed in (a comment has an author).
+    pub const FORBIDDEN_COMMENT: ErrorKeys = ErrorKeys {
+        message: Key::ErrForbiddenCommentMessage,
+        hint: Key::ErrForbiddenCommentHint,
+    };
+
+    /// `forbidden` on a decision: the caller can read the repository but holds no `review` here.
+    pub const FORBIDDEN_DECISION: ErrorKeys = ErrorKeys {
+        message: Key::ErrForbiddenDecisionMessage,
+        hint: Key::ErrForbiddenDecisionHint,
+    };
+
+    /// `forbidden` on hiding or showing a comment: the caller can read the repository but may not administer it.
+    pub const FORBIDDEN_HIDE: ErrorKeys = ErrorKeys {
+        message: Key::ErrForbiddenHideMessage,
+        hint: Key::ErrForbiddenHideHint,
+    };
+
+    /// `invalid_request` for a comment that breaks a rule (the `reason` field says which).
+    pub const BAD_COMMENT: ErrorKeys = ErrorKeys {
+        message: Key::ErrInvalidRequestMessage,
+        hint: Key::ErrCommentHint,
+    };
+
+    /// `invalid_request` for a decision that breaks a rule.
+    pub const BAD_DECISION: ErrorKeys = ErrorKeys {
+        message: Key::ErrInvalidRequestMessage,
+        hint: Key::ErrDecisionHint,
+    };
+
+    /// `invalid_request` for hiding a comment without a proper reason.
+    pub const BAD_HIDE: ErrorKeys = ErrorKeys {
+        message: Key::ErrInvalidRequestMessage,
+        hint: Key::ErrHideHint,
+    };
+
+    /// `rate_limited`: too many comments on one proposal in the last hour.
+    pub const RATE_COMMENTS: ErrorKeys = ErrorKeys {
+        message: Key::ErrRateCommentsMessage,
+        hint: Key::ErrRateCommentsHint,
+    };
+
+    /// `rate_limited`: too many decisions on one proposal in the last hour.
+    pub const RATE_DECISIONS: ErrorKeys = ErrorKeys {
+        message: Key::ErrRateDecisionsMessage,
+        hint: Key::ErrRateDecisionsHint,
     };
 
     /// `transport_off` for a proposal: fetches may be set up while the artifact store, which proposals need, is not.
@@ -470,6 +555,21 @@ impl ErrorCode {
             }
             ErrorCode::ArtifactRemoved => {
                 "the files of that revision were kept until a date and have been removed since (the body's `kept_until` is that date)"
+            }
+            ErrorCode::CommentsClosed => {
+                "the proposal finished more than its grace ago and takes no more comments (the body's `state` and `kept_until` say when)"
+            }
+            ErrorCode::DecisionsClosed => {
+                "the proposal has landed or been closed (the body's `state` says which) and takes no more decisions"
+            }
+            ErrorCode::RevisionNotCurrent => {
+                "a decision was named for a revision that is not the latest (the body's `current` is the latest)"
+            }
+            ErrorCode::SelfApproval => {
+                "the submitter of a revision cannot approve it, and nobody who submitted any revision of a proposal can approve its latest (the body's `reason` says which)"
+            }
+            ErrorCode::CommentState => {
+                "the comment is already hidden, or is not hidden (the body's `hidden` says which it is now)"
             }
         }
     }

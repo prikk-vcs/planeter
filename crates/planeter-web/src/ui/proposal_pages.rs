@@ -71,7 +71,7 @@ pub(super) async fn nav_for(
 
 /// What a page answers when this server keeps no proposals (no artifact store is set up): a plain sentence, with a way back
 /// to the repository. It is shown only after the read gate, so it says nothing about a repository the viewer cannot read.
-fn off_page(state: &AppState, c: &Ctx, owner: &str, name: &str) -> Response {
+pub(super) fn off_page(state: &AppState, c: &Ctx, owner: &str, name: &str) -> Response {
     let tpl = super::MessageTpl {
         user: c.user.clone(),
         csrf: c.csrf.clone(),
@@ -99,6 +99,8 @@ struct Row {
     state_label: Key,
     summary: String,
     when: String,
+    /// The review word of an open proposal (`None`: it is not open, or review is not set up).
+    review: Option<Key>,
 }
 
 fn state_label(s: ChangeState) -> Key {
@@ -137,6 +139,7 @@ fn row(t: &T, s: &Summary) -> Row {
         state_label: state_label(s.proposal.state),
         summary: summary_line(t, s.patches, s.revisions),
         when: timefmt::minute(s.proposal.updated_at),
+        review: None,
     }
 }
 
@@ -240,7 +243,25 @@ pub(super) async fn list_page(
         .next
         .as_deref()
         .map(|cursor| format!("{at}?state={}&after={}", filter_name(filter), pct(cursor)));
-    let rows = page.items.iter().map(|s| row(&c.t, s)).collect();
+    let words = super::review_pages::review_words(
+        &state,
+        &page
+            .items
+            .iter()
+            .filter(|s| s.proposal.state == ChangeState::Open)
+            .map(|s| (s.proposal.change_id.clone(), s.revisions))
+            .collect::<Vec<_>>(),
+    )
+    .await;
+    let rows: Vec<Row> = page
+        .items
+        .iter()
+        .map(|s| {
+            let mut r = row(&c.t, s);
+            r.review = words.get(&s.proposal.change_id).copied();
+            r
+        })
+        .collect();
     render(
         &state,
         StatusCode::OK,
@@ -317,6 +338,8 @@ struct DetailTpl {
     may_close: bool,
     /// Where the close form posts.
     close_action: String,
+    /// The review: the line, the decisions, the comments and their forms (`None`: review is not set up here).
+    review: Option<super::review_pages::ReviewBlock>,
 }
 
 fn artifact_href(owner: &str, name: &str, id: &str, seq: u32) -> String {
@@ -500,12 +523,20 @@ fn detail_tpl(
         latest_download,
         may_close: may_close && p.state == ChangeState::Open,
         close_action: format!("/{owner}/{name}/proposals/{}/close", pct(&p.change_id)),
+        review: None,
     }
+}
+
+#[derive(serde::Deserialize)]
+pub(super) struct DetailQuery {
+    /// The cursor of the next page of comments.
+    after: Option<String>,
 }
 
 pub(super) async fn detail_page(
     State(state): State<AppState>,
     Path((owner, name, id)): Path<(String, String, String)>,
+    Query(q): Query<DetailQuery>,
     headers: HeaderMap,
 ) -> Response {
     let c = ctx(&headers, &state).await;
@@ -536,7 +567,7 @@ pub(super) async fn detail_page(
     };
     let (may_download, may_close) = permissions(&state, &c, &record, &d.proposal.opened_by).await;
     let (proposals_nav, _) = nav_for(&state, &c, &owner, &name).await;
-    let tpl = detail_tpl(
+    let mut tpl = detail_tpl(
         &c,
         &d,
         &owner,
@@ -545,6 +576,16 @@ pub(super) async fn detail_page(
         may_download,
         may_close,
     );
+    tpl.review = super::review_pages::review_block(
+        &state,
+        &c,
+        &record,
+        &owner,
+        &name,
+        &d,
+        q.after.as_deref(),
+    )
+    .await;
     render(&state, StatusCode::OK, &tpl, &c)
 }
 

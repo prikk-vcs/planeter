@@ -39,6 +39,7 @@ use crate::principal::principal_from_request;
 use crate::sanitize::render_markdown;
 
 mod proposal_pages;
+mod review_pages;
 
 const HISTORY_PAGE: usize = 50;
 const CSRF_TTL_SECS: u64 = 30 * 24 * 3600;
@@ -49,6 +50,12 @@ pub fn routes() -> Routes {
     // Every page that shows repository data reads through `ReadService`: `authorize(_, Read, _)` first.
     let read = Class::Authorized(Action::Read);
     let close = Class::Authorized(Action::Close);
+    // Review (RFC 005 part 6): the forms of the proposal page.
+    let (comment_class, decision_class, admin_class) = (
+        Class::Authorized(Action::Comment),
+        Class::Authorized(Action::Review),
+        Class::Authorized(Action::RepoAdmin),
+    );
     Routes::new()
         .route(
             "/",
@@ -108,6 +115,10 @@ pub fn routes() -> Routes {
         .route("/{owner}/{name}/proposals", read, &["GET"], get(proposal_pages::list_page))
         .route("/{owner}/{name}/proposals/{id}", read, &["GET"], get(proposal_pages::detail_page))
         .route("/{owner}/{name}/proposals/{id}/close", close, &["POST"], post(proposal_pages::close_submit))
+        .route("/{owner}/{name}/proposals/{id}/comments", comment_class, &["POST"], post(review_pages::comment_submit))
+        .route("/{owner}/{name}/proposals/{id}/decisions", decision_class, &["POST"], post(review_pages::decision_submit))
+        .route("/{owner}/{name}/proposals/{id}/comments/{cid}/hide", admin_class, &["POST"], post(review_pages::hide_submit))
+        .route("/{owner}/{name}/proposals/{id}/comments/{cid}/unhide", admin_class, &["POST"], post(review_pages::unhide_submit))
 }
 
 pub fn router(state: AppState) -> Router {

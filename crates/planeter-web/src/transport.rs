@@ -47,6 +47,8 @@ pub struct TransportRuntime {
     /// What a person sees of the proposals (RFC 005 part 5: the list, the detail, closing, the download), when the write
     /// side is on; `None` otherwise.
     pub proposals: Option<Arc<planeter_transport::ProposalService>>,
+    /// Comments and decisions (RFC 005 part 6), when the write side is on; `None` otherwise.
+    pub reviews: Option<Arc<planeter_transport::ReviewService>>,
     pub ip_limit: RateLimiter,
     pub principal_limit: RateLimiter,
 }

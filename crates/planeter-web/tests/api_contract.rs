@@ -35,7 +35,7 @@ use planeter_web::errors::ErrorCode;
 use planeter_web::{AppState, BlockingGate, ContentOrigin, PrikkGate, TrustedProxies, router};
 
 /// The routes the API is meant to have, written down independently of `api::paths`.
-const EXPECTED_PATHS: [&str; 16] = [
+const EXPECTED_PATHS: [&str; 20] = [
     "/api/v1/repos/{owner}/{name}/history",
     "/api/v1/repos/{owner}/{name}/change/{target}",
     "/api/v1/repos/{owner}/{name}/file",
@@ -51,6 +51,10 @@ const EXPECTED_PATHS: [&str; 16] = [
     "/api/v1/repos/{owner}/{name}/proposals/{id}",
     "/api/v1/repos/{owner}/{name}/proposals/{id}/close",
     "/api/v1/repos/{owner}/{name}/proposals/{id}/revisions/{seq}/artifact",
+    "/api/v1/repos/{owner}/{name}/proposals/{id}/comments",
+    "/api/v1/repos/{owner}/{name}/proposals/{id}/decisions",
+    "/api/v1/repos/{owner}/{name}/proposals/{id}/comments/{cid}/hide",
+    "/api/v1/repos/{owner}/{name}/proposals/{id}/comments/{cid}/unhide",
     "/api/v1/openapi.json",
 ];
 
@@ -241,7 +245,7 @@ fn every_code_has_one_plain_sentence_and_the_shape_is_stable() {
             assert_eq!(text.matches(". ").count(), allowed, "sentences: {text:?}");
         }
     }
-    assert_eq!(seen.len(), 35);
+    assert_eq!(seen.len(), 40);
 }
 
 #[test]
@@ -305,7 +309,10 @@ async fn the_document_lists_exactly_the_routes_the_router_serves() {
         let concrete = path
             .replace("{owner}", "alice")
             .replace("{name}", "open")
-            .replace("{target}", "abc");
+            .replace("{target}", "abc")
+            .replace("{id}", "p1")
+            .replace("{seq}", "1")
+            .replace("{cid}", "m1");
         let req = Request::builder()
             .method("DELETE")
             .uri(&concrete)
@@ -832,7 +839,7 @@ fn api_routes_are_registered_only_through_the_shared_paths() {
         .map(str::trim)
         .filter(|l| l.contains(".route("))
         .collect();
-    assert_eq!(route_lines.len(), 16, "{route_lines:?}");
+    assert_eq!(route_lines.len(), 20, "{route_lines:?}");
     assert!(
         route_lines.iter().all(|l| l.contains("paths::")),
         "a route is registered with a literal path: {route_lines:?}"

@@ -911,4 +911,245 @@ pub const CATALOG: &[Entry] = &[
         "proposal.sighting_explain",
         "ここで受信した履歴は置き換えられることがあるため、この作業が反映済みであることを示すものではありません。",
     ),
+    msg(
+        "error.comments_closed.message",
+        "この提案へのコメントは、完了後の議論の期間が終わった {date} に締め切られました。",
+    ),
+    msg(
+        "error.comments_closed.hint",
+        "続きの話は、新しい提案として始めてください。",
+    ),
+    msg(
+        "error.decisions_closed.message",
+        "この提案は反映済みか閉じられているため、これ以上レビューの判断を受け付けません。",
+    ),
+    msg(
+        "error.decisions_closed.hint",
+        "判断を記録できるのは提案が開いている間だけです。コメントはしばらくの間続けられます。",
+    ),
+    msg(
+        "error.revision_not_current.message",
+        "判断は最新のリビジョンに対して行います。最新はリビジョン {current} です。",
+    ),
+    msg(
+        "error.revision_not_current.hint",
+        "リビジョンを省くと最新のリビジョンへの判断になります。以前のリビジョンは履歴です。",
+    ),
+    msg(
+        "error.self_approval.message",
+        "自分が送った作業を自分で承認することはできません。",
+    ),
+    msg(
+        "error.self_approval.hint",
+        "ほかの人にレビューを依頼してください（変更の依頼やコメントはできます）。",
+    ),
+    msg(
+        "error.comment_state.message",
+        "そのコメントはすでに指定の状態になっています。",
+    ),
+    msg(
+        "error.comment_state.hint",
+        "提案を読み込み直して、コメントの現在の状態を確認してください。",
+    ),
+    msg(
+        "error.forbidden_comment.message",
+        "このリポジトリは読めますが、コメントするにはサインインが必要です。",
+    ),
+    msg(
+        "error.forbidden_comment.hint",
+        "サインインするか、アクセストークンを付けてリクエストを送ってください。",
+    ),
+    msg(
+        "error.forbidden_decision.message",
+        "このリポジトリは読めますが、判断を記録できるのはここでレビューできる人だけです。",
+    ),
+    msg(
+        "error.forbidden_decision.hint",
+        "メンテナーにその権限を依頼してください。",
+    ),
+    msg(
+        "error.forbidden_hide.message",
+        "このリポジトリは読めますが、コメントを非表示にしたり再表示したりできるのは管理者だけです。",
+    ),
+    msg(
+        "error.forbidden_hide.hint",
+        "リポジトリの管理者に依頼してください。",
+    ),
+    msg(
+        "error.rate_comments.message",
+        "この1時間に、この提案へ何度もコメントしています。",
+    ),
+    msg(
+        "error.rate_comments.hint",
+        "しばらく待ってからもう一度お試しください。待ち時間は Retry-After ヘッダーにあります。",
+    ),
+    msg(
+        "error.rate_decisions.message",
+        "この1時間に、この提案へ何度も判断を記録しています。",
+    ),
+    msg(
+        "error.rate_decisions.hint",
+        "しばらく待ってからもう一度お試しください。待ち時間は Retry-After ヘッダーにあります。",
+    ),
+    msg(
+        "error.invalid_request.comment_hint",
+        "フィールドの一覧は API ドキュメントにあるので、reason に示されたフィールドを直してから、コメントをもう一度送信してください。",
+    ),
+    msg(
+        "error.invalid_request.decision_hint",
+        "フィールドの一覧は API ドキュメントにあるので、reason に示されたフィールドを直してから、判断をもう一度送信してください。",
+    ),
+    msg(
+        "error.invalid_request.hide_hint",
+        "500 文字までの一、二文の理由を付けて、もう一度送信してください。",
+    ),
+    msg("review.line.awaiting", "レビュー待ち"),
+    plural_msg(
+        "review.line.approved",
+        "{count} 人が承認しました",
+        "{count} 人が承認しました",
+    ),
+    plural_msg(
+        "review.line.changes",
+        "{count} 人が変更を依頼しています",
+        "{count} 人が変更を依頼しています",
+    ),
+    msg(
+        "review.means.awaiting",
+        "リビジョン {revision} に判断を出したレビュアーはまだいません。レビューは何もマージしません。",
+    ),
+    msg(
+        "review.means.approved",
+        "ここでの承認は、レビュアーがリビジョン {revision} に満足していると述べたという意味です。何もマージしません。",
+    ),
+    msg(
+        "review.means.changes",
+        "レビュアーがリビジョン {revision} への変更を依頼しました。これは意見であり、マージも妨げも行いません。",
+    ),
+    msg(
+        "review.earlier_note",
+        "以前のリビジョンで承認されました。リビジョン {revision} はまだレビューされていません。",
+    ),
+    msg("review.word.approved", "承認済み"),
+    msg("review.word.changes", "変更依頼あり"),
+    msg("review.heading", "レビュー"),
+    msg("review.decisions.heading", "リビジョン {revision} への判断"),
+    msg(
+        "review.decisions.none",
+        "このリビジョンに判断を出した人はまだいません。",
+    ),
+    msg(
+        "review.decision.approve",
+        "{who} さんがリビジョン {revision} を承認しました",
+    ),
+    msg(
+        "review.decision.request_changes",
+        "{who} さんがリビジョン {revision} への変更を依頼しました",
+    ),
+    msg("review.decision.note", "メモ：{note}"),
+    msg("review.earlier.heading", "以前のリビジョンへの判断"),
+    msg(
+        "review.earlier.explain",
+        "これらは、その後置き換えられたリビジョンに対する判断です。履歴であり、現在は何にも数えられません。",
+    ),
+    msg("comments.heading", "コメント"),
+    msg("comments.none", "コメントはまだありません。"),
+    msg("comments.more", "さらにコメントを表示"),
+    plural_msg(
+        "comments.count",
+        "コメント {count} 件",
+        "コメント {count} 件",
+    ),
+    msg(
+        "comment.meta",
+        "{who} · {when} · リビジョン {revision} の時点",
+    ),
+    msg("comment.anchor.patch", "パッチ {patch} について"),
+    msg("comment.anchor.path", "{path} について"),
+    msg("comment.anchor.lines", "{path} の {from}–{to} 行目について"),
+    msg("comment.anchor.line", "{path} の {line} 行目について"),
+    msg("comment.hidden", "メンテナーが非表示にしました：{reason}"),
+    msg(
+        "comment.hidden_admin",
+        "{who} さんが {when} に非表示にしました：{reason}。あなたはこのリポジトリの管理者なので読めます。",
+    ),
+    msg("comment.reply.label", "返信"),
+    msg("comment.reply.button", "返信する"),
+    msg("comment.form.heading", "コメントを追加"),
+    msg("comment.form.body", "コメント（Markdown を使えます）"),
+    msg(
+        "comment.form.patch",
+        "パッチについて（任意）：その ID の最初の数文字",
+    ),
+    msg("comment.form.path", "ファイルについて（任意）：そのパス"),
+    msg("comment.form.from", "開始行（任意）"),
+    msg("comment.form.to", "終了行（任意）"),
+    msg("comment.form.button", "コメントする"),
+    msg(
+        "comment.form.consequence",
+        "このリポジトリを読める全員にコメントが見えます。あとから編集や削除はできず、メンテナーが非表示にすることはできます。",
+    ),
+    msg("comment.refused.heading", "コメントは追加されませんでした"),
+    msg("comment.refusal.body_empty", "コメントには本文が必要です。"),
+    msg(
+        "comment.refusal.body_too_long",
+        "コメントは 16 KiB までです。",
+    ),
+    msg(
+        "comment.refusal.patch",
+        "この提案のパッチで、その文字で始まるものがないか、複数あります。",
+    ),
+    msg(
+        "comment.refusal.path",
+        "パスは 1〜1,024 文字で、制御文字は使えません。",
+    ),
+    msg(
+        "comment.refusal.lines_need_a_path",
+        "行を指定するには、ファイルのパスも必要です。",
+    ),
+    msg(
+        "comment.refusal.lines_incomplete",
+        "終了行だけでなく開始行も指定してください。",
+    ),
+    msg("comment.refusal.line_zero", "行番号は 1 から始まります。"),
+    msg(
+        "comment.refusal.line_order",
+        "開始行は終了行より後にできません。",
+    ),
+    msg(
+        "comment.refusal.parent",
+        "そこには返信を追加できません。スレッドは 1 階層までです。",
+    ),
+    msg("decision.form.heading", "リビジョン {revision} への判断"),
+    msg("decision.form.approve", "承認する"),
+    msg("decision.form.request_changes", "変更を依頼する"),
+    msg("decision.form.note", "メモ（任意）"),
+    msg("decision.form.button", "判断を記録する"),
+    msg(
+        "decision.form.consequence",
+        "これはリビジョン {revision} だけに記録され、このリポジトリを読める全員に見えます。提案が開いている間は変更できます。あとのリビジョンには引き継がれず、何もマージしません。",
+    ),
+    msg(
+        "decision.form.self",
+        "あなたはこの提案の一部を送ったため、承認はできません。変更の依頼はできます。",
+    ),
+    msg("decision.refused.heading", "判断は記録されませんでした"),
+    msg("decision.refusal.note_too_long", "メモは 2 KiB までです。"),
+    msg("hide.form.reason", "非表示にする理由"),
+    msg("hide.form.button", "コメントを非表示にする"),
+    msg(
+        "hide.form.consequence",
+        "コメントは記録に残ります。本文が見えるのはこのリポジトリの管理者だけで、ほかの人には理由が表示されます。あとで再表示できます。",
+    ),
+    msg("unhide.form.button", "コメントを再表示する"),
+    msg(
+        "unhide.form.consequence",
+        "このリポジトリを読める全員に本文が再び見えます。",
+    ),
+    msg("hide.refused.heading", "コメントは変更されませんでした"),
+    msg(
+        "hide.refusal.reason",
+        "非表示にするには、500 文字までの理由が必要です。",
+    ),
+    msg("proposals.col.review", "レビュー"),
 ];

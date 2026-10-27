@@ -442,6 +442,31 @@ impl ReviewService {
         })
     }
 
+    /// The one patch of the proposal's current set whose id starts with `prefix` (lower-case hexadecimal, at least 6
+    /// characters), for the page's comment form. `Ok(None)` when none does, or more than one does.
+    pub fn patch_by_prefix(
+        &self,
+        record: &RepositoryRecord,
+        id: &str,
+        prefix: &str,
+    ) -> Result<Option<String>, ReviewError> {
+        let (_, revisions) = self.own(record, id)?;
+        if prefix.len() < 6
+            || !prefix
+                .bytes()
+                .all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+        {
+            return Ok(None);
+        }
+        let mut found = current_patch_set(&revisions)
+            .into_iter()
+            .filter(|p| p.starts_with(prefix));
+        Ok(match (found.next(), found.next()) {
+            (Some(one), None) => Some(one),
+            _ => None,
+        })
+    }
+
     // ------------------------------------------------------------------------------------------ decisions
 
     /// Record a decision. The caller has already decided that `reviewer` may review (`authorize(Review)`).

@@ -111,6 +111,7 @@ fn concrete(pattern: &str, repo: &str) -> String {
         .replace("{target}", "abcdef")
         .replace("{id}", "p1")
         .replace("{seq}", "1")
+        .replace("{cid}", "m1")
         .replace("{*path}", "some/path.txt");
     if p.ends_with("/file") || p.ends_with("/raw") {
         format!("{p}?path=README.md")
@@ -220,6 +221,10 @@ fn the_table_lists_the_routes_the_contract_knows_and_every_public_entry_has_a_re
         "/{owner}/{name}/proposals",
         "/{owner}/{name}/proposals/{id}",
         "/{owner}/{name}/proposals/{id}/close",
+        "/{owner}/{name}/proposals/{id}/comments",
+        "/{owner}/{name}/proposals/{id}/decisions",
+        "/{owner}/{name}/proposals/{id}/comments/{cid}/hide",
+        "/{owner}/{name}/proposals/{id}/comments/{cid}/unhide",
     ]);
     let mut have: Vec<&str> = table.iter().map(|e| e.path).collect();
     have.sort_unstable();

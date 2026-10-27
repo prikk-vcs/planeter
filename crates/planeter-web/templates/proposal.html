@@ -7,6 +7,10 @@
 {% if let Some(line) = closed_line %}<p>{{ line }}</p>
 {% endif %}<p class="muted">{{ t.msg(Key::ProposalBy).with("who", by) }} · {{ t.msg(Key::ProposalWhen).with("when", when) }}</p>
 <p>{{ summary }}</p>
+{% if let Some(rv) = review %}{% if let Some(line) = rv.line %}<p class="review-line"><strong>{{ line }}</strong></p>
+{% if let Some(m) = rv.means %}<p class="muted">{{ m }}</p>
+{% endif %}{% if let Some(n) = rv.earlier_note %}<p class="muted">{{ n }}</p>
+{% endif %}{% endif %}{% endif %}
 <p class="muted">{{ t.get(Key::ProposalFileViewMissing) }}</p>
 {% if let Some((seq, href)) = latest_download %}
 <p><a href="{{ href }}">{{ t.msg(Key::ProposalDownloadLink).with("seq", seq) }}</a></p>
@@ -57,6 +61,104 @@
 <ul>{% for r in sightings %}<li>{{ t.msg(Key::ProposalSighting).code("ref", r).html() }}</li>{% endfor %}</ul>
 <p class="muted">{{ t.get(Key::ProposalSightingExplain) }}</p>
 {% endif %}
+{% if let Some(rv) = review %}
+<h2 id="review">{{ t.get(Key::ReviewHeading) }}</h2>
+<h3>{{ rv.decisions_heading }}</h3>
+{% if rv.decisions.is_empty() %}<p class="muted">{{ t.get(Key::ReviewDecisionsNone) }}</p>
+{% else %}<ul>{% for d in rv.decisions %}<li>{{ d.text }}{% if let Some(n) = d.note %}<br><span class="muted">{{ n }}</span>{% endif %}</li>{% endfor %}</ul>
+{% endif %}{% if !rv.earlier.is_empty() %}<h3>{{ t.get(Key::ReviewEarlierHeading) }}</h3>
+<p class="muted">{{ t.get(Key::ReviewEarlierExplain) }}</p>
+<ul>{% for d in rv.earlier %}<li>{{ d.text }}{% if let Some(n) = d.note %}<br><span class="muted">{{ n }}</span>{% endif %}</li>{% endfor %}</ul>
+{% endif %}{% if rv.can_decide %}<form method="post" action="{{ rv.decision_action }}">
+<input type="hidden" name="csrf" value="{{ csrf }}">
+<input type="hidden" name="revision" value="{{ rv.latest }}">
+<fieldset>
+<legend>{{ rv.decision_heading }}</legend>
+<p><label><input type="radio" name="decision" value="approve" required{% if rv.is_submitter %} disabled{% endif %}> {{ t.get(Key::DecisionFormApprove) }}</label></p>
+<p><label><input type="radio" name="decision" value="request-changes" required> {{ t.get(Key::DecisionFormRequest) }}</label></p>
+<p><label for="decision-note">{{ t.get(Key::DecisionFormNote) }}</label><br>
+<textarea id="decision-note" name="note" rows="2" cols="60" maxlength="2048"></textarea></p>
+<p class="muted">{{ rv.decision_consequence }}</p>
+{% if rv.is_submitter %}<p class="muted">{{ t.get(Key::DecisionFormSelf) }}</p>
+{% endif %}<p><button type="submit">{{ t.get(Key::DecisionFormButton) }}</button></p>
+</fieldset>
+</form>
+{% endif %}<h2 id="comments">{{ t.get(Key::CommentsHeading) }}</h2>
+<p class="muted">{{ rv.comments_count }}</p>
+{% if rv.threads.is_empty() %}<p>{{ t.get(Key::CommentsNone) }}</p>
+{% endif %}{% for th in rv.threads %}<article class="comment" id="comment-{{ th.top.id }}">
+<p class="muted">{{ th.top.meta }}</p>
+{% if let Some(a) = th.top.anchor %}<p class="muted">{{ a }}</p>
+{% endif %}{% if let Some(h) = th.top.hidden_line %}<p><em>{{ h }}</em></p>
+{% endif %}{% if let Some(html) = th.top.body_html %}<div class="comment-body">{{ html|safe }}</div>
+{% endif %}{% if rv.can_hide %}{% if th.top.hidden %}<form method="post" action="{{ rv.comment_action }}/{{ th.top.id }}/unhide">
+<input type="hidden" name="csrf" value="{{ csrf }}">
+<p class="muted">{{ t.get(Key::UnhideFormConsequence) }}</p>
+<p><button type="submit">{{ t.get(Key::UnhideFormButton) }}</button></p>
+</form>
+{% else %}<details>
+<summary>{{ t.get(Key::HideFormButton) }}</summary>
+<form method="post" action="{{ rv.comment_action }}/{{ th.top.id }}/hide">
+<input type="hidden" name="csrf" value="{{ csrf }}">
+<p><label for="hide-{{ th.top.id }}">{{ t.get(Key::HideFormReason) }}</label><br>
+<input id="hide-{{ th.top.id }}" type="text" name="reason" maxlength="500" size="60" required></p>
+<p class="muted">{{ t.get(Key::HideFormConsequence) }}</p>
+<p><button type="submit">{{ t.get(Key::HideFormButton) }}</button></p>
+</form>
+</details>
+{% endif %}{% endif %}{% for r in th.replies %}<div class="reply" id="comment-{{ r.id }}">
+<p class="muted">{{ r.meta }}</p>
+{% if let Some(a) = r.anchor %}<p class="muted">{{ a }}</p>
+{% endif %}{% if let Some(h) = r.hidden_line %}<p><em>{{ h }}</em></p>
+{% endif %}{% if let Some(html) = r.body_html %}<div class="comment-body">{{ html|safe }}</div>
+{% endif %}{% if rv.can_hide %}{% if r.hidden %}<form method="post" action="{{ rv.comment_action }}/{{ r.id }}/unhide">
+<input type="hidden" name="csrf" value="{{ csrf }}">
+<p class="muted">{{ t.get(Key::UnhideFormConsequence) }}</p>
+<p><button type="submit">{{ t.get(Key::UnhideFormButton) }}</button></p>
+</form>
+{% else %}<details>
+<summary>{{ t.get(Key::HideFormButton) }}</summary>
+<form method="post" action="{{ rv.comment_action }}/{{ r.id }}/hide">
+<input type="hidden" name="csrf" value="{{ csrf }}">
+<p><label for="hide-{{ r.id }}">{{ t.get(Key::HideFormReason) }}</label><br>
+<input id="hide-{{ r.id }}" type="text" name="reason" maxlength="500" size="60" required></p>
+<p class="muted">{{ t.get(Key::HideFormConsequence) }}</p>
+<p><button type="submit">{{ t.get(Key::HideFormButton) }}</button></p>
+</form>
+</details>
+{% endif %}{% endif %}</div>
+{% endfor %}{% if rv.can_comment %}<details>
+<summary>{{ t.get(Key::CommentReplyButton) }}</summary>
+<form method="post" action="{{ rv.comment_action }}">
+<input type="hidden" name="csrf" value="{{ csrf }}">
+<input type="hidden" name="parent" value="{{ th.top.id }}">
+<p><label for="reply-{{ th.top.id }}">{{ t.get(Key::CommentReplyLabel) }}</label><br>
+<textarea id="reply-{{ th.top.id }}" name="body" rows="3" cols="60" required></textarea></p>
+<p class="muted">{{ t.get(Key::CommentFormConsequence) }}</p>
+<p><button type="submit">{{ t.get(Key::CommentReplyButton) }}</button></p>
+</form>
+</details>
+{% endif %}</article>
+{% endfor %}{% if let Some(href) = rv.more %}<p><a href="{{ href }}#comments">{{ t.get(Key::CommentsMore) }}</a></p>
+{% endif %}{% if rv.can_comment %}<form method="post" action="{{ rv.comment_action }}">
+<input type="hidden" name="csrf" value="{{ csrf }}">
+<fieldset>
+<legend>{{ t.get(Key::CommentFormHeading) }}</legend>
+<p><label for="comment-body">{{ t.get(Key::CommentFormBody) }}</label><br>
+<textarea id="comment-body" name="body" rows="5" cols="60" required></textarea></p>
+<p><label for="comment-patch">{{ t.get(Key::CommentFormPatch) }}</label><br>
+<input id="comment-patch" type="text" name="patch" maxlength="64" size="20"></p>
+<p><label for="comment-path">{{ t.get(Key::CommentFormPath) }}</label><br>
+<input id="comment-path" type="text" name="path" maxlength="1024" size="60"></p>
+<p><label for="comment-from">{{ t.get(Key::CommentFormFrom) }}</label>
+<input id="comment-from" type="number" name="line_from" min="1" size="6">
+<label for="comment-to">{{ t.get(Key::CommentFormTo) }}</label>
+<input id="comment-to" type="number" name="line_to" min="1" size="6"></p>
+<p class="muted">{{ t.get(Key::CommentFormConsequence) }}</p>
+<p><button type="submit">{{ t.get(Key::CommentFormButton) }}</button></p>
+</fieldset>
+</form>
+{% endif %}{% endif %}
 {% if let Some(n) = retention_note %}<p class="muted">{{ n }}</p>{% endif %}
 <p class="muted">{{ t.get(Key::ProposalsNoMerge) }}</p>
 </details>

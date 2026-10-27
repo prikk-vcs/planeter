@@ -62,8 +62,8 @@ exact :: authn.rs :: Bearer  :: the Authorization scheme prefix
 # --- errors.rs: the stable machine codes and the OpenAPI prose (developer-facing, English by decision)
 re :: errors.rs :: ^(not_found|unavailable|busy|invalid_request|method_not_allowed|raw_elsewhere|too_large|internal|transport_off|unknown_ref|unknown_kind|bundle_of_received_ref|not_verified|export_failed|rate_limited|range_not_satisfiable)$ :: a stable machine-readable error code
 exact :: errors.rs :: document :: a placeholder name
-re :: errors.rs :: ^(reason_required|proposal_final|artifact_removed)$ :: a stable machine-readable error code (RFC 005 part 5)
-re :: errors.rs :: ^(a proposal is closed with a reason|the proposal has landed or been closed|the files of that revision were kept).* :: ErrorCode::description: OpenAPI prose for developers, English by decision (D-3d)
+re :: errors.rs :: ^(reason_required|proposal_final|artifact_removed|comments_closed|decisions_closed|revision_not_current|self_approval|comment_state)$ :: a stable machine-readable error code (RFC 005 part 5)
+re :: errors.rs :: ^(a proposal is closed with a reason|the proposal has landed or been closed|the files of that revision were kept|the proposal finished more than|a decision was named for|the submitter of a revision cannot|the comment is already hidden).* :: ErrorCode::description: OpenAPI prose for developers, English by decision (D-3d)
 re :: errors.rs :: ^(forbidden|length_required|payload_too_large|needs_recovery|quota_exceeded|base_unknown|declaration_misses_added|declared_not_held|no_new_content|unknown_proposal|proposal_not_open|not_your_proposal|accept_refused|intent_pending|incomplete|unknown_intent)$ :: a stable machine-readable error code (RFC 004 part 3b)
 re :: errors.rs :: ^(the caller can read the repository but|a proposal must declare|the proposal is larger than|the repository is waiting for recovery|a limit on proposals was reached|the declared base is not|the declared patches leave|the declared patches name|the artifact added nothing|the repository has no proposal|the proposal is landed|the proposal was opened by somebody|prikk refused the artifact and|somebody else has begun|the accept did not finish|an intent to abandon).* :: ErrorCode::description: OpenAPI prose for developers, English by decision (D-3d)
 re :: transport.rs :: ^(reason|state|limit|used|quota|unit|count|patch_ids|detail|intent|cause|mebibytes)$ :: a JSON field name or value of the propose response (machine-readable)
@@ -140,3 +140,10 @@ re :: proposal_pages.rs :: ^(revisions|date|limit|repo|reason|ref)$ :: a placeho
 re :: proposal_pages.rs :: ^(open|landed|closed|all)$ :: the value of the `state` query parameter (matches the API's)
 exact :: proposal_pages.rs :: {at}?state={} :: a format string of a link: identifiers and separators
 exact :: proposal_pages.rs :: {at}?state={}&after={} :: a format string of a link: identifiers and separators
+
+# --- review over HTTP (RFC 005 part 6): JSON field names and stable reason words, placeholder names, link formats
+re :: reviews.rs :: ^(reason|date|state|kept_until|current|hidden|note_too_long|reason_required|reason_too_long|not_json|too_large|decision_unknown|unknown_field)$ :: a JSON field name or a stable machine-readable reason word
+exact :: reviews.rs :: unknown field :: the text of serde's error, matched to tell an unknown field from invalid JSON
+re :: review_pages.rs :: ^(patch|path|line|from|to|who|when|reason|revision|note|date|current)$ :: a placeholder name of a catalog message
+exact :: review_pages.rs :: {}#comment-{} :: a link to a comment: an address and an identifier
+exact :: review_pages.rs :: {}#comment-{cid} :: a link to a comment: an address and an identifier

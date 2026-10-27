@@ -30,6 +30,7 @@ use planeter_store::Owner;
 use crate::errors::{ErrorBody, ErrorCode};
 use crate::gate::{AdmitError, PrikkGate, offload};
 use crate::proposals::{artifact_handler, close_handler, detail_handler, list_handler};
+use crate::reviews::{comment_handler, decision_handler, hide_handler, unhide_handler};
 use crate::routes::{Action, Class, Routes};
 use crate::security::{ContentOrigin, app_security_headers, raw_content_headers};
 use crate::transport::{
@@ -89,9 +90,15 @@ pub mod paths {
     pub const PROPOSAL_CLOSE: &str = "/api/v1/repos/{owner}/{name}/proposals/{id}/close";
     pub const PROPOSAL_ARTIFACT: &str =
         "/api/v1/repos/{owner}/{name}/proposals/{id}/revisions/{seq}/artifact";
+    pub const PROPOSAL_COMMENTS: &str = "/api/v1/repos/{owner}/{name}/proposals/{id}/comments";
+    pub const PROPOSAL_DECISIONS: &str = "/api/v1/repos/{owner}/{name}/proposals/{id}/decisions";
+    pub const COMMENT_HIDE: &str =
+        "/api/v1/repos/{owner}/{name}/proposals/{id}/comments/{cid}/hide";
+    pub const COMMENT_UNHIDE: &str =
+        "/api/v1/repos/{owner}/{name}/proposals/{id}/comments/{cid}/unhide";
     pub const OPENAPI: &str = "/api/v1/openapi.json";
     /// Every route, in document order.
-    pub const ALL: [&str; 16] = [
+    pub const ALL: [&str; 20] = [
         HISTORY,
         CHANGE,
         FILE,
@@ -107,6 +114,10 @@ pub mod paths {
         PROPOSAL,
         PROPOSAL_CLOSE,
         PROPOSAL_ARTIFACT,
+        PROPOSAL_COMMENTS,
+        PROPOSAL_DECISIONS,
+        COMMENT_HIDE,
+        COMMENT_UNHIDE,
         OPENAPI,
     ];
 }
@@ -132,6 +143,19 @@ pub fn routes() -> Routes {
     let close_class = Class::Authorized(Action::Close);
     let download_class = Class::AuthorizedAny(&[Action::Review, Action::MergeSeal]);
     let (close, download) = (axum::routing::post(close_handler), get(artifact_handler));
+    // Review (RFC 005 part 6): a comment (any signed-in reader, a read-only token included), a decision (whoever may
+    // `Review`), hiding and showing a comment (whoever may `RepoAdmin`). All bearer only; each handler reads the repository
+    // through the one read gate first.
+    let comment_class = Class::Authorized(Action::Comment);
+    let review_class = Class::Authorized(Action::Review);
+    let (comment, decision) = (
+        axum::routing::post(comment_handler),
+        axum::routing::post(decision_handler),
+    );
+    let (hide, unhide) = (
+        axum::routing::post(hide_handler),
+        axum::routing::post(unhide_handler),
+    );
     Routes::new()
         .route(paths::HISTORY, read, &["GET"], get(history_handler))
         .route(paths::CHANGE, read, &["GET"], get(change_handler))
@@ -148,6 +172,10 @@ pub fn routes() -> Routes {
         .route(paths::PROPOSAL, read, &["GET"], get(detail_handler))
         .route(paths::PROPOSAL_CLOSE, close_class, &["POST"], close)
         .route(paths::PROPOSAL_ARTIFACT, download_class, &["GET"], download)
+        .route(paths::PROPOSAL_COMMENTS, comment_class, &["POST"], comment)
+        .route(paths::PROPOSAL_DECISIONS, review_class, &["POST"], decision)
+        .route(paths::COMMENT_HIDE, admin_class, &["POST"], hide)
+        .route(paths::COMMENT_UNHIDE, admin_class, &["POST"], unhide)
         .route(paths::OPENAPI, description, &["GET"], get(openapi_handler))
 }
 

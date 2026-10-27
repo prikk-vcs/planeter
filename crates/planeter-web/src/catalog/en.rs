@@ -871,4 +871,250 @@ pub const CATALOG: &[Entry] = &[
         "proposal.sighting_explain",
         "A history received here can be replaced, so this does not show that the work has landed.",
     ),
+    msg(
+        "error.comments_closed.message",
+        "Comments on this proposal closed on {date}, when the time for talking about it after it was finished ran out.",
+    ),
+    msg(
+        "error.comments_closed.hint",
+        "Start a new proposal if there is more to say about the work.",
+    ),
+    msg(
+        "error.decisions_closed.message",
+        "This proposal has landed or been closed, so it takes no more review decisions.",
+    ),
+    msg(
+        "error.decisions_closed.hint",
+        "A decision can be recorded only while a proposal is open; comments are still welcome for a while.",
+    ),
+    msg(
+        "error.revision_not_current.message",
+        "A decision is about the newest revision, and the newest is revision {current}.",
+    ),
+    msg(
+        "error.revision_not_current.hint",
+        "Leave the revision out to decide on the newest one; an earlier revision is history.",
+    ),
+    msg(
+        "error.self_approval.message",
+        "You cannot approve work that you sent yourself.",
+    ),
+    msg(
+        "error.self_approval.hint",
+        "Ask someone else to review it; you can still ask for changes or leave a comment.",
+    ),
+    msg(
+        "error.comment_state.message",
+        "That comment is already in the state you asked for.",
+    ),
+    msg(
+        "error.comment_state.hint",
+        "Read the proposal again to see the comment as it is now.",
+    ),
+    msg(
+        "error.forbidden_comment.message",
+        "You can read this repository, but you need to be signed in to comment on it.",
+    ),
+    msg(
+        "error.forbidden_comment.hint",
+        "Sign in, or send the request with an access token.",
+    ),
+    msg(
+        "error.forbidden_decision.message",
+        "You can read this repository, but only people who review here can record a decision.",
+    ),
+    msg(
+        "error.forbidden_decision.hint",
+        "Ask a maintainer to give you that access.",
+    ),
+    msg(
+        "error.forbidden_hide.message",
+        "You can read this repository, but only people who administer it can hide or show a comment.",
+    ),
+    msg(
+        "error.forbidden_hide.hint",
+        "Ask an administrator of the repository.",
+    ),
+    msg(
+        "error.rate_comments.message",
+        "You have commented on this proposal many times in the last hour.",
+    ),
+    msg(
+        "error.rate_comments.hint",
+        "Wait a little and try again; the Retry-After header says how long.",
+    ),
+    msg(
+        "error.rate_decisions.message",
+        "You have recorded many decisions on this proposal in the last hour.",
+    ),
+    msg(
+        "error.rate_decisions.hint",
+        "Wait a little and try again; the Retry-After header says how long.",
+    ),
+    msg(
+        "error.invalid_request.comment_hint",
+        "Fix the field named in the reason and send the comment again, as the API document lists the fields.",
+    ),
+    msg(
+        "error.invalid_request.decision_hint",
+        "Fix the field named in the reason and send the decision again, as the API document lists the fields.",
+    ),
+    msg(
+        "error.invalid_request.hide_hint",
+        "Give a reason of a sentence or two, up to 500 characters, and send the request again.",
+    ),
+    msg("review.line.awaiting", "Awaiting review"),
+    plural_msg(
+        "review.line.approved",
+        "Approved by {count} person",
+        "Approved by {count} people",
+    ),
+    plural_msg(
+        "review.line.changes",
+        "Changes requested by {count} person",
+        "Changes requested by {count} people",
+    ),
+    msg(
+        "review.means.awaiting",
+        "No reviewer has given a decision on revision {revision} yet. Reviewing does not merge anything.",
+    ),
+    msg(
+        "review.means.approved",
+        "Approved here means reviewers said they are happy with revision {revision}. It does not merge anything.",
+    ),
+    msg(
+        "review.means.changes",
+        "A reviewer asked for changes to revision {revision}. That is their opinion; it does not merge or block anything.",
+    ),
+    msg(
+        "review.earlier_note",
+        "Approved on an earlier revision; revision {revision} has not been reviewed.",
+    ),
+    msg("review.word.approved", "Approved"),
+    msg("review.word.changes", "Changes requested"),
+    msg("review.heading", "Review"),
+    msg(
+        "review.decisions.heading",
+        "Decisions on revision {revision}",
+    ),
+    msg(
+        "review.decisions.none",
+        "Nobody has decided on this revision yet.",
+    ),
+    msg(
+        "review.decision.approve",
+        "{who} approved revision {revision}",
+    ),
+    msg(
+        "review.decision.request_changes",
+        "{who} asked for changes to revision {revision}",
+    ),
+    msg("review.decision.note", "Note: {note}"),
+    msg("review.earlier.heading", "Decisions on earlier revisions"),
+    msg(
+        "review.earlier.explain",
+        "These were given for revisions that have since been replaced. They are history and count for nothing now.",
+    ),
+    msg("comments.heading", "Comments"),
+    msg("comments.none", "There are no comments yet."),
+    msg("comments.more", "Show more comments"),
+    plural_msg("comments.count", "{count} comment", "{count} comments"),
+    msg(
+        "comment.meta",
+        "{who} · {when} · written on revision {revision}",
+    ),
+    msg("comment.anchor.patch", "On patch {patch}"),
+    msg("comment.anchor.path", "On {path}"),
+    msg("comment.anchor.lines", "On {path}, lines {from}–{to}"),
+    msg("comment.anchor.line", "On {path}, line {line}"),
+    msg("comment.hidden", "Hidden by a maintainer: {reason}"),
+    msg(
+        "comment.hidden_admin",
+        "Hidden by {who} on {when}: {reason}. You can read it because you administer this repository.",
+    ),
+    msg("comment.reply.label", "Your reply"),
+    msg("comment.reply.button", "Reply"),
+    msg("comment.form.heading", "Add a comment"),
+    msg("comment.form.body", "Your comment (Markdown is allowed)"),
+    msg(
+        "comment.form.patch",
+        "About a patch (optional): the first characters of its id",
+    ),
+    msg("comment.form.path", "About a file (optional): its path"),
+    msg("comment.form.from", "From line (optional)"),
+    msg("comment.form.to", "To line (optional)"),
+    msg("comment.form.button", "Comment"),
+    msg(
+        "comment.form.consequence",
+        "Everyone who can read this repository will see your comment. You cannot edit or delete it afterwards; a maintainer can hide it.",
+    ),
+    msg("comment.refused.heading", "Your comment was not added"),
+    msg("comment.refusal.body_empty", "A comment needs some text."),
+    msg(
+        "comment.refusal.body_too_long",
+        "A comment can hold up to 16 KiB of text.",
+    ),
+    msg(
+        "comment.refusal.patch",
+        "No patch of this proposal starts with those characters, or more than one does.",
+    ),
+    msg(
+        "comment.refusal.path",
+        "A path is 1 to 1,024 characters, with no control characters.",
+    ),
+    msg(
+        "comment.refusal.lines_need_a_path",
+        "Lines need a file path to belong to.",
+    ),
+    msg(
+        "comment.refusal.lines_incomplete",
+        "Give the first line as well as the last.",
+    ),
+    msg("comment.refusal.line_zero", "Line numbers start at 1."),
+    msg(
+        "comment.refusal.line_order",
+        "The first line must not come after the last.",
+    ),
+    msg(
+        "comment.refusal.parent",
+        "That reply cannot be added there: a thread is one level deep.",
+    ),
+    msg(
+        "decision.form.heading",
+        "Your decision on revision {revision}",
+    ),
+    msg("decision.form.approve", "Approve"),
+    msg("decision.form.request_changes", "Request changes"),
+    msg("decision.form.note", "Note (optional)"),
+    msg("decision.form.button", "Record decision"),
+    msg(
+        "decision.form.consequence",
+        "This is recorded on revision {revision} only, and everyone who can read this repository will see it. You can change it while the proposal is open. It does not carry over to a later revision, and it does not merge anything.",
+    ),
+    msg(
+        "decision.form.self",
+        "You sent part of this proposal, so you cannot approve it. You can still ask for changes.",
+    ),
+    msg("decision.refused.heading", "Your decision was not recorded"),
+    msg(
+        "decision.refusal.note_too_long",
+        "A note can hold up to 2 KiB of text.",
+    ),
+    msg("hide.form.reason", "Reason for hiding"),
+    msg("hide.form.button", "Hide comment"),
+    msg(
+        "hide.form.consequence",
+        "The comment stays on record. Only people who administer this repository will see its text; everyone else sees your reason. You can show it again.",
+    ),
+    msg("unhide.form.button", "Show comment again"),
+    msg(
+        "unhide.form.consequence",
+        "Everyone who can read this repository will see the text again.",
+    ),
+    msg("hide.refused.heading", "The comment was not changed"),
+    msg(
+        "hide.refusal.reason",
+        "Hiding needs a reason of up to 500 characters.",
+    ),
+    msg("proposals.col.review", "Review"),
 ];

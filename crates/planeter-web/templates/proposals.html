@@ -13,8 +13,8 @@
 {% else %}
 <table>
 <caption class="visually-hidden">{{ t.get(Key::ProposalsHeading) }}</caption>
-<thead><tr><th scope="col">{{ t.get(Key::ProposalsColProposal) }}</th><th scope="col">{{ t.get(Key::ProposalsColBy) }}</th><th scope="col">{{ t.get(Key::ProposalsColState) }}</th><th scope="col">{{ t.get(Key::ProposalsColSummary) }}</th><th scope="col">{{ t.get(Key::ProposalsColUpdated) }}</th></tr></thead>
-<tbody>{% for r in rows %}<tr><th scope="row"><a href="/{{ owner }}/{{ name }}/proposals/{{ r.id }}">{{ r.title }}</a></th><td>{{ r.by }}</td><td><span class="badge">{{ t.get(*r.state_label) }}</span></td><td>{{ r.summary }}</td><td class="muted">{{ r.when }}</td></tr>{% endfor %}</tbody>
+<thead><tr><th scope="col">{{ t.get(Key::ProposalsColProposal) }}</th><th scope="col">{{ t.get(Key::ProposalsColBy) }}</th><th scope="col">{{ t.get(Key::ProposalsColState) }}</th><th scope="col">{{ t.get(Key::ProposalsColSummary) }}</th><th scope="col">{{ t.get(Key::ProposalsColReview) }}</th><th scope="col">{{ t.get(Key::ProposalsColUpdated) }}</th></tr></thead>
+<tbody>{% for r in rows %}<tr><th scope="row"><a href="/{{ owner }}/{{ name }}/proposals/{{ r.id }}">{{ r.title }}</a></th><td>{{ r.by }}</td><td><span class="badge">{{ t.get(*r.state_label) }}</span></td><td>{{ r.summary }}</td><td>{% if let Some(w) = r.review %}{{ t.get(w.clone()) }}{% else %}<span class="muted">–</span>{% endif %}</td><td class="muted">{{ r.when }}</td></tr>{% endfor %}</tbody>
 </table>
 {% endif %}
 {% if let Some(href) = more %}

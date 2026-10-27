@@ -244,6 +244,7 @@ async fn main() {
     let mut propose_cost: Option<(u64, u64)> = None;
     let mut recovery_service: Option<Arc<planeter_transport::RecoveryService>> = None;
     let mut proposals_service: Option<Arc<planeter_transport::ProposalService>> = None;
+    let mut reviews_service: Option<Arc<planeter_transport::ReviewService>> = None;
     // RFC 004 part 2: advertise and fetch need the export spool; without it the routes answer `transport_off`
     // to a reader of the repository. Every setting is a positive whole number, refused at start otherwise.
     let transport = match &dirs.spool {
@@ -409,6 +410,35 @@ async fn main() {
                         eprintln!("planeter: cannot start the retention sweep: {e}");
                     }
                     proposals_service = Some(proposals);
+                    // RFC 005 part 6: comments and decisions, over the same database. The limits are per principal
+                    // per proposal per hour and are computed from the records.
+                    let review_store: Arc<dyn planeter_store::ReviewStore> =
+                        match planeter_store::SqliteReviewStore::new(db.clone()) {
+                            Ok(r) => Arc::new(r),
+                            Err(e) => {
+                                eprintln!("planeter: cannot initialise the review records: {e}");
+                                exit_releasing_lock(1);
+                            }
+                        };
+                    let comments_per_hour = positive_env(
+                        "PLANETER_COMMENTS_PER_HOUR",
+                        planeter_core::review::COMMENTS_PER_HOUR_DEFAULT,
+                    );
+                    let decisions_per_hour = positive_env(
+                        "PLANETER_DECISIONS_PER_HOUR",
+                        planeter_core::review::DECISIONS_PER_HOUR_DEFAULT,
+                    );
+                    eprintln!(
+                        "planeter: review: at most {comments_per_hour} comment(s) and {decisions_per_hour} decision(s) per person per proposal per hour"
+                    );
+                    reviews_service = Some(Arc::new(planeter_transport::ReviewService::new(
+                        changes.clone(),
+                        review_store,
+                        planeter_transport::ReviewConfig {
+                            comments_per_hour,
+                            decisions_per_hour,
+                        },
+                    )));
                     let mut service = planeter_transport::ProposeService::new(
                         hosting.clone(),
                         artifacts.clone(),
@@ -452,6 +482,7 @@ async fn main() {
                 propose,
                 recovery: recovery_service,
                 proposals: proposals_service,
+                reviews: reviews_service,
                 ip_limit: planeter_web::RateLimiter::new(rate, std::time::Duration::from_secs(60)),
                 principal_limit: planeter_web::RateLimiter::new(
                     rate,

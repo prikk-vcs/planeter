@@ -296,7 +296,7 @@ fn proposal_schemas() -> Value {
             "state": {"type": "string", "enum": ["kept", "partly_removed", "removed"], "description": "What is left of the files of a proposal that landed or was closed."},
             "until": {"type": "integer", "minimum": 0, "description": "Unix seconds: the files are kept until then; after it a sweep may remove them (the records stay)."}
         })),
-        "ProposalItem": obj(&["id", "title", "state", "opened_by", "opened_at", "updated_at", "revision_count", "patch_count", "built_on", "retention"], json!({
+        "ProposalItem": obj(&["id", "title", "state", "opened_by", "opened_at", "updated_at", "revision_count", "patch_count", "built_on", "review", "retention"], json!({
             "id": string_prop(), "title": string_prop(),
             "state": {"type": "string", "enum": ["open", "landed", "closed"]},
             "opened_by": string_prop(),
@@ -304,6 +304,7 @@ fn proposal_schemas() -> Value {
             "revision_count": {"type": "integer", "minimum": 0},
             "patch_count": {"type": "integer", "minimum": 0, "description": "The patches of the current set: the latest declared revision's declared set plus what every later revision added."},
             "built_on": {"type": "boolean", "description": "Whether the latest revision says what it was built on."},
+            "review": {"type": "string", "nullable": true, "enum": ["awaiting_review", "approved", "changes_requested", null], "description": "The review state of an open proposal (the current decisions on its latest revision); null for one that is not open, and when review is not set up."},
             "retention": {"allOf": [{"$ref": "#/components/schemas/ProposalRetention"}], "nullable": true, "description": "Absent (null) while the proposal is open."}
         })),
         "ProposalList": obj(&["proposals", "next"], json!({
@@ -331,6 +332,46 @@ fn proposal_schemas() -> Value {
             "patch_id": string_prop(),
             "assurance": {"allOf": [{"$ref": "#/components/schemas/Assurance"}], "nullable": true, "description": "`forge-approved-unsealed`: listed by `sync pending` (held by this server, nobody has signed it in). `sealed`: in a block `log` lists for a **published** ref of the repository (this wins over `sync pending`, which an import can leave listing the patch). `null`: in neither; nothing is claimed. Never read from `queued`."}
         })),
+        "ProposalDecision": obj(&["reviewer", "revision", "decision", "note", "created_at"], json!({
+            "reviewer": string_prop(), "revision": {"type": "integer", "minimum": 1},
+            "decision": {"type": "string", "enum": ["approve", "request-changes"]},
+            "note": nullable_string(), "created_at": {"type": "integer", "minimum": 0}
+        })),
+        "ProposalReview": obj(&["state", "revision", "approved_count", "changes_requested_count", "decisions", "approved_on", "requested_changes_on", "earlier_decisions"], json!({
+            "state": {"type": "string", "enum": ["awaiting_review", "approved", "changes_requested"], "description": "`changes_requested` if any reviewer's current decision on the **latest** revision is `request-changes`; else `approved` if at least one is `approve`; else `awaiting_review`. Nothing else decides it. It merges and blocks nothing."},
+            "revision": {"type": "integer", "minimum": 1, "description": "The latest revision: the one the state is about."},
+            "approved_count": {"type": "integer", "minimum": 0}, "changes_requested_count": {"type": "integer", "minimum": 0},
+            "decisions": array_of("ProposalDecision"),
+            "approved_on": {"type": "array", "items": {"type": "integer"}, "description": "Earlier revisions that hold an approval. History: it never counts toward the latest revision."},
+            "requested_changes_on": {"type": "array", "items": {"type": "integer"}},
+            "earlier_decisions": array_of("ProposalDecision")
+        })),
+        "ProposalCommentBody": obj(&["source", "html"], json!({
+            "source": {"type": "string", "description": "The Markdown as written."},
+            "html": {"type": "string", "description": "The same, rendered through the sanitizer."}
+        })),
+        "ProposalComment": obj(&["id", "author", "revision", "created_at", "patch_id", "path", "line_from", "line_to", "body", "hidden", "hidden_reason", "hidden_by", "hidden_at", "replies"], json!({
+            "id": string_prop(), "author": string_prop(),
+            "revision": {"type": "integer", "minimum": 1, "description": "The revision that was the latest when it was written."},
+            "created_at": {"type": "integer", "minimum": 0},
+            "patch_id": nullable_string(), "path": nullable_string(),
+            "line_from": {"type": "integer", "nullable": true, "minimum": 1}, "line_to": {"type": "integer", "nullable": true, "minimum": 1},
+            "body": {"allOf": [{"$ref": "#/components/schemas/ProposalCommentBody"}], "nullable": true, "description": "Absent (`null`) for a hidden comment, unless the caller holds `RepoAdmin`."},
+            "hidden": {"type": "boolean"},
+            "hidden_reason": {"type": "string", "nullable": true, "description": "Why it was hidden: said to everyone."},
+            "hidden_by": {"type": "string", "nullable": true, "description": "Said to people who administer the repository only."},
+            "hidden_at": {"type": "integer", "nullable": true, "description": "Said to people who administer the repository only."},
+            "replies": {"type": "array", "items": {"type": "object"}, "description": "Replies, oldest first; a reply has no replies (a thread is one level deep)."}
+        })),
+        "ProposalComments": obj(&["total", "items", "next"], json!({
+            "total": {"type": "integer", "minimum": 0, "description": "All the proposal's comments, replies included."},
+            "items": array_of("ProposalComment"),
+            "next": {"type": "string", "nullable": true, "description": "The cursor to pass as `after`; absent on the last page."}
+        })),
+        "ProposalDecisionRecorded": obj(&["decision", "review"], json!({
+            "decision": {"$ref": "#/components/schemas/ProposalDecision"},
+            "review": {"$ref": "#/components/schemas/ProposalReview"}
+        })),
         "ProposalSighting": obj(&["ref"], json!({
             "ref": {"type": "string", "description": "The name of the received ref."}
         })),
@@ -338,7 +379,7 @@ fn proposal_schemas() -> Value {
             "source": {"type": "string", "description": "The text as sent."},
             "html": {"type": "string", "description": "The same, rendered as Markdown through the sanitizer."}
         })),
-        "ProposalDetail": obj(&["id", "title", "description", "state", "closed_reason", "landed_at", "target_ref", "opened_by", "opened_at", "updated_at", "retention", "revisions", "patches", "patch_total", "truncated", "still_pending", "received_sightings", "note"], json!({
+        "ProposalDetail": obj(&["id", "title", "description", "state", "closed_reason", "landed_at", "target_ref", "opened_by", "opened_at", "updated_at", "retention", "revisions", "patches", "patch_total", "truncated", "still_pending", "received_sightings", "review", "comments", "note"], json!({
             "id": string_prop(), "title": string_prop(),
             "description": {"$ref": "#/components/schemas/ProposalDescription"},
             "state": {"type": "string", "enum": ["open", "landed", "closed"]},
@@ -352,6 +393,8 @@ fn proposal_schemas() -> Value {
             "patches": {"type": "array", "items": {"$ref": "#/components/schemas/ProposalPatch"}, "description": "The patches of the current set, at most 1,000, in id order."},
             "patch_total": {"type": "integer", "minimum": 0}, "truncated": {"type": "boolean"},
             "still_pending": {"type": "integer", "minimum": 0, "description": "How many patches of the whole current set are still held by this server, not yet signed in."},
+            "review": {"allOf": [{"$ref": "#/components/schemas/ProposalReview"}], "nullable": true, "description": "The review: a function of the current decisions on the latest revision. `null` when review is not set up on this server."},
+            "comments": {"allOf": [{"$ref": "#/components/schemas/ProposalComments"}], "nullable": true, "description": "A page of comment threads, oldest first (`limit` ≤ 100, `after` cursor, both on this route). A hidden comment has `hidden: true`, its reason and **no body** unless the caller administers the repository. `null` when review is not set up."},
             "received_sightings": {"type": "array", "items": {"$ref": "#/components/schemas/ProposalSighting"}, "description": "For an open proposal: the received refs whose logs hold any of its patches. Shown for information only: a received ref is replaceable and unverified, so no state is ever derived from one (an empty list otherwise, and when the logs could not be read)."},
             "note": {"type": "string", "description": "One plain sentence, in the language negotiated from `Accept-Language`, that is true under every answer to what happens after a maintainer signs the work."}
         })),
@@ -381,7 +424,7 @@ fn proposal_paths(paths_obj: &mut serde_json::Map<String, Value>) {
             json!({"get": {
                 "operationId": "getProposals",
                 "summary": "The proposals of a repository, newest-updated first",
-                "description": "`Authorized(Read)`: a hidden and an absent repository are both `404`. Rate limited like the fetch routes. **No prikk call is made per item**: the landing of an open proposal is observed once per repository per state fingerprint, from `sync pending` and (only when some proposal's patches have all left the pending list) `log`; a proposal is `landed` only when every patch of its current set is absent from the pending list **and** present in a block `log` lists. This server does not merge anything itself; a maintainer signs the work on their own computer.",
+                "description": "`Authorized(Read)`: a hidden and an absent repository are both `404`. Rate limited like the fetch routes. **No prikk call is made per item**: the landing of an open proposal is observed once per repository per state fingerprint, from the logs of its published refs; a proposal is `landed` only when every patch of its current set is in a block of a **published** ref (`sync pending` is not consulted, and a received ref is never evidence: it is replaceable and unverified). This server does not merge anything itself; a maintainer signs the work on their own computer.",
                 "parameters": owner_name().into_iter().chain([
                     param("state", "query", false, "`open` (the default), `landed`, `closed` or `all`.", json!({"type": "string", "enum": ["open", "landed", "closed", "all"]})),
                     param("limit", "query", false, "At most 100; 50 when omitted.", json!({"type": "integer", "minimum": 1, "maximum": 100})),
@@ -400,7 +443,10 @@ fn proposal_paths(paths_obj: &mut serde_json::Map<String, Value>) {
                 "operationId": "getProposal",
                 "summary": "One proposal, in full",
                 "description": "`Authorized(Read)`; an id of another repository is the same `404` as an unknown one. The description is rendered Markdown through the sanitizer (and given as sent); the revisions are in order, each with its claims **as accept reported them (stored, not re-asserted)**, its key ids and what it was built on; the patches are those of the **current** set (at most 1,000, `truncated` says when there are more), each classified from the facts of one observation, never from `queued`.",
-                "parameters": with_id.clone(),
+                "parameters": with_id.clone().into_iter().chain([
+                    param("limit", "query", false, "How many comment threads, at most 100; 50 when omitted.", json!({"type": "integer", "minimum": 1, "maximum": 100})),
+                    param("after", "query", false, "The `comments.next` cursor of the previous page.", json!({"type": "string"})),
+                ]).collect::<Vec<_>>(),
                 "security": read_security.clone(),
                 "responses": {"200": {"description": "The proposal.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ProposalDetail"}}}}},
             }}),
@@ -420,6 +466,83 @@ fn proposal_paths(paths_obj: &mut serde_json::Map<String, Value>) {
                 "responses": {"200": {"description": "The proposal, closed.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ProposalClosed"}}}}},
             }}),
             &[ErrorCode::TransportOff, ErrorCode::RateLimited, ErrorCode::Forbidden, ErrorCode::ReasonRequired, ErrorCode::ProposalFinal],
+        ),
+    );
+    let cid_param = param(
+        "cid",
+        "path",
+        true,
+        "The comment's id (from the proposal's `comments`).",
+        json!({"type": "string"}),
+    );
+    paths_obj.insert(
+        paths::PROPOSAL_COMMENTS.into(),
+        with_errors(
+            json!({"post": {
+                "operationId": "postProposalComment",
+                "summary": "Comment on a proposal",
+                "description": "For any signed-in caller who can read the repository (`authorize(Comment)`: a read-only token included); **bearer token only**. Accepted on an open proposal and, until its retention ends (30 days by default), on a landed or closed one. A comment may be anchored to a patch of the proposal's current set, a path (free text, never opened) and lines. A thread is one level deep: a reply's `parent` must be a top-level comment of this proposal. **Comments are immutable and are never deleted.** At most 20 per principal per proposal per hour (`429` with `Retry-After`).",
+                "parameters": with_id.clone(),
+                "security": [{"bearerToken": []}],
+                "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["body"], "properties": {
+                    "body": {"type": "string", "description": "Markdown, 1 to 16 KiB."},
+                    "patch_id": {"type": "string"}, "path": {"type": "string", "maxLength": 1024},
+                    "line_from": {"type": "integer", "minimum": 1}, "line_to": {"type": "integer", "minimum": 1},
+                    "parent": {"type": "string"}
+                }}}}},
+                "responses": {"201": {"description": "The comment, as recorded.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ProposalComment"}}}}},
+            }}),
+            &[ErrorCode::TransportOff, ErrorCode::RateLimited, ErrorCode::Forbidden, ErrorCode::CommentsClosed],
+        ),
+    );
+    paths_obj.insert(
+        paths::PROPOSAL_DECISIONS.into(),
+        with_errors(
+            json!({"post": {
+                "operationId": "postProposalDecision",
+                "summary": "Approve a revision, or request changes to it",
+                "description": "For whoever holds `review` (`write` and above); **bearer token only**. Only while the proposal is open. A decision belongs to **one revision** (the latest unless `revision` names it; naming an older one is `revision_not_current`) and is **never carried to a later one**: what a later revision shows of it is `approved_on`. One current decision per reviewer per revision; recording another replaces it (the replaced one stays in a history). The submitter of a revision cannot approve it, and nobody who submitted any revision of the proposal can approve its latest (`self_approval`); asking for changes and commenting are allowed. At most 10 per principal per proposal per hour.",
+                "parameters": with_id.clone(),
+                "security": [{"bearerToken": []}],
+                "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["decision"], "properties": {
+                    "decision": {"type": "string", "enum": ["approve", "request-changes"]},
+                    "note": {"type": "string", "description": "Plain text, up to 2 KiB."},
+                    "revision": {"type": "integer", "minimum": 1}
+                }}}}},
+                "responses": {"200": {"description": "The decision, and the review as it now stands.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ProposalDecisionRecorded"}}}}},
+            }}),
+            &[ErrorCode::TransportOff, ErrorCode::RateLimited, ErrorCode::Forbidden, ErrorCode::DecisionsClosed, ErrorCode::RevisionNotCurrent, ErrorCode::SelfApproval],
+        ),
+    );
+    let mut hide_params = with_id.clone();
+    hide_params.push(cid_param);
+    paths_obj.insert(
+        paths::COMMENT_HIDE.into(),
+        with_errors(
+            json!({"post": {
+                "operationId": "postCommentHide",
+                "summary": "Hide a comment, with a reason",
+                "description": "For whoever holds `RepoAdmin`; **bearer token only**. The comment stays on record; its text is shown to administrators only, and everyone else sees `hidden: true` and the reason. Reversible. This is the only moderation.",
+                "parameters": hide_params.clone(),
+                "security": [{"bearerToken": []}],
+                "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["reason"], "properties": {"reason": {"type": "string", "maxLength": 500}}}}}},
+                "responses": {"200": {"description": "The comment, as an administrator sees it.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ProposalComment"}}}}},
+            }}),
+            &[ErrorCode::TransportOff, ErrorCode::RateLimited, ErrorCode::Forbidden, ErrorCode::CommentState],
+        ),
+    );
+    paths_obj.insert(
+        paths::COMMENT_UNHIDE.into(),
+        with_errors(
+            json!({"post": {
+                "operationId": "postCommentUnhide",
+                "summary": "Show a hidden comment again",
+                "description": "For whoever holds `RepoAdmin`; **bearer token only**; no body. Every hide and unhide is kept in a log.",
+                "parameters": hide_params,
+                "security": [{"bearerToken": []}],
+                "responses": {"200": {"description": "The comment.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ProposalComment"}}}}},
+            }}),
+            &[ErrorCode::TransportOff, ErrorCode::RateLimited, ErrorCode::Forbidden, ErrorCode::CommentState],
         ),
     );
     let mut download_params = with_id;
