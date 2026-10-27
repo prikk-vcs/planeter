@@ -409,7 +409,7 @@ fn unavailable_page(state: &AppState, c: &Ctx, at: &str) -> Response {
 fn form_refused(state: &AppState, c: &Ctx, v: Values, fail: &Fail, owner: &str) -> Response {
     let (status, text, detail) = fail_text(&c.t, fail, owner);
     // prikk's own words, when it refused an archive, follow our sentence.
-    let text = detail.map_or(text.clone(), |d| format!("{text} {d}"));
+    let text = detail.map_or(text.clone(), |d| format!("{} {}", text, d));
     let mut resp = new_page_with(state, c, status, v, Some(text));
     if let Fail::Rate(secs) = fail
         && let Ok(v) = secs.max(&1).to_string().parse()
