@@ -14,7 +14,7 @@
 //!    proposal cannot approve its latest one either. `request-changes` and comments are allowed.
 //! 4. **A decision belongs to one revision**, by default the latest; naming another is refused. What a later revision shows
 //!    of an earlier approval is "approved on revision N", and it counts for nothing now ([`review_standing`], built on
-//!    [`approval_standing`](crate::change::approval_standing)).
+//!    [`approval_standing`]).
 //! 5. **The review state** is a function of the current decisions on the **latest** revision and of nothing else
 //!    ([`review_standing`]): `changes_requested` if any reviewer's current decision on it is `request-changes`, else
 //!    `approved` if at least one is `approve`, else `awaiting_review`. Counts are of distinct reviewers.

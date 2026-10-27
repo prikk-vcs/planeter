@@ -4,7 +4,7 @@
 //! * The writes are **bearer-only** (a cookie is not looked at, like `propose` and `close`): the read gate first (a stranger
 //!   is `404`, whatever else is or is not set up), then the caller's right to do this (`403` with the hint for it), then the
 //!   service, which applies the rules of `planeter_core::review`.
-//! * **A hidden comment's text leaves this module in one place only** — [`visible_body`] — and only for a caller who holds
+//! * **A hidden comment's text leaves this module in one place only** — `visible_body` — and only for a caller who holds
 //!   `RepoAdmin`. Everyone else gets `hidden: true`, the reason, and no `body` (HTML or source). The text is never logged.
 //! * Existence-neutral: an unknown proposal, another repository's proposal, an unknown comment and another proposal's
 //!   comment are all the same `404`.
