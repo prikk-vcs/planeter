@@ -370,6 +370,20 @@ impl HostingService {
         }
     }
 
+    /// A driver bound to `root` — a directory that is **not** a hosted repository (the scratch repository of a staged
+    /// archive) — with this service's prikk binary, under `sandbox` and `limits`. Not version-pinned: the caller's first
+    /// call (`init_configured`) pins it.
+    pub fn driver_in(
+        &self,
+        root: &std::path::Path,
+        sandbox: planeter_prikk::Sandbox,
+        limits: CallLimits,
+    ) -> CliPrikkRepo {
+        self.driver_at(root)
+            .with_sandbox(sandbox)
+            .with_limits(limits)
+    }
+
     /// The sandbox policy every prikk call of this service runs under.
     pub fn sandbox(&self) -> &planeter_prikk::Sandbox {
         &self.sandbox
@@ -456,6 +470,15 @@ impl Creation<'_> {
     pub fn abort(mut self) -> Result<()> {
         self.finished = true;
         self.svc.remove_unfinished(&self.record).map(drop)
+    }
+}
+
+impl std::fmt::Debug for Creation<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Creation")
+            .field("record", &self.record)
+            .field("finished", &self.finished)
+            .finish()
     }
 }
 

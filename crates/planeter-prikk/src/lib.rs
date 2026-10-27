@@ -13,6 +13,7 @@ pub mod cli;
 pub mod error;
 pub mod exchange;
 pub mod extract;
+pub mod findings;
 pub mod maintenance;
 pub mod model;
 pub mod repo;

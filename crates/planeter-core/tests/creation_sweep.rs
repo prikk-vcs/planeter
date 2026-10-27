@@ -110,8 +110,7 @@ fn the_name_is_taken_from_the_reservation_and_checked_before_a_byte_is_written()
             Visibility::Public,
             ProposalPolicy::Members,
         )
-        .err()
-        .expect("taken");
+        .expect_err("taken");
     assert!(
         matches!(err, planeter_core::HostingError::NameTaken { .. }),
         "{err}"
@@ -187,8 +186,7 @@ fn a_prikk_that_cannot_run_removes_the_creation_and_leaves_the_name_free() {
     .with_binary("/nonexistent/prikk");
     let err = svc
         .create_repo(alice(), "app", Visibility::Private)
-        .err()
-        .expect("no prikk");
+        .expect_err("no prikk");
     assert!(
         matches!(err, planeter_core::HostingError::Prikk(_)),
         "{err}"

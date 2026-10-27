@@ -6,6 +6,7 @@
 //! spooled, cached artifact, and its [`metrics`]. Nothing here speaks HTTP; the web crate serves it.
 
 pub mod artifacts;
+pub mod creation;
 pub mod export;
 pub mod fingerprint;
 pub mod metrics;
@@ -17,6 +18,10 @@ pub mod reviews;
 pub use artifacts::{
     AcceptDir, ArtifactStore, Digest, DirsConfig, DirsConfigError, Removal, Spool, StoreError,
     TransportDirs, UploadWriter,
+};
+pub use creation::{
+    Confirmed, CreateError, CreationConfig, CreationService, LandingOutcome, StageMeta,
+    StageSummary, StageUpload, StartupSweep, Uploaded as StageUploaded,
 };
 pub use export::{
     Advertisement, Artifact, ExportConfig, ExportService, FetchError, Kind, Offer, RefClass,

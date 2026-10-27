@@ -471,13 +471,22 @@ pub struct Uploaded {
 }
 
 /// A bounded counting semaphore over a mutex (the upload slots), with a timed wait.
-struct Slots {
+pub(crate) struct Slots {
     free: Mutex<usize>,
     changed: Condvar,
 }
 
 impl Slots {
-    fn acquire(self: &Arc<Self>, wait: Duration) -> Option<SlotGuard> {
+    /// `n` slots (at least one).
+    pub(crate) fn new(n: usize) -> Arc<Self> {
+        Arc::new(Slots {
+            free: Mutex::new(n.max(1)),
+            changed: Condvar::new(),
+        })
+    }
+
+    /// Take a slot, waiting at most `wait`; `None` when none came free.
+    pub(crate) fn acquire(self: &Arc<Self>, wait: Duration) -> Option<SlotGuard> {
         let end = Instant::now() + wait;
         let mut free = self
             .free
@@ -499,7 +508,7 @@ impl Slots {
     }
 }
 
-struct SlotGuard(Arc<Slots>);
+pub(crate) struct SlotGuard(Arc<Slots>);
 
 impl Drop for SlotGuard {
     fn drop(&mut self) {
