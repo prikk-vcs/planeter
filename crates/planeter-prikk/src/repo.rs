@@ -89,6 +89,15 @@ pub trait PrikkRepo {
     /// closure, signatures). A report that is not ok, or a non-zero exit, is a failure to serve.
     fn archive_verify(&self, artifact: &Path) -> Result<model::ArchiveVerifyReport>;
 
+    /// `archive import <file> --format json` (and `--adopt` when `adopt`): land every ref the archive carries (RFC 004 part 7).
+    /// Without `--adopt` every ref lands under `remotes/`; with it a ref that is absent locally, signed by an adopted key and
+    /// verified lands as a published branch. It writes into the repository and is a **W-class** call.
+    fn archive_import(&self, artifact: &Path, adopt: bool) -> Result<model::ArchiveImportReport>;
+
+    /// `trust maintainer add --key-id ID --public-key HEX`: adopt one maintainer key. Both values must be well-formed
+    /// ([`model::CarriedKey::is_well_formed`]); anything else is refused here, before prikk is run.
+    fn trust_maintainer_add(&self, key_id: &str, public_key: &str) -> Result<()>;
+
     /// `bundle verify --input <artifact>` → check a bundle offline (a non-zero exit is an error).
     fn bundle_verify(&self, artifact: &Path) -> Result<()>;
 

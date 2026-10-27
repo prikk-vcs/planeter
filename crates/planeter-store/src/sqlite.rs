@@ -56,6 +56,13 @@ impl SqliteDb {
             "proposals",
             "TEXT NOT NULL DEFAULT 'members'",
         )?;
+        // RFC 004 part 7: a repository is `creating` until its last creation step marks it `ready`. Every row that
+        // existed before is `ready` (the column's default), and a second start changes nothing.
+        db.ensure_column(
+            "repositories",
+            "state",
+            "TEXT NOT NULL DEFAULT 'ready' CHECK (state IN ('creating', 'ready'))",
+        )?;
         Ok(db)
     }
 
@@ -264,8 +271,12 @@ type RepoRow = (
 const SELECT_REPO: &str = "SELECT repo_id, owner_kind, owner, name, visibility, created_at, \
                            prikk_format_version, path, proposals FROM repositories";
 
-impl RepositoryStore for SqliteRepositoryStore {
-    fn create(&self, record: RepositoryRecord) -> Result<()> {
+/// Only the `ready` rows: a `creating` repository is invisible to every read by id, name or owner.
+const READY: &str = "state = 'ready'";
+
+impl SqliteRepositoryStore {
+    /// Insert `record` in `state` (`ready` or `creating`); a taken id or `owner/name` (in either state) is a conflict.
+    fn insert(&self, record: RepositoryRecord, state: &str) -> Result<()> {
         let conn = self.db.lock()?;
         let (kind, handle) = owner_parts(&record.owner);
         // Explicit conflict checks give the same messages as the in-memory store.
@@ -300,7 +311,7 @@ impl RepositoryStore for SqliteRepositoryStore {
         }
         conn.execute(
             "INSERT INTO repositories (repo_id, owner_kind, owner, name, visibility, created_at, \
-             prikk_format_version, path, proposals) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+             prikk_format_version, path, proposals, state) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 record.repo_id.as_str(),
                 kind,
@@ -311,17 +322,24 @@ impl RepositoryStore for SqliteRepositoryStore {
                 record.prikk_format_version,
                 record.path.to_string_lossy().into_owned(),
                 record.proposals.as_str(),
+                state,
             ],
         )
         .map_err(backend)?;
         Ok(())
+    }
+}
+
+impl RepositoryStore for SqliteRepositoryStore {
+    fn create(&self, record: RepositoryRecord) -> Result<()> {
+        self.insert(record, "ready")
     }
 
     fn get(&self, repo_id: &RepoId) -> Result<Option<RepositoryRecord>> {
         let conn = self.db.lock()?;
         let row = conn
             .query_row(
-                &format!("{SELECT_REPO} WHERE repo_id = ?1"),
+                &format!("{SELECT_REPO} WHERE repo_id = ?1 AND {READY}"),
                 params![repo_id.as_str()],
                 Self::row_to_record,
             )
@@ -335,7 +353,8 @@ impl RepositoryStore for SqliteRepositoryStore {
         let (kind, handle) = owner_parts(owner);
         let id: Option<String> = conn
             .query_row(
-                "SELECT repo_id FROM repositories WHERE owner_kind = ?1 AND owner = ?2 AND name = ?3",
+                "SELECT repo_id FROM repositories WHERE owner_kind = ?1 AND owner = ?2 AND name = ?3 \
+                 AND state = 'ready'",
                 params![kind, handle, name],
                 |r| r.get(0),
             )
@@ -349,7 +368,7 @@ impl RepositoryStore for SqliteRepositoryStore {
         let (kind, handle) = owner_parts(&new_owner);
         let exists: Option<String> = conn
             .query_row(
-                "SELECT repo_id FROM repositories WHERE repo_id = ?1",
+                "SELECT repo_id FROM repositories WHERE repo_id = ?1 AND state = 'ready'",
                 params![repo_id.as_str()],
                 |r| r.get(0),
             )
@@ -432,7 +451,7 @@ impl RepositoryStore for SqliteRepositoryStore {
         let (kind, handle) = owner_parts(owner);
         let mut stmt = conn
             .prepare(&format!(
-                "{SELECT_REPO} WHERE owner_kind = ?1 AND owner = ?2 ORDER BY name"
+                "{SELECT_REPO} WHERE owner_kind = ?1 AND owner = ?2 AND {READY} ORDER BY name"
             ))
             .map_err(backend)?;
         let rows = stmt
@@ -443,6 +462,68 @@ impl RepositoryStore for SqliteRepositoryStore {
             out.push(Self::decode(row.map_err(backend)?)?);
         }
         Ok(out)
+    }
+
+    fn reserve(&self, record: RepositoryRecord) -> Result<()> {
+        self.insert(record, "creating")
+    }
+
+    fn mark_ready(&self, repo_id: &RepoId) -> Result<()> {
+        let conn = self.db.lock()?;
+        let n = conn
+            .execute(
+                "UPDATE repositories SET state = 'ready' WHERE repo_id = ?1 AND state = 'creating'",
+                params![repo_id.as_str()],
+            )
+            .map_err(backend)?;
+        if n == 0 {
+            Err(StoreError::NotFound)
+        } else {
+            Ok(())
+        }
+    }
+
+    fn creating(&self) -> Result<Vec<RepositoryRecord>> {
+        let conn = self.db.lock()?;
+        let mut stmt = conn
+            .prepare(&format!(
+                "{SELECT_REPO} WHERE state = 'creating' ORDER BY repo_id"
+            ))
+            .map_err(backend)?;
+        let rows = stmt.query_map([], Self::row_to_record).map_err(backend)?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(Self::decode(row.map_err(backend)?)?);
+        }
+        Ok(out)
+    }
+
+    fn known_ids(&self) -> Result<Vec<RepoId>> {
+        let conn = self.db.lock()?;
+        let mut stmt = conn
+            .prepare("SELECT repo_id FROM repositories")
+            .map_err(backend)?;
+        let rows = stmt
+            .query_map([], |r| r.get::<_, String>(0))
+            .map_err(backend)?;
+        let mut out = Vec::new();
+        for row in rows {
+            out.push(RepoId::new(row.map_err(backend)?));
+        }
+        Ok(out)
+    }
+
+    fn count_owned(&self, owner: &Owner) -> Result<u64> {
+        let conn = self.db.lock()?;
+        let (kind, handle) = owner_parts(owner);
+        let n: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM repositories WHERE owner_kind = ?1 AND owner = ?2",
+                params![kind, handle],
+                |r| r.get(0),
+            )
+            .map_err(backend)?;
+        Ok(u64::try_from(n).unwrap_or(0))
     }
 }
 
@@ -574,6 +655,21 @@ impl MembershipStore for SqliteMembershipStore {
             .optional()
             .map_err(backend)?;
         role.map(|r| org_role_from(&r)).transpose()
+    }
+
+    fn grant_user(&self, user: UserId, repo_id: RepoId, role: Role) -> Result<()> {
+        self.grant_repo_role(Subject::User(user), repo_id, role)
+    }
+
+    fn forget_repo(&self, repo_id: &RepoId) -> Result<()> {
+        self.db
+            .lock()?
+            .execute(
+                "DELETE FROM repo_grants WHERE repo_id = ?1",
+                params![repo_id.as_str()],
+            )
+            .map_err(backend)?;
+        Ok(())
     }
 }
 

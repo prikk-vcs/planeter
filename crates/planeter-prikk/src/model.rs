@@ -720,11 +720,88 @@ pub struct ArchiveVerifyReport {
     pub damaged: Vec<serde_json::Value>,
     #[serde(default)]
     pub interrupted_appends: Vec<serde_json::Value>,
+    /// The maintainer keys the archive **carries** (its exporter's own adopted set). Inert: carried, not trusted, and never
+    /// inferred from the archive by this forge (RFC 004 D-4): adopting one is a person's explicit act.
+    #[serde(default)]
+    pub maintainer_keys: Vec<CarriedKey>,
+}
+
+/// One maintainer key an archive carries (`archive verify`).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct CarriedKey {
+    /// prikk's key id (`ed25519-` and 16 hexadecimal characters).
+    pub key_id: String,
+    /// The public key, 64 lowercase hexadecimal characters — what `prikk key public` prints on the maintainer's machine.
+    pub public_key: String,
+    /// prikk's word for it (`carried, not adopted`).
+    #[serde(default)]
+    pub status: String,
+}
+
+impl CarriedKey {
+    /// Whether the two fields have the shape prikk gives them. A carried key whose fields are anything else is not passed
+    /// to `trust maintainer add` (the values come from the archive, which is hostile input).
+    pub fn is_well_formed(&self) -> bool {
+        let hex = |s: &str, n: usize| {
+            s.len() == n && s.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+        };
+        self.key_id
+            .strip_prefix("ed25519-")
+            .is_some_and(|rest| hex(rest, 16))
+            && hex(&self.public_key, 64)
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 pub struct ArchiveCheck {
     pub ok: bool,
+}
+
+// ----------------------------------------------------------------------------
+// `archive import` — schema_version "prepo-import-report-v1" (RFC 004 part 7: the creation from an archive)
+// ----------------------------------------------------------------------------
+
+/// What `prikk archive import --format json` says: how many objects were written, and where each ref the archive
+/// carries **landed** — a published local branch (`--adopt`, absent locally, signed by an adopted key, verified) or under
+/// `remotes/` with prikk's reason (PK-67).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct ArchiveImportReport {
+    pub schema_version: String,
+    pub ok: bool,
+    #[serde(default)]
+    pub written_objects: std::collections::BTreeMap<String, u64>,
+    #[serde(default)]
+    pub merged_objects: std::collections::BTreeMap<String, u64>,
+    #[serde(default)]
+    pub landings: Vec<Landing>,
+    #[serde(default)]
+    pub note: Option<String>,
+}
+
+impl ArchiveImportReport {
+    /// Every object the import wrote or merged (patches, blobs, blocks, ref-states, …).
+    pub fn object_count(&self) -> u64 {
+        self.written_objects
+            .values()
+            .chain(self.merged_objects.values())
+            .sum()
+    }
+}
+
+/// Where one ref of an archive landed.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct Landing {
+    /// The ref's name in the archive.
+    pub ref_name: String,
+    /// The name it was landed under (`heads/main` when published, `remotes/heads/main` when not).
+    pub landed_as: String,
+    /// Published as a local branch by `--adopt`.
+    pub adopted: bool,
+    /// Why it is not a published branch, in prikk's words (`null` when it is, or when there is nothing to add).
+    #[serde(default)]
+    pub remote_reason: Option<String>,
+    #[serde(default)]
+    pub publication_trusted: bool,
 }
 
 impl ArchiveVerifyReport {

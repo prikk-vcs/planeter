@@ -627,6 +627,39 @@ impl super::repo::PrikkRepo for CliPrikkRepo {
         )
     }
 
+    fn archive_import(&self, artifact: &Path, adopt: bool) -> Result<model::ArchiveImportReport> {
+        let a = artifact.to_string_lossy();
+        let mut args = vec!["archive", "import", &*a];
+        if adopt {
+            args.push("--adopt");
+        }
+        args.extend(["--format", "json"]);
+        self.run_json(&args, "prepo-import-report-v1")
+    }
+
+    fn trust_maintainer_add(&self, key_id: &str, public_key: &str) -> Result<()> {
+        let key = model::CarriedKey {
+            key_id: key_id.to_owned(),
+            public_key: public_key.to_owned(),
+            status: String::new(),
+        };
+        if !key.is_well_formed() {
+            return Err(PrikkError::Parse(
+                "a maintainer key id or public key is not in the shape prikk gives them".to_owned(),
+            ));
+        }
+        self.run(&[
+            "trust",
+            "maintainer",
+            "add",
+            "--key-id",
+            key_id,
+            "--public-key",
+            public_key,
+        ])
+        .map(drop)
+    }
+
     fn bundle_verify(&self, artifact: &Path) -> Result<()> {
         let a = artifact.to_string_lossy();
         self.run(&["bundle", "verify", "--input", &a]).map(drop)

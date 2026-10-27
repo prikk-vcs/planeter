@@ -14,6 +14,7 @@ pub mod recovery;
 pub mod review;
 pub mod revision;
 pub mod sqlite;
+pub mod stage;
 pub mod store;
 
 pub use change::{
@@ -39,4 +40,8 @@ pub use review::{
 };
 pub use revision::{InMemoryRevisions, RevisionStore, SqliteRevisions};
 pub use sqlite::{SqliteDb, SqliteMembershipStore, SqliteRepositoryStore};
+pub use stage::{
+    ClaimError, InMemoryStageStore, STAGE_SCHEMA, SqliteStageStore, StageLimits, StageRecord,
+    StageRefusal, StageState, StageStore,
+};
 pub use store::{RepositoryStore, StoreError};

@@ -42,6 +42,9 @@ pub type Result<T> = std::result::Result<T, StoreError>;
 
 /// Persistence of [`RepositoryRecord`]s. Implementations must be safe to share across threads (a forge
 /// is concurrent) — hence the `Send + Sync` bound.
+///
+/// A record is `ready` or `creating` (RFC 004 part 7). Everything that reads a repository by id or name sees `ready`
+/// records only; [`RepositoryStore::delete`] removes a record in either state.
 pub trait RepositoryStore: Send + Sync {
     /// Insert a new record. Fails with [`StoreError::Conflict`] if its `repo_id` or its `owner/name`
     /// already exists.
@@ -65,9 +68,32 @@ pub trait RepositoryStore: Send + Sync {
     /// is unknown.
     fn set_proposals(&self, repo_id: &RepoId, policy: ProposalPolicy) -> Result<()>;
 
-    /// Remove a record (the caller removes the on-disk repository separately).
+    /// Remove a record in either state (the caller removes the on-disk repository separately — **first**, so that a
+    /// record never outlives its directory's absence while a directory outlives its record).
     fn delete(&self, repo_id: &RepoId) -> Result<()>;
 
-    /// All records owned by `owner`.
+    /// All **ready** records owned by `owner`.
     fn list_by_owner(&self, owner: &Owner) -> Result<Vec<RepositoryRecord>>;
+
+    /// Reserve a name for a repository that is being created (RFC 004 part 7, T1): the record is stored in the state
+    /// `creating`. A `creating` repository is **invisible**: [`RepositoryStore::get`], [`RepositoryStore::resolve`] and
+    /// [`RepositoryStore::list_by_owner`] answer exactly as for an absent one, so no gate, route or listing can reach it.
+    /// The name is taken from this moment (a second reservation or a [`RepositoryStore::create`] of the same
+    /// `owner/name` fails [`StoreError::Conflict`]), checked before any byte of the repository is written.
+    fn reserve(&self, record: RepositoryRecord) -> Result<()>;
+
+    /// The last step of a creation: `creating` → `ready`. Fails [`StoreError::NotFound`] when no repository with this id is
+    /// `creating` (a record that is already `ready`, or none).
+    fn mark_ready(&self, repo_id: &RepoId) -> Result<()>;
+
+    /// Every record in the state `creating` (the start-up sweep removes them: a creation that did not finish is
+    /// removed whole).
+    fn creating(&self) -> Result<Vec<RepositoryRecord>>;
+
+    /// The ids of every record in either state (the sweep removes a directory that is in neither).
+    fn known_ids(&self) -> Result<Vec<RepoId>>;
+
+    /// How many repositories `owner` has: ready ones **and** the ones being created (a reservation holds its place, so
+    /// two creations racing cannot both slip under a quota).
+    fn count_owned(&self, owner: &Owner) -> Result<u64>;
 }

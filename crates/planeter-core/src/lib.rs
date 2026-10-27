@@ -20,6 +20,7 @@ pub mod admission;
 pub mod audit;
 pub mod authorize;
 pub mod change;
+pub mod creation;
 pub mod egress;
 pub mod fetch;
 pub mod hosting;
@@ -40,7 +41,7 @@ pub use egress::{
     is_public_unicast,
 };
 pub use fetch::{CurlFetcher, FetchError, FetchLimits, FetchRequest, HttpsFetcher};
-pub use hosting::{HostingError, HostingService};
+pub use hosting::{Creation, HostingError, HostingService, SweepReport};
 pub use layout::{DefaultRepoIdAllocator, RepoIdAllocator, RepoLayout};
 pub use lease::{Lease, LeaseClass, LeaseError, LeaseManager, new_boot_id};
 pub use permission::resolve_repo_role;

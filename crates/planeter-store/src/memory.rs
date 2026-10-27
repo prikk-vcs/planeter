@@ -1,7 +1,7 @@
 //! An in-memory [`RepositoryStore`] — a real, thread-safe backend for tests and development. The
 //! production SQLite backend (RFC 001 IQ-4) is a later increment behind the same trait.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{RwLock, RwLockReadGuard, RwLockWriteGuard};
 
 use crate::model::{Owner, ProposalPolicy, RepoId, RepositoryRecord};
@@ -11,6 +11,8 @@ use crate::store::{RepositoryStore, Result, StoreError};
 struct Inner {
     by_id: HashMap<RepoId, RepositoryRecord>,
     by_owner_name: HashMap<(Owner, String), RepoId>,
+    /// The ids in the state `creating` (invisible to every read but [`RepositoryStore::creating`]).
+    creating: HashSet<RepoId>,
 }
 
 /// A `RwLock`-guarded in-memory store.
@@ -37,8 +39,8 @@ impl InMemoryRepositoryStore {
     }
 }
 
-impl RepositoryStore for InMemoryRepositoryStore {
-    fn create(&self, record: RepositoryRecord) -> Result<()> {
+impl InMemoryRepositoryStore {
+    fn insert(&self, record: RepositoryRecord, creating: bool) -> Result<()> {
         let mut inner = self.write()?;
         if inner.by_id.contains_key(&record.repo_id) {
             return Err(StoreError::Conflict(format!(
@@ -55,24 +57,41 @@ impl RepositoryStore for InMemoryRepositoryStore {
             )));
         }
         inner.by_owner_name.insert(key, record.repo_id.clone());
+        if creating {
+            inner.creating.insert(record.repo_id.clone());
+        }
         inner.by_id.insert(record.repo_id.clone(), record);
         Ok(())
     }
+}
+
+impl RepositoryStore for InMemoryRepositoryStore {
+    fn create(&self, record: RepositoryRecord) -> Result<()> {
+        self.insert(record, false)
+    }
 
     fn get(&self, repo_id: &RepoId) -> Result<Option<RepositoryRecord>> {
-        Ok(self.read()?.by_id.get(repo_id).cloned())
+        let inner = self.read()?;
+        if inner.creating.contains(repo_id) {
+            return Ok(None);
+        }
+        Ok(inner.by_id.get(repo_id).cloned())
     }
 
     fn resolve(&self, owner: &Owner, name: &str) -> Result<Option<RepoId>> {
-        Ok(self
-            .read()?
+        let inner = self.read()?;
+        Ok(inner
             .by_owner_name
             .get(&(owner.clone(), name.to_owned()))
+            .filter(|id| !inner.creating.contains(*id))
             .cloned())
     }
 
     fn rename(&self, repo_id: &RepoId, new_owner: Owner, new_name: String) -> Result<()> {
         let mut inner = self.write()?;
+        if inner.creating.contains(repo_id) {
+            return Err(StoreError::NotFound);
+        }
         let old_key = {
             let record = inner.by_id.get(repo_id).ok_or(StoreError::NotFound)?;
             (record.owner.clone(), record.name.clone())
@@ -111,18 +130,55 @@ impl RepositoryStore for InMemoryRepositoryStore {
     fn delete(&self, repo_id: &RepoId) -> Result<()> {
         let mut inner = self.write()?;
         let record = inner.by_id.remove(repo_id).ok_or(StoreError::NotFound)?;
+        inner.creating.remove(repo_id);
         inner.by_owner_name.remove(&(record.owner, record.name));
         Ok(())
     }
 
     fn list_by_owner(&self, owner: &Owner) -> Result<Vec<RepositoryRecord>> {
+        let inner = self.read()?;
+        Ok(inner
+            .by_id
+            .values()
+            .filter(|r| &r.owner == owner && !inner.creating.contains(&r.repo_id))
+            .cloned()
+            .collect())
+    }
+
+    fn reserve(&self, record: RepositoryRecord) -> Result<()> {
+        self.insert(record, true)
+    }
+
+    fn mark_ready(&self, repo_id: &RepoId) -> Result<()> {
+        if self.write()?.creating.remove(repo_id) {
+            Ok(())
+        } else {
+            Err(StoreError::NotFound)
+        }
+    }
+
+    fn creating(&self) -> Result<Vec<RepositoryRecord>> {
+        let inner = self.read()?;
+        let mut out: Vec<RepositoryRecord> = inner
+            .creating
+            .iter()
+            .filter_map(|id| inner.by_id.get(id).cloned())
+            .collect();
+        out.sort_by(|a, b| a.repo_id.as_str().cmp(b.repo_id.as_str()));
+        Ok(out)
+    }
+
+    fn known_ids(&self) -> Result<Vec<RepoId>> {
+        Ok(self.read()?.by_id.keys().cloned().collect())
+    }
+
+    fn count_owned(&self, owner: &Owner) -> Result<u64> {
         Ok(self
             .read()?
             .by_id
             .values()
             .filter(|r| &r.owner == owner)
-            .cloned()
-            .collect())
+            .count() as u64)
     }
 }
 

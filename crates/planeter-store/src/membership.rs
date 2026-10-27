@@ -93,6 +93,13 @@ pub trait MembershipStore: Send + Sync {
 
     /// This user's org role in `org`, if any.
     fn org_role(&self, user: &UserId, org: &OrgId) -> Result<Option<OrgRole>>;
+
+    /// Grant `user` `role` on `repo_id` (raising a lower grant, never lowering): what a creation does for its creator
+    /// (RFC 004 part 7). The stores' own `grant_repo_role` does the same for any subject.
+    fn grant_user(&self, user: UserId, repo_id: RepoId, role: Role) -> Result<()>;
+
+    /// Forget every grant on `repo_id`: a creation that did not finish removes the repository whole, grants included.
+    fn forget_repo(&self, repo_id: &RepoId) -> Result<()>;
 }
 
 /// An in-memory [`MembershipStore`] (dev/test; the SQLite backend is the follow-on).
@@ -217,6 +224,15 @@ impl MembershipStore for InMemoryMembershipStore {
             .org_roles
             .get(&(user.clone(), org.clone()))
             .copied())
+    }
+
+    fn grant_user(&self, user: UserId, repo_id: RepoId, role: Role) -> Result<()> {
+        self.grant_repo_role(Subject::User(user), repo_id, role)
+    }
+
+    fn forget_repo(&self, repo_id: &RepoId) -> Result<()> {
+        self.write()?.repo_grants.retain(|(_, id), _| id != repo_id);
+        Ok(())
     }
 }
 
