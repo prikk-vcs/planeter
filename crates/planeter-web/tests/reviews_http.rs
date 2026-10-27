@@ -324,12 +324,52 @@ impl Reply {
 }
 
 async fn send(r: &Router, req: Request<Body>) -> Reply {
+    let asked = std::env::var("REVIEWS_TRANSCRIPT").is_ok().then(|| {
+        let mut line = format!("{} {}", req.method(), req.uri());
+        if let Some(a) = req
+            .headers()
+            .get("authorization")
+            .and_then(|v| v.to_str().ok())
+        {
+            line += &format!("\n    authorization: {a}");
+        }
+        line
+    });
     let resp = r.clone().oneshot(req).await.unwrap();
     let (status, headers) = (resp.status(), resp.headers().clone());
     let body = axum::body::to_bytes(resp.into_body(), 1 << 26)
         .await
         .unwrap()
         .to_vec();
+    if let (Some(asked), Ok(path)) = (asked, std::env::var("REVIEWS_TRANSCRIPT")) {
+        use std::io::Write as _;
+        let is_json = headers
+            .get("content-type")
+            .and_then(|v| v.to_str().ok())
+            .is_some_and(|c| c.starts_with("application/json"));
+        let shown = if is_json {
+            String::from_utf8_lossy(&body)
+                .chars()
+                .take(900)
+                .collect::<String>()
+        } else {
+            format!("(a page of {} bytes)", body.len())
+        };
+        let retry = headers
+            .get("retry-after")
+            .and_then(|v| v.to_str().ok())
+            .map(|v| format!("\n    retry-after: {v}"))
+            .unwrap_or_default();
+        let test = std::thread::current().name().unwrap_or("?").to_owned();
+        if is_json {
+            let mut f = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(path)
+                .unwrap();
+            let _ = writeln!(f, "[{test}]\n> {asked}\n< {status}{retry}\n    {shown}\n");
+        }
+    }
     Reply {
         status,
         headers,
@@ -1804,6 +1844,10 @@ async fn the_forms_are_for_the_people_who_may_use_them() {
         "{dt}"
     );
     assert!(!dt.contains("Hide comment"));
+    assert!(
+        dt.contains("<input type=\"hidden\" name=\"revision\" value=\"1\">"),
+        "the form says which revision the decision is for: {dt}"
+    );
     assert_eq!(violations(&p), Vec::<String>::new(), "{p}");
     // The submitter (dave on p2): approve is disabled and the page says why; asking for changes is there.
     let p2 = page(
