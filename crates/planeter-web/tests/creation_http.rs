@@ -1445,6 +1445,7 @@ async fn the_empty_form_creates_checks_its_token_and_says_what_is_wrong_where_th
         html.contains("value=\"My App\"") && html.contains("The repository was not created"),
         "{html}"
     );
+    dump("new-refused", "en", &html);
     assert!(html.contains("Use lowercase letters only"), "{html}");
     assert_eq!(violations(&html), Vec::<String>::new());
     // The same, in Japanese.
@@ -1574,6 +1575,7 @@ async fn the_archive_flow_on_the_pages_in_two_screens_with_empty_fingerprint_fie
         html.contains("is not the one the archive carries") && html.contains(&keys[0].key_id),
         "{html}"
     );
+    dump("stage-refused", "en", &html);
     assert!(
         html.contains("name=\"fp_0\" value=\"\""),
         "nothing typed is echoed back"

@@ -21,6 +21,8 @@ header a,nav.repo a,th a,td a,.crumbs a,main > p > a{display:inline-block;min-he
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 h1,h2,td,th,.name,.crumbs,.readme{overflow-wrap:anywhere}pre code{overflow-wrap:normal}
 th a,td a,.crumbs a{unicode-bidi:plaintext}
+/* A key's fingerprint (repository creation): in groups of eight, wrapping between groups on a narrow screen, never inside one word of the page */
+.fingerprint{overflow-wrap:anywhere}
 .readme img{max-width:100%;height:auto}
 /* plain words (RFC 012 D-4): the in-place explanations are native <details>, no script */
 details.explain{margin-block:.5rem}details.explain summary{cursor:pointer;min-height:24px;min-width:24px;padding-block:.15rem}details.explain p{margin-block:.4rem;overflow-wrap:anywhere}
