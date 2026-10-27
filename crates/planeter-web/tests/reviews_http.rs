@@ -1695,12 +1695,39 @@ async fn the_default_view_has_one_review_line_and_everything_else_is_under_detai
     );
     assert!(details(&p).contains("dave approved revision 1"));
     assert_eq!(violations(&p), Vec::<String>::new());
+    // Once someone has asked for changes to revision 2 it has been reviewed: the note about the old approval is gone.
+    decide(
+        &w,
+        "open",
+        "p1",
+        Some("tok-gina"),
+        serde_json::json!({"decision": "request-changes"}),
+    )
+    .await;
+    let p = page(&w, "GET", uri, None, "en").await.text();
+    assert!(default_view(&p).contains("Changes requested by 1 person"));
+    assert!(
+        !default_view(&p).contains("Approved on an earlier revision"),
+        "{}",
+        default_view(&p)
+    );
+    // Withdrawn again for the rest of the test (gina's decision is replaced by an approval of nothing: remove it).
+    w.reviews
+        .record_decision(&planeter_store::DecisionRecord {
+            change_id: "p1".into(),
+            revision_seq: 2,
+            reviewer: "gina".into(),
+            verdict: "approve".into(),
+            note: None,
+            created_at: now(),
+        })
+        .unwrap();
     // The list shows the same word.
     let l = page(&w, "GET", "/alice/open/proposals", None, "en")
         .await
         .text();
     assert!(
-        l.contains(">Review</th>") && l.contains("Awaiting review"),
+        l.contains(">Review</th>") && l.contains("<td>Approved</td>"),
         "{l}"
     );
     assert_eq!(violations(&l), Vec::<String>::new());
