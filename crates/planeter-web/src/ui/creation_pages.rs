@@ -410,7 +410,13 @@ fn form_refused(state: &AppState, c: &Ctx, v: Values, fail: &Fail, owner: &str) 
     let (status, text, detail) = fail_text(&c.t, fail, owner);
     // prikk's own words, when it refused an archive, follow our sentence.
     let text = detail.map_or(text.clone(), |d| format!("{text} {d}"));
-    new_page_with(state, c, status, v, Some(text))
+    let mut resp = new_page_with(state, c, status, v, Some(text));
+    if let Fail::Rate(secs) = fail
+        && let Ok(v) = secs.max(&1).to_string().parse()
+    {
+        resp.headers_mut().insert(header::RETRY_AFTER, v);
+    }
+    resp
 }
 
 /// A name the form's four values do not pass: the form again, with the field's sentence.

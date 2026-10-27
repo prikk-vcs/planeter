@@ -1487,6 +1487,25 @@ async fn the_empty_form_creates_checks_its_token_and_says_what_is_wrong_where_th
     .await;
     assert_eq!(r.status, StatusCode::FORBIDDEN);
     assert!(r.text().contains("You cannot create a repository there."));
+    // The rate limit on the page: the sentence and `Retry-After`.
+    let limited = world("page-rate", |_, rate| *rate = 1);
+    let c2 = limited.session("alice");
+    let ok2 = "csrf=tok123&owner=alice&name=one&visibility=private&proposals=members";
+    assert_eq!(
+        form(&limited, "/new", Some(&c2), ok2, "en").await.status,
+        StatusCode::SEE_OTHER
+    );
+    let r = form(
+        &limited,
+        "/new",
+        Some(&c2),
+        &ok2.replace("one", "two"),
+        "en",
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::TOO_MANY_REQUESTS);
+    assert!(r.h("retry-after").parse::<u64>().unwrap() >= 1);
+    assert!(r.text().contains("too many new repositories"));
     // Signed out: the sign-in sentence.
     let r = form(&w, "/new", Some("planeter_csrf=tok123"), ok, "en").await;
     assert_eq!(r.status, StatusCode::FORBIDDEN);
