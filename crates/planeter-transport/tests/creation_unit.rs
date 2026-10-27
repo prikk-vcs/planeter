@@ -149,12 +149,21 @@ fn fixture_with(name: &str, wrapper: Option<&str>, tweak: impl FnOnce(&mut Creat
         repos.clone() as Arc<dyn RepositoryStore>,
     )
     .with_sandbox(Sandbox::Unconfined);
-    if let Some(fail_on) = wrapper {
-        // A prikk that fails the call whose first two words are `fail_on`, and is the real prikk otherwise.
+    if let Some(spec) = wrapper {
+        // A prikk that fails the calls whose first two words are `pattern` from the `n`-th such call on (`pattern@n`; plain
+        // `pattern` is from the first), and is the real prikk otherwise. A counter file keeps the count across calls.
+        let (pattern, from) = match spec.split_once('@') {
+            Some((p, n)) => (p, n.parse::<u32>().unwrap()),
+            None => (spec, 1),
+        };
         let script = base.join("prikk-wrapper.sh");
+        let count = base.join("wrapper-count");
         std::fs::write(
             &script,
-            format!("#!/bin/sh\ncase \"$1 $2\" in\n  \"{fail_on}\"*) echo \"error: injected failure\" >&2; exit 1;;\nesac\nexec prikk \"$@\"\n"),
+            format!(
+                "#!/bin/sh\ncase \"$1 $2\" in\n  \"{pattern}\"*)\n    n=$(cat \"{c}\" 2>/dev/null || echo 0); n=$((n+1)); echo $n > \"{c}\"\n    if [ \"$n\" -ge {from} ]; then echo \"error: injected failure\" >&2; exit 1; fi;;\nesac\nexec prikk \"$@\"\n",
+                c = count.display()
+            ),
         )
         .unwrap();
         use std::os::unix::fs::PermissionsExt;
@@ -944,40 +953,47 @@ fn an_archive_that_cannot_verify_even_with_every_key_is_removed_whole_and_the_st
 #[test]
 fn every_step_of_the_confirmation_that_fails_removes_the_repository_whole() {
     need_prikk!();
-    // The call that fails, as `$1 $2` of the prikk command line.
-    for (step, wrapper) in [
-        ("init", "init"),
-        ("trust", "trust maintainer"),
-        ("archive import", "archive import"),
-        ("repository verify", "verify --format"),
+    // The call that fails, as `$1 $2` of the prikk command line, from its **second** call on: the first is the stage's own
+    // (its scratch repository runs the same verbs), the second is the confirmation's. `kept` says whether the stage is kept for
+    // another try (a failure that is not the archive's) or removed with the repository (prikk refused the archive).
+    for (step, wrapper, kept) in [
+        ("init", "init@2", true),
+        ("trust", "trust maintainer@2", true),
+        ("archive import", "archive import@2", false),
+        ("repository verify", "verify --format@2", true),
     ] {
         let fix = fixture_with(
             &format!("fail-{}", step.replace(' ', "-")),
             Some(wrapper),
             |_| {},
         );
-        // Stage with the real prikk (the wrapper must not break the stage), then fail the confirmation. For the stage the
-        // wrapper is the same prikk: so make the stage first with a clean service sharing the stores is not possible; instead
-        // arrange the failing step only for calls that come after the stage by inserting the stage record directly.
         let (archive, keys) = simple_archive(&fix.base, "maint", 2, 0);
-        let s = match stage(&fix, &archive, "app") {
-            Ok(s) => s,
-            Err(_) => {
-                // The failing call is also one of the stage's own (init, trust, import, verify): the stage fails and keeps nothing.
-                assert!(
-                    stage_dirs(&fix).is_empty(),
-                    "{step}: nothing kept by the stage"
-                );
-                assert!(everything_on_disk(&fix).is_empty());
-                continue;
-            }
-        };
+        let s = stage(&fix, &archive, "app")
+            .unwrap_or_else(|e| panic!("{step}: the stage must work: {e:?}"));
         let e = fix
             .svc
             .confirm(&alice_p(), &alice(), &s.stage_id, &typed(&keys))
             .unwrap_err();
         eprintln!("{step}: {e:?}");
         nothing_left(&fix);
+        assert_eq!(
+            fix.svc.stage(&alice(), &s.stage_id).is_ok(),
+            kept,
+            "{step}: the stage is {} for another try",
+            if kept { "kept" } else { "removed" }
+        );
+        assert_eq!(stage_dirs(&fix).len(), usize::from(kept), "{step}");
+        // The name is free: with a working prikk the same stage confirms (when it was kept).
+        if kept {
+            let fixed = fix.base.join("prikk-wrapper.sh");
+            std::fs::write(&fixed, "#!/bin/sh\nexec prikk \"$@\"\n").unwrap();
+            assert!(
+                fix.svc
+                    .confirm(&alice_p(), &alice(), &s.stage_id, &typed(&keys))
+                    .is_ok(),
+                "{step}: a second try works once prikk does"
+            );
+        }
     }
 }
 
@@ -1065,7 +1081,30 @@ fn two_confirmations_at_once_have_one_winner() {
 #[test]
 fn a_staged_file_that_changed_on_disk_is_not_imported() {
     need_prikk!();
+    // The file under the stage is replaced by **another valid archive** (so that prikk itself would accept it): only the digest
+    // taken when it was verified can tell.
     let fix = fixture("digest");
+    let (archive, keys) = simple_archive(&fix.base, "maint", 2, 0);
+    let (other, _) = simple_archive(&fix.base, "other", 3, 0);
+    let s = stage(&fix, &archive, "app").unwrap();
+    let staged = stage_dirs(&fix)[0].join("in").join("archive");
+    std::fs::write(&staged, std::fs::read(&other).unwrap()).unwrap();
+    match fix
+        .svc
+        .confirm(&alice_p(), &alice(), &s.stage_id, &typed(&keys))
+    {
+        Err(CreateError::ArchiveRefused { text }) => {
+            assert!(text.contains("not the one that was verified"), "{text}")
+        }
+        other => panic!("{:?}", other.err()),
+    }
+    nothing_left(&fix);
+    assert!(
+        stage_dirs(&fix).is_empty(),
+        "a stage whose file changed is not kept"
+    );
+    // A byte flipped in the staged file is refused too (by the same check, before prikk is asked).
+    let fix = fixture("digest-flip");
     let (archive, keys) = simple_archive(&fix.base, "maint", 2, 0);
     let s = stage(&fix, &archive, "app").unwrap();
     let staged = stage_dirs(&fix)[0].join("in").join("archive");
