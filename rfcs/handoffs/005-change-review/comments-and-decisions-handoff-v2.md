@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | Part 6 of the RFC 005 v2 series: **people talk about a proposal and say what they think of a revision** (RFC 005 D-5): comments in threads, anchored to a patch (and optionally a path and lines), and one decision per reviewer per revision — *approve* or *request changes* — that is shown on the revision it was given for and **never carried over** to a later one. Then the default view may truthfully show a review state (D-11), which part 5 deliberately left out. No file-by-file view (blocked on prikk: see "Not here"), no checks, no merge. |
-| Status | **Assigned** (2026-10-27), after part 5a was reviewed Approved. Independent of the supply-chain decision and of the client helper. |
+| Status | **Done, reviewed Approved (2026-10-27; commits `c7411fd`…`30af1d6`).** |
 | Basis | [`../../accepted/005-change-review.md`](../../accepted/005-change-review.md) D-5, D-7 (stale never counts), D-10, D-11; `docs/proposals.md`; `crates/planeter-core/src/authorize.rs` (`Action::Comment`: any authenticated principal who can read the repository, a read-only token included; `Action::Review`: `write` and above; `Action::Close`); `crates/planeter-core/src/change.rs` (`approval_standing`, `Staleness`); part 5's service, routes, pages, catalog, WCAG checker, plain-words tests, glossary; RFC 003's Markdown sanitizer; the route registry (IS-14). |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 
