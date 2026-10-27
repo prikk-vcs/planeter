@@ -5,6 +5,19 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **Creating a repository — empty, or from a maintainer's archive (RFC 004 part 7).** A person can now make a repository through the pages (`/new`) or the
+  API. **Empty**: one step, `POST /api/v1/repos`. **From an archive** (the file `prikk archive export` writes): two steps — upload it and see what it holds
+  (the maintainer keys it lists, its branches and where each would land, whether it would pass prikk's checks), then **type the fingerprints of the keys you
+  trust** (the whole public key, which the maintainer can read off their own machine; the page never fills them in). Only the keys you typed are trusted; the
+  rest are explicitly left out, and their branches are kept as received copies. The repository is built in one order — name reserved, directory, `init`, trust, import,
+  `verify`, you as administrator, ready — and **a failure, a timeout or a kill at any step removes it whole**; at every start the server removes (and logs) what a killed
+  one left, never following a link and never outside the repository root. Your own namespace or an organization you belong to; one refusal for every other owner; quotas
+  per owner (50 / 500); 10 creations an hour per person; names are lowercase and the server's own words (`new`, `api`, `login`, `static`, `import`, … derived from its routes)
+  are reserved. A staged archive is kept 24 hours, at most 2 per person. The pages upload with a bounded `multipart/form-data` reader of our own (no new dependency).
+  Settings: `PLANETER_IMPORT_MAX_MB`, `PLANETER_CREATE_DEADLINE_SECS`, `PLANETER_STAGE_BUDGET_MB`, `PLANETER_REPO_QUOTA_USER`, `PLANETER_REPO_QUOTA_ORG`,
+  `PLANETER_CREATIONS_PER_HOUR`. Measured on prikk 0.54.1: `archive verify` holds 3.0 × the largest blob and `archive import` 6.0 ×, and **prikk bounds neither**.
+  See `docs/creation.md`.
+
 - **Comments and review decisions (RFC 005 part 6).** People can now talk about a proposal and say what they think of a revision. **Comments**
   (Markdown, shown through the sanitizer) sit in one-level threads and may be anchored to a patch, a path and lines; they are never edited or deleted, and a maintainer
   who administers the repository can **hide** one with a reason (its text is then shown to administrators only, everyone else sees the reason) and show it again. A reviewer

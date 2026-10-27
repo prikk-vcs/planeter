@@ -360,7 +360,9 @@ pub(crate) fn fail_response(state: &AppState, fail: &Fail, owner: &str) -> Respo
                 *secs,
             );
         }
-        Fail::OverBudget => return error_response(state, Failure::OverBudget),
+        Fail::OverBudget => {
+            return code_response_with_keys(state, ErrorCode::TooLarge, ErrorCode::CREATE_TOO_BIG);
+        }
         Fail::Busy => return error_response(state, Failure::Busy),
         Fail::Internal => return code_response(state, ErrorCode::Internal),
         Fail::Create(e) => e,
@@ -722,7 +724,7 @@ pub(crate) async fn confirm(
     id: &str,
     req: AdoptionRequest,
 ) -> Result<Confirmed, Fail> {
-    rate(state, rt, user)?;
+    // (Not rate limited again: the staging that made this stage counted as the creation.)
     // The size comes from the stage record; a stage that is not this user's, or is gone, is the one neutral answer.
     let summary = stage_of(rt, user, id).await?;
     let cost = cost_model::admission_cost(summary.archive_bytes);
@@ -745,22 +747,25 @@ pub(crate) async fn confirm(
 // ------------------------------------------------------------------------------------------------ handlers
 
 /// The bytes of a small JSON body, or a refusal.
-async fn small_body(state: &AppState, body: Body, limit: usize) -> Result<Bytes, Response> {
+async fn small_body(state: &AppState, body: Body, limit: usize) -> Result<Bytes, Box<Response>> {
     axum::body::to_bytes(body, limit)
         .await
-        .map_err(|_| bad_value(state, "body", "too_large_or_unreadable"))
+        .map_err(|_| Box::new(bad_value(state, "body", "too_large_or_unreadable")))
 }
 
 /// The common start of every API handler here: the signed-in user, or the refusal.
-async fn signed_in(state: &AppState, headers: &HeaderMap) -> Result<(Principal, UserId), Response> {
+async fn signed_in(
+    state: &AppState,
+    headers: &HeaderMap,
+) -> Result<(Principal, UserId), Box<Response>> {
     let principal = bearer_principal(state, headers).await;
     match principal.user().cloned() {
         Some(user) => Ok((principal, user)),
-        None => Err(fail_response(
+        None => Err(Box::new(fail_response(
             state,
             &Fail::Create(CreateError::NotSignedIn),
             "",
-        )),
+        ))),
     }
 }
 
@@ -774,11 +779,11 @@ pub(crate) async fn create_handler(
     };
     let (principal, user) = match signed_in(&state, &headers).await {
         Ok(v) => v,
-        Err(r) => return r,
+        Err(r) => return *r,
     };
     let bytes = match small_body(&state, body, 16 * 1024).await {
         Ok(b) => b,
-        Err(r) => return r,
+        Err(r) => return *r,
     };
     let wire: NewWire = match serde_json::from_slice(&bytes) {
         Ok(w) => w,
@@ -847,7 +852,7 @@ pub(crate) async fn import_handler(
     };
     let (principal, user) = match signed_in(&state, &headers).await {
         Ok(v) => v,
-        Err(r) => return r,
+        Err(r) => return *r,
     };
     if !rt.service.import_enabled() {
         return fail_response(&state, &Fail::Create(CreateError::ImportOff), "");
@@ -1007,7 +1012,7 @@ pub(crate) async fn stage_handler(
     };
     let (_, user) = match signed_in(&state, &headers).await {
         Ok(v) => v,
-        Err(r) => return r,
+        Err(r) => return *r,
     };
     match stage_of(&rt, &user, &stage).await {
         Ok(summary) => {
@@ -1034,11 +1039,11 @@ pub(crate) async fn confirm_handler(
     };
     let (principal, user) = match signed_in(&state, &headers).await {
         Ok(v) => v,
-        Err(r) => return r,
+        Err(r) => return *r,
     };
     let bytes = match small_body(&state, body, 64 * 1024).await {
         Ok(b) => b,
-        Err(r) => return r,
+        Err(r) => return *r,
     };
     let wire: ConfirmWire = match serde_json::from_slice(&bytes) {
         Ok(w) => w,

@@ -219,8 +219,7 @@ fn headers_and_fields_are_bounded() {
 
 #[test]
 fn a_field_that_is_not_text_is_refused() {
-    let b = format!("--XyZ-boundary\r\nContent-Disposition: form-data; name=\"a\"\r\n\r\n")
-        .into_bytes();
+    let b = b"--XyZ-boundary\r\nContent-Disposition: form-data; name=\"a\"\r\n\r\n".to_vec();
     let mut v = b;
     v.extend_from_slice(&[0xff, 0xfe, b'\r', b'\n']);
     v.extend_from_slice(b"--XyZ-boundary--\r\n");

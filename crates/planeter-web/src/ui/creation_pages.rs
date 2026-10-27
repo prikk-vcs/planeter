@@ -618,7 +618,7 @@ pub(super) async fn new_import_submit(
                         visibility: req.visibility,
                         proposals: req.proposals,
                     });
-                    writer = match StageWriter::begin(&rt, &user, total).await {
+                    writer = match StageWriter::begin(&rt, &user, total.min(max)).await {
                         Ok(w) => Some(w),
                         Err(fail) => {
                             return form_refused(

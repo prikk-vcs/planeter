@@ -8,7 +8,12 @@
 
 ## Where we are
 
-- **RFC 005 part 6 (comments and review decisions) built 2026-10-27, awaiting review**
+- **RFC 004 part 7 (creating a repository, empty or from an archive) built 2026-10-27, awaiting review**
+  (`rfcs/handoffs/004-transport/repository-creation-handoff-v2.md`): the `creating | ready` state and the kill-safe order, the start-up
+  sweep with its guards, the empty and the archive paths (stage and verify, then confirm with the typed fingerprints) over the API and the
+  pages, the cost of the two archive calls measured on prikk 0.54.1 (3.0 × and 6.0 × the largest blob; prikk bounds neither), a SIGKILL
+  test of the real server. `docs/creation.md`. Part 6 was **reviewed Approved**.
+- **RFC 005 part 6 (comments and review decisions) built 2026-10-27, reviewed Approved (D-42)**
   (`rfcs/handoffs/005-change-review/comments-and-decisions-handoff-v2.md`): comments and decisions as records (SQLite triggers make a comment
   immutable), the pure rules, the API, the review line and the forms on the proposal page, hiding. Part 5a and the advisory measurement were **reviewed Approved**;
   IS-54 (the crypto-bigint advisory) waits for the owner.

@@ -89,13 +89,18 @@ impl Maintainer {
         };
     }
 
-    /// `n` more sealed commits, one file each.
+    /// `n` more sealed commits, one file each (sealed in batches: a queue holds at most 1,000 patches).
     pub fn history(&self, n: usize) {
         for i in 0..n {
             self.write(&format!("src/f{i}.txt"), &format!("file {i}\n"));
             self.commit(&format!("add f{i}"));
+            if i % 500 == 499 {
+                self.seal(None);
+            }
         }
-        self.seal(None);
+        if !n.is_multiple_of(500) {
+            self.seal(None);
+        }
     }
 
     pub fn archive(&self, out: &Path) -> PathBuf {
