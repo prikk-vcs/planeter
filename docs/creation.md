@@ -163,6 +163,12 @@ thousands of objects needs a longer `PLANETER_CREATE_DEADLINE_SECS`.
 A call that hits the ceiling aborts (`SIGABRT`, "memory allocation of N bytes failed") and is reported as a named refusal
 (`create_too_big`), never as damage; one that hits the deadline is killed and the repository removed whole.
 
+**What the server collects is bounded too (IS-55).** A hostile archive with very many refs makes `archive import --format json` print a report
+as large as its refs (171 bytes a ref, measured; 100 MiB can carry about 130,000 refs, 22 MB). The driver reads at most 64 MiB of that report
+(16 MiB of `archive verify`'s) and kills the call beyond it, as a named, counted, logged refusal: while staging or confirming it is an ordinary
+refusal of the archive ("prikk's report on the archive is larger than this server reads"), and the repository is removed whole. A creation
+therefore never refuses an archive the edge accepted because prikk's honest report is long.
+
 ## 5. The settings
 
 | Variable | Default | What |

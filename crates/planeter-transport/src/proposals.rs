@@ -56,6 +56,28 @@ pub struct ProposalConfig {
     pub grace_secs: u64,
     /// How many revisions one sweep run examines.
     pub sweep_batch: usize,
+    /// How many blocks of each published ref an observation reads (`prikk log --limit`; `PLANETER_OBSERVATION_BLOCKS`,
+    /// [`OBSERVATION_BLOCKS_MIN`]..=[`OBSERVATION_BLOCKS_MAX`]). The cap of that `log` follows from it (`output_cap`).
+    pub observation_blocks: usize,
+}
+
+/// The least, the default and the most of [`ProposalConfig::observation_blocks`].
+pub const OBSERVATION_BLOCKS_MIN: usize = 100;
+pub const OBSERVATION_BLOCKS_DEFAULT: usize = 10_000;
+pub const OBSERVATION_BLOCKS_MAX: usize = 100_000;
+
+/// `PLANETER_OBSERVATION_BLOCKS`: unset or empty is the default; anything but a whole number in the range is refused (the server
+/// does not start), in words.
+pub fn observation_blocks_from(value: Option<&str>) -> Result<usize, String> {
+    match value.filter(|v| !v.is_empty()) {
+        None => Ok(OBSERVATION_BLOCKS_DEFAULT),
+        Some(v) => match v.parse::<usize>() {
+            Ok(n) if (OBSERVATION_BLOCKS_MIN..=OBSERVATION_BLOCKS_MAX).contains(&n) => Ok(n),
+            _ => Err(format!(
+                "PLANETER_OBSERVATION_BLOCKS must be a whole number from {OBSERVATION_BLOCKS_MIN} to {OBSERVATION_BLOCKS_MAX} (got {v:?})"
+            )),
+        },
+    }
 }
 
 impl Default for ProposalConfig {
@@ -63,6 +85,7 @@ impl Default for ProposalConfig {
         ProposalConfig {
             grace_secs: planeter_core::change::DEFAULT_RETENTION_GRACE_SECS,
             sweep_batch: SWEEP_BATCH,
+            observation_blocks: OBSERVATION_BLOCKS_DEFAULT,
         }
     }
 }
@@ -186,6 +209,9 @@ pub struct PatchEntry {
     /// `ForgeApprovedUnsealed` — pending in the repository; `Sealed` — in a block `log` lists; `None` — neither (not
     /// listed: it is not claimed to be anything).
     pub assurance: Option<Assurance>,
+    /// The patch was not found in a log that filled the observation window, so it may be older than the window: whether it is signed
+    /// in is **unknown** (`assurance` is `None`). Only the detail page says so in words.
+    pub history_unknown: bool,
 }
 
 /// A proposal in full.
@@ -370,17 +396,18 @@ impl ProposalService {
     }
 
     /// The patch ids of the blocks of one ref: `log` with a limit far above prikk's own default of the newest 20 blocks
-    /// ([`LOG_BLOCK_LIMIT`]), and whether the log filled the limit. **Positive evidence suffices; absence under truncation is
+    /// (`limit` = [`ProposalConfig::observation_blocks`]), and whether the log filled the limit. **Positive evidence suffices; absence under truncation is
     /// unknown** (IS-55): a patch found in the newest blocks is found whether or not the log was cut short, and one that is not
     /// found in a log that was cut short is neither "sealed" nor "not sealed".
     fn patch_ids_of(
         driver: &planeter_prikk::CliPrikkRepo,
         ref_name: &str,
+        limit: usize,
     ) -> Result<(BTreeSet<String>, bool), ProposalError> {
         let log = driver
-            .log(Some(ref_name), Some(LOG_BLOCK_LIMIT))
+            .log(Some(ref_name), Some(limit))
             .map_err(|e| unavailable("cannot read a log", e))?;
-        let truncated = log.blocks.len() >= LOG_BLOCK_LIMIT;
+        let truncated = log.blocks.len() >= limit;
         let ids = log
             .blocks
             .into_iter()
@@ -431,7 +458,8 @@ impl ProposalService {
             truncated: false,
         };
         for b in &refs.branches {
-            let (ids, truncated) = Self::patch_ids_of(&driver, &b.ref_name)?;
+            let (ids, truncated) =
+                Self::patch_ids_of(&driver, &b.ref_name, self.config.observation_blocks)?;
             found.ids.extend(ids);
             found.truncated |= truncated;
         }
@@ -458,7 +486,7 @@ impl ProposalService {
                 .map(|r| {
                     Ok((
                         r.ref_name.clone(),
-                        Self::patch_ids_of(&driver, &r.ref_name)?.0,
+                        Self::patch_ids_of(&driver, &r.ref_name, self.config.observation_blocks)?.0,
                     ))
                 })
                 .collect()
@@ -639,6 +667,7 @@ impl ProposalService {
             patches.extend(set.iter().take(DETAIL_PATCH_LIMIT).map(|id| PatchEntry {
                 patch_id: id.clone(),
                 assurance: Some(Assurance::Sealed),
+                history_unknown: false,
             }));
             let retention = self.retention_of(&proposal, &revisions);
             let revisions = revisions
@@ -685,6 +714,7 @@ impl ProposalService {
                 patches.push(PatchEntry {
                     patch_id: id.clone(),
                     assurance: patch_assurance(&facts),
+                    history_unknown: unknown(id),
                 });
             }
             if proposal.state == ChangeState::Open {
@@ -699,6 +729,7 @@ impl ProposalService {
             patches.extend(set.iter().take(DETAIL_PATCH_LIMIT).map(|id| PatchEntry {
                 patch_id: id.clone(),
                 assurance: None,
+                history_unknown: false,
             }));
         }
         let retention = self.retention_of(&proposal, &revisions);
@@ -940,12 +971,6 @@ pub fn record_digest(recorded: &str) -> Result<Digest, crate::artifacts::StoreEr
 /// 0.54.1, a repository of 200 sealed blocks needs under 1 MiB with nothing pending and under 6 MiB with 5,000 patches
 /// pending (about 1 KiB a patch), so 64 MiB holds some 60,000 pending patches; the floor of a `log` read is raised to it.
 const OBSERVATION_FLOOR: u64 = 64 << 20;
-
-/// How many blocks of one ref an observation reads (`prikk log --limit`): about 6.4 MB of JSON, a cap near 23 MiB (IS-55; 100,000
-/// blocks would be 63 MB held and parsed in one observation). A log that fills it may have been cut short: a proposal whose
-/// patches are all found in it lands all the same (positive evidence suffices); one with a patch not found stays open, and that
-/// patch is shown as unknown, never as "held".
-pub(crate) const LOG_BLOCK_LIMIT: usize = 10_000;
 
 /// The cursor of the page after `c`: its sort key, `<updated_at>.<id>`.
 fn cursor(c: &ChangeRecord) -> String {

@@ -827,6 +827,11 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg("proposal.patches.col.patch", "Patch"),
     msg("proposal.patches.col.status", "Status"),
+    msg("proposal.patch.unknown", "Cannot tell"),
+    msg(
+        "proposal.patch.unknown_explain",
+        "This server cannot tell whether this patch has been signed in (the history is longer than it reads).",
+    ),
     msg("proposal.patch.not_listed", "Not listed here"),
     msg(
         "proposal.patch.not_listed_explain",

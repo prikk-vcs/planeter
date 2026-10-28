@@ -626,6 +626,8 @@ keys! {
     ProposalPatchColStatus => "proposal.patches.col.status",
     ProposalPatchNotListed => "proposal.patch.not_listed",
     ProposalPatchNotListedExplain => "proposal.patch.not_listed_explain",
+    ProposalPatchUnknown => "proposal.patch.unknown",
+    ProposalPatchUnknownExplain => "proposal.patch.unknown_explain",
     ProposalRetentionKept => "proposal.retention.kept",
     ProposalRetentionPartly => "proposal.retention.partly",
     ProposalRetentionRemoved => "proposal.retention.removed",

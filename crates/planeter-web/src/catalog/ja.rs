@@ -864,6 +864,11 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg("proposal.patches.col.patch", "パッチ"),
     msg("proposal.patches.col.status", "状態"),
+    msg("proposal.patch.unknown", "判断できません"),
+    msg(
+        "proposal.patch.unknown_explain",
+        "このサーバーは、このパッチが署名されて履歴に入ったかどうかを判断できません(履歴が、サーバーが読む範囲より長いためです)。",
+    ),
     msg("proposal.patch.not_listed", "この場所には記録なし"),
     msg(
         "proposal.patch.not_listed_explain",

@@ -40,7 +40,7 @@ use crate::export::ExportService;
 use crate::metrics::{Metrics, ProposeOutcome, ProposeRecord};
 
 /// How many blocks of one ref the declaration's "is it held" check reads (`prikk log --limit`): a declared patch sealed longer ago
-/// is still held. Unchanged by IS-55 (the observation of proposals reads fewer, [`crate::proposals::LOG_BLOCK_LIMIT`]); the cap of
+/// is still held. Unchanged by IS-55 (the observation of proposals reads fewer, [`crate::proposals::ProposalConfig::observation_blocks`]); the cap of
 /// such a `log` is 162 MB.
 pub(crate) const DECLARATION_LOG_LIMIT: usize = 100_000;
 

@@ -5,6 +5,16 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **A cap on what the server reads from a prikk call (IS-55).** The memory ceiling bounded prikk, not the server's own buffer: a hostile archive with
+  very many refs could make `archive import --format json` print a report as large as the archive. Every prikk call is now read up to a limit per
+  verb (a table with its measurements, each limit at least twice the largest legitimate output measured on prikk 0.54.1) and **killed beyond it**; the
+  call fails as a named error, is counted by verb and logged, and is never read as an empty or a partial report. A read is then *unavailable*, an accept
+  *incomplete*, a creation refused (the repository removed whole), recovery's witness *unknown*. The start-up probe and the outbound fetch are bounded the
+  same way. **Landing is observed from the newest `PLANETER_OBSERVATION_BLOCKS` blocks of each published branch (default 10,000; 100 to 100,000):** a
+  proposal whose patches are all found lands; a patch not found in a log that filled the window is shown as *unknown* ("This server cannot tell whether
+  this patch has been signed in"), never as held, and the proposal stays open; a landed proposal shows its patches as signed in without reading the log
+  again. The counters (`output_too_large` by verb, `sightings_unavailable`) are in the retention sweep's log line and at shutdown. See `docs/proposals.md`.
+
 - **Creating a repository — empty, or from a maintainer's archive (RFC 004 part 7).** A person can now make a repository through the pages (`/new`) or the
   API. **Empty**: one step, `POST /api/v1/repos`. **From an archive** (the file `prikk archive export` writes): two steps — upload it and see what it holds
   (the maintainer keys it lists, its branches and where each would land, whether it would pass prikk's checks), then **type the fingerprints of the keys you

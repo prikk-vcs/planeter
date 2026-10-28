@@ -66,7 +66,7 @@ recover.
 
 # What a person sees of a proposal (RFC 005 part 5)
 
-## Landing, observed from facts
+## Landing, observed from facts (and what a window cannot see)
 
 A proposal moves from `open` to `landed` only because the repository says so. The rule (RFC 005 D-6 as amended by D-40, applied to
 the proposal's current patch set, rule 5 above):
@@ -84,16 +84,28 @@ A patch in a block of a published ref is shown as signed in (*Sealed*), even if 
 is listed there and in no published block is shown as held; a patch in neither shows no badge ("Not listed here"). A **received**
 ref that holds any patch of an *open* proposal is shown under *Details* as a **sighting** ("Also found in history received here (not
 verified here): `remotes/…`", and that a received history can be replaced); the JSON has `received_sightings: [{ref}]`. Nothing is
-derived from a sighting, and failing to read the received logs means no sightings, never an error.
+derived from a sighting, and failing to read the received logs means no sightings, never an error (the failure is counted: see
+"Reading the counters" below).
+
+**The window (IS-55).** An observation reads the newest `PLANETER_OBSERVATION_BLOCKS` blocks (default 10,000) of each published ref: more
+would hold tens of megabytes of `log` output and parse it in one request. **Positive evidence suffices; absence under truncation is
+unknown.** A proposal whose patches are *all* found in the window lands, whether or not a log was cut short. A patch that is *not* found
+while a log filled the window may be older than the window, so the proposal stays open and the patch is shown as **unknown** — never as
+held, and never counted as still waiting: *"This server cannot tell whether this patch has been signed in (the history is longer than it
+reads)."* The window is per published ref, and a log that filled the window on **any** ref makes an absent patch unknown. This happens when
+a ref gains more than the window in blocks while a proposal on it is still open; it is rare, and an operator of a very busy repository raises
+`PLANETER_OBSERVATION_BLOCKS` (more history read: more memory and time per observation; the cap on what the server collects from `log`
+grows with it, 1.5 KiB a block, 8 MiB at least). A **landed** proposal is final and was observed at landing: its detail shows every patch as
+signed in (*Sealed*) without reading the log again, so a patch sealed long ago does not lose its badge.
 
 How often prikk is asked is bounded and does not grow with the number of proposals:
 
 * **one `sync pending` per repository per state fingerprint** (`ExportService::state`: the revision counter and the files cross-check);
   while the fingerprint is the same, every list, detail and landing pass in that state shares the answer;
 * **one `branch` and one `log` per published ref per fingerprint**, read only when some proposal is open (every open proposal is a
-  candidate) or a detail needs them; up to 100,000 blocks a ref. (prikk's own default is the newest 20 blocks, so the limit is passed; a
-  log that fills the limit may have been cut short, and then nothing lands on it.) The logs of the **received** refs are read only for
-  the detail of an open proposal, once per fingerprint;
+  candidate) or a detail needs them; the **newest 10,000 blocks** of a ref (`PLANETER_OBSERVATION_BLOCKS`, 100 to 100,000; prikk's own
+  default is the newest 20 blocks, so the limit is passed). The logs of the **received** refs are read only for the detail of an open
+  proposal, once per fingerprint;
 * **no prikk call per item**: a list of fifty proposals makes the same calls as a list of one; with no proposal open, a list reads no log.
 
 The transition is a **compare-and-set**: it applies only if the proposal is still open **and** has exactly the number of revisions the
@@ -101,7 +113,16 @@ observation was made on. A revision recorded meanwhile wins and the observation 
 transition starts the grace (`retain_until`, below). Landed is final.
 
 If the repository cannot be read (no prikk, a damaged store, a busy gate) the records are still listed as they stand and the patches
-carry no badge (nothing is claimed about a patch whose history could not be read); the next request tries again.
+carry no badge (nothing is claimed about a patch whose history could not be read); the next request tries again. The same holds when a
+prikk call **printed more than the server reads** (it is killed at its cap, `OutputTooLarge`): that is *unknown*, never *none*.
+
+### Reading the counters
+
+Two counters say that something was hidden: `output_too_large=<verb>:<n>,…` (prikk calls killed for printing more than their verb's limit,
+by verb) and `sightings_unavailable=<n>` (reads of the received logs that failed and showed as "no sightings"). They are in the retention
+sweep's periodic log line (`planeter: retention sweep: … output_too_large=… sightings_unavailable=…`; the sweep runs only while the artifact
+store, `PLANETER_ARTIFACT_DIR`, is configured) and in the line printed at graceful shutdown (`planeter: stopped (…)`). Each hit also logs
+one line when it happens (`a prikk call printed more than it may: verb=… stream=… limit=… bytes`).
 
 The observation's memory ceiling is at least 64 MiB. Measured on prikk 0.54.1 with 200 sealed blocks: under 1 MiB with nothing
 pending, under 6 MiB with 5,000 patches pending (about 1 KiB a patch), so 64 MiB holds some 60,000 pending patches; each call takes

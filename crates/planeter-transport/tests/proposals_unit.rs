@@ -17,7 +17,7 @@ use planeter_store::{
 };
 use planeter_transport::{
     ArtifactStore, ExportConfig, ExportService, Metrics, ProposalConfig, ProposalError,
-    ProposalService, Retention, Spool, StateFilter, record_digest,
+    ProposalService, Retention, Spool, StateFilter, observation_blocks_from, record_digest,
 };
 
 const T0: u64 = 1_000_000;
@@ -89,6 +89,14 @@ esac
 
 impl Fixture {
     fn new(name: &str, clock: fn() -> u64, sweep_batch: usize) -> Fixture {
+        Fixture::with_window(name, clock, sweep_batch, 10_000)
+    }
+    fn with_window(
+        name: &str,
+        clock: fn() -> u64,
+        sweep_batch: usize,
+        observation_blocks: usize,
+    ) -> Fixture {
         let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("proposals-unit-{name}"));
         let _ = std::fs::remove_dir_all(&dir);
         let repo_dir = dir.join("repo");
@@ -137,6 +145,7 @@ impl Fixture {
             ProposalConfig {
                 grace_secs: GRACE,
                 sweep_batch,
+                observation_blocks,
             },
         )
         .with_clock(clock);
@@ -536,6 +545,7 @@ fn a_patch_not_found_in_a_log_that_filled_the_window_is_unknown_never_held_and_n
     let d = f.svc.detail(&f.repo, "p").unwrap();
     assert_eq!(d.patches[0].assurance, None, "not called held");
     assert_eq!(d.still_pending, 0);
+    assert!(d.patches[0].history_unknown, "and said to be unknown");
     // The same log one block shorter was read whole: the patch is pending and in no block, so it is held.
     f.move_state();
     f.log("heads/main", &ids[1..]);
@@ -545,6 +555,7 @@ fn a_patch_not_found_in_a_log_that_filled_the_window_is_unknown_never_held_and_n
         Some(Assurance::ForgeApprovedUnsealed)
     );
     assert_eq!(d.still_pending, 1);
+    assert!(!d.patches[0].history_unknown);
 }
 
 #[test]
@@ -919,4 +930,54 @@ fn a_call_over_its_output_limit_is_unknown_never_none() {
     assert_eq!(d.still_pending, 0);
     assert_eq!(f.list(StateFilter::Open), vec!["p"]);
     assert!(planeter_prikk::output_too_large_total()["sync pending"] >= 1);
+}
+
+/// IS-55 ruling 4: `PLANETER_OBSERVATION_BLOCKS` is a whole number from 100 to 100,000; the default when unset or empty; anything else is
+/// refused (the server does not start) with the name and the range in the message.
+#[test]
+fn the_observation_window_is_a_number_from_a_hundred_to_a_hundred_thousand() {
+    assert_eq!(observation_blocks_from(None), Ok(10_000));
+    assert_eq!(observation_blocks_from(Some("")), Ok(10_000));
+    assert_eq!(observation_blocks_from(Some("100")), Ok(100));
+    assert_eq!(observation_blocks_from(Some("100000")), Ok(100_000));
+    for bad in [
+        "99", "100001", "0", "-5", "ten", "1e4", " 500", "10000 ", "1_000",
+    ] {
+        let e = observation_blocks_from(Some(bad)).unwrap_err();
+        assert!(
+            e.contains("PLANETER_OBSERVATION_BLOCKS") && e.contains("100 to 100000"),
+            "{bad}: {e}"
+        );
+    }
+}
+
+/// IS-55 ruling 4: a larger window finds an older patch. A history of 10,500 blocks whose first (oldest) block holds the proposal's
+/// patch: with the default window the patch is not found (the log was cut) and the proposal stays open; with a window of 20,000 the
+/// whole log is read, the patch is found and the proposal lands. The log asked for is the window.
+#[test]
+fn a_larger_window_finds_an_old_patch_and_the_asked_limit_is_the_window() {
+    let mut ids: Vec<String> = (0..10_500u64).map(|n| pid(2_000_000 + n)).collect();
+    ids[10_499] = pid(1); // the oldest block (log lists newest first)
+    // The stand-in prints the whole file, as prikk would for a large enough `--limit`; only the first `limit` blocks are its answer.
+    let narrow = Fixture::with_window("window-default", now, 200, 10_000);
+    narrow.propose("p", "alice", &[pid(1)], 101);
+    narrow.pending(&[]);
+    narrow.log("heads/main", &ids[..10_000]);
+    assert_eq!(narrow.list(StateFilter::Open), vec!["p"]);
+    assert!(
+        narrow.calls().iter().any(|c| c.contains("--limit 10000")),
+        "{:?}",
+        narrow.calls()
+    );
+
+    let wide = Fixture::with_window("window-wide", now, 200, 20_000);
+    wide.propose("p", "alice", &[pid(1)], 101);
+    wide.pending(&[]);
+    wide.log("heads/main", &ids);
+    assert_eq!(wide.list(StateFilter::Landed), vec!["p"]);
+    assert!(
+        wide.calls().iter().any(|c| c.contains("--limit 20000")),
+        "{:?}",
+        wide.calls()
+    );
 }

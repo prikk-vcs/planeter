@@ -303,6 +303,8 @@ struct PatchRow {
     short_id: String,
     /// The badge, when the patch is held or sealed; `None` = not listed, and nothing is claimed.
     badge: Option<(&'static str, Key)>,
+    /// Not found in a log that filled the window: whether it is signed in is unknown (IS-55).
+    unknown: bool,
 }
 
 #[derive(Template)]
@@ -467,6 +469,7 @@ fn detail_tpl(
         .map(|x| PatchRow {
             short_id: short(&x.patch_id),
             badge: x.assurance.map(assurance),
+            unknown: x.history_unknown,
         })
         .collect();
     // One explanation per distinct badge on the page, then the sentence for a patch that is not listed.
@@ -481,7 +484,13 @@ fn detail_tpl(
             });
         }
     }
-    if patches.iter().any(|r| r.badge.is_none()) {
+    if patches.iter().any(|r| r.unknown) {
+        explain.push(ExplainRow {
+            label: Some(Key::ProposalPatchUnknown),
+            text: Key::ProposalPatchUnknownExplain,
+        });
+    }
+    if patches.iter().any(|r| r.badge.is_none() && !r.unknown) {
         explain.push(ExplainRow {
             label: Some(Key::ProposalPatchNotListed),
             text: Key::ProposalPatchNotListedExplain,

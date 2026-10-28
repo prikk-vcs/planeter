@@ -356,6 +356,8 @@ async fn main() {
     let mut recovery_service: Option<Arc<planeter_transport::RecoveryService>> = None;
     let mut proposals_service: Option<Arc<planeter_transport::ProposalService>> = None;
     let mut reviews_service: Option<Arc<planeter_transport::ReviewService>> = None;
+    // The counters of IS-55 (a prikk call over its output limit, a hidden failure to read sightings) are printed at shutdown.
+    let mut shutdown_metrics: Option<Arc<planeter_transport::Metrics>> = None;
     // RFC 004 part 2: advertise and fetch need the export spool; without it the routes answer `transport_off`
     // to a reader of the repository. Every setting is a positive whole number, refused at start otherwise.
     let transport = match &dirs.spool {
@@ -392,6 +394,7 @@ async fn main() {
                 rate
             );
             let metrics = Arc::new(planeter_transport::Metrics::new());
+            shutdown_metrics = Some(metrics.clone());
             let export = Arc::new(planeter_transport::ExportService::new(
                 hosting.clone(),
                 spool.clone(),
@@ -492,6 +495,16 @@ async fn main() {
                     // that nothing needs any more (records stay; only files go).
                     let grace_days = positive_env("PLANETER_PROPOSAL_GRACE_DAYS", 30);
                     let sweep_minutes = positive_env("PLANETER_RETENTION_SWEEP_MINUTES", 60);
+                    // IS-55: how many blocks of each published ref an observation reads; refused outside the range.
+                    let observation_blocks = match planeter_transport::observation_blocks_from(
+                        std::env::var("PLANETER_OBSERVATION_BLOCKS").ok().as_deref(),
+                    ) {
+                        Ok(n) => n,
+                        Err(e) => {
+                            eprintln!("planeter: {e}");
+                            exit_releasing_lock(1);
+                        }
+                    };
                     let proposals = Arc::new(planeter_transport::ProposalService::new(
                         hosting.clone(),
                         changes.clone(),
@@ -500,11 +513,12 @@ async fn main() {
                         metrics.clone(),
                         planeter_transport::ProposalConfig {
                             grace_secs: grace_days.saturating_mul(24 * 60 * 60),
+                            observation_blocks,
                             ..planeter_transport::ProposalConfig::default()
                         },
                     ));
                     eprintln!(
-                        "planeter: a closed or landed proposal keeps its files for {grace_days} day(s); the retention sweep runs at start and every {sweep_minutes} minute(s)"
+                        "planeter: a closed or landed proposal keeps its files for {grace_days} day(s); the retention sweep runs at start and every {sweep_minutes} minute(s); an observation reads the newest {observation_blocks} block(s) of each published branch"
                     );
                     let sweeper = proposals.clone();
                     let spawned = std::thread::Builder::new()
@@ -835,7 +849,11 @@ async fn main() {
         eprintln!("planeter: server error: {e}");
         release_and_exit(&leases, 1);
     }
-    eprintln!("planeter: stopped");
+    let counters = shutdown_metrics
+        .unwrap_or_else(|| Arc::new(planeter_transport::Metrics::new()))
+        .snapshot()
+        .over_cap_summary();
+    eprintln!("planeter: stopped ({counters})");
     release_and_exit(&leases, 0);
 }
 

@@ -140,6 +140,12 @@ too large *before* anything is accepted; one that is admitted is not killed by i
 
 ## Limits worth knowing
 
+* **What the server reads of prikk is bounded (IS-55).** Every prikk call is read up to a limit per verb (a table in
+  `planeter-prikk/src/output_cap.rs`, each limit at least twice the largest legitimate output measured) and is killed beyond it. A `sync accept`
+  that prints more than 16 MiB (about 150,000 claims; the edge allows 20,000) is **incomplete** (`accept_unreadable`): the repository is flagged
+  for recovery as for any output that cannot be read. The declaration check ("is this declared patch already held") reads up to 100,000 blocks
+  of each ref, with a cap of 162 MB on that `log`; the landing observation reads fewer (`PLANETER_OBSERVATION_BLOCKS`, see `proposals.md`).
+
 * **A proposal does not move a branch, and until the maintainer's history is published here it will usually stay open.** What a
   person sends is held for review; it lands (the page says *Landed*) only when every one of its patches is in a block of a published branch of
   this repository, which only a key-holding action puts there. History that was merely *received* here (an archive import without

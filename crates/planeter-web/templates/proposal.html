@@ -55,7 +55,7 @@
 <table>
 <caption class="visually-hidden">{{ t.get(Key::ProposalPatchesHeading) }}</caption>
 <thead><tr><th scope="col">{{ t.get(Key::ProposalPatchColPatch) }}</th><th scope="col">{{ t.get(Key::ProposalPatchColStatus) }}</th></tr></thead>
-<tbody>{% for p in patches %}<tr><th scope="row"><code>{{ p.short_id }}</code></th><td>{% if let Some((class, label)) = p.badge %}<span class="badge {{ class }}">{{ t.get(label.clone()) }}</span>{% else %}<span class="muted">{{ t.get(Key::ProposalPatchNotListed) }}</span>{% endif %}</td></tr>{% endfor %}</tbody>
+<tbody>{% for p in patches %}<tr><th scope="row"><code>{{ p.short_id }}</code></th><td>{% if let Some((class, label)) = p.badge %}<span class="badge {{ class }}">{{ t.get(label.clone()) }}</span>{% else if p.unknown %}<span class="muted">{{ t.get(Key::ProposalPatchUnknown) }}</span>{% else %}<span class="muted">{{ t.get(Key::ProposalPatchNotListed) }}</span>{% endif %}</td></tr>{% endfor %}</tbody>
 </table>
 {% if !sightings.is_empty() %}
 <ul>{% for r in sightings %}<li>{{ t.msg(Key::ProposalSighting).code("ref", r).html() }}</li>{% endfor %}</ul>
