@@ -17,6 +17,15 @@ pub enum PrikkError {
     /// never a verification result and never "unverified". `verb` is the prikk subcommand; no path and no
     /// tool output is carried.
     CeilingExceeded { verb: String, ceiling_bytes: u64 },
+    /// The call printed more than this server reads (RFC 011 follow-on, IS-55): the child was killed and **nothing it printed is
+    /// used** — a truncated report is never parsed as a whole one, and the call is neither "empty" nor "none". `stream` says which
+    /// of the two pipes went over `limit` bytes. For a call that writes (an accept, an import) the repository may have changed:
+    /// the caller treats it as it treats any output it cannot read.
+    OutputTooLarge {
+        verb: String,
+        limit: u64,
+        stream: crate::sandbox::OutputStream,
+    },
     /// The prikk binary's version is outside planeter's supported range (RFC 001 D-3 / PK-22:
     /// transport requires prikk ≥ 0.43.0).
     UnsupportedVersion { found: String, required: String },
@@ -38,6 +47,14 @@ impl fmt::Display for PrikkError {
             } => write!(
                 f,
                 "the prikk `{verb}` call exceeded its memory ceiling of {ceiling_bytes} bytes"
+            ),
+            PrikkError::OutputTooLarge {
+                verb,
+                limit,
+                stream,
+            } => write!(
+                f,
+                "the prikk `{verb}` call printed more than {limit} bytes on {stream}, which is more than this server reads"
             ),
             PrikkError::UnsupportedVersion { found, required } => {
                 write!(

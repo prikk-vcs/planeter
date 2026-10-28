@@ -16,11 +16,13 @@ pub mod extract;
 pub mod findings;
 pub mod maintenance;
 pub mod model;
+pub mod output_cap;
 pub mod repo;
 pub mod sandbox;
 
 pub use cli::CliPrikkRepo;
 pub use error::{PrikkError, Result};
 pub use exchange::{AcceptReport, ClaimLine};
+pub use output_cap::output_too_large_total;
 pub use repo::PrikkRepo;
-pub use sandbox::{CallLimits, Sandbox};
+pub use sandbox::{CallLimits, OutputLimit, OutputStream, Sandbox};

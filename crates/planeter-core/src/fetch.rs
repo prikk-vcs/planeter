@@ -105,6 +105,13 @@ impl CurlFetcher {
         }
     }
 
+    /// **Dev and tests:** the `curl` to run (default: `curl` on `PATH`).
+    #[must_use]
+    pub fn with_curl_binary(mut self, curl: impl Into<OsString>) -> Self {
+        self.curl = curl.into();
+        self
+    }
+
     #[must_use]
     pub fn with_limits(mut self, limits: FetchLimits) -> Self {
         self.limits = limits;
@@ -211,10 +218,27 @@ impl HttpsFetcher for CurlFetcher {
     fn fetch(&self, req: &FetchRequest) -> Result<Vec<u8>, FetchError> {
         let target = self.guard.check(&req.url).map_err(FetchError::Egress)?;
         let args = Self::curl_args(&target, req, self.limits);
-        let out = self
-            .command(&args)
-            .output()
-            .map_err(|e| FetchError::Transport(format!("spawn: {e}")))?;
+        // The body is read up to the size bound and no further (`--max-filesize` does not bind a download whose length curl is not
+        // told), and the call ends at its time bound: never an unbounded read of the child's pipe (IS-55).
+        let out = planeter_prikk::sandbox::run_command_capped(
+            self.command(&args),
+            Some(std::time::Duration::from_secs(self.limits.max_secs + 5)),
+            planeter_prikk::OutputLimit::new(self.limits.max_bytes, 64 * 1024),
+        )
+        .map_err(|e| FetchError::Transport(format!("spawn: {e}")))?;
+        if let Some(over) = out.exceeded {
+            return Err(match over.stream {
+                planeter_prikk::OutputStream::Stdout => FetchError::TooLarge,
+                planeter_prikk::OutputStream::Stderr => {
+                    FetchError::Transport("curl printed more than it may".to_owned())
+                }
+            });
+        }
+        if out.timed_out {
+            return Err(FetchError::Transport(
+                "curl did not finish in time".to_owned(),
+            ));
+        }
         if !out.status.success() {
             let err = String::from_utf8_lossy(&out.stderr).into_owned();
             // curl exit 63 = --max-filesize exceeded.

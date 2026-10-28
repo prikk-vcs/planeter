@@ -50,20 +50,30 @@ pub enum BinaryProbe {
 /// and apply the same pin that every repository open applies. The server refuses to start on [`BinaryProbe::Unsupported`]
 /// instead of answering every read with "temporarily unavailable".
 pub fn probe_binary(binary: &std::ffi::OsStr) -> BinaryProbe {
-    use std::process::{Command, Stdio};
-    let out = Command::new(crate::sandbox::PRLIMIT)
-        .arg("--cpu=20")
+    use std::process::Command;
+    // What a version line is: a few dozen bytes. The probe reads at most 64 KiB of either pipe and waits at most 30 s (the CPU
+    // limit below is 20 s), so even a binary that prints without end cannot make the start-up read without end (IS-55).
+    let mut cmd = Command::new(crate::sandbox::PRLIMIT);
+    cmd.arg("--cpu=20")
         .arg(format!("--data={}", 512u64 << 20))
         .arg("--")
         .arg(binary)
-        .arg("--version")
-        .stdin(Stdio::null())
-        .stderr(Stdio::piped())
-        .output();
+        .arg("--version");
+    let probe_cap = crate::sandbox::OutputLimit::new(64 * 1024, 64 * 1024);
+    let out = crate::sandbox::run_command_capped(
+        cmd,
+        Some(std::time::Duration::from_secs(30)),
+        probe_cap,
+    );
     let out = match out {
         Ok(o) => o,
         Err(e) => return BinaryProbe::Unreadable(e.to_string()),
     };
+    if out.exceeded.is_some() || out.timed_out {
+        return BinaryProbe::Unreadable(
+            "`--version` printed without end or did not finish".to_owned(),
+        );
+    }
     if !out.status.success() {
         // `prlimit` itself cannot find the program: exit 127 (or 126), and its own message on stderr.
         let err = String::from_utf8_lossy(&out.stderr);
@@ -109,6 +119,8 @@ pub struct CliPrikkRepo {
     sandbox: Sandbox,
     /// Per-call limits (RFC 011 D-2): none by default.
     limits: CallLimits,
+    /// A stdout limit that replaces the table's for every call through this handle (IS-55): for a caller that knows better.
+    stdout_limit: Option<u64>,
 }
 
 impl CliPrikkRepo {
@@ -119,6 +131,7 @@ impl CliPrikkRepo {
             binary: OsString::from("prikk"),
             sandbox: Sandbox::default(),
             limits: CallLimits::NONE,
+            stdout_limit: None,
         }
     }
 
@@ -129,6 +142,7 @@ impl CliPrikkRepo {
             binary: binary.into(),
             sandbox: Sandbox::default(),
             limits: CallLimits::NONE,
+            stdout_limit: None,
         }
     }
 
@@ -137,6 +151,14 @@ impl CliPrikkRepo {
     #[must_use]
     pub fn with_sandbox(mut self, sandbox: Sandbox) -> Self {
         self.sandbox = sandbox;
+        self
+    }
+
+    /// Replace the stdout limit of every call made through this handle ([`crate::output_cap`] says what a call gets otherwise). A call
+    /// that prints more fails as [`PrikkError::OutputTooLarge`]. There is no "unlimited".
+    #[must_use]
+    pub fn with_stdout_limit(mut self, bytes: u64) -> Self {
+        self.stdout_limit = Some(bytes);
         self
     }
 
@@ -226,10 +248,28 @@ impl CliPrikkRepo {
     }
 
     /// Run one prikk subcommand under the sandbox, the limits and the server-side wall-time bound.
+    ///
+    /// **A call that prints more than its limit** ([`crate::output_cap`]) is killed and fails here, as
+    /// [`PrikkError::OutputTooLarge`], before any caller looks at a byte of it: no verb's reader can take a truncated report for a
+    /// whole one, and none can take "went over" for "empty".
     pub(crate) fn execute(&self, args: &[&str]) -> Result<Run> {
-        self.sandbox
-            .run(&self.binary, &self.root, args, self.limits)
-            .map_err(PrikkError::Spawn)
+        let mut cap = crate::output_cap::for_args(args);
+        if let Some(bytes) = self.stdout_limit {
+            cap = crate::sandbox::OutputLimit::new(bytes, cap.stderr);
+        }
+        let run = self
+            .sandbox
+            .run_capped(&self.binary, &self.root, args, self.limits, cap)
+            .map_err(PrikkError::Spawn)?;
+        if let Some(over) = run.exceeded {
+            let verb = crate::output_cap::record(args, &over);
+            return Err(PrikkError::OutputTooLarge {
+                verb,
+                limit: over.limit,
+                stream: over.stream,
+            });
+        }
+        Ok(run)
     }
 
     /// The typed failure for a call that did not succeed.

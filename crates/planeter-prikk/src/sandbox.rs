@@ -59,6 +59,49 @@ impl CallLimits {
     }
 }
 
+/// Which of a child's two output pipes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum OutputStream {
+    Stdout,
+    Stderr,
+}
+
+impl std::fmt::Display for OutputStream {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            OutputStream::Stdout => "stdout",
+            OutputStream::Stderr => "stderr",
+        })
+    }
+}
+
+/// How much of a child's output a call collects (IS-55): each pipe has a limit in bytes, and **there is no way to ask for none**.
+/// Collecting stops at the limit, the child is killed, and the call reports [`Run::exceeded`]. The table of what each verb gets is
+/// [`crate::output_cap`]; this is the mechanism.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OutputLimit {
+    pub stdout: u64,
+    pub stderr: u64,
+}
+
+impl OutputLimit {
+    pub const fn new(stdout: u64, stderr: u64) -> Self {
+        OutputLimit { stdout, stderr }
+    }
+}
+
+/// The bytes read from a pipe at a time: the allocation a read adds to the limit (never more).
+const READ_CHUNK: usize = 64 * 1024;
+/// How much of the end of a pipe's output is kept when it goes over its limit (for the log line, never parsed).
+pub const OVER_LIMIT_TAIL_BYTES: usize = 8 * 1024;
+
+/// A pipe that went over its limit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Exceeded {
+    pub stream: OutputStream,
+    pub limit: u64,
+}
+
 /// What a bounded run produced.
 #[derive(Debug)]
 pub struct Run {
@@ -68,6 +111,9 @@ pub struct Run {
     pub stderr: Vec<u8>,
     /// The wall-time bound fired and the server killed the call.
     pub timed_out: bool,
+    /// A pipe went over its limit and the server killed the call. **`stdout` is then empty** (a truncated report must never be
+    /// parsed as a whole one) and `stderr` is at most [`OVER_LIMIT_TAIL_BYTES`] from the end of what was read.
+    pub exceeded: Option<Exceeded>,
 }
 
 /// How the prikk subprocess is confined.
@@ -351,8 +397,8 @@ impl Sandbox {
         }
     }
 
-    /// Run one call to completion under this policy: spawn it, collect stdout and stderr, and enforce the
-    /// wall-time bound **in the server** (`SIGKILL` at the deadline; [`Run::timed_out`]).
+    /// Run one call to completion under this policy: spawn it, collect stdout and stderr (at most [`crate::output_cap::GENERAL`]
+    /// each), and enforce the wall-time bound **in the server** (`SIGKILL` at the deadline; [`Run::timed_out`]).
     ///
     /// The child is spawned **and** waited for on the calling thread (see the module docs): never move
     /// the spawn or the wait to another thread.
@@ -363,6 +409,18 @@ impl Sandbox {
         args: &[&str],
         limits: CallLimits,
     ) -> std::io::Result<Run> {
+        self.run_capped(prikk_binary, root, args, limits, crate::output_cap::GENERAL)
+    }
+
+    /// [`Sandbox::run`] with an explicit [`OutputLimit`].
+    pub fn run_capped(
+        &self,
+        prikk_binary: &OsStr,
+        root: &Path,
+        args: &[&str],
+        limits: CallLimits,
+        cap: OutputLimit,
+    ) -> std::io::Result<Run> {
         if let Sandbox::Bwrap(cfg) = self {
             cfg.mounts
                 .validate(root)
@@ -371,6 +429,7 @@ impl Sandbox {
         run_bounded(
             self.command_with(prikk_binary, root, args, limits),
             self.deadline(),
+            cap,
         )
     }
 }
@@ -430,45 +489,136 @@ impl BwrapConfig {
     }
 }
 
-/// Spawn `cmd`, collect its output, and kill it at `deadline`.
+/// Run any other child of the server (a version probe, `curl`) the way prikk's calls are run: stdout and stderr collected up to
+/// `cap` each, the child killed at `deadline` or when a pipe goes over, and never an unbounded read of a child's pipe (IS-55).
+/// Spawned and waited for on the calling thread.
+pub fn run_command_capped(
+    cmd: Command,
+    deadline: Option<Duration>,
+    cap: OutputLimit,
+) -> std::io::Result<Run> {
+    run_bounded(cmd, deadline, cap)
+}
+
+/// What a pipe reader tells the waiting thread.
+enum Event {
+    /// stdout reached its end: the call is over (or about to be).
+    StdoutEnd,
+    /// A pipe went over its limit.
+    Over(Exceeded),
+}
+
+/// Read `pipe` to its end, keeping at most `limit` bytes. Allocation is bounded by the limit plus one chunk: the buffer grows by
+/// doubling but never past `limit`, and a read adds one chunk. On going over, the reader stops (the waiting thread kills the
+/// child), tells it so, and leaves the end of what it saw in `tail`.
+fn collect(
+    mut pipe: impl Read,
+    limit: u64,
+    stream: OutputStream,
+    events: mpsc::Sender<Event>,
+    tail: std::sync::Arc<std::sync::Mutex<Vec<u8>>>,
+) -> Vec<u8> {
+    let mut buf: Vec<u8> = Vec::new();
+    let mut chunk = vec![0u8; READ_CHUNK];
+    let mut total: u64 = 0;
+    loop {
+        let n = match pipe.read(&mut chunk) {
+            Ok(0) => break,
+            Ok(n) => n,
+            Err(e) if e.kind() == std::io::ErrorKind::Interrupted => continue,
+            Err(_) => break,
+        };
+        total += n as u64;
+        if total > limit {
+            let mut end: Vec<u8> = buf[buf.len().saturating_sub(OVER_LIMIT_TAIL_BYTES)..].to_vec();
+            end.extend_from_slice(&chunk[..n]);
+            let from = end.len().saturating_sub(OVER_LIMIT_TAIL_BYTES);
+            *tail
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner) = end[from..].to_vec();
+            let _ = events.send(Event::Over(Exceeded { stream, limit }));
+            return Vec::new();
+        }
+        if buf.capacity() - buf.len() < n {
+            let want = (buf.capacity().max(READ_CHUNK) * 2)
+                .min(limit as usize)
+                .max(buf.len() + n);
+            buf.reserve_exact(want - buf.len());
+        }
+        buf.extend_from_slice(&chunk[..n]);
+    }
+    if stream == OutputStream::Stdout {
+        let _ = events.send(Event::StdoutEnd);
+    }
+    buf
+}
+
+/// Spawn `cmd`, collect its output (at most `cap` per pipe), and kill it at `deadline` or when a pipe goes over its cap.
 ///
 /// Spawn and wait both happen on **this** thread: the sandbox's `--die-with-parent` binds the child to the
 /// spawning *thread*, so handing the child to another thread (or spawning from one that then exits) would
 /// kill healthy calls. Only the two pipe readers run elsewhere, and they never touch the child.
 ///
-/// No polling in the common path: the wait is a `recv_timeout` on "stdout reached EOF", which happens when
-/// the call is over, so a normal call adds no latency; only an exit that lags EOF is polled, briefly.
-fn run_bounded(mut cmd: Command, deadline: Option<Duration>) -> std::io::Result<Run> {
+/// No polling in the common path: the wait is a `recv_timeout` on "stdout reached EOF" (or "a pipe went over its limit"), which
+/// happens when the call is over, so a normal call adds no latency; only an exit that lags EOF is polled, briefly.
+fn run_bounded(
+    mut cmd: Command,
+    deadline: Option<Duration>,
+    cap: OutputLimit,
+) -> std::io::Result<Run> {
     cmd.stdin(Stdio::null())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
     let mut child = cmd.spawn()?;
     let started = Instant::now();
-    let (mut out, mut err) = match (child.stdout.take(), child.stderr.take()) {
+    let (out, err) = match (child.stdout.take(), child.stderr.take()) {
         (Some(o), Some(e)) => (o, e),
         _ => unreachable!("stdout and stderr were requested as pipes"),
     };
-    let (eof_tx, eof_rx) = mpsc::channel::<()>();
-    let out_reader = std::thread::spawn(move || {
-        let mut buf = Vec::new();
-        let _ = out.read_to_end(&mut buf);
-        let _ = eof_tx.send(());
-        buf
-    });
-    let err_reader = std::thread::spawn(move || {
-        let mut buf = Vec::new();
-        let _ = err.read_to_end(&mut buf);
-        buf
-    });
-
-    // 1. Wait for the call's output to end (or the deadline).
-    let mut timed_out = match deadline {
-        None => {
-            let _ = eof_rx.recv();
-            false
-        }
-        Some(d) => matches!(eof_rx.recv_timeout(d), Err(mpsc::RecvTimeoutError::Timeout)),
+    let (events_tx, events) = mpsc::channel::<Event>();
+    let (out_tail, err_tail) = (
+        std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
+        std::sync::Arc::new(std::sync::Mutex::new(Vec::new())),
+    );
+    let out_reader = {
+        let (tx, tail) = (events_tx.clone(), out_tail);
+        std::thread::spawn(move || collect(out, cap.stdout, OutputStream::Stdout, tx, tail))
     };
+    let err_reader = {
+        let tail = std::sync::Arc::clone(&err_tail);
+        std::thread::spawn(move || collect(err, cap.stderr, OutputStream::Stderr, events_tx, tail))
+    };
+
+    // 1. Wait for the call's output to end, a pipe to go over its limit, or the deadline.
+    let first = match deadline {
+        None => events.recv().ok(),
+        Some(d) => match events.recv_timeout(d) {
+            Ok(ev) => Some(ev),
+            Err(mpsc::RecvTimeoutError::Timeout) => None,
+            Err(mpsc::RecvTimeoutError::Disconnected) => Some(Event::StdoutEnd),
+        },
+    };
+    let mut timed_out = first.is_none() && deadline.is_some();
+    if let Some(Event::Over(exceeded)) = first {
+        // Killed at once; nothing it printed is used. The tail is what the pipe that went over had last.
+        let _ = child.kill();
+        let status = child.wait()?;
+        drop((out_reader, err_reader));
+        let tail = match exceeded.stream {
+            OutputStream::Stdout => Vec::new(),
+            OutputStream::Stderr => err_tail
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .clone(),
+        };
+        return Ok(Run {
+            status,
+            stdout: Vec::new(),
+            stderr: tail,
+            timed_out: false,
+            exceeded: Some(exceeded),
+        });
+    }
     // 2. Output has ended; the exit normally follows at once. Poll only if it lags, still bounded.
     if !timed_out {
         let mut pause = Duration::from_micros(50);
@@ -488,11 +638,34 @@ fn run_bounded(mut cmd: Command, deadline: Option<Duration>) -> std::io::Result<
         if let Some(status) = status {
             let stdout = out_reader.join().unwrap_or_default();
             let stderr = err_reader.join().unwrap_or_default();
+            // stderr may have gone over its limit while the child was finishing: the event is still in the channel.
+            let exceeded = events.try_iter().find_map(|ev| match ev {
+                Event::Over(e) => Some(e),
+                Event::StdoutEnd => None,
+            });
+            if let Some(e) = exceeded {
+                let tail = err_tail
+                    .lock()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .clone();
+                return Ok(Run {
+                    status,
+                    stdout: Vec::new(),
+                    stderr: if e.stream == OutputStream::Stderr {
+                        tail
+                    } else {
+                        stderr
+                    },
+                    timed_out: false,
+                    exceeded: Some(e),
+                });
+            }
             return Ok(Run {
                 status,
                 stdout,
                 stderr,
                 timed_out: false,
+                exceeded: None,
             });
         }
     }
@@ -507,6 +680,7 @@ fn run_bounded(mut cmd: Command, deadline: Option<Duration>) -> std::io::Result<
         stdout: Vec::new(),
         stderr: Vec::new(),
         timed_out,
+        exceeded: None,
     })
 }
 
