@@ -437,6 +437,9 @@ fn standin(base: &Path) -> (PathBuf, PathBuf) {
 REAL={real}
 MODE="$(cat {ctrl})"
 if [ "$1" = unlock ] && [ -z "$2" ] && [ "$MODE" = unlock-garbage ]; then echo "this is not what unlock prints"; exit 0; fi
+if [ "$1" = unlock ] && [ -z "$2" ] && [ "$MODE" = unlock-flood ]; then head -c 40000000 /dev/zero | tr '\0' ' '; exit 0; fi
+if [ "$1" = doctor ] && [ -z "$2" ] && [ "$MODE" = doctor-flood ]; then head -c 40000000 /dev/zero | tr '\0' ' '; exit 0; fi
+if [ "$1" = verify ] && [ "$MODE" = verify-flood ]; then head -c 40000000 /dev/zero | tr '\0' ' '; exit 0; fi
 if [ "$1" = doctor ] && [ -n "$2" ] && [ "${{2#--}}" != "$2" ]; then
   echo "REPAIR $2" >> {log}
   if [ "$2" = --repair-wal-tail ]; then touch {repaired}; fi
@@ -954,6 +957,64 @@ fn an_unreadable_unlock_output_stops_with_prikks_text_kept_and_changes_nothing()
     assert_eq!(w.records.list().unwrap().len(), 1);
     std::fs::write(&ctrl, "pass").unwrap();
     assert_eq!(locks_listed(&w.repo_path), 2, "no lock was cleared");
+}
+
+/// IS-55: a witness whose output was killed at its cap is **unknown**, never "clean": the plan names it, no step is taken, the flag
+/// stays set and the dead lease record stays. (`doctor` and `unlock` are over 32 MiB and 1 MiB; `verify` over 32 MiB.)
+#[test]
+fn a_doctor_unlock_or_verify_that_prints_more_than_its_cap_is_unknown_and_changes_nothing() {
+    if skip() {
+        return;
+    }
+    for (mode, blocker) in [
+        ("doctor-flood", "output_unreadable"),
+        ("unlock-flood", "output_unreadable"),
+    ] {
+        let (w, ctrl) = standin_world(mode);
+        w.killed_accept();
+        std::fs::write(&ctrl, mode).unwrap();
+        let plan = w.svc.plan(&w.record).unwrap();
+        assert!(
+            plan.blockers
+                .iter()
+                .any(|b| b.code == blocker && b.detail.contains("more than")),
+            "{mode}: {:?}",
+            plan.blockers
+        );
+        assert!(
+            w.svc.auto(&w.record).is_none(),
+            "{mode}: nothing unattended"
+        );
+        let r = w.svc.recover(&w.record, "alice", &[]).unwrap();
+        assert_eq!(r.outcome, RecoveryOutcome::Stopped, "{mode}");
+        assert!(w.flagged(), "{mode}: the flag stays set");
+        assert_eq!(
+            w.records.list().unwrap().len(),
+            1,
+            "{mode}: and the dead lease record"
+        );
+        assert_eq!(locks_listed(&w.repo_path), 2, "{mode}: no lock was cleared");
+    }
+    // `verify` is the last witness, after the locks were cleared: the run stops there, the flag stays, and the record says so.
+    let (w, ctrl) = standin_world("verify-flood");
+    w.killed_accept();
+    std::fs::write(&ctrl, "verify-flood").unwrap();
+    let r = w.svc.auto(&w.record).expect("it ran");
+    assert_eq!(r.outcome, RecoveryOutcome::Stopped);
+    assert!(w.flagged(), "no flag is cleared without a fresh verify");
+    let steps = w.steps_of_last();
+    assert_eq!(
+        steps.last().unwrap(),
+        &("verify".to_owned(), Some("stopped".to_owned())),
+        "{steps:?}"
+    );
+    assert!(r.stopped.unwrap().contains("verify could not be run"));
+    // With a verify that answers, a second run recovers.
+    std::fs::write(&ctrl, "pass").unwrap();
+    assert_eq!(
+        w.svc.recover(&w.record, "alice", &[]).unwrap().outcome,
+        RecoveryOutcome::Recovered
+    );
 }
 
 #[test]
