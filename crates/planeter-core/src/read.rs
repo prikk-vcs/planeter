@@ -937,7 +937,9 @@ fn is_missing_path(e: &planeter_prikk::PrikkError) -> bool {
 
 /// A failed prikk call as the read service reports it: `Unavailable` — and, when the cause is the call's
 /// own memory ceiling (RFC 011 D-2), one log line naming the verb and the ceiling (no path, no tool
-/// output). A ceiling hit says nothing about the repository, so it is never mapped to a verdict.
+/// output). A ceiling hit says nothing about the repository, so it is never mapped to a verdict. The same holds for a call that
+/// printed more than its verb's limit ([`planeter_prikk::PrikkError::OutputTooLarge`], IS-55): it is `Unavailable` (the driver has
+/// already counted it and logged one line naming the verb and the limit), never an empty listing.
 fn unavailable(e: planeter_prikk::PrikkError) -> ReadError {
     if let planeter_prikk::PrikkError::CeilingExceeded {
         verb,

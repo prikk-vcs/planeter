@@ -39,6 +39,11 @@ use crate::artifacts::{AcceptDir, ArtifactStore, Digest, StoreError, UploadWrite
 use crate::export::ExportService;
 use crate::metrics::{Metrics, ProposeOutcome, ProposeRecord};
 
+/// How many blocks of one ref the declaration's "is it held" check reads (`prikk log --limit`): a declared patch sealed longer ago
+/// is still held. Unchanged by IS-55 (the observation of proposals reads fewer, [`crate::proposals::LOG_BLOCK_LIMIT`]); the cap of
+/// such a `log` is 162 MB.
+pub(crate) const DECLARATION_LOG_LIMIT: usize = 100_000;
+
 /// The most metadata a proposal may carry (RFC 004 part 3b T1).
 pub const METADATA_MAX_BYTES: u64 = 4 * 1024 * 1024;
 /// The longest title, in characters.
@@ -1117,7 +1122,7 @@ impl ProposeService {
         })
     }
 
-    /// The patch ids of the blocks `log` lists: `(every ref the repository holds, published or received; the published
+    /// The patch ids of the blocks `log` lists (at most [`DECLARATION_LOG_LIMIT`] a ref): `(every ref the repository holds, published or received; the published
     /// refs only)`. The first serves the declaration's *held* check; only the second may say a patch is signed in.
     fn patches_in_logs(
         &self,
@@ -1132,7 +1137,7 @@ impl ProposeService {
             .chain(refs.received.iter().map(|r| (r.ref_name.as_str(), false)));
         for (name, is_published) in names {
             // prikk's own default is the newest 20 blocks; a declared patch sealed longer ago is still held.
-            let log = driver.log(Some(name), Some(crate::proposals::LOG_BLOCK_LIMIT))?;
+            let log = driver.log(Some(name), Some(DECLARATION_LOG_LIMIT))?;
             for block in log.blocks {
                 for p in block.patch_messages {
                     if is_published {
@@ -1196,7 +1201,11 @@ impl ProposeService {
                     _ => Failure::Incomplete(IncompleteCause::Failed),
                 }
             }
-            PrikkError::Parse(_) => Failure::Incomplete(IncompleteCause::Unreadable),
+            // The accept printed more than it may (IS-55) and was killed: its output is unreadable, and the repository may have
+            // changed, so it is incomplete like any run whose output cannot be read.
+            PrikkError::Parse(_) | PrikkError::OutputTooLarge { .. } => {
+                Failure::Incomplete(IncompleteCause::Unreadable)
+            }
             _ => Failure::Incomplete(IncompleteCause::Failed),
         }
     }

@@ -208,12 +208,19 @@ pub struct Detail {
 /// For each received ref (by name), the patch ids of its blocks.
 type ReceivedLogs = Vec<(String, BTreeSet<String>)>;
 
+/// The patch ids found in the logs of the published refs, and whether any of those logs filled the read limit (so that a patch
+/// that is **not** found may only be older than the window).
+struct Published {
+    ids: BTreeSet<String>,
+    truncated: bool,
+}
+
 /// The facts of one observation of a repository: valid for one state fingerprint.
 struct Observed {
     fingerprint: String,
     pending: Arc<BTreeSet<String>>,
     /// The patch ids in the blocks `log` lists for the **published** refs, read when first needed.
-    sealed: Mutex<Option<Arc<BTreeSet<String>>>>,
+    sealed: Mutex<Option<Arc<Published>>>,
     /// The refs the repository holds (`branch --all`), listed once and shared by the two reads below.
     refs: Mutex<Option<Arc<planeter_prikk::model::BranchList>>>,
     /// For each **received** ref, the patch ids of its blocks, read when first needed (sightings only).
@@ -362,26 +369,24 @@ impl ProposalService {
         Ok(observed)
     }
 
-    /// The patch ids of the blocks of one ref: `log` with a limit far above prikk's own default of the newest 20 blocks. A log
-    /// that fills the limit may have been cut short, so it is refused rather than read as complete.
+    /// The patch ids of the blocks of one ref: `log` with a limit far above prikk's own default of the newest 20 blocks
+    /// ([`LOG_BLOCK_LIMIT`]), and whether the log filled the limit. **Positive evidence suffices; absence under truncation is
+    /// unknown** (IS-55): a patch found in the newest blocks is found whether or not the log was cut short, and one that is not
+    /// found in a log that was cut short is neither "sealed" nor "not sealed".
     fn patch_ids_of(
         driver: &planeter_prikk::CliPrikkRepo,
         ref_name: &str,
-    ) -> Result<BTreeSet<String>, ProposalError> {
+    ) -> Result<(BTreeSet<String>, bool), ProposalError> {
         let log = driver
             .log(Some(ref_name), Some(LOG_BLOCK_LIMIT))
             .map_err(|e| unavailable("cannot read a log", e))?;
-        if log.blocks.len() >= LOG_BLOCK_LIMIT {
-            return Err(unavailable(
-                "the history is longer than an observation reads",
-                ref_name,
-            ));
-        }
-        Ok(log
+        let truncated = log.blocks.len() >= LOG_BLOCK_LIMIT;
+        let ids = log
             .blocks
             .into_iter()
             .flat_map(|b| b.patch_messages.into_iter().map(|p| p.patch_id))
-            .collect())
+            .collect();
+        Ok((ids, truncated))
     }
 
     fn refs(
@@ -411,7 +416,7 @@ impl ProposalService {
         &self,
         record: &RepositoryRecord,
         obs: &Observed,
-    ) -> Result<Arc<BTreeSet<String>>, ProposalError> {
+    ) -> Result<Arc<Published>, ProposalError> {
         let mut slot = obs
             .sealed
             .lock()
@@ -421,13 +426,18 @@ impl ProposalService {
         }
         let driver = self.reader(record)?;
         let refs = self.refs(&driver, obs)?;
-        let mut ids = BTreeSet::new();
+        let mut found = Published {
+            ids: BTreeSet::new(),
+            truncated: false,
+        };
         for b in &refs.branches {
-            ids.extend(Self::patch_ids_of(&driver, &b.ref_name)?);
+            let (ids, truncated) = Self::patch_ids_of(&driver, &b.ref_name)?;
+            found.ids.extend(ids);
+            found.truncated |= truncated;
         }
-        let ids = Arc::new(ids);
-        *slot = Some(Arc::clone(&ids));
-        Ok(ids)
+        let found = Arc::new(found);
+        *slot = Some(Arc::clone(&found));
+        Ok(found)
     }
 
     /// For each received ref, the patch ids of its blocks: read once per observation, for sightings only. **A failure is
@@ -448,13 +458,18 @@ impl ProposalService {
                 .map(|r| {
                     Ok((
                         r.ref_name.clone(),
-                        Self::patch_ids_of(&driver, &r.ref_name)?,
+                        Self::patch_ids_of(&driver, &r.ref_name)?.0,
                     ))
                 })
                 .collect()
         };
         let logs = Arc::new(read().unwrap_or_else(|e| {
-            eprintln!("planeter: proposals: no sightings this time: {e}");
+            // Display only, and nothing is derived from it, so a failure is "no sightings"; but it is counted
+            // (`sightings_unavailable` in the metrics) so that a hidden failure can be seen.
+            let n = self.metrics.sightings_unavailable();
+            eprintln!(
+                "planeter: proposals: no sightings this time (failures since start: {n}): {e}"
+            );
             Vec::new()
         }));
         *slot = Some(Arc::clone(&logs));
@@ -485,7 +500,7 @@ impl ProposalService {
                     .revisions_of(&c.change_id)
                     .map_err(|e| unavailable("cannot read the revisions", e))?;
                 let set = current_patch_set(&revisions);
-                if observe_landing(&set, &sealed) != Landing::Landed {
+                if observe_landing(&set, &sealed.ids) != Landing::Landed {
                     continue;
                 }
                 let t = transition(
@@ -617,6 +632,33 @@ impl ProposalService {
         let mut patches = Vec::new();
         let mut still_pending = 0;
         let mut sightings = Vec::new();
+        // A landed proposal is final: it was observed at landing, with every patch in a block of a published ref, and it never
+        // changes again. Its patches are shown `Sealed` **without reading the log again** (a patch sealed more than a window ago
+        // would otherwise show no badge).
+        if proposal.state == ChangeState::Landed {
+            patches.extend(set.iter().take(DETAIL_PATCH_LIMIT).map(|id| PatchEntry {
+                patch_id: id.clone(),
+                assurance: Some(Assurance::Sealed),
+            }));
+            let retention = self.retention_of(&proposal, &revisions);
+            let revisions = revisions
+                .into_iter()
+                .map(|record| RevisionView {
+                    artifact_available: self.available(&record.artifact_digest),
+                    record,
+                })
+                .collect();
+            return Ok(Detail {
+                proposal,
+                revisions,
+                truncated: patch_total > patches.len(),
+                patches,
+                patch_total,
+                still_pending: 0,
+                sightings,
+                retention,
+            });
+        }
         // The facts of one observation: `sync pending`, and the logs of the published refs (cached per fingerprint). If
         // either could not be read, nothing is claimed about any patch (a patch called "held" might be signed in).
         let facts = obs.and_then(|obs| match self.sealed(record, &obs) {
@@ -627,14 +669,17 @@ impl ProposalService {
             }
         });
         if let Some((obs, sealed)) = &facts {
+            // A patch not found in a log that was cut short may be older than the window: it may be signed in, so it is not called
+            // "held" (unknown), and it is not counted as still pending.
+            let unknown = |id: &String| sealed.truncated && !sealed.ids.contains(id);
             still_pending = set
                 .iter()
-                .filter(|id| obs.pending.contains(*id) && !sealed.contains(*id))
+                .filter(|id| obs.pending.contains(*id) && !sealed.ids.contains(*id) && !unknown(id))
                 .count();
             for id in set.iter().take(DETAIL_PATCH_LIMIT) {
                 let facts = PatchFacts {
-                    in_block_from_log: sealed.contains(id),
-                    listed_pending: obs.pending.contains(id),
+                    in_block_from_log: sealed.ids.contains(id),
+                    listed_pending: obs.pending.contains(id) && !unknown(id),
                     reported_queued: false,
                 };
                 patches.push(PatchEntry {
@@ -782,13 +827,14 @@ impl ProposalService {
             report.errors,
         );
         eprintln!(
-            "planeter: retention sweep: examined={} removed={} removed_bytes={} kept={} already_gone={} errors={}",
+            "planeter: retention sweep: examined={} removed={} removed_bytes={} kept={} already_gone={} errors={} {}",
             report.examined,
             report.removed,
             report.removed_bytes,
             report.kept,
             report.already_gone,
-            report.errors
+            report.errors,
+            self.metrics.snapshot().over_cap_summary()
         );
         report
     }
@@ -895,9 +941,11 @@ pub fn record_digest(recorded: &str) -> Result<Digest, crate::artifacts::StoreEr
 /// pending (about 1 KiB a patch), so 64 MiB holds some 60,000 pending patches; the floor of a `log` read is raised to it.
 const OBSERVATION_FLOOR: u64 = 64 << 20;
 
-/// How many blocks of one ref an observation reads (`prikk log --limit`). A log that fills it may have been cut short, so
-/// no proposal lands on it.
-pub(crate) const LOG_BLOCK_LIMIT: usize = 100_000;
+/// How many blocks of one ref an observation reads (`prikk log --limit`): about 6.4 MB of JSON, a cap near 23 MiB (IS-55; 100,000
+/// blocks would be 63 MB held and parsed in one observation). A log that fills it may have been cut short: a proposal whose
+/// patches are all found in it lands all the same (positive evidence suffices); one with a patch not found stays open, and that
+/// patch is shown as unknown, never as "held".
+pub(crate) const LOG_BLOCK_LIMIT: usize = 10_000;
 
 /// The cursor of the page after `c`: its sort key, `<updated_at>.<id>`.
 fn cursor(c: &ChangeRecord) -> String {

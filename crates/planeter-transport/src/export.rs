@@ -408,11 +408,15 @@ impl ExportService {
             .branches(true)
             .map_err(|e| unavailable("branches", e))?;
         let tags = driver.tags().map_err(|e| unavailable("tags", e))?;
-        let tip = |name: &str| -> Option<String> {
-            driver
-                .log(Some(name), Some(1))
-                .ok()
-                .and_then(|l| l.blocks.first().map(|b| b.block_id.clone()))
+        // The tip of a ref is shown when `log` gives it. A log that cannot be read is "no tip" (the advertisement still lists the
+        // ref) — except one that **printed more than it may** (IS-55): that is not "no tip", it is a repository this server cannot
+        // describe, and the advertisement fails as any unreadable one does.
+        let tip = |name: &str| -> Result<Option<String>, FetchError> {
+            match driver.log(Some(name), Some(1)) {
+                Ok(l) => Ok(l.blocks.first().map(|b| b.block_id.clone())),
+                Err(e @ PrikkError::OutputTooLarge { .. }) => Err(unavailable("a log", e)),
+                Err(_) => Ok(None),
+            }
         };
         let mut refs = Vec::new();
         for b in &branches.branches {
@@ -421,7 +425,7 @@ impl ExportService {
                 class: RefClass::Branch,
                 closed: b.closed,
                 ref_state_id: Some(b.ref_state_id.clone()),
-                tip_block: tip(&b.ref_name),
+                tip_block: tip(&b.ref_name)?,
             });
         }
         for t in &tags.tags {
@@ -439,7 +443,7 @@ impl ExportService {
                 class: RefClass::Received,
                 closed: false,
                 ref_state_id: Some(r.ref_state_id.clone()),
-                tip_block: tip(&r.ref_name),
+                tip_block: tip(&r.ref_name)?,
             });
         }
         let listing = Listing {
@@ -644,6 +648,8 @@ impl ExportService {
     fn map_prikk(e: &PrikkError) -> FetchError {
         match e {
             PrikkError::CeilingExceeded { .. } => FetchError::Ceiling,
+            // The export (or the verify of it) printed more than it may: the call was killed, nothing was served.
+            PrikkError::OutputTooLarge { .. } => FetchError::ExportFailed,
             PrikkError::Command { code: Some(c), .. }
                 if *c == planeter_prikk::sandbox::TIMEOUT_EXIT_CODE =>
             {

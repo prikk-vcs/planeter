@@ -152,6 +152,16 @@ fn fixture_with(name: &str, wrapper: Option<&str>, tweak: impl FnOnce(&mut Creat
     if let Some(spec) = wrapper {
         // A prikk that fails the calls whose first two words are `pattern` from the `n`-th such call on (`pattern@n`; plain
         // `pattern` is from the first), and is the real prikk otherwise. A counter file keeps the count across calls.
+        // `flood:` before the pattern: the call prints 80 MB on stdout (and exits 0) instead of failing, IS-55.
+        let (flood, spec) = match spec.strip_prefix("flood:") {
+            Some(rest) => (true, rest),
+            None => (false, spec),
+        };
+        let injected = if flood {
+            "head -c 80000000 /dev/zero | tr '\\0' ' '; exit 0"
+        } else {
+            "echo 'error: injected failure' >&2; exit 1"
+        };
         let (pattern, from) = match spec.split_once('@') {
             Some((p, n)) => (p, n.parse::<u32>().unwrap()),
             None => (spec, 1),
@@ -161,7 +171,7 @@ fn fixture_with(name: &str, wrapper: Option<&str>, tweak: impl FnOnce(&mut Creat
         std::fs::write(
             &script,
             format!(
-                "#!/bin/sh\ncase \"$1 $2\" in\n  \"{pattern}\"*)\n    n=$(cat \"{c}\" 2>/dev/null || echo 0); n=$((n+1)); echo $n > \"{c}\"\n    if [ \"$n\" -ge {from} ]; then echo \"error: injected failure\" >&2; exit 1; fi;;\nesac\nexec prikk \"$@\"\n",
+                "#!/bin/sh\ncase \"$1 $2\" in\n  \"{pattern}\"*)\n    n=$(cat \"{c}\" 2>/dev/null || echo 0); n=$((n+1)); echo $n > \"{c}\"\n    if [ \"$n\" -ge {from} ]; then {injected}; fi;;\nesac\nexec prikk \"$@\"\n",
                 c = count.display()
             ),
         )
@@ -1299,4 +1309,35 @@ fn creation_from_an_archive_is_off_without_a_stage_directory() {
         svc.stage(&alice(), "s-000000000000000000000000"),
         Err(CreateError::ImportOff) | Err(CreateError::StageNotFound)
     ));
+}
+
+/// IS-55: a prikk call that prints more than its verb's limit (80 MB; the limits of `archive verify` and `archive import` are 16 and
+/// 64 MiB) is an ordinary refusal of the operation: the stage is refused, or the confirmation removes the repository whole.
+#[test]
+fn a_report_over_the_output_cap_refuses_the_stage_and_removes_the_repository_whole() {
+    need_prikk!();
+    // The stage's own `archive verify` (its first call): refused, with nothing kept.
+    let fix = fixture_with("flood-verify", Some("flood:archive verify@1"), |_| {});
+    let (archive, _) = simple_archive(&fix.base, "maint", 2, 0);
+    match stage(&fix, &archive, "app") {
+        Err(CreateError::ArchiveRefused { text }) => {
+            assert!(text.contains("larger than this server reads"), "{text}")
+        }
+        other => panic!("{:?}", other.err()),
+    }
+    nothing_left(&fix);
+    assert!(stage_dirs(&fix).is_empty());
+
+    // The confirmation's `archive import` (the second: the stage's scratch import is the first): the repository is removed whole and
+    // the stage goes with it, as for any archive prikk refuses.
+    let fix = fixture_with("flood-import", Some("flood:archive import@2"), |_| {});
+    let (archive, keys) = simple_archive(&fix.base, "maint", 2, 0);
+    let s = stage(&fix, &archive, "app").expect("the stage works");
+    let e = fix
+        .svc
+        .confirm(&alice_p(), &alice(), &s.stage_id, &typed(&keys))
+        .unwrap_err();
+    assert!(matches!(e, CreateError::ArchiveRefused { .. }), "{e:?}");
+    nothing_left(&fix);
+    assert!(stage_dirs(&fix).is_empty());
 }

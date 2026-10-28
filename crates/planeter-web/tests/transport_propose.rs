@@ -1791,6 +1791,7 @@ if [ "$1" = sync ] && [ "$2" = accept ]; then
   case "$(cat {ctrl})" in
     die-after-real) "$REAL" "$@"; kill -9 $$ ;;
     unreadable) echo "this is not what accept prints"; exit 0 ;;
+    flood) head -c 40000000 /dev/zero | tr '\0' ' '; exit 0 ;;
     refuse) echo "error: the artifact is damaged" >&2; exit 1 ;;
     fail-after-real) "$REAL" "$@" >/dev/null; echo "error: something broke midway" >&2; exit 1 ;;
     ceiling) echo "memory allocation of 4194304 bytes failed" >&2; exit 134 ;;
@@ -2008,6 +2009,8 @@ async fn output_that_cannot_be_read_a_failure_after_a_change_and_a_lock_conflict
     let repo = RepoId::new("r-forge");
     for (mode, cause) in [
         ("unreadable", "accept_unreadable"),
+        // IS-55: an accept that prints 40 MB (the limit is 16 MiB) is killed and is incomplete, like any output that cannot be read.
+        ("flood", "accept_unreadable"),
         ("fail-after-real", "accept_failed"),
         ("lock", "accept_failed"),
     ] {

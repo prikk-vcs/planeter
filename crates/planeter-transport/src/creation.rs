@@ -277,6 +277,11 @@ fn archive_call(e: PrikkError) -> CreateError {
             text: prikk_text(&stderr),
         },
         PrikkError::CeilingExceeded { .. } => CreateError::CeilingExceeded,
+        // An archive whose report is larger than this server reads (a million one-line branches, say) is refused as the archive's:
+        // the call was killed (IS-55) and nothing of it is kept.
+        PrikkError::OutputTooLarge { .. } => CreateError::ArchiveRefused {
+            text: "prikk's report on the archive is larger than this server reads".to_owned(),
+        },
         other => log_unavailable("an archive call failed", other),
     }
 }

@@ -111,6 +111,31 @@ pub struct Snapshot {
     pub sweep_removed_bytes: u64,
     pub sweep_kept: u64,
     pub sweep_errors: u64,
+    /// `prikk_output_too_large_total` by verb (IS-55): prikk calls killed since start for printing more than their verb's limit. The
+    /// count is the driver's own (it is process-wide, as the calls are), read when the snapshot is taken.
+    pub prikk_output_too_large: BTreeMap<String, u64>,
+    /// Reads of the received refs' logs (sightings, display only) that failed and were shown as "no sightings" (IS-55).
+    pub sightings_unavailable: u64,
+}
+
+impl Snapshot {
+    /// The two IS-55 counters as one fragment for the periodic log line: `output_too_large=<verb>:<n>,… sightings_unavailable=<n>`
+    /// (`output_too_large=none` when no call went over its limit).
+    pub fn over_cap_summary(&self) -> String {
+        let by_verb = if self.prikk_output_too_large.is_empty() {
+            "none".to_owned()
+        } else {
+            self.prikk_output_too_large
+                .iter()
+                .map(|(verb, n)| format!("{}:{n}", verb.replace(' ', "_")))
+                .collect::<Vec<_>>()
+                .join(",")
+        };
+        format!(
+            "output_too_large={by_verb} sightings_unavailable={}",
+            self.sightings_unavailable
+        )
+    }
 }
 
 /// The counters. Cheap to share (`Arc`); every method takes `&self`.
@@ -232,7 +257,17 @@ impl Metrics {
         self.with(|m| *m.refusals.entry(reason.to_owned()).or_insert(0) += 1);
     }
 
+    /// One failed read of the received logs; returns the count since start.
+    pub fn sightings_unavailable(&self) -> u64 {
+        self.with(|m| {
+            m.sightings_unavailable += 1;
+            m.sightings_unavailable
+        })
+    }
+
     pub fn snapshot(&self) -> Snapshot {
-        self.with(|m| m.clone())
+        let mut snapshot = self.with(|m| m.clone());
+        snapshot.prikk_output_too_large = planeter_prikk::output_too_large_total();
+        snapshot
     }
 }

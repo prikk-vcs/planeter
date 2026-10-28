@@ -64,9 +64,11 @@ D="$PWD/.standin"
 echo "$*" >> "$D/calls"
 case "$1" in
   --version) echo "prikk 0.54.1" ;;
-  sync) cat "$D/pending" ;;
+  sync) [ -e "$D/flood-pending" ] && { head -c 20000000 /dev/zero | tr '\0' ' '; exit 0; }
+        cat "$D/pending" ;;
   branch) cat "$D/branches.json" ;;
-  log) ref=""; while [ $# -gt 0 ]; do [ "$1" = "--ref" ] && ref="$2"; shift; done; cat "$D/log-$(echo "$ref" | tr / _).json" ;;
+  log) [ -e "$D/flood-log" ] && { head -c 200000000 /dev/zero | tr '\0' ' '; exit 0; }
+       ref=""; while [ $# -gt 0 ]; do [ "$1" = "--ref" ] && ref="$2"; shift; done; cat "$D/log-$(echo "$ref" | tr / _).json" ;;
   *) echo "stand-in: unexpected $*" >&2; exit 2 ;;
 esac
 "#,
@@ -486,6 +488,11 @@ fn sightings_are_for_open_proposals_only_and_a_failure_to_read_them_is_none_not_
     let d = f.svc.detail(&f.repo, "p").unwrap();
     assert!(d.sightings.is_empty());
     assert_eq!(
+        f.metrics.snapshot().sightings_unavailable,
+        1,
+        "the hidden failure is counted"
+    );
+    assert_eq!(
         d.patches[0].assurance,
         Some(Assurance::ForgeApprovedUnsealed)
     );
@@ -496,18 +503,77 @@ fn sightings_are_for_open_proposals_only_and_a_failure_to_read_them_is_none_not_
     assert!(f.svc.detail(&f.repo, "p").unwrap().sightings.is_empty());
 }
 
+/// IS-55: the observation reads the newest 10,000 blocks of a ref. **Positive evidence suffices; absence under truncation is
+/// unknown.**
+const WINDOW: u64 = 10_000;
+
 #[test]
-fn a_log_that_may_have_been_cut_short_lands_nothing() {
-    // The observation reads at most 100,000 blocks of a ref; a log that fills that may be a part, so nothing lands on it.
-    let f = Fixture::new("cut-short", now, 200);
+fn a_proposal_whose_patches_are_all_found_in_a_log_that_filled_the_window_lands() {
+    let f = Fixture::new("window-found", now, 200);
     f.propose("p", "alice", &[pid(1)], 101);
     f.pending(&[]);
-    // The proposal's patch is in the log; the log is exactly as long as the limit, so it may be only a part of the history.
-    let mut ids: Vec<String> = (1..100_000u64).map(|n| pid(1_000_000 + n)).collect();
+    // The log is exactly as long as the window (it may be the newest 10,000 of a 10,500-block history), and the patch is in it.
+    let mut ids: Vec<String> = (1..WINDOW).map(|n| pid(1_000_000 + n)).collect();
     ids.push(pid(1));
+    assert_eq!(ids.len() as u64, WINDOW);
     f.log("heads/main", &ids);
-    assert_eq!(f.list(StateFilter::Open), vec!["p"]);
-    assert_eq!(f.state_of("p"), ChangeState::Open);
+    assert_eq!(f.list(StateFilter::Landed), vec!["p"]);
+}
+
+#[test]
+fn a_patch_not_found_in_a_log_that_filled_the_window_is_unknown_never_held_and_never_landed() {
+    let f = Fixture::new("window-unknown", now, 200);
+    f.propose("p", "alice", &[pid(1)], 101);
+    f.pending(&[pid(1)]);
+    // 10,000 blocks, none of them the proposal's: the patch may be older than the window.
+    let ids: Vec<String> = (0..WINDOW).map(|n| pid(1_000_000 + n)).collect();
+    f.log("heads/main", &ids);
+    assert_eq!(
+        f.list(StateFilter::Open),
+        vec!["p"],
+        "stays open: unknown, not no"
+    );
+    let d = f.svc.detail(&f.repo, "p").unwrap();
+    assert_eq!(d.patches[0].assurance, None, "not called held");
+    assert_eq!(d.still_pending, 0);
+    // The same log one block shorter was read whole: the patch is pending and in no block, so it is held.
+    f.move_state();
+    f.log("heads/main", &ids[1..]);
+    let d = f.svc.detail(&f.repo, "p").unwrap();
+    assert_eq!(
+        d.patches[0].assurance,
+        Some(Assurance::ForgeApprovedUnsealed)
+    );
+    assert_eq!(d.still_pending, 1);
+}
+
+#[test]
+fn a_landed_proposal_shows_every_patch_sealed_without_reading_the_log_again() {
+    let f = Fixture::new("landed-sealed", now, 200);
+    f.propose("p", "alice", &[pid(1), pid(2)], 101);
+    f.pending(&[]);
+    f.log("heads/main", &[pid(1), pid(2)]);
+    assert_eq!(f.list(StateFilter::Landed), vec!["p"]);
+    // Later the patches are older than any window: the log no longer shows them (and could not be read at all).
+    f.move_state();
+    std::fs::remove_file(f.standin().join("log-heads_main.json")).unwrap();
+    std::fs::remove_file(f.standin().join("branches.json")).unwrap();
+    let logs_before = f.count("log");
+    let d = f.svc.detail(&f.repo, "p").unwrap();
+    assert_eq!(d.proposal.state, ChangeState::Landed);
+    assert!(
+        d.patches
+            .iter()
+            .all(|p| p.assurance == Some(Assurance::Sealed))
+    );
+    assert_eq!(d.patches.len(), 2);
+    assert_eq!(d.still_pending, 0);
+    assert!(d.sightings.is_empty());
+    assert_eq!(
+        f.count("log"),
+        logs_before,
+        "the detail of a landed proposal reads no log"
+    );
 }
 
 #[test]
@@ -795,4 +861,62 @@ fn a_closed_proposals_detail_claims_nothing_when_the_published_history_cannot_be
     let d = f.svc.detail(&f.repo, "p").unwrap();
     assert_eq!(d.patches[0].assurance, None);
     assert_eq!(d.still_pending, 0);
+}
+
+/// IS-55: a call that printed more than its verb's limit is **unknown**, never "none": a log read as empty would call the patch
+/// "held" (it is pending and, as far as an empty log says, in no published block), and a silent truncation would call it the same.
+#[test]
+fn a_call_over_its_output_limit_is_unknown_never_none() {
+    let f = Fixture::new("output-too-large", now, 200);
+    f.propose("p", "alice", &[pid(1)], 101);
+    f.pending(&[pid(1)]);
+    // Control: with a readable (empty) log the patch is held.
+    assert_eq!(
+        f.svc.detail(&f.repo, "p").unwrap().patches[0].assurance,
+        Some(Assurance::ForgeApprovedUnsealed)
+    );
+    // The published log prints 200 MB (the limit of the observation's `--limit 10000` is 23.7 MB): killed, and nothing is claimed.
+    f.move_state();
+    std::fs::write(f.standin().join("flood-log"), "").unwrap();
+    let before = planeter_prikk::output_too_large_total()
+        .get("log")
+        .copied()
+        .unwrap_or(0);
+    let d = f.svc.detail(&f.repo, "p").unwrap();
+    assert_eq!(d.patches[0].assurance, None, "unknown, not held");
+    assert_eq!(d.still_pending, 0);
+    assert_eq!(
+        f.list(StateFilter::Open),
+        vec!["p"],
+        "the list answers from the records"
+    );
+    assert_eq!(f.state_of("p"), ChangeState::Open);
+    assert!(planeter_prikk::output_too_large_total()["log"] > before);
+    assert!(f.metrics.snapshot().prikk_output_too_large["log"] > before);
+    assert!(
+        f.metrics
+            .snapshot()
+            .over_cap_summary()
+            .contains("output_too_large=log:"),
+        "the periodic log line carries the counter"
+    );
+    // The ref advertisement is the same: a log that cannot be read at all is "no tip" (the ref is still listed); one that printed
+    // more than it may is a repository the server cannot describe.
+    assert!(
+        matches!(
+            f.export.advertise(&f.repo),
+            Err(planeter_transport::FetchError::Unavailable)
+        ),
+        "an advertisement does not list refs without tips it could not read"
+    );
+    std::fs::remove_file(f.standin().join("flood-log")).unwrap();
+
+    // `sync pending` that prints 20 MB (limit 16 MiB): the same.
+    f.move_state();
+    std::fs::write(f.standin().join("flood-pending"), "").unwrap();
+    let d = f.svc.detail(&f.repo, "p").unwrap();
+    assert_eq!(d.patches[0].assurance, None);
+    assert_eq!(d.still_pending, 0);
+    assert_eq!(f.list(StateFilter::Open), vec!["p"]);
+    assert!(planeter_prikk::output_too_large_total()["sync pending"] >= 1);
 }
