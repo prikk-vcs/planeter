@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | Small follow-ups of parts 8 and 9 (the have-list route and `planeter-client`), all decided in the review of 2026-10-30 (D-51): the advertisement should say what a client needs to know before it sends (the artifact size bound) and what makes a freshness check a *comparison* (the tip's `update_seq`); the client's tests should run its three commands on macOS and Windows if prikk can run there; and one undocumented variable should be documented. |
-| Status | **Assigned** (2026-10-30). Independent of the image handoff. |
+| Status | **Done, reviewed Approved (2026-10-30; commit `2260be6`).** The flake its review met: `client-flake-handoff-v2.md`. (Originally: Assigned 2026-10-30.) |
 | Basis | `client-helper-review-request.md` §9 (items 1, 2, 7, 8), `have-route-review-request.md` §7; RFC 004 D-8 (pin `update_seq` and RefState id), D-11; `docs/client.md`, `docs/propose.md`; `crates/planeter-transport/src/export.rs` (`Advertisement`, `RefInfo`), the OpenAPI document and drift guard; `.github/workflows/ci.yml` (job `client`). |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 
