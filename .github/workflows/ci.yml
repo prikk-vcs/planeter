@@ -163,15 +163,28 @@ jobs:
           echo "clean release build: $((end - start)) s"
           ls -l target/release/planeter-client*
 
-      # A measurement, not a gate (continue-on-error): what does the build need? The same build with nasm and cmake taken off PATH.
-      - name: Measure the native build requirements (build again without nasm and cmake on PATH)
+      # A measurement, not a gate (continue-on-error): what does the build need? The same build with nasm and cmake made unusable.
+      # On Windows the directories that hold nasm.exe or cmake.exe are taken off PATH; elsewhere (where they live in /usr/bin beside
+      # the compiler) a stub that fails is put in front of them.
+      - name: Measure the native build requirements (build again with nasm and cmake unusable)
         shell: bash
         continue-on-error: true
         run: |
           set -uo pipefail
-          clean=$(printf '%s' "$PATH" | tr ':' '\n' | grep -viE 'nasm|cmake' | paste -sd: -)
-          for t in nasm cmake; do if PATH="$clean" command -v "$t" >/dev/null 2>&1; then echo "$t is still on PATH"; else echo "$t is off PATH"; fi; done
-          PATH="$clean" CARGO_TARGET_DIR=target-without-nasm-cmake cargo build -p planeter-client --release --locked
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            clean=""
+            IFS=':' read -ra dirs <<< "$PATH"
+            for d in "${dirs[@]}"; do
+              if [ -e "$d/nasm.exe" ] || [ -e "$d/cmake.exe" ]; then echo "taken off PATH: $d"; else clean="$clean:$d"; fi
+            done
+            export PATH="${clean#:}"
+          else
+            mkdir -p "$RUNNER_TEMP/shims"
+            for t in nasm cmake; do printf '#!/bin/sh\nexit 127\n' > "$RUNNER_TEMP/shims/$t"; chmod +x "$RUNNER_TEMP/shims/$t"; done
+            export PATH="$RUNNER_TEMP/shims:$PATH"
+          fi
+          for t in nasm cmake; do if command -v "$t" >/dev/null 2>&1 && "$t" --version >/dev/null 2>&1; then echo "$t still works"; else echo "$t does not work now"; fi; done
+          CARGO_TARGET_DIR=target-without-nasm-cmake cargo build -p planeter-client --release --locked
           echo "build without nasm and cmake: exit=$?"
 
       - name: Test planeter-client
