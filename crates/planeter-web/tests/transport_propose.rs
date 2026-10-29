@@ -4193,7 +4193,7 @@ async fn a_closed_proposal_shows_its_reason_beside_the_state_cut_at_200_characte
     );
     let (before, after) = p.split_once("<summary>Details</summary>").unwrap();
     assert!(
-        before.contains("<p>Closed: &#60;b&#62;Not&#60;/b&#62; needed &#38; done</p>"),
+        before.contains("<p>Reason: &#60;b&#62;Not&#60;/b&#62; needed &#38; done</p>"),
         "escaped, in the default view: {before}"
     );
     assert!(!before.contains("<b>"), "{before}");
@@ -4214,7 +4214,7 @@ async fn a_closed_proposal_shows_its_reason_beside_the_state_cut_at_200_characte
         .await,
     );
     let (before, after) = p.split_once("<summary>Details</summary>").unwrap();
-    let cut = format!("Closed: {}…", "é".repeat(199) + "T");
+    let cut = format!("Reason: {}…", "é".repeat(199) + "T");
     assert!(
         before.contains(&cut),
         "cut at 200 characters with an ellipsis: {before}"
@@ -4241,7 +4241,7 @@ async fn a_closed_proposal_shows_its_reason_beside_the_state_cut_at_200_characte
             .await,
         );
         assert_eq!(violations(&ja), Vec::<String>::new());
-        assert!(ja.contains("閉じています："));
+        assert!(ja.contains("理由："));
         std::fs::write(dir.join("detail-closed-ja.html"), &ja).unwrap();
     }
 }

@@ -32,7 +32,7 @@ labels of their own.
 | Concept (what it is) | Was | Current | Why | Certainty |
 |---|---|---|---|---|
 | A change that a maintainer has **signed into the project's history** (prikk: a *sealed* Block) | "sealed", "prikk-verified" | on the change page a sealed patch is labelled **Signed into the history** (a plain badge, JSON `"sealed"`); the badge **Verified** is shown only where a verification ran and passed (the repository, history and verification pages: when the whole repository checks out) | "sealed" is prikk's verb for a maintainer signing queued work into history; "signed" is the word a reader knows. The change page runs no verification, so it must not say **Verified** (IS-44); its explanation says what is known there: the patch is signed in, and the Verification page says whether the repository checks out (`explain.signed`) | Confirmed (`prikk` data model: *seal* creates a signed Block from queued Patches); IS-44 |
-| A change **approved on this server but not yet signed in** (prikk: a *queued* Patch awaiting a seal) | badge "forge-approved, unsealed" | badge **Approved, awaiting signature**; explanation `explain.queued` | The old badge used two private words. The explanation is the part that protects the reader (RFC 005 D-10). | Confirmed meaning; wording is the owner's choice |
+| A patch **held on this server but not yet signed in** (prikk: a *queued* Patch awaiting a seal) | badge "forge-approved, unsealed", then "Approved, awaiting signature" | badge **Held here, not signed in**; explanation `explain.queued` | The first badge used two private words. The second said *approved*, which nobody does to a patch a keyless forge holds: *approved* belongs to a reviewer's decision about a revision, and on one proposal page one word would mean two things. *Held* is what is true (accepted, unsigned); *not signed in* is the trust-bearing half. The explanation is the part that protects the reader (RFC 005 D-10). History: 2026-10-29: reworded (D-50). | Confirmed meaning; wording by the architect on the owner's delegation (D-50) |
 | The repository's check **failed** (prikk `verify`: not ok) | badge "unverified" | badge **Verification failed**; the Verification page lists what was found | "unverified" reads as "not checked". Since IS-39 the page can really say the check found problems. | Confirmed (IS-39) |
 | The check **could not run** (outage, budget, timeout) | badge "verify unavailable" | badge **Could not be checked now**; explanation "Try again in a little while." | Separates "failed" from "could not check", which the old wording blurred | Confirmed |
 | `verify` | nav "verify", page "Verification" | nav **Verification**; page **Verification** | One word everywhere (sentence case) | Owner's choice |
@@ -128,11 +128,11 @@ whether a private repository exists. Messages not listed here did not change (fo
 |---|---|---|---|
 | `assurance.verified` | "prikk-verified" | "Verified" | Approved |
 | `assurance.sealed` | — | "Signed into the history" | Approved |
-| `assurance.queued` | "forge-approved, unsealed" | "Approved, awaiting signature" | Approved |
+| `assurance.queued` | "Approved, awaiting signature" (until 2026-10-29: reworded, D-50) | "Held here, not signed in" | Approved |
 | `assurance.unverified` | "unverified" | "Verification failed" | Approved |
 | `assurance.verify_unavailable` | "verify unavailable" | "Could not be checked now" | Approved |
 | `explain.summary` | — | "What does this mean?" | Approved |
-| `explain.queued` | — | "This change was approved on this server. A maintainer has not yet signed it into the project's history, so it is not part of the verified record." | Approved |
+| `explain.queued` | "This change was approved on this server. A maintainer has not yet signed it into the project's history, so it is not part of the verified record." (until 2026-10-29: reworded, D-50) | "This patch is held on this server. A maintainer has not signed it into the project's history, so it is not part of the verified record." | Approved |
 | `explain.unavailable` | — | "Try again in a little while." | Approved |
 | `explain.verified` | — | "prikk ran all of its checks on this repository just now, and they found no problems." | Approved |
 | `explain.signed` | — | "A maintainer signed this patch into the project's history. The Verification page shows whether the whole repository checks out." | Approved |
@@ -213,7 +213,7 @@ says the same for every count; numbers group with commas (`1,200`).
 | verify / verification | 検証 | yes | The page and the navigation say 検証; the checks are チェック (`verify.col.stage`), so a *check* and the *verification* stay two words, as in English. Alternative: 確認 (used for *could not be checked*, 現在は確認できません). | Hard term — reviewers decide |
 | Verified (badge) | 検証済み | yes | A trust label. English: prikk ran all its checks just now and found no problems. 検証済み says *has been verified*; the explanation (`explain.verified`) says *just now*. The reviewers confirm the label does not read as a lasting guarantee. | Hard term — trust label, reviewers decide |
 | Signed into the history (badge) | 署名して履歴に記録済み | yes | A trust label. English: a maintainer signed this patch into the project's history. The draft says both parts, *signed* and *recorded in the history*. Alternatives: 履歴に署名済み, 署名済み. It must not read as *verified* (it is not). | Hard term — trust label, reviewers decide |
-| Approved, awaiting signature (badge) | 承認済み・署名待ち | yes | A trust label. English: approved on this server, not yet signed by a maintainer, so not part of the verified record. 署名待ち keeps *not yet signed*. | Hard term — trust label, reviewers decide |
+| Held here, not signed in (badge) | ここで保持中・未署名 | yes | A trust label. English: held on this server, not signed by a maintainer, so not part of the verified record. Draft — reworded 2026-10-29 (D-50; was 承認済み・署名待ち, which said *approved*); owner and colleague to confirm. 未署名 keeps *not signed*. | Hard term — trust label, reviewers decide |
 | Verification failed (badge) | 検証に失敗 | yes | A trust label. prikk checked and found problems (not *was not checked*). | Hard term — trust label, reviewers decide |
 | Could not be checked now (badge) | 現在は確認できません | yes | A trust label. The check could not run (not *failed*). 確認 rather than 検証 so that it does not claim a verification happened. | Hard term — trust label, reviewers decide |
 | seal / sealed / unsealed | (not used) | no | The interface never says *seal* (the plain-words work retired it; the English reader sees *signed into the history*). **prikk documents no Japanese, so there is no usage to follow.** If a document ever needs the word, the draft would propose 封印 / 封印済み / 未封印 or the loan word シール; both are on the forbidden list for the messages (`tests/retired_words.rs`). | Hard term — reviewers decide (not shown to the reader) |
@@ -243,13 +243,13 @@ the two catalogs). A reviewer's correction changes this cell and `ja.rs` togethe
 | `login.password` | "Password" | "パスワード" |
 | `assurance.verified` | "Verified" | "検証済み" |
 | `assurance.sealed` | "Signed into the history" | "署名して履歴に記録済み" |
-| `assurance.queued` | "Approved, awaiting signature" | "承認済み・署名待ち" |
+| `assurance.queued` | "Held here, not signed in" | "ここで保持中・未署名" |
 | `assurance.unverified` | "Verification failed" | "検証に失敗" |
 | `assurance.verify_unavailable` | "Could not be checked now" | "現在は確認できません" |
 | `explain.summary` | "What does this mean?" | "これはどういう意味ですか？" |
 | `explain.verified` | "prikk ran all of its checks on this repository just now, and they found no problems." | "prikk がこのリポジトリに対してすべてのチェックをたった今実行し、問題は見つかりませんでした。" |
 | `explain.signed` | "A maintainer signed this patch into the project's history. The Verification page shows whether the whole repository checks out." | "メンテナーがこのパッチをプロジェクトの履歴に署名して記録しました。リポジトリ全体に問題がないかどうかは、「検証」ページで確認できます。" |
-| `explain.queued` | "This change was approved on this server. A maintainer has not yet signed it into the project's history, so it is not part of the verified record." | "この変更は、このサーバーで承認されました。メンテナーがまだプロジェクトの履歴に署名していないため、検証済みの記録には含まれていません。" |
+| `explain.queued` | "This patch is held on this server. A maintainer has not signed it into the project's history, so it is not part of the verified record." | "このパッチは、このサーバーで保持されています。メンテナーがプロジェクトの履歴にまだ署名していないため、検証済みの記録には含まれていません。" |
 | `explain.failed` | "prikk checked this repository and found problems. The Verification page lists what was found." | "prikk がこのリポジトリをチェックしたところ、問題が見つかりました。見つかった内容は「検証」ページに一覧があります。" |
 | `explain.failed_here` | "prikk checked this repository and found problems. They are listed below." | "prikk がこのリポジトリをチェックしたところ、問題が見つかりました。内容は下に一覧で示します。" |
 | `explain.unavailable` | "Try again in a little while." | "しばらくしてから、もう一度お試しください。" |

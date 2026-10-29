@@ -5,7 +5,7 @@
 //! from `/static/app.css` on the app origin; raw bytes link to the isolated content origin.
 //!
 //! Honesty on the page (WEB-06): the repository badge is prikk's re-derived `verify` verdict, and a
-//! queued patch is labelled *Approved, awaiting signature* — never *Verified* (the words are the catalog's;
+//! queued patch is labelled *Held here, not signed in* — never *Verified* (the words are the catalog's;
 //! the API keeps its stable `Assurance` values).
 
 use askama::Template;

@@ -324,7 +324,7 @@ struct DetailTpl {
     what: Key,
     summary: String,
     closed_reason: Option<String>,
-    /// The one line of the default view: "Closed: <reason>", the reason cut at 200 characters (the full text is under Details).
+    /// The one line of the default view: "Reason: <reason>", the reason cut at 200 characters (the full text is under Details).
     closed_line: Option<String>,
     /// The received refs that hold a patch of this open proposal (Details only; information, never a state).
     sightings: Vec<String>,
@@ -354,7 +354,7 @@ fn artifact_href(owner: &str, name: &str, id: &str, seq: u32) -> String {
 /// How many characters of a closing reason the default view shows.
 const REASON_SHOWN: usize = 200;
 
-/// "Closed: <reason>", the reason cut at [`REASON_SHOWN`] characters with an ellipsis (the template escapes it).
+/// "Reason: <reason>", the reason cut at [`REASON_SHOWN`] characters with an ellipsis (the template escapes it).
 fn closed_line(t: &T, reason: &str) -> String {
     let shown: String = if reason.chars().count() > REASON_SHOWN {
         reason.chars().take(REASON_SHOWN).collect::<String>() + "…"

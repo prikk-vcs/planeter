@@ -133,7 +133,7 @@ pub const CATALOG: &[Entry] = &[
     // assurance labels (trust-bearing)
     msg("assurance.verified", "検証済み"),
     msg("assurance.sealed", "署名して履歴に記録済み"),
-    msg("assurance.queued", "承認済み・署名待ち"),
+    msg("assurance.queued", "ここで保持中・未署名"),
     msg("assurance.unverified", "検証に失敗"),
     msg("assurance.verify_unavailable", "現在は確認できません"),
     // in-place explanations (a native <details>, no script)
@@ -148,7 +148,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "explain.queued",
-        "この変更は、このサーバーで承認されました。メンテナーがまだプロジェクトの履歴に署名していないため、検証済みの記録には含まれていません。",
+        "このパッチは、このサーバーで保持されています。メンテナーがプロジェクトの履歴にまだ署名していないため、検証済みの記録には含まれていません。",
     ),
     msg(
         "explain.failed",
@@ -907,7 +907,7 @@ pub const CATALOG: &[Entry] = &[
         "proposal.close.too_long",
         "理由が 1,000 文字を超えています。短くして、もう一度お試しください。",
     ),
-    msg("proposal.closed_line", "閉じています：{reason}"),
+    msg("proposal.closed_line", "理由：{reason}"),
     msg(
         "proposal.sighting",
         "ここで受信した履歴にも見つかりました（ここでは未検証）：{ref}",

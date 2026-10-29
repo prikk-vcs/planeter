@@ -42,6 +42,15 @@ const CHANGE_MEANING_PROPOSAL: &[&str] = &[
     "an existing change",
 ];
 
+/// D-50 (2026-10-29): two owner-approved texts said something the product no longer means. *Approved* belongs to a reviewer's
+/// decision about a revision, and a keyless forge approves nothing about a patch it holds; *change* belongs to a recorded unit
+/// of history. The badge is now "Held here, not signed in" and its explanation says "This patch is held on this server". These
+/// phrases may not come back (whole phrases, ignoring case).
+const RETIRED_PHRASES: &[&str] = &[
+    "Approved, awaiting signature",
+    "was approved on this server",
+];
+
 /// Old navigation words that may not be a whole message (a label); `Verification` and `error code` are fine.
 const LABELS: &[&str] = &["code", "history", "verify"];
 
@@ -103,6 +112,12 @@ fn terms_in(text: &str) -> Vec<&'static str> {
         .copied()
         .filter(|w| contains_word(&text, w))
         .collect();
+    out.extend(
+        RETIRED_PHRASES
+            .iter()
+            .copied()
+            .filter(|p| contains_word(&text, p)),
+    );
     out.extend(LABELS.iter().copied().filter(|l| text.trim() == *l));
     out.extend(
         CHANGE_MEANING_PROPOSAL
@@ -206,6 +221,19 @@ fn every_retired_word_is_found_wherever_it_hides() {
         ("Open a new change instead.", "new change"),
         ("Close one of your open changes.", "open changes"),
         ("You may not propose changes to it.", "propose changes"),
+        // the owner-approved texts retired in D-50 (nobody approves a patch a keyless forge holds)
+        (
+            "Approved, awaiting signature",
+            "Approved, awaiting signature",
+        ),
+        (
+            "This change was approved on this server. A maintainer has not yet signed it in.",
+            "was approved on this server",
+        ),
+        (
+            "Your patch was approved on this server.",
+            "was approved on this server",
+        ),
         // a whole message that is an old navigation label
         ("code", "code"),
         ("history", "history"),
@@ -243,7 +271,10 @@ fn ordinary_words_and_placeholders_are_not_mistaken_for_retired_ones() {
         // "change" in its glossary sense, a recorded unit of history, is not a proposal
         "A recorded change.",
         "There are no signed changes on this branch yet.",
-        "This change was approved on this server.",
+        // the D-50 texts that replaced the retired ones
+        "Held here, not signed in",
+        "This patch is held on this server. A maintainer has not signed it into the project's history, so it is not part of the verified record.",
+        "Reason: {reason}",
         "A rollback is a change that undoes an earlier change.",
         "No branch has changed.",
     ] {
@@ -298,6 +329,10 @@ const JA_FORBIDDEN: &[(&str, &str)] = &[
         "`evaluated` is retired because it does not mean \"passed\"; the status is 完了 (completed)",
     ),
     ("ブロック", "a block is a \"change\" (変更) for the reader"),
+    (
+        "承認済み・署名待ち",
+        "retired in D-50: nobody approves a patch a keyless forge holds; the badge is ここで保持中・未署名",
+    ),
     (
         "リファレンス",
         "refs are \"branches and tags\" (ブランチとタグ)",
@@ -392,7 +427,8 @@ fn every_forbidden_japanese_term_is_found_and_ordinary_words_are_not_mistaken_fo
     for text in [
         "検証済み",
         "署名して履歴に記録済み",
-        "承認済み・署名待ち",
+        "ここで保持中・未署名",
+        "理由：{reason}",
         "完了",
         "変更 {target}",
         "{ref}",
@@ -438,7 +474,7 @@ fn the_english_retired_words_are_found_in_a_japanese_message_too() {
 
 /// *Approve* belongs to a **reviewer's decision**. A sentence about a proposal that says it without being about a decision —
 /// "Approved, awaiting signature" beside a proposal — would tell a reader that someone approved the proposal when nobody
-/// did: that badge is about work held on this server, and the owner is asked about its wording separately.
+/// did. That badge said it about a patch held on this server and was retired in D-50 (see `RETIRED_PHRASES`); the rule stays.
 const APPROVE_WORDS: &[&str] = &[
     "approve",
     "approved",
@@ -513,7 +549,7 @@ fn the_approved_rule_finds_the_planted_badge_beside_a_proposal_and_lets_decision
         )]);
         assert_eq!(approve_outside_decisions(&[l]).len(), 1, "{text:?}");
     }
-    // A sentence that is not about a proposal is not this rule's (the owner-approved badge on a patch stays as it is).
+    // A sentence that is not about a proposal is not this rule's (a label on a patch; D-50 retired this text by phrase, above).
     let badge = planted(vec![message(
         "assurance.queued",
         "Approved, awaiting signature",

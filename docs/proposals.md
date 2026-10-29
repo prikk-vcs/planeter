@@ -150,7 +150,7 @@ The repository navigation shows *Proposals* only when the repository has at leas
 repository page says only how many are open.
 
 The default view of one proposal shows: the title, who proposed it, the state (*Open*, *Landed*, *Closed*, always the neutral badge), one
-sentence of what that means ("Held for review: not yet part of the project's history."), for a closed proposal one line "Closed: <reason>" (escaped, the reason cut at 200 characters), a one-line summary ("3 patches in 2 revisions"),
+sentence of what that means ("Held for review: not yet part of the project's history."), for a closed proposal one line "Reason: <reason>" (escaped, the reason cut at 200 characters), a one-line summary ("3 patches in 2 revisions"),
 "The file-by-file view is not available yet.", and the actions the viewer may take — the download of the latest revision for a
 reviewer, and the close form (a reason, the consequence stated: *Closing keeps the record and the files; nobody can reopen it.*) for whoever
 may close. **Everything else is under one *Details*:** the full reason a proposal was closed, the received-history sightings, the description (through the sanitizer), the

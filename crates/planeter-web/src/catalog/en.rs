@@ -117,7 +117,7 @@ pub const CATALOG: &[Entry] = &[
     // assurance labels (trust-bearing)
     msg("assurance.verified", "Verified"),
     msg("assurance.sealed", "Signed into the history"),
-    msg("assurance.queued", "Approved, awaiting signature"),
+    msg("assurance.queued", "Held here, not signed in"),
     msg("assurance.unverified", "Verification failed"),
     msg("assurance.verify_unavailable", "Could not be checked now"),
     // in-place explanations (a native <details>, no script); the wording is on the glossary page.
@@ -132,7 +132,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "explain.queued",
-        "This change was approved on this server. A maintainer has not yet signed it into the project's history, so it is not part of the verified record.",
+        "This patch is held on this server. A maintainer has not signed it into the project's history, so it is not part of the verified record.",
     ),
     msg(
         "explain.failed",
@@ -867,7 +867,7 @@ pub const CATALOG: &[Entry] = &[
         "proposal.close.too_long",
         "The reason is longer than 1,000 characters. Shorten it and try again.",
     ),
-    msg("proposal.closed_line", "Closed: {reason}"),
+    msg("proposal.closed_line", "Reason: {reason}"),
     msg(
         "proposal.sighting",
         "Also found in history received here (not verified here): {ref}",

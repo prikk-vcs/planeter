@@ -408,13 +408,15 @@ async fn the_change_page_never_says_verified_and_explains_each_badge_once_and_th
             "{name}: the explanation"
         );
     }
-    // The meaning of "approved, awaiting signature" is the glossary's, word for word: approved here, not yet
-    // signed by a maintainer, not part of the verified record.
+    // The meaning of "held here, not signed in" is the glossary's, word for word: held on this server, not
+    // signed by a maintainer, not part of the verified record. Nobody "approved" it (D-50: that word belongs
+    // to a reviewer's decision about a revision).
     assert_eq!(
         text(Key::ExplainQueued),
-        "This change was approved on this server. A maintainer has not yet signed it into the project's \
+        "This patch is held on this server. A maintainer has not signed it into the project's \
          history, so it is not part of the verified record."
     );
+    assert_eq!(text(Key::AssuranceQueued), "Held here, not signed in");
     // A sealed patch on this page is signed in; nothing here has checked the repository, so the sentence must
     // not claim a check (it points to the Verification page instead). The label is the plain, not the green, one.
     assert_eq!(text(Key::AssuranceSealed), "Signed into the history");
