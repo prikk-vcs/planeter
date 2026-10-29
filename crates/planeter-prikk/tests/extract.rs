@@ -3,7 +3,7 @@
 //!
 //! Three kinds of test: pure ones (the readers), ones against a stand-in `prikk` that records its argv and prints a document
 //! (they run everywhere), and ones against the real prikk (they self-skip, printing why, without it). The real documents in the
-//! fixtures were captured from prikk 0.54.1.
+//! fixtures were captured from prikk 0.54.1; the two ids 0.55.0 added are provoked on a real 0.55.0 (they skip below it, saying so).
 
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
@@ -152,7 +152,7 @@ fn the_real_report_is_read_and_every_field_is_required() {
 }
 
 #[test]
-fn all_thirteen_refusal_ids_read_to_their_own_value_and_never_to_another() {
+fn all_fifteen_refusal_ids_read_to_their_own_value_and_never_to_another() {
     let expected = [
         ("over-max-bytes", RefusalId::OverMaxBytes),
         ("over-max-files", RefusalId::OverMaxFiles),
@@ -173,9 +173,14 @@ fn all_thirteen_refusal_ids_read_to_their_own_value_and_never_to_another() {
         ("damaged-repository", RefusalId::DamagedRepository),
         ("io-failure", RefusalId::IoFailure),
         ("not-a-repository", RefusalId::NotARepository),
+        ("claim-parent-not-sealed", RefusalId::ClaimParentNotSealed),
+        (
+            "destination-inside-repository",
+            RefusalId::DestinationInsideRepository,
+        ),
     ];
-    assert_eq!(expected.len(), 13);
-    assert_eq!(RefusalId::KNOWN.len(), 13);
+    assert_eq!(expected.len(), 15);
+    assert_eq!(RefusalId::KNOWN.len(), 15);
     for (id, want) in expected {
         let r = parse_refusal(&refusal_doc(id, None)).unwrap();
         assert_eq!(r.refusal, want, "{id}");
@@ -211,8 +216,8 @@ fn the_three_reasons_are_a_closed_set_and_an_unknown_one_is_kept_and_counted() {
 #[test]
 fn an_unknown_refusal_id_is_the_named_catch_all_never_a_known_id() {
     let before = unknown_refusals_seen();
-    let r = parse_refusal(&refusal_doc("a-fourteenth-id", None)).unwrap();
-    assert_eq!(r.refusal, RefusalId::Other("a-fourteenth-id".to_owned()));
+    let r = parse_refusal(&refusal_doc("a-sixteenth-id", None)).unwrap();
+    assert_eq!(r.refusal, RefusalId::Other("a-sixteenth-id".to_owned()));
     assert_ne!(r.refusal, RefusalId::DamagedRepository);
     assert!(unknown_refusals_seen() > before);
     // Near misses are not the known ids.
@@ -546,6 +551,51 @@ fn damaged_repository_for_a_claim_is_not_reported_as_damage_but_for_a_ref_it_is_
     );
 }
 
+/// prikk 0.55.0's `claim-parent-not-sealed` (a claim whose parent is still pending) is its own outcome; the text is
+/// kept verbatim and nothing is parsed out of it.
+#[test]
+fn claim_parent_not_sealed_is_its_own_outcome_with_prikks_text_kept_verbatim() {
+    let message = "precondition not met: recognition claim aa declares parent bb, which is not in this repository yet -- seal or receive the parent before extracting this claim";
+    let doc = format!(
+        r#"{{"schema_version": "refusal-v1", "command": "extract", "refusal": "claim-parent-not-sealed", "reason": null, "message": "{message}"}}"#
+    );
+    let (w, d) = world("not-sealed", &format!("echo '{doc}'; exit 1"));
+    let wd = ExtractWorkdir::create(&w.work, &w.repo).unwrap();
+    let e = d
+        .extract(
+            &ExtractPoint::Claim("aa".repeat(32)),
+            &wd,
+            &ExtractOptions::default(),
+        )
+        .unwrap_err();
+    let ExtractError::ClaimParentNotSealed(r) = &e else {
+        panic!("{e}")
+    };
+    assert_eq!(r.refusal, RefusalId::ClaimParentNotSealed);
+    assert_eq!(r.message, message, "verbatim");
+    let text = e.to_string();
+    assert!(
+        text.contains("still pending") && !text.contains("damaged"),
+        "{text}"
+    );
+}
+
+/// `destination-inside-repository` cannot be reached through the driver; if prikk says it, it is a named driver bug.
+#[test]
+fn destination_inside_repository_is_a_named_driver_bug_never_a_plain_refusal() {
+    let doc = r#"{"schema_version": "refusal-v1", "command": "extract", "refusal": "destination-inside-repository", "reason": null, "message": "the destination lies inside the repository"}"#;
+    let (w, d) = world("inside", &format!("echo '{doc}'; exit 1"));
+    for p in [point(), ExtractPoint::Claim("aa".repeat(32))] {
+        let wd = ExtractWorkdir::create(&w.work, &w.repo).unwrap();
+        let e = d.extract(&p, &wd, &ExtractOptions::default()).unwrap_err();
+        let ExtractError::DestinationInsideRepository(r) = &e else {
+            panic!("{e}")
+        };
+        assert_eq!(r.refusal, RefusalId::DestinationInsideRepository);
+        assert!(e.to_string().contains("driver bug"), "{e}");
+    }
+}
+
 // ------------------------------------------------------------------------------------------------------------ (d) the tree is data
 
 #[test]
@@ -609,6 +659,21 @@ fn have_prikk() -> bool {
         .output()
         .map(|o| o.status.success() && String::from_utf8_lossy(&o.stdout).trim() >= "prikk 0.54.0")
         .unwrap_or(false)
+}
+
+/// The installed prikk is 0.55.0 or later (the two ids of 0.55.0 exist only there).
+fn prikk_is_0_55_or_later() -> bool {
+    let Ok(out) = Command::new("prikk").arg("--version").output() else {
+        return false;
+    };
+    let text = String::from_utf8_lossy(&out.stdout).into_owned();
+    let mut parts = text
+        .trim()
+        .trim_start_matches("prikk ")
+        .split('.')
+        .map(|p| p.parse::<u32>().unwrap_or(0));
+    let (major, minor) = (parts.next().unwrap_or(0), parts.next().unwrap_or(0));
+    (major, minor) >= (0, 55)
 }
 
 fn bwrap_works() -> bool {
@@ -942,7 +1007,65 @@ fn real_prikk_a_claim_whose_parent_is_pending_is_not_called_damage() {
         eprintln!("skipping: needs prikk >= 0.54.0");
         return;
     }
-    let base = scratch("real-claims");
+    if prikk_is_0_55_or_later() {
+        eprintln!(
+            "skipping: prikk 0.55.0 and later give this case its own id (see real_prikk_0_55_names_a_claim_whose_parent_is_pending)"
+        );
+        return;
+    }
+    let outcomes = accepted_artifact_of_two_claims("real-claims");
+    let ok = outcomes.iter().filter(|o| o.is_ok()).count();
+    let pending = outcomes
+        .iter()
+        .filter(|o| matches!(o, Err(ExtractError::ClaimParentNotSealedOrDamaged(_))))
+        .count();
+    assert_eq!((ok, pending), (1, 1), "{outcomes:?}");
+    let good = outcomes.iter().find_map(|o| o.as_ref().ok()).unwrap();
+    assert_eq!(good.report.point_kind, PointKind::Claim);
+    assert!(
+        good.report.claim_parent_block_id.is_some(),
+        "a claim names its parent"
+    );
+}
+
+/// The same accepted artifact on prikk 0.55.0: the second claim refuses with `claim-parent-not-sealed`, naming the claim and its
+/// parent in its text; the repository is not called damaged. (Skips below 0.55.0.)
+#[test]
+fn real_prikk_0_55_names_a_claim_whose_parent_is_pending() {
+    if !have_prikk() || !prikk_is_0_55_or_later() {
+        eprintln!("skipping: needs prikk >= 0.55.0 (claim-parent-not-sealed)");
+        return;
+    }
+    let outcomes = accepted_artifact_of_two_claims("real-claims-055");
+    let ok = outcomes.iter().filter(|o| o.is_ok()).count();
+    let refused: Vec<_> = outcomes
+        .iter()
+        .filter_map(|o| match o {
+            Err(ExtractError::ClaimParentNotSealed(r)) => Some(r),
+            _ => None,
+        })
+        .collect();
+    assert_eq!((ok, refused.len()), (1, 1), "{outcomes:?}");
+    let r = refused[0];
+    assert_eq!(r.refusal, RefusalId::ClaimParentNotSealed);
+    assert!(
+        r.message.contains("parent") && !r.message.contains("damaged"),
+        "{}",
+        r.message
+    );
+    assert!(
+        !outcomes
+            .iter()
+            .any(|o| matches!(o, Err(ExtractError::ClaimParentNotSealedOrDamaged(_)))),
+        "0.55.0 does not say damaged-repository for it"
+    );
+}
+
+/// A real accepted artifact of two commits: the outcomes of extracting its two claims.
+fn accepted_artifact_of_two_claims(
+    name: &str,
+) -> Vec<Result<planeter_prikk::extract::Extraction, ExtractError>> {
+    let base = scratch(name);
     let (crepo, ckeys) = client(&base, 1);
     let archive = base.join("c.archive");
     prikk_in(
@@ -1046,16 +1169,36 @@ fn real_prikk_a_claim_whose_parent_is_pending_is_not_called_damage() {
             &ExtractOptions::default(),
         ));
     }
-    let ok = outcomes.iter().filter(|o| o.is_ok()).count();
-    let pending = outcomes
-        .iter()
-        .filter(|o| matches!(o, Err(ExtractError::ClaimParentNotSealedOrDamaged(_))))
-        .count();
-    assert_eq!((ok, pending), (1, 1), "{outcomes:?}");
-    let good = outcomes.iter().find_map(|o| o.as_ref().ok()).unwrap();
-    assert_eq!(good.report.point_kind, PointKind::Claim);
-    assert!(
-        good.report.claim_parent_block_id.is_some(),
-        "a claim names its parent"
-    );
+    outcomes
+}
+
+/// prikk 0.55.0's `destination-inside-repository`, raw (the driver cannot ask for it): a destination inside a throwaway repository.
+/// (Skips below 0.55.0.)
+#[test]
+fn real_prikk_0_55_refuses_a_destination_inside_the_repository_and_the_driver_reads_the_id() {
+    if !have_prikk() || !prikk_is_0_55_or_later() {
+        eprintln!("skipping: needs prikk >= 0.55.0 (destination-inside-repository)");
+        return;
+    }
+    let base = scratch("real-inside");
+    let (repo, keys) = client(&base, 1);
+    let dest = repo.join("inside-the-repository");
+    let out = Command::new("prikk")
+        .args([
+            "extract",
+            "--ref",
+            "heads/main",
+            dest.to_str().unwrap(),
+            "--format",
+            "json",
+        ])
+        .current_dir(&repo)
+        .env("HOME", &keys)
+        .env("XDG_CONFIG_HOME", &keys)
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(1));
+    let r = parse_refusal(&String::from_utf8_lossy(&out.stdout)).unwrap();
+    assert_eq!(r.refusal, RefusalId::DestinationInsideRepository);
+    assert!(!dest.exists(), "nothing was written");
 }

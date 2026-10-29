@@ -3,7 +3,7 @@
 What this is: the part of planeter that asks prikk for **the files of one point of history** (a ref, a block, or a pending
 claim) and gets them as a directory. It is a driver only. No page, no API route and no job uses it yet: the review UI (RFC 005
 part 6) and the checkpoint-refresh job (RFC 006) are built on it. Code: `planeter-prikk::extract`; cost: `planeter-core::admission`.
-prikk ≥ 0.54.0 (`MIN_PRIKK_VERSION`); measured on 0.54.1.
+prikk ≥ 0.54.0 (`MIN_PRIKK_VERSION`); measured on 0.54.1; the refusal ids re-checked on 0.55.0.
 
 ## The destination is ours to make safe
 
@@ -51,6 +51,8 @@ stdout (the exit status is 1, the message is also on stderr); a crash, a timeout
 | `damaged-repository` | prikk could not read what it needed | damaged **or**, for a claim, its parent is still pending (see below) |
 | `io-failure` | a disk or resource failure while writing | an operator's problem |
 | `not-a-repository` | there is no repository here | the caller bound the driver to the wrong directory |
+| `claim-parent-not-sealed` | (prikk 0.55.0 and later) the claim's parent block is accepted here but not sealed yet | wait for the parent to be sealed; nothing is damaged (see below) |
+| `destination-inside-repository` | (prikk 0.55.0 and later) the destination lies inside the repository | cannot happen through the driver; if it does, it is a **bug of the driver** (`DestinationInsideRepository`) |
 
 `reason`, only for `no-checkpoint-in-reach`: **`signer-not-adopted`** — a recorded checkpoint is in reach but its signer is not
 adopted here: adopt the key (the checkpoint-refresh job will not help). **`not-recorded`** — a snapshot is in reach but this
@@ -59,9 +61,18 @@ blocks has a snapshot: `verify` cannot help, and running it again will not clear
 (then `provisional: true`). A caller must not loop on this one.
 
 **A claim whose parent is still pending.** In prikk 0.54.x `extract --claim` of a claim whose parent block is accepted but not
-sealed here refuses with `damaged-repository` ("missing Block …"); the repository is not damaged. 0.55.0 gives it an id of its
-own. The driver does not say "damaged" for a claim: it returns `ClaimParentNotSealedOrDamaged`, whose text names both
-possibilities (a test reproduces it with a real accepted artifact of two commits: the first claim extracts, the second does not).
+sealed here refuses with `damaged-repository` ("missing Block …"); the repository is not damaged. The driver does not say
+"damaged" for a claim: it returns `ClaimParentNotSealedOrDamaged`, whose text names both possibilities (a test reproduces it with a
+real accepted artifact of two commits: the first claim extracts, the second does not). **prikk 0.55.0 and later give it its own id**,
+`claim-parent-not-sealed`, and the driver returns `ClaimParentNotSealed`: the repository is not damaged and the text says so. The
+floor is 0.54.0, so both outcomes exist. `refusal-v1` has no field for the claim or its parent (only `command`, `refusal`,
+`reason`, `message`); the two ids are in prikk's text, which the driver keeps **verbatim** and never parses (the claim is the one the
+caller asked for). A chain of pending claims is prikk 0.56.0 work: until then the second claim of a series refuses this way.
+
+`destination-inside-repository` (0.55.0 and later) is the refusal of a destination inside the repository. The driver only names a
+destination in its own working directory, outside every repository, so it never asks for one; if prikk says it, it is
+`DestinationInsideRepository`, a named driver bug, never an ordinary refusal. Both ids were provoked on a real 0.55.0 (the tests skip,
+saying so, below 0.55.0).
 
 ## Bounds and cost
 

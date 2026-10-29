@@ -5,6 +5,10 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **The `extract` driver knows prikk 0.55.0's two refusals.** `claim-parent-not-sealed` (a claim whose parent is accepted but not sealed yet; 0.54.x said
+  `damaged-repository`) is its own outcome, `ClaimParentNotSealed`, with prikk's text kept verbatim; `destination-inside-repository` is a named driver bug
+  (the driver never passes such a destination). The list of ids is 15; the floor stays 0.54.0, so the 0.54.x mapping stays. See `docs/extract.md`.
+
 - **A cap on what the server reads from a prikk call (IS-55).** The memory ceiling bounded prikk, not the server's own buffer: a hostile archive with
   very many refs could make `archive import --format json` print a report as large as the archive. Every prikk call is now read up to a limit per
   verb (a table with its measurements, each limit at least twice the largest legitimate output measured on prikk 0.54.1) and **killed beyond it**; the

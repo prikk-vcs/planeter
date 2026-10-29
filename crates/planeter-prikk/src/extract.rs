@@ -129,7 +129,8 @@ pub struct ExtractReport {
     pub largest_file_bytes: u64,
 }
 
-/// `refusal-v1`'s thirteen ids (prikk 0.54.1, `extract.rs` `ExtractRefusalId`), and a named catch-all.
+/// `refusal-v1`'s fifteen ids (prikk 0.55.0, `extract.rs` `ExtractRefusalId`: the thirteen of 0.54.1 and the two 0.55.0 added), and
+/// a named catch-all.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RefusalId {
     OverMaxBytes,
@@ -145,6 +146,10 @@ pub enum RefusalId {
     DamagedRepository,
     IoFailure,
     NotARepository,
+    /// 0.55.0: a claim whose parent block is still pending here (accepted, not yet sealed). 0.54.x said `damaged-repository`.
+    ClaimParentNotSealed,
+    /// 0.55.0: the destination lies inside the repository. The driver never passes such a destination (see [`ExtractError`]).
+    DestinationInsideRepository,
     /// An id this driver does not know (a later prikk). Kept as it came; a log line says so when it is read.
     Other(String),
 }
@@ -166,12 +171,14 @@ impl RefusalId {
             RefusalId::DamagedRepository => "damaged-repository",
             RefusalId::IoFailure => "io-failure",
             RefusalId::NotARepository => "not-a-repository",
+            RefusalId::ClaimParentNotSealed => "claim-parent-not-sealed",
+            RefusalId::DestinationInsideRepository => "destination-inside-repository",
             RefusalId::Other(s) => s,
         }
     }
 
-    /// The thirteen ids this driver knows, in prikk's order.
-    pub const KNOWN: [&'static str; 13] = [
+    /// The fifteen ids this driver knows, in prikk's order.
+    pub const KNOWN: [&'static str; 15] = [
         "over-max-bytes",
         "over-max-files",
         "destination-exists",
@@ -185,6 +192,8 @@ impl RefusalId {
         "damaged-repository",
         "io-failure",
         "not-a-repository",
+        "claim-parent-not-sealed",
+        "destination-inside-repository",
     ];
 
     fn from_id(s: &str) -> RefusalId {
@@ -202,6 +211,8 @@ impl RefusalId {
             "damaged-repository" => RefusalId::DamagedRepository,
             "io-failure" => RefusalId::IoFailure,
             "not-a-repository" => RefusalId::NotARepository,
+            "claim-parent-not-sealed" => RefusalId::ClaimParentNotSealed,
+            "destination-inside-repository" => RefusalId::DestinationInsideRepository,
             other => {
                 UNKNOWN_SEEN.fetch_add(1, Ordering::Relaxed);
                 eprintln!(
@@ -270,8 +281,18 @@ pub enum ExtractError {
     Refused(Refusal),
     /// A claim point and `damaged-repository`. In prikk 0.54.x that id is **also** what prikk says for a claim whose parent
     /// is still pending (accepted, not yet sealed here): the repository is not damaged then (letter of 2026-10-24 §3,
-    /// ledger PK-70; 0.55.0 gives it an id of its own). The driver does not tell the two apart and does not say "damaged".
+    /// ledger PK-70). The driver does not tell the two apart and does not say "damaged". 0.55.0 and later report
+    /// `claim-parent-not-sealed` ([`ExtractError::ClaimParentNotSealed`]); the floor is 0.54.0, so this stays.
     ClaimParentNotSealedOrDamaged(Refusal),
+    /// prikk 0.55.0 and later: the claim's parent block is still pending here (accepted, not yet sealed), said by its own id
+    /// `claim-parent-not-sealed`; the repository is not damaged. `refusal-v1` carries no field for the claim or its parent (only
+    /// `command`, `refusal`, `reason`, `message`), so the two ids are in prikk's text, kept **verbatim** in `message` and never
+    /// parsed; the claim is the one the caller asked for.
+    ClaimParentNotSealed(Refusal),
+    /// prikk 0.55.0 and later refused the destination as lying inside the repository (`destination-inside-repository`). The
+    /// driver only ever names a destination in its own working directory outside every repository, so this cannot be reached:
+    /// if it is, it is a **bug of this driver** (or of the directory it was given), not a state of the repository.
+    DestinationInsideRepository(Refusal),
     /// The working directory or the destination was not made safe: refused before any prikk call.
     UnsafeDestination(String),
     /// Anything else: a crash, a timeout, a memory ceiling, an unreadable output (as for every other verb).
@@ -290,6 +311,16 @@ impl fmt::Display for ExtractError {
             ExtractError::ClaimParentNotSealedOrDamaged(r) => write!(
                 f,
                 "prikk could not read the claim's parent: either the parent is still pending here (not sealed yet) or the repository is damaged; prikk 0.54 gives both the same refusal ({})",
+                r.message
+            ),
+            ExtractError::ClaimParentNotSealed(r) => write!(
+                f,
+                "the claim's parent is still pending here (accepted, not sealed yet): {}",
+                r.message
+            ),
+            ExtractError::DestinationInsideRepository(r) => write!(
+                f,
+                "driver bug: prikk refused the extraction destination as lying inside the repository ({})",
                 r.message
             ),
             ExtractError::UnsafeDestination(why) => {
@@ -531,6 +562,12 @@ impl CliPrikkRepo {
                 return Err(match (point, &refusal.refusal) {
                     (ExtractPoint::Claim(_), RefusalId::DamagedRepository) => {
                         ExtractError::ClaimParentNotSealedOrDamaged(refusal)
+                    }
+                    (_, RefusalId::ClaimParentNotSealed) => {
+                        ExtractError::ClaimParentNotSealed(refusal)
+                    }
+                    (_, RefusalId::DestinationInsideRepository) => {
+                        ExtractError::DestinationInsideRepository(refusal)
                     }
                     _ => ExtractError::Refused(refusal),
                 });
