@@ -330,6 +330,14 @@ const JA_FORBIDDEN: &[(&str, &str)] = &[
     ),
     ("ブロック", "a block is a \"change\" (変更) for the reader"),
     (
+        "サーバーの管理者",
+        "one word, two roles (D-50, consistency): the person who runs the server is このサーバーを運用している人 (運用者 in API hints); 管理者 is only the administrator of a repository, always as リポジトリの管理者",
+    ),
+    (
+        "検査",
+        "a fourth word for *check* (D-50, consistency): verifying is 検証, a verification stage is チェック, and what `doctor` does is 点検",
+    ),
+    (
         "承認済み・署名待ち",
         "retired in D-50: nobody approves a patch a keyless forge holds; the badge is ここで保持中・未署名",
     ),

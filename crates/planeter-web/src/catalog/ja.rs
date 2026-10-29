@@ -90,7 +90,7 @@ pub const CATALOG: &[Entry] = &[
     msg("unavailable.heading", "一時的に利用できません"),
     msg(
         "unavailable.body",
-        "今はこのリポジトリを読み込めません。しばらくしてから、もう一度お試しください。それでも解決しない場合は、このサーバーの管理者にお知らせください。",
+        "今はこのリポジトリを読み込めません。しばらくしてから、もう一度お試しください。それでも解決しない場合は、このサーバーを運用している人にお知らせください。",
     ),
     msg("busy.heading", "サーバーが混み合っています"),
     msg(
@@ -100,7 +100,7 @@ pub const CATALOG: &[Entry] = &[
     msg("too_large.heading", "大きすぎて表示できません"),
     msg(
         "too_large.body",
-        "これは大きすぎて、このサーバーでは表示できません。ダウンロードするか、このサーバーの管理者に上限の引き上げを依頼してください。",
+        "これは大きすぎて、このサーバーでは表示できません。ダウンロードするか、このサーバーを運用している人に上限の引き上げを依頼してください。",
     ),
     // a missing path in a repository the reader may read (IS-45); the heading and title are `not_found.*`
     msg(
@@ -262,7 +262,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "error.too_large.raw_hint",
-        "このサーバーは、そこまで大きなファイルを提供しません。このサーバーの管理者に問い合わせてください。",
+        "このサーバーは、そこまで大きなファイルを提供しません。このサーバーを運用している人に問い合わせてください。",
     ),
     msg(
         "error.internal.message",
@@ -278,7 +278,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "error.transport_off.hint",
-        "このサーバーの管理者に、エクスポート用スプールの設定を依頼してください。",
+        "このサーバーを運用している人に、エクスポート用スプールの設定を依頼してください。",
     ),
     msg(
         "error.unknown_ref.message",
@@ -322,15 +322,15 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "error.export_failed.deadline_hint",
-        "エクスポートがこのサーバーの許す時間を超えました。このサーバーの管理者に、エクスポートの制限時間の引き上げを依頼してください。",
+        "エクスポートがこのサーバーの許す時間を超えました。このサーバーを運用している人に、エクスポートの制限時間の引き上げを依頼してください。",
     ),
     msg(
         "error.export_failed.ceiling_hint",
-        "エクスポートに必要なメモリが、このサーバーの許す量を超えています。このサーバーの管理者に、エクスポート用メモリ上限の引き上げを依頼してください。",
+        "エクスポートに必要なメモリが、このサーバーの許す量を超えています。このサーバーを運用している人に、エクスポート用メモリ上限の引き上げを依頼してください。",
     ),
     msg(
         "error.export_failed.spool_hint",
-        "アーティファクトがエクスポート用スプール全体より大きくなっています。このサーバーの管理者に、スプールの拡大を依頼してください。",
+        "アーティファクトがエクスポート用スプール全体より大きくなっています。このサーバーを運用している人に、スプールの拡大を依頼してください。",
     ),
     msg("error.rate_limited.message", "リクエストが多すぎます。"),
     msg(
@@ -380,7 +380,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "quota.capacity.hint",
-        "メンテナーに完了した提案を閉じるよう依頼するか、このサーバーの管理者に容量の引き上げを依頼してください。",
+        "メンテナーに完了した提案を閉じるよう依頼するか、このサーバーを運用している人に容量の引き上げを依頼してください。",
     ),
     // making a proposal (RFC 004 part 3b)
     msg(
@@ -405,7 +405,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "error.payload_too_large.hint",
-        "もっと小さいアーティファクトを送るか、このサーバーの管理者に上限の引き上げを依頼してください。",
+        "もっと小さいアーティファクトを送るか、このサーバーを運用している人に上限の引き上げを依頼してください。",
     ),
     msg(
         "error.needs_recovery.message",
@@ -413,7 +413,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "error.needs_recovery.hint",
-        "しばらくしてからもう一度お試しください。読み取りには影響がなく、理由はこのサーバーの管理者がサーバーのログで確認できます。",
+        "しばらくしてからもう一度お試しください。読み取りには影響がなく、理由はこのサーバーを運用している人がサーバーのログで確認できます。",
     ),
     msg(
         "error.quota_exceeded.message",
@@ -525,7 +525,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "error.propose_off.hint",
-        "このサーバーの管理者に、アーティファクト保存先の設定を依頼してください。",
+        "このサーバーを運用している人に、アーティファクト保存先の設定を依頼してください。",
     ),
     msg(
         "propose.held",
@@ -723,7 +723,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "page.sso_unlinked.body",
-        "このシングルサインオンのIDは、planeter のアカウントに連携されていません。このサーバーの管理者に問い合わせてください。",
+        "このシングルサインオンの ID は、planeter のアカウントに連携されていません。このサーバーを運用している人に問い合わせてください。",
     ),
     msg("page.server_error.title", "問題が発生しました · {product}"),
     msg("page.server_error.heading", "問題が発生しました"),
@@ -974,7 +974,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "error.forbidden_hide.message",
-        "このリポジトリは読めますが、コメントを非表示にしたり再表示したりできるのは管理者だけです。",
+        "このリポジトリは読めますが、コメントを非表示にしたり再表示したりできるのはリポジトリの管理者だけです。",
     ),
     msg(
         "error.forbidden_hide.hint",
@@ -1256,7 +1256,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "error.creation_verify.message",
-        "このアーカイブから作られるリポジトリは prikk の検査に通らないため、作成されませんでした。",
+        "このアーカイブから作られるリポジトリは prikk の検証に通らないため、作成されませんでした。",
     ),
     msg(
         "error.creation_verify.hint",
@@ -1280,7 +1280,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "error.invalid_request.name_hint",
-        "この応答の field と reason が断られた値と理由を示しているので、直して、API 文書の項目の通りにもう一度送ってください。",
+        "この応答の field と reason に、断られた値と理由が示されています。API ドキュメントの項目の通りに直して、もう一度送ってください。",
     ),
     msg(
         "error.import_off.message",
@@ -1332,7 +1332,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "error.invalid_request.import_framing_hint",
-        "本文は PLANETER-IMPORT-1 で始め、続けてメタデータの長さ、メタデータ、アーカイブの順に、API 文書の通りに送ってください。",
+        "本文は PLANETER-IMPORT-1 で始め、続けてメタデータの長さ、メタデータ、アーカイブの順に、API ドキュメントの通りに送ってください。",
     ),
     msg("title.new", "新しいリポジトリ · {product}"),
     msg("new.heading", "新しいリポジトリ"),
@@ -1369,7 +1369,7 @@ pub const CATALOG: &[Entry] = &[
     msg("new.empty.button", "空のリポジトリを作成する"),
     msg(
         "new.empty.consequence",
-        "リポジトリをいま作成します。あなたがその管理者になり、上で選んだ人が読めるようになります。",
+        "リポジトリをいま作成します。あなたがそのリポジトリの管理者になり、上で選んだ人が読めるようになります。",
     ),
     msg(
         "new.import.heading",
@@ -1461,11 +1461,11 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "stage.verifies.yes",
-        "下の鍵をすべて信頼すれば、新しいリポジトリは prikk のすべての検査に通ります。",
+        "下の鍵をすべて信頼すれば、新しいリポジトリは prikk のすべての検証に通ります。",
     ),
     msg(
         "stage.verifies.no",
-        "下の鍵をすべて信頼しても、新しいリポジトリは prikk の検査に通りません（{problems}）。鍵を 1 つも信頼せずに作成することはできます。",
+        "下の鍵をすべて信頼しても、新しいリポジトリは prikk の検証に通りません（{problems}）。鍵を 1 つも信頼せずに作成することはできます。",
     ),
     msg("stage.keys.heading", "アーカイブ内のメンテナーの鍵"),
     msg(
@@ -1517,11 +1517,11 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "created.verified",
-        "リポジトリは prikk のすべての検査に通りました。",
+        "リポジトリは prikk のすべての検証に通りました。",
     ),
     msg(
         "created.unverified",
-        "信頼しなかった鍵で署名されたブランチがあるため、リポジトリは prikk のすべての検査には通りません。鍵を信頼するまで何も検証・信頼されず、このバージョンでは後から鍵を信頼することもできません。",
+        "信頼しなかった鍵で署名されたブランチがあるため、リポジトリは prikk のすべての検証には通りません。鍵を信頼するまで何も検証・信頼されず、このバージョンでは後から鍵を信頼することもできません。",
     ),
     msg("created.trusted", "信頼した鍵：{keys}。"),
     msg("created.none_trusted", "信頼した鍵はありません。"),
@@ -1541,7 +1541,7 @@ pub const CATALOG: &[Entry] = &[
         "stage.error.both",
         "鍵 {key} について、フィンガープリントを入力し、同時に信頼しないことも選んでいます。どちらか一方にしてください。",
     ),
-    msg("stage.error.verify", "失敗した検査：{conditions}。"),
+    msg("stage.error.verify", "失敗したチェック：{conditions}。"),
     msg(
         "stage.gone",
         "そのアーカイブはもうありません。すでに使われたか、保管期間が過ぎた可能性があります。",

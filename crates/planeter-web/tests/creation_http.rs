@@ -1646,7 +1646,7 @@ async fn the_archive_flow_on_the_pages_in_two_screens_with_empty_fingerprint_fie
         html.contains("heads/main") && html.contains("/alice/arch"),
         "{html}"
     );
-    assert!(html.contains("すべての検査に通りました"), "{html}");
+    assert!(html.contains("すべての検証に通りました"), "{html}");
     assert_eq!(w.stage_dirs(), 0);
     let refs = api_get(&w, "/api/v1/repos/alice/arch/refs", Some("tok-alice")).await;
     assert!(refs.text().contains("heads/main"));

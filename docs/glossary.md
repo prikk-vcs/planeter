@@ -210,7 +210,7 @@ says the same for every count; numbers group with commas (`1,200`).
 | trust (a key) | 鍵を信頼する | yes | Plain: 信頼する / 信頼しない (`stage.key.skip`, `created.trusted`). prikk's *adopt* is not shown. | Hard term — reviewers decide |
 | received copy | 受信したコピー | yes | A branch kept but not published (`created.branch.kept`, `stage.ref.kept`); the English *received copy* made plain. | Proposed |
 | rollback | ロールバック | yes | The usual loan word; explained in place (`explain.rollback`: 以前の変更を取り消す変更). | Hard term — reviewers decide |
-| verify / verification | 検証 | yes | The page and the navigation say 検証; the checks are チェック (`verify.col.stage`), so a *check* and the *verification* stay two words, as in English. Alternative: 確認 (used for *could not be checked*, 現在は確認できません). | Hard term — reviewers decide |
+| verify / verification | 検証 | yes | The page and the navigation say 検証 (also "prikk の検証に通ります"; 検査 is no longer used, D-50); the checks are チェック (`verify.col.stage`, `stage.error.verify`), so a *check* and the *verification* stay two words, as in English. Alternative: 確認 (used for *could not be checked*, 現在は確認できません). | Hard term — reviewers decide |
 | Verified (badge) | 検証済み | yes | A trust label. English: prikk ran all its checks just now and found no problems. 検証済み says *has been verified*; the explanation (`explain.verified`) says *just now*. The reviewers confirm the label does not read as a lasting guarantee. | Hard term — trust label, reviewers decide |
 | Signed into the history (badge) | 署名して履歴に記録済み | yes | A trust label. English: a maintainer signed this patch into the project's history. The draft says both parts, *signed* and *recorded in the history*. Alternatives: 履歴に署名済み, 署名済み. It must not read as *verified* (it is not). | Hard term — trust label, reviewers decide |
 | Held here, not signed in (badge) | ここで保持中・未署名 | yes | A trust label. English: held on this server, not signed by a maintainer, so not part of the verified record. Draft — reworded 2026-10-29 (D-50; was 承認済み・署名待ち, which said *approved*); owner and colleague to confirm. 未署名 keeps *not signed*. | Hard term — trust label, reviewers decide |
@@ -222,7 +222,11 @@ says the same for every count; numbers group with commas (`1,200`).
 | username | ユーザー名 | yes | `login.user`. | Proposed |
 | maintainer | メンテナー | yes | The usual loan word (`explain.signed`, `explain.queued`). | Proposed |
 | check (a verification stage) | チェック | yes | `verify.col.stage`; the statuses are 完了 / 問題あり / 未実行 / 途中で停止. | Proposed |
-| the person who runs this server | このサーバーの管理者 | yes | `unavailable.body`, `too_large.body`, `error.too_large.raw_hint`. The API hints say 運用者 (operator), as the English hints say *operator*. | Proposed |
+| the person who runs this server | このサーバーを運用している人 | yes | `unavailable.body`, `too_large.body`, `error.too_large.raw_hint` and the other operator-facing messages. Reversed 2026-10-29 (D-50, the architect's consistency change; the reviewers may overrule): the draft said このサーバーの管理者, which is also what a repository's administrator would be called. | Hard term — reviewers decide |
+| operator (in API hints for developers) | 運用者 | yes | The same person, in the short form the API hints use, as the English hints say *operator*. | Hard term — reviewers decide |
+| an administrator of a repository | リポジトリの管理者 | yes | Always with the qualifier, never 管理者 alone (`error.forbidden_hide.message`, `review.hidden.*`, `new.empty.consequence`). Not the person who runs the server. Added 2026-10-29 (D-50). | Hard term — reviewers decide |
+| the repository check that prikk's `doctor` does | 点検 | yes | `recovery.blocker.doctor_problems`, `recovery.note.unreached_objects`. Only for `doctor`; it is a different operation from the verification, as the English keeps *repository check* and *verification* apart. 検査 is not used. Added 2026-10-29 (D-50). | Hard term — reviewers decide |
+| merge | マージ | yes | The usual loan word in software (`proposal.*`, `review.*`: "何もマージしません"). Added 2026-10-29 (D-50). | Proposed |
 
 ### 5.2 Messages that carry a term or a trust label
 
@@ -273,7 +277,7 @@ the two catalogs). A reviewer's correction changes this cell and `ja.rs` togethe
 | `verify.col.stage` | "Check" | "チェック" |
 | `home.open` | "Open repository" | "リポジトリを開く" |
 | `home.address_label` | "Repository address" | "リポジトリのアドレス" |
-| `unavailable.body` | "This repository could not be read right now. Try again in a little while. If it keeps happening, tell the person who runs this server." | "今はこのリポジトリを読み込めません。しばらくしてから、もう一度お試しください。それでも解決しない場合は、このサーバーの管理者にお知らせください。" |
+| `unavailable.body` | "This repository could not be read right now. Try again in a little while. If it keeps happening, tell the person who runs this server." | "今はこのリポジトリを読み込めません。しばらくしてから、もう一度お試しください。それでも解決しない場合は、このサーバーを運用している人にお知らせください。" |
 | `not_found.body` | "There is no repository at this address, or you do not have access to it. Check the address, or sign in if the repository is private." | "このアドレスにはリポジトリがないか、アクセスする権限がありません。アドレスを確認してください。非公開のリポジトリの場合は、ログインしてください。" |
 
 ## 6. Words for the person who runs the server
