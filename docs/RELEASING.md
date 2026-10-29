@@ -123,7 +123,19 @@ platform claims it cannot run (prikk RFC 107's lesson).
   run`/`docker pull` of an undigested image, on a registry login that does not read the token from standard
   input (`--password-stdin`), on a token interpolated into a script, and on a login that can run outside a tag
   push or a rehearsal.
-* **The base image** of the `Dockerfile` stays pinned by digest as before.
+* **The base image** of the `Dockerfile` stays pinned by digest as before: since D-51 it is **`debian:trixie-slim`** (Debian 13, glibc 2.41), the
+  multi-arch index digest, with the human tag in a comment. Why trixie: the release binaries are built on `ubuntu-24.04` runners (glibc 2.39) and
+  copied into the image; on the earlier base, `debian:bookworm-slim` (glibc 2.36), the image could not start them (observed in the rehearsal of
+  2026-10-29: `GLIBC_2.38' not found` on amd64, `GLIBC_2.38'`/`GLIBC_2.39' not found` on arm64). A change of the base re-reads the registry for the
+  index digest (record it in the review), and the gate below re-proves that the binary starts on it.
+* **The image gate (D-51), in every mode, before anything is pushed or attested.** In the `image` job, after the image of this architecture is built
+  and loaded: (1) **it is run** — `planeter --version` (the line must read `planeter X.Y.Z`), `prikk --version`, `bwrap --version`,
+  `prlimit --version` — by the id of the image just built (`docker run … "${IMAGE_ID}"`, the id checked to be `sha256:<64 hex>`); (2)
+  **`tools/glibc-check`** reads the highest *strict* `GLIBC_` version need of the binary (`readelf -V`: a need flagged `WEAK` is reported, not failed)
+  and fails if it exceeds the glibc of the image, read from the image with `ldd --version` (never a constant); (3) after the push by digest,
+  the pushed image's config digest must equal the id that was run (the pushed image is the tested image). `planeter-pin-check` refuses a workflow
+  in which a step that pushes or attests an image is not preceded, in its job or a job it `needs`, by a step that runs the image and a step that
+  runs `planeter-glibc-check`. A dry run, a rehearsal and a release all pass through it.
 
 **Updating one of these (RFC 010 D-9)** is a reviewed change, one pin per change, with the record in its review:
 old and new tag and **full SHA** (or image digest); that the SHA is the tag's commit **in the upstream

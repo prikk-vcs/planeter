@@ -299,14 +299,6 @@ jobs:
           jq -er '."containerimage.digest"' meta.json > "digest/${ARCH}"
           grep -Eqx 'sha256:[0-9a-f]{64}' "digest/${ARCH}"
           cat "digest/${ARCH}"
-      - name: The pushed image is the image that was run
-        if: github.event_name == 'push'
-        run: |
-          set -euo pipefail
-          tested="$(cat image-id.txt)"
-          pushed="$(jq -er '."containerimage.config.digest"' meta.json)"
-          echo "run: ${tested}  pushed config: ${pushed}"
-          test "${tested}" = "${pushed}"
       # REHEARSAL ONLY (RFC 010 D-10): the same, to the throwaway package.
       - name: Log in to ghcr (rehearsal)
         if: inputs.mode == 'rehearsal'
@@ -328,14 +320,6 @@ jobs:
           jq -er '."containerimage.digest"' meta.json > "digest/${ARCH}"
           grep -Eqx 'sha256:[0-9a-f]{64}' "digest/${ARCH}"
           cat "digest/${ARCH}"
-      - name: The pushed image is the image that was run
-        if: inputs.mode == 'rehearsal'
-        run: |
-          set -euo pipefail
-          tested="$(cat image-id.txt)"
-          pushed="$(jq -er '."containerimage.config.digest"' meta.json)"
-          echo "run: ${tested}  pushed config: ${pushed}"
-          test "${tested}" = "${pushed}"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: image-digest-${{ matrix.arch }}

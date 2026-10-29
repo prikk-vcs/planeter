@@ -47,8 +47,9 @@ red becomes an issue-register entry. This detects an advisory at the next event,
 
 ## The build chain is pinned and checked (RFC 010 D-2, D-5)
 
-`tools/floor-check` fails unless `MIN_PRIKK_VERSION`, `PRIKK_VERSION` in `release.yml` and `ARG
-PRIKK_VERSION` in the `Dockerfile` are one `X.Y.Z`. `tools/pin-check` fails on any workflow `uses:` that
+`tools/floor-check` fails unless `MIN_PRIKK_VERSION`, `PRIKK_VERSION` in `release.yml` and in `ci.yml` (the prikk the client's tests install)
+and `ARG PRIKK_VERSION` in the `Dockerfile` are one `X.Y.Z`. The base image of the `Dockerfile` is `debian:trixie-slim` by digest (D-51), and the
+release workflow runs the image and checks the binary's glibc needs against it before any push (`tools/glibc-check`). `tools/pin-check` fails on any workflow `uses:` that
 is not a 40-hex commit SHA, any `image:` or Dockerfile `FROM` without a digest, and any toolchain named by
 channel. It also fails when the `toolchain:` inputs across the workflows are not one and the same version
 (CI, the manual checkpoint and the release build with **one compiler**, `1.99.0`), and when a `runs-on` or
