@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | The architect's pre-review of the Japanese catalog (`.git-exclude/reviewed/japanese-pre-review-v1.md`, 2026-10-29; findings 1–5) found words used for two things, five words for *check*, and a few inconsistencies. They are fixed in the draft so the owner and the colleague review a consistent text. **This changes the draft only; the Japanese stays preview-only and unsigned (`JA_REVIEWED` false) — the reviewers' sign-off is untouched and still required.** |
-| Status | **Assigned** (2026-10-29). Do it **together with or after** `honest-wording-handoff-v1.md` (same files; one tree). |
+| Status | **Done, reviewed Approved (2026-10-30; commits `0add5b3`).** (Originally: **Assigned** (2026-10-29). Do it **together with or after** `honest-wording-handoff-v1.md` (same files; one tree). |
 | Basis | The pre-review note; `crates/planeter-web/src/catalog/ja.rs`; `docs/glossary.md` §5.1/§5.2; `tests/glossary_ja.rs`, `tests/retired_words.rs`; the reviewers' sheet and its addenda (`.git-exclude/review-requests/japanese-review-sheet*.md`). |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 

@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | The owner delegated this decision to the architect (D-50). Two owner-approved texts say something the product no longer means: **"Approved, awaiting signature"** (badge) and **"This change was approved on this server…"** (`explain.queued`). Nobody approves a patch that a keyless forge holds; *approved* now belongs to a reviewer's decision about a revision (part 6), and *change* belongs to a recorded unit of history. On one proposal page the same word would mean two things — the confusion the owner forbids. This handoff rewords them, and makes the closed line say "Reason: …". |
-| Status | **Assigned** (2026-10-29). |
+| Status | **Done, reviewed Approved (2026-10-30; commits `2dca975`).** (Originally: **Assigned** (2026-10-29). |
 | Basis | `crates/planeter-web/src/catalog/{en,ja}.rs` (`assurance.queued`, `explain.queued`, `proposal.closed_line`); `docs/glossary.md` (lines of the *Approved, awaiting signature* row, `explain.queued` row, and §5.1/§5.2 Japanese rows); `tests/retired_words.rs`, `tests/glossary*.rs`, `tests/plain_words.rs`; IS-47 (`queued` never means sealed); RFC 005 D-10 (the machine value `forge-approved-unsealed` stays — it is in the released API). |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 

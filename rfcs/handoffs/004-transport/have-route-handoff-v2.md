@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | **A gap found while planning the client helper.** RFC 004 D-10 says a push is "advertise (have for the target) → `prikk sync build <ref> --have` → upload". The advertisement built in part 2 carries refs, the state fingerprint and the fetches on offer — **not the have-list** (`prikk sync have <ref> --output`, the `PSYNCHV1` file that tells a sender what the receiver already holds). Without it a client cannot build an incremental artifact over HTTP; its only choices would be a full build (wasteful, and past the object bound for any real history) or a hidden out-of-band step. This part adds one read route that serves the have-list. |
-| Status | **Assigned** (2026-10-29). Must be done before the client helper (`client-helper-handoff-v2.md`). |
+| Status | **Done, reviewed Approved (2026-10-30; commits `cdd6891`, `41171c1`).** (Originally: **Assigned** (2026-10-29). Must be done before the client helper (`client-helper-handoff-v2.md`). |
 | Basis | [`../../accepted/004-transport.md`](../../accepted/004-transport.md) D-10, D-11; ledger PK-27 (`sync have` runs keyless), PK-59, PK-72/PK-74 (output sizes); part 2's advertise/fetch routes, spool, single flight, rate limits, ETag and fingerprint (`export.rs`, `transport.rs`); `CliPrikkRepo::sync_have`; the output cap table (`output_cap.rs`: `sync have` is in the 1 MiB class — **check that is right for a 20,000-patch ref**); the route registry (IS-14); `docs/propose.md` check order. |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 

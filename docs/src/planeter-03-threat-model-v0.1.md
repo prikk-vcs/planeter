@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | planeter Threat Model (security) |
-| Version | v0.5 (2026-10-27 — the inbound write and review surfaces of RFC 004/005 as built: T-15 hostile proposals, T-16 review abuse and dishonest status, T-17 repository creation from a hostile archive and key trust; INV-10, INV-11; RR-12…RR-16; C-4f for `extract`; no change to T-1…T-14; v0.4 2026-10-17 — release 0.3.0 status lines under T-2, T-6, T-7 and T-9: constant-work sign-in and the auth gate, host-gated raw content, cache directives, the bounded read and auth paths; no new threat or control id; v0.3 2026-09-24 — 0.2.0: OpenID Connect under T-2/C-2a, the trusted-proxy client-IP rule and per-client-IP throttle under RR-11, the first egress-guard caller under T-8; the two residual risks v0.2 added are renumbered RR-10/RR-11 because v0.2 reused the ids RR-6/RR-7 already held by the CI-runner and supply-chain risks; v0.2 2026-09-23 recorded implementation status through 0.1.x under T-2/T-6/T-8; v0.1 2026-09-15 was the review draft) |
+| Version | v0.6 (2026-10-30 — T-18 the client helper and a hostile server; T-11 status: no standing advisory ignore, the OIDC verifier on the aws-lc backend, a per-crate licence exception for the Mozilla root list; RR-17 (the C library in the sign-in path), RR-18 (the container image must run the binary); v0.5 2026-10-27 — the inbound write and review surfaces of RFC 004/005 as built: T-15 hostile proposals, T-16 review abuse and dishonest status, T-17 repository creation from a hostile archive and key trust; INV-10, INV-11; RR-12…RR-16; C-4f for `extract`; no change to T-1…T-14; v0.4 2026-10-17 — release 0.3.0 status lines under T-2, T-6, T-7 and T-9: constant-work sign-in and the auth gate, host-gated raw content, cache directives, the bounded read and auth paths; no new threat or control id; v0.3 2026-09-24 — 0.2.0: OpenID Connect under T-2/C-2a, the trusted-proxy client-IP rule and per-client-IP throttle under RR-11, the first egress-guard caller under T-8; the two residual risks v0.2 added are renumbered RR-10/RR-11 because v0.2 reused the ids RR-6/RR-7 already held by the CI-runner and supply-chain risks; v0.2 2026-09-23 recorded implementation status through 0.1.x under T-2/T-6/T-8; v0.1 2026-09-15 was the review draft) |
 | Date | 2026-09-24 (v0.3); 2026-09-23 (v0.2); 2026-09-15 (v0.1) |
 | Basis | planeter Requirements v0.1 (PU/NG/CAP/STD/SEC/INT/OPS/BN/UD/OQ) and External Design v0.1 (BD/AC/TX/WEB/API/AUTH/CI/REG/HOOK/PK/FL/CT/OP/GATED); **forge-commons** (the standards frame); prikk reality (2026-09-15 survey, prikk `HEAD f6cbd057`); project rules (a threat model is a first-class release deliverable) |
 | ID scheme | `A-` asset · `TB-` trust boundary · `T-` threat · `C-` control · `INV-` security invariant · `RR-` residual risk · `ASSUME-` assumption |
@@ -306,6 +306,13 @@ planeter's crates and the third-party CI actions it runs are attack and audit su
   `cargo-audit` in CI failing on a new advisory; a minimal, justified dependency set; planeter's own
   crates `forbid(unsafe_code)` outside any isolated FFI; new dependencies get architect review — the
   ecosystem's standing discipline. CI actions pinned by digest (C-5d).
+- *Status 2026-10-30 (D-50, IS-54):* **no advisory is ignored** (`deny.toml` and `audit.toml` carry `ignore = []`); the two
+  advisories of October (`tokio` `AsyncFd`, `crypto-bigint` timing) were removed by a lock update and by taking the
+  RustCrypto curve stack out of the tree: `jsonwebtoken` verifies OIDC ID tokens through **aws-lc-rs** (AWS-LC, C, built
+  from source), which also retired the standing `rsa` ignore. A test pins that production code of `planeter-auth` can never
+  sign (no `EncodingKey`, no `encode(`), so no private key is ever used by the server. The client helper adds a
+  separate dependency set (`ureq`, `rustls`, `webpki-roots`) that the server crates may not depend on (the boundary check
+  fails if they do); `webpki-roots` carries the Mozilla root list under `CDLA-Permissive-2.0`, allowed for that crate only.
 
 ### T-12 (Repudiation) — who did what
 Disputes over who pushed, merged, or changed permissions (A-AUTHZ, A-HISTORY).
@@ -444,6 +451,28 @@ maintainer public keys the creator may be tricked into trusting: a trusted key m
   the archive) and the deadline are the whole protection, and a stage count/byte budget with expiry limits what
   waiting uploads can hold.
 
+### T-18 (Spoofing / Information disclosure / DoS) — the client helper against a hostile server or network (RFC 004 D-10; v0.6)
+`planeter-client` runs on users' machines and talks to whatever server a user names. A hostile server, a hostile network
+or a malicious archive can try to read the user's token, make the program follow it somewhere else, exhaust the user's
+memory or disk, or trick the user into trusting a key (A-USER-KEYS, A-TOKEN).
+
+- **C-18a — transport is verified and never downgraded.** https only (a plain address is refused before any connection);
+  no `--insecure`; certificate failures are one plain sentence with the next step; `--cacert` *replaces* the trust
+  anchors (so a user's private authority cannot be mixed with public ones by accident); redirects are reported and
+  never followed (a server cannot bounce the bearer token elsewhere); no cookies exist.
+- **C-18b — the token is in no text.** It comes from the environment or a private file (refused if other users can read
+  it, on Unix), is sent only as a header, and is absent from every message, log and `--verbose` output (tests grep
+  every output of an end-to-end run).
+- **C-18c — bounded reads.** Downloads stream through a 64 KiB buffer to a partial file; JSON answers, error bodies and
+  uploads have fixed bounds; a body longer or shorter than its length, a slow drip and a huge error body are handled
+  with bounded memory and time.
+- **C-18d — trust is typed.** The carried maintainer keys are shown whole; the user types each one they trust; there
+  is no default "yes", a non-terminal needs `--trust-key`, and `--no-adopt` says that nothing is verified. The
+  client holds no key and signs nothing (ENF-2 scans its binary too); it drives the user's own prikk, which verifies.
+- **C-18e — a freshness check.** The client records the tips it was shown and refuses a served state that does not
+  continue them (a rollback or split view by the server), and says so; it can say *lower number* only once the
+  advertisement carries `update_seq` (planned, part 10); a server that withholds the newest state from this client alone
+  remains undetectable without a second source (RFC 004 D-8).
 
 ## 4. Security invariants (INV-…) — the non-negotiables
 
@@ -538,6 +567,13 @@ A change that breaks one of these is a security bug, not a preference. Several m
   (≥ 2× the largest legitimate output, measured: ledger PK-74), the child is killed on overflow, and overflow is a
   named, counted refusal handled by every caller (never a truncated parse, never "none"). Residual: four of the
   table's `largest` values are extrapolated.
+- **RR-17 — A C library (AWS-LC) is in the server's sign-in path (v0.6).** It verifies tokens against public keys of
+  the identity provider and nothing else (the pin test), is maintained by AWS, and replaces many small pure-Rust
+  crates; the unsafe surface moves from those crates to one C library behind generated bindings. Accepted for removing
+  a vulnerable crate by construction; revisit if a memory-safety advisory appears in `aws-lc-sys`.
+- **RR-18 — The container image has to be able to run the binary (v0.6; IS-56 until closed).** The release binaries
+  are built on glibc 2.39 runners; a base image with an older glibc cannot start them. Closed by a base on a new enough
+  glibc and a gate that runs each image and checks the binary's needs against it before anything is pushed.
 - **ASSUME-1 — The operator and host are trusted; planeter defends against network actors and malicious
   users, not a hostile operator** (TB-8).
 - **ASSUME-2 — prikk's offline `verify` is correct and is the ultimate arbiter of history integrity.**
@@ -590,6 +626,7 @@ contributing; **C-14**a/b is the primary control for **T-14** (secrets at scale)
 | T-14 / C-14* / INV-8 | C-7b, and modern secret-scanning practice |
 | T-15 / C-15* / C-4f / INV-10 | RFC 004 D-3, D-5, D-6; RFC 005 D-1, D-8, D-9; RFC 011; ledger PK-41, PK-59, PK-68, PK-69 |
 | T-16 / C-16* / INV-11 | RFC 005 D-5, D-6, D-7, D-10, D-11; RFC 003 sanitizer |
+| T-18 / C-18* | RFC 004 D-10, D-8; docs/client.md; ledger PK-33, PK-72 |
 | T-17 / C-17* | RFC 004 D-4; ledger PK-32, PK-33, PK-67, PK-72 |
 
 *End of Threat Model v0.1. Per project rules, this document is revisited every release: changes that
