@@ -9,13 +9,18 @@ fn repo_root() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../..")
 }
 
-/// A scratch repository holding the three files with the given floors.
+/// A scratch repository holding the four files with the given floors (the CI workflow declares the release workflow's).
 fn fixture(name: &str, cli: &str, release: &str, docker: &str) -> PathBuf {
+    fixture_with_ci(name, cli, release, release, docker)
+}
+
+fn fixture_with_ci(name: &str, cli: &str, release: &str, ci: &str, docker: &str) -> PathBuf {
     let root = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("floor-{name}"));
     let _ = fs::remove_dir_all(&root);
     for (rel, body) in [
         ("crates/planeter-prikk/src/cli.rs", cli),
         (".github/workflows/release.yml", release),
+        (".github/workflows/ci.yml", ci),
         ("Dockerfile", docker),
     ] {
         let p = root.join(rel);
@@ -120,4 +125,32 @@ fn a_missing_file_is_reported_and_fails() {
 fn a_bad_root_is_a_usage_error() {
     let (code, _) = run(Path::new("/definitely/not/a/directory"));
     assert_eq!(code, 2);
+}
+
+#[test]
+fn the_prikk_the_ci_installs_is_a_floor_too() {
+    // ci.yml drifting alone fails and is named (RFC 004 part 10: the client's tests run against the floor).
+    let root = fixture_with_ci(
+        "ci-drift",
+        &cli("0, 52, 0"),
+        &release("0.52.0"),
+        &release("0.53.0"),
+        &docker("0.52.0"),
+    );
+    let (code, text) = run(&root);
+    assert_eq!(code, 1, "{text}");
+    for needle in [".github/workflows/ci.yml", "0.53.0", "FAILED"] {
+        assert!(text.contains(needle), "{needle:?} missing from:\n{text}");
+    }
+    // ...and a ci.yml with no declaration is a missing floor, not a pass.
+    let root = fixture_with_ci(
+        "ci-none",
+        &cli("0, 52, 0"),
+        &release("0.52.0"),
+        "env:\n  OTHER: x\n",
+        &docker("0.52.0"),
+    );
+    let (code, text) = run(&root);
+    assert_eq!(code, 1, "{text}");
+    assert!(text.contains("no floor declaration found"), "{text}");
 }

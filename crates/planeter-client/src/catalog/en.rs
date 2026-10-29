@@ -225,6 +225,10 @@ pub static CATALOG: &[Entry] = &[
         "Your work is {size}, and this server takes at most {limit} at once. Send it in smaller pieces, or ask the person who runs the server to raise the limit.",
     ),
     msg(
+        "propose.too_many_objects",
+        "Your work has {count} new patches, and this server takes at most {limit} at once. Send it in smaller pieces, or ask the person who runs the server to raise the limit.",
+    ),
+    msg(
         "propose.title_needed",
         "A new proposal needs a title. Add --title \"…\", or add --proposal ID to extend one that exists.",
     ),
@@ -367,7 +371,15 @@ pub static CATALOG: &[Entry] = &[
     ),
     msg(
         "fetch.no_sequence",
-        "This server does not yet say how many updates a branch has had, so an older state cannot be told from a newer one by number; this program compares what each branch continues from instead.",
+        "This server does not say how many updates a branch has had (it is older than this program expects), so an older state cannot be told from a newer one by number; this program compares what each branch continues from instead.",
+    ),
+    msg(
+        "fetch.older_state",
+        "The server now shows {ref} at update {shown}, but it showed update {seen} before. A server does not go back in time; two different servers may be answering under one name. Nothing was downloaded. Tell the maintainers.",
+    ),
+    msg(
+        "fetch.same_number",
+        "The server shows {ref} at update {seq}, as it did before, but as a different state. Two different histories are being served under one name. Nothing was downloaded. Tell the maintainers.",
     ),
     // ---- prikk and local state
     msg(

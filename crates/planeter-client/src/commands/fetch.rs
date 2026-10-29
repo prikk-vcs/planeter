@@ -5,7 +5,9 @@
 use crate::Ctx;
 use crate::catalog::{Key, size as show_size, t};
 use crate::cli::FetchArgs;
-use crate::commands::{Advert, Scratch, advertise, client, parse_url, progress_line};
+use crate::commands::{
+    Advert, FreshRefusal, Scratch, advertise, client, judge_freshness, parse_url, progress_line,
+};
 use crate::exit::{Failure, PRIKK, REFUSED};
 use crate::http::{HttpError, Saved};
 use crate::prikk::Prikk;
@@ -79,7 +81,33 @@ pub fn run(ctx: &mut Ctx<'_>, args: &FetchArgs) -> Result<(), Failure> {
             .text(),
     );
     let advert: Advert = advertise(ctx, &http, &url)?;
-    ctx.say(t(ctx.lang, Key::FetchNoSequence).text());
+    // Freshness before the download (RFC 004 D-8): a number that went down, or the same number with another state, stops here.
+    let fresh = judge_freshness(&rec, &advert);
+    match &fresh.refuse {
+        Some(FreshRefusal::Older { name, seen, shown }) => {
+            return Err(Failure::new(
+                REFUSED,
+                t(ctx.lang, Key::FetchOlder)
+                    .with("ref", name)
+                    .with("shown", shown)
+                    .with("seen", seen)
+                    .text(),
+            ));
+        }
+        Some(FreshRefusal::SameNumberOtherState { name, seq }) => {
+            return Err(Failure::new(
+                REFUSED,
+                t(ctx.lang, Key::FetchSameNumber)
+                    .with("ref", name)
+                    .with("seq", seq)
+                    .text(),
+            ));
+        }
+        None => {}
+    }
+    if fresh.without_number {
+        ctx.say(t(ctx.lang, Key::FetchNoSequence).text());
+    }
 
     let scratch = Scratch::new(ctx)?;
     let archive = scratch.path().join("update.archive");
@@ -132,7 +160,7 @@ pub fn run(ctx: &mut Ctx<'_>, args: &FetchArgs) -> Result<(), Failure> {
     let known: Vec<(&String, &state::RefRecord)> = rec
         .refs
         .iter()
-        .filter(|(_, r)| r.tip_block.is_some())
+        .filter(|(n, r)| r.tip_block.is_some() && fresh.continuation.contains(*n))
         .collect();
     if !known.is_empty() {
         let trial_dir = scratch.path().join("trial");
@@ -176,14 +204,5 @@ pub fn run(ctx: &mut Ctx<'_>, args: &FetchArgs) -> Result<(), Failure> {
 
 fn land_state(rec: &mut state::Record, advert: &Advert, etag: Option<String>) {
     rec.etag = etag;
-    rec.refs.clear();
-    for r in advert.refs.iter().filter(|r| r.published) {
-        rec.refs.insert(
-            r.name.clone(),
-            state::RefRecord {
-                tip_block: r.tip_block.clone(),
-                ref_state_id: r.ref_state_id.clone(),
-            },
-        );
-    }
+    state::record_refs(rec, advert);
 }

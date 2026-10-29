@@ -4399,3 +4399,52 @@ async fn a_declared_patch_that_an_import_left_pending_is_held() {
     assert_eq!(v["declared"], true);
     assert_eq!(v["added_count"], 1, "only the patch this push added: {v}");
 }
+
+/// RFC 004 part 10 T1, T2: the advertisement says what a proposal may carry and each branch's RefState sequence.
+#[tokio::test]
+async fn the_advertisement_carries_the_propose_bounds_and_the_tips_update_seq() {
+    if skip() {
+        return;
+    }
+    let w = world("advert-limits", Opts::default());
+    let adv = get_as(
+        &w,
+        "/api/v1/repos/alice/forge/transport/advertise",
+        None,
+        &[],
+    )
+    .await
+    .json();
+    let defaults = planeter_transport::ProposeConfig::default();
+    assert_eq!(
+        adv["limits"]["max_artifact_bytes"],
+        defaults.max_artifact_bytes
+    );
+    assert_eq!(adv["limits"]["max_objects"], defaults.max_objects);
+    let main = adv["refs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["name"] == "heads/main")
+        .unwrap();
+    let seq = main["update_seq"]
+        .as_u64()
+        .expect("a branch has a sequence");
+    // A sealed commit in the forge's history moves the number: the forge here only holds what the client sealed once.
+    assert!(seq >= 1);
+    let log = prikk(
+        &w.forge,
+        &w.client.keys,
+        &[
+            "log",
+            "--format",
+            "json",
+            "--limit",
+            "1",
+            "--ref",
+            "heads/main",
+        ],
+    );
+    let log: serde_json::Value = serde_json::from_str(&log).unwrap();
+    assert_eq!(log["blocks"][0]["update_seq"], seq);
+}

@@ -174,11 +174,46 @@ impl World {
 /// What the stub says on the propose route, and what it was sent.
 type Propose = Arc<Mutex<Box<dyn FnMut(&Req) -> Reply + Send>>>;
 
+/// What a test turns while the stub is running: the tip's sequence and RefState id, and the bounds the advertisement states.
+struct Knobs {
+    seq: Mutex<Option<u64>>,
+    ref_state: Mutex<String>,
+    limits: Mutex<serde_json::Value>,
+}
+
+impl Knobs {
+    fn new() -> Arc<Knobs> {
+        Arc::new(Knobs {
+            seq: Mutex::new(Some(1)),
+            ref_state: Mutex::new("rs-1".to_owned()),
+            limits: Mutex::new(serde_json::Value::Null),
+        })
+    }
+}
+
 fn stub(
     w: &World,
     archive: Arc<Mutex<Vec<u8>>>,
     etag: Arc<Mutex<String>>,
     tip: String,
+    propose: Propose,
+) -> Server {
+    stub_knobs(
+        w,
+        archive,
+        etag,
+        Arc::new(Mutex::new(tip)),
+        Knobs::new(),
+        propose,
+    )
+}
+
+fn stub_knobs(
+    w: &World,
+    archive: Arc<Mutex<Vec<u8>>>,
+    etag: Arc<Mutex<String>>,
+    tip: Arc<Mutex<String>>,
+    knobs: Arc<Knobs>,
     propose: Propose,
 ) -> Server {
     let have = w.have();
@@ -189,17 +224,23 @@ fn stub(
             match path {
                 p if p.ends_with("/transport/advertise") => {
                     let et = etag.lock().unwrap().clone();
+                    let mut main = serde_json::json!({
+                        "name": "heads/main", "state": "published", "kind": "branch", "closed": false,
+                        "tip_block": tip.lock().unwrap().clone(), "ref_state_id": knobs.ref_state.lock().unwrap().clone(),
+                        "fetch": [
+                            {"kind": "bundle", "ref": "heads/main", "size": null, "etag": "\"b\""},
+                            {"kind": "have", "ref": "heads/main", "size": have.len(), "etag": "\"h\""}
+                        ]
+                    });
+                    // A server older than the field says no number at all.
+                    if let Some(seq) = *knobs.seq.lock().unwrap() {
+                        main["update_seq"] = serde_json::json!(seq);
+                    }
                     let adv = serde_json::json!({
                         "fingerprint": "00112233445566778899aabbccddeeff",
-                        "refs": [{
-                            "name": "heads/main", "state": "published", "kind": "branch", "closed": false,
-                            "tip_block": tip, "ref_state_id": "rs-1",
-                            "fetch": [
-                                {"kind": "bundle", "ref": "heads/main", "size": null, "etag": "\"b\""},
-                                {"kind": "have", "ref": "heads/main", "size": have.len(), "etag": "\"h\""}
-                            ]
-                        }],
+                        "refs": [main],
                         "archive": {"kind": "archive", "ref": null, "size": null, "etag": et},
+                        "limits": knobs.limits.lock().unwrap().clone(),
                     });
                     full(
                         200,
@@ -306,7 +347,7 @@ fn home_wrapper(home: &Path) -> std::ffi::OsString {
 fn setup_propose(
     name: &str,
     reply: Box<dyn FnMut(&Req) -> Reply + Send>,
-) -> (World, Server, Propose) {
+) -> (World, Server, Propose, Arc<Knobs>) {
     let w = world(name);
     let archive = Arc::new(Mutex::new(w.export(
         &w.forge,
@@ -315,14 +356,16 @@ fn setup_propose(
     )));
     let tip = w.tip(&w.forge, &w.forge_keys);
     let propose: Propose = Arc::new(Mutex::new(reply));
-    let server = stub(
+    let knobs = Knobs::new();
+    let server = stub_knobs(
         &w,
         archive,
         Arc::new(Mutex::new("\"a1\"".into())),
-        tip,
+        Arc::new(Mutex::new(tip)),
+        knobs.clone(),
         propose.clone(),
     );
-    (w, server, propose)
+    (w, server, propose, knobs)
 }
 
 fn url(s: &Server) -> String {
@@ -430,44 +473,42 @@ fn a_key_typed_whole_is_trusted_a_wrong_one_is_told_so_an_empty_line_skips_and_t
     assert!(r.out.contains("0 of 1 keys are trusted"), "{}", r.out);
 }
 
-#[test]
-fn fetch_lands_a_newer_state_as_received_copies_and_refuses_a_history_that_does_not_continue() {
-    if !have_prikk() {
-        eprintln!("skipping: needs prikk on PATH");
-        return;
-    }
-    let w = world("fetch");
+/// How many times the stub was asked for an archive (a `fetch`).
+fn archive_requests(s: &Server) -> usize {
+    s.seen()
+        .iter()
+        .filter(|r| r.path.contains("/transport/fetch"))
+        .count()
+}
+
+/// A stub that follows shared knobs, and a clone of it made by the client under test.
+struct Fetching {
+    w: World,
+    server: Server,
+    archive: Arc<Mutex<Vec<u8>>>,
+    etag: Arc<Mutex<String>>,
+    tip: Arc<Mutex<String>>,
+    knobs: Arc<Knobs>,
+    home: PathBuf,
+    state: PathBuf,
+    dest: PathBuf,
+}
+
+fn fetching(name: &str, seq: Option<u64>) -> Fetching {
+    let w = world(name);
     let archive = Arc::new(Mutex::new(w.export(&w.maintainer, &w.keys, "v1.archive")));
     let etag = Arc::new(Mutex::new("\"a1\"".to_owned()));
     let tip = Arc::new(Mutex::new(w.tip(&w.maintainer, &w.keys)));
-    let server = {
-        // The advertisement follows the shared `tip`.
-        let (a2, e2, t2) = (archive.clone(), etag.clone(), tip.clone());
-        let have = w.have();
-        Server::start(
-            "good",
-            Arc::new(move |r: &Req| {
-                let path = r.path.split('?').next().unwrap_or("");
-                if path.ends_with("/transport/advertise") {
-                    let adv = serde_json::json!({
-                        "fingerprint": "ff", "refs": [{"name": "heads/main", "state": "published", "kind": "branch", "closed": false,
-                            "tip_block": t2.lock().unwrap().clone(), "ref_state_id": "rs", "fetch": [{"kind": "have", "ref": "heads/main", "size": have.len(), "etag": "\"h\""}]}],
-                        "archive": {"kind": "archive", "ref": null, "size": null, "etag": e2.lock().unwrap().clone()}
-                    });
-                    full(200, &[], adv.to_string().as_bytes())
-                } else if path.ends_with("/transport/fetch") {
-                    let et = e2.lock().unwrap().clone();
-                    if r.header("if-none-match") == Some(et.as_str()) {
-                        full(304, &[("ETag", &et)], b"")
-                    } else {
-                        full(200, &[("ETag", &et)], &a2.lock().unwrap())
-                    }
-                } else {
-                    full(404, &[], b"{}")
-                }
-            }),
-        )
-    };
+    let knobs = Knobs::new();
+    *knobs.seq.lock().unwrap() = seq;
+    let server = stub_knobs(
+        &w,
+        archive.clone(),
+        etag.clone(),
+        tip.clone(),
+        knobs.clone(),
+        Arc::new(Mutex::new(Box::new(|_: &Req| full(500, &[], b"{}")))),
+    );
     let (home, state) = (w.dir.join("reader"), w.dir.join("state"));
     std::fs::create_dir_all(&home).unwrap();
     let dest = w.dir.join("clone");
@@ -487,17 +528,68 @@ fn fetch_lands_a_newer_state_as_received_copies_and_refuses_a_history_that_does_
         &[],
     );
     assert_eq!(r.code, 0, "{}{}", r.out, r.err);
+    Fetching {
+        w,
+        server,
+        archive,
+        etag,
+        tip,
+        knobs,
+        home,
+        state,
+        dest,
+    }
+}
+
+impl Fetching {
+    fn fetch(&self) -> Run {
+        client(
+            &["fetch"],
+            &self.dest,
+            &self.home,
+            &self.state,
+            "",
+            false,
+            &[],
+        )
+    }
+    /// The maintainer's history grows by `n` patches and the server shows it (a new archive, tip, ETag).
+    fn move_on(&self, n: usize, etag: &str) {
+        self.w.commit(n, "next");
+        *self.archive.lock().unwrap() =
+            self.w
+                .export(&self.w.maintainer, &self.w.keys, "next.archive");
+        *self.etag.lock().unwrap() = etag.into();
+        *self.tip.lock().unwrap() = self.w.tip(&self.w.maintainer, &self.w.keys);
+    }
+}
+
+#[test]
+fn fetch_lands_a_newer_state_as_received_copies_and_refuses_a_history_that_does_not_continue() {
+    if !have_prikk() {
+        eprintln!("skipping: needs prikk on PATH");
+        return;
+    }
+    let f = fetching("fetch", Some(1));
     // Nothing changed: a 304.
-    let r = client(&["fetch"], &dest, &home, &state, "", false, &[]);
+    let r = f.fetch();
     assert_eq!(r.code, 0, "{}{}", r.out, r.err);
     assert!(r.out.contains("Nothing changed on the server"), "{}", r.out);
-    // The server moves on (the maintainer's history grows): a new state, landed as received copies; the person's branches stay.
-    w.commit(2, "next");
-    *archive.lock().unwrap() = w.export(&w.maintainer, &w.keys, "v2.archive");
-    *etag.lock().unwrap() = "\"a2\"".into();
-    *tip.lock().unwrap() = w.tip(&w.maintainer, &w.keys);
-    let before = prikk(&dest, &home, &["log", "--format", "json", "--limit", "1"]);
-    let r = client(&["fetch"], &dest, &home, &state, "", false, &[]);
+    assert!(
+        !r.out.contains("how many updates"),
+        "the server states its numbers: no fallback sentence: {}",
+        r.out
+    );
+    // The server moves on (a higher number, a history that continues): landed as received copies; the person's branches stay.
+    f.move_on(2, "\"a2\"");
+    *f.knobs.seq.lock().unwrap() = Some(3);
+    *f.knobs.ref_state.lock().unwrap() = "rs-3".into();
+    let before = prikk(
+        &f.dest,
+        &f.home,
+        &["log", "--format", "json", "--limit", "1"],
+    );
+    let r = f.fetch();
     assert_eq!(r.code, 0, "{}{}", r.out, r.err);
     assert!(
         r.out.contains("Fetched the server's state")
@@ -507,22 +599,29 @@ fn fetch_lands_a_newer_state_as_received_copies_and_refuses_a_history_that_does_
         r.out
     );
     assert_eq!(
-        prikk(&dest, &home, &["log", "--format", "json", "--limit", "1"]),
+        prikk(
+            &f.dest,
+            &f.home,
+            &["log", "--format", "json", "--limit", "1"]
+        ),
         before,
         "the person's own branch did not move"
     );
-    // A server that now shows a history which does not continue from the one it showed: two histories under one name.
+    // A higher number whose history does NOT continue the recorded tip: refused after the download (a trial import), nothing lands.
     let other = world("fetch-other");
     other.commit(1, "elsewhere");
-    *archive.lock().unwrap() = other.export(&other.maintainer, &other.keys, "other.archive");
-    *etag.lock().unwrap() = "\"a3\"".into();
-    *tip.lock().unwrap() = other.tip(&other.maintainer, &other.keys);
+    *f.archive.lock().unwrap() = other.export(&other.maintainer, &other.keys, "other.archive");
+    *f.etag.lock().unwrap() = "\"a3\"".into();
+    *f.tip.lock().unwrap() = other.tip(&other.maintainer, &other.keys);
+    *f.knobs.seq.lock().unwrap() = Some(4);
+    *f.knobs.ref_state.lock().unwrap() = "rs-4".into();
     let remotes_before = prikk(
-        &dest,
-        &home,
+        &f.dest,
+        &f.home,
         &["branch", "list", "--all", "--format", "json"],
     );
-    let r = client(&["fetch"], &dest, &home, &state, "", false, &[]);
+    let asked = archive_requests(&f.server);
+    let r = f.fetch();
     assert_eq!(r.code, 1, "{}{}", r.out, r.err);
     assert!(
         r.err
@@ -532,14 +631,152 @@ fn fetch_lands_a_newer_state_as_received_copies_and_refuses_a_history_that_does_
         r.err
     );
     assert_eq!(
+        archive_requests(&f.server),
+        asked + 1,
+        "this one is only found by the download"
+    );
+    assert_eq!(
         prikk(
-            &dest,
-            &home,
+            &f.dest,
+            &f.home,
             &["branch", "list", "--all", "--format", "json"]
         ),
         remotes_before,
         "nothing of a split view reached the repository"
     );
+}
+
+#[test]
+fn a_lower_number_or_the_same_number_with_another_state_is_refused_before_anything_is_downloaded() {
+    if !have_prikk() {
+        eprintln!("skipping: needs prikk on PATH");
+        return;
+    }
+    let f = fetching("fetch-numbers", Some(5));
+    let asked = archive_requests(&f.server);
+    // A lower number: refused, and the stub saw no request for an archive.
+    *f.knobs.seq.lock().unwrap() = Some(4);
+    *f.etag.lock().unwrap() = "\"a2\"".into();
+    let r = f.fetch();
+    assert_eq!(r.code, 1, "{}{}", r.out, r.err);
+    assert!(
+        r.err.contains("at update 4, but it showed update 5 before")
+            && r.err.contains("Nothing was downloaded"),
+        "{}",
+        r.err
+    );
+    assert_eq!(archive_requests(&f.server), asked, "nothing was fetched");
+    // The same number with another RefState id: refused the same way.
+    *f.knobs.seq.lock().unwrap() = Some(5);
+    *f.knobs.ref_state.lock().unwrap() = "rs-other".into();
+    let r = f.fetch();
+    assert_eq!(r.code, 1, "{}{}", r.out, r.err);
+    assert!(
+        r.err
+            .contains("at update 5, as it did before, but as a different state"),
+        "{}",
+        r.err
+    );
+    assert_eq!(archive_requests(&f.server), asked, "nothing was fetched");
+    // The same number and the same state while something else changed (a new archive validator): it is downloaded and landed.
+    *f.knobs.ref_state.lock().unwrap() = "rs-1".into();
+    let r = f.fetch();
+    assert_eq!(r.code, 0, "{}{}", r.out, r.err);
+    assert_eq!(archive_requests(&f.server), asked + 1);
+    // The record never goes down: a lower number is still refused after that.
+    *f.knobs.seq.lock().unwrap() = Some(3);
+    assert_eq!(f.fetch().code, 1);
+}
+
+#[test]
+fn an_advertisement_without_numbers_falls_back_to_continuation_and_says_so() {
+    if !have_prikk() {
+        eprintln!("skipping: needs prikk on PATH");
+        return;
+    }
+    // An older server: no `update_seq`. Nothing was recorded from a number, and the fetch works as it did, with the sentence.
+    let f = fetching("fetch-fallback", None);
+    f.move_on(1, "\"a2\"");
+    let r = f.fetch();
+    assert_eq!(r.code, 0, "{}{}", r.out, r.err);
+    assert!(
+        r.out
+            .contains("does not say how many updates a branch has had"),
+        "{}",
+        r.out
+    );
+    // And a history that does not continue is still refused in that fallback.
+    let other = world("fetch-fallback-other");
+    other.commit(1, "elsewhere");
+    *f.archive.lock().unwrap() = other.export(&other.maintainer, &other.keys, "o.archive");
+    *f.etag.lock().unwrap() = "\"a3\"".into();
+    *f.tip.lock().unwrap() = other.tip(&other.maintainer, &other.keys);
+    let r = f.fetch();
+    assert_eq!(r.code, 1, "{}{}", r.out, r.err);
+    assert!(r.err.contains("does not continue"), "{}", r.err);
+}
+
+#[test]
+fn work_over_the_servers_stated_bounds_is_refused_before_any_upload_with_the_servers_number() {
+    if !have_prikk() {
+        eprintln!("skipping: needs prikk on PATH");
+        return;
+    }
+    let (w, server, _, knobs) = setup_propose("bounds", Box::new(|_| full(500, &[], b"{}")));
+    w.commit(2, "work");
+    let (state, tok) = (w.dir.join("state"), token_file(&w.dir));
+    let go = || {
+        client(
+            &[
+                "propose",
+                &url(&server),
+                "--title",
+                "T",
+                "--token-file",
+                tok.to_str().unwrap(),
+            ],
+            &w.maintainer,
+            &w.keys,
+            &state,
+            "",
+            false,
+            &[],
+        )
+    };
+    let posts = || {
+        server
+            .seen()
+            .iter()
+            .filter(|r| r.path.ends_with("/transport/propose"))
+            .count()
+    };
+    // A size bound smaller than the artifact.
+    *knobs.limits.lock().unwrap() =
+        serde_json::json!({"max_artifact_bytes": 100, "max_objects": 5000});
+    let r = go();
+    assert_eq!(r.code, 1, "{}{}", r.out, r.err);
+    assert!(
+        r.err.contains("this server takes at most 100 B at once"),
+        "{}",
+        r.err
+    );
+    assert_eq!(posts(), 0, "nothing was uploaded");
+    // An object bound smaller than the number of patches: refused before the build.
+    *knobs.limits.lock().unwrap() =
+        serde_json::json!({"max_artifact_bytes": 104857600, "max_objects": 1});
+    let r = go();
+    assert_eq!(r.code, 1, "{}{}", r.out, r.err);
+    assert!(
+        r.err.contains("2 new patches") && r.err.contains("at most 1 at once"),
+        "{}",
+        r.err
+    );
+    assert_eq!(posts(), 0);
+    // Within the bounds (or with none stated) the send happens.
+    *knobs.limits.lock().unwrap() =
+        serde_json::json!({"max_artifact_bytes": 104857600, "max_objects": 5000});
+    let r = go();
+    assert_eq!(posts(), 1, "{}{}", r.out, r.err);
 }
 
 fn json_error(
@@ -677,7 +914,7 @@ fn every_refusal_of_the_propose_route_is_one_reason_and_one_remedy_and_the_serve
         if status == 429 {
             headers.push(("Retry-After".into(), "17".into()));
         }
-        let (w, server, _) = setup_propose(
+        let (w, server, _, _) = setup_propose(
             &format!("refusal-{name}"),
             Box::new(move |_| Reply::Full {
                 status: st,
@@ -752,7 +989,7 @@ fn an_unfinished_send_is_only_repeated_when_asked_and_a_success_is_said_in_plain
     }
     let calls = Arc::new(Mutex::new(0u32));
     let c2 = calls.clone();
-    let (w, server, _) = setup_propose(
+    let (w, server, _, _) = setup_propose(
         "retry",
         Box::new(move |_| {
             let mut n = c2.lock().unwrap();
@@ -826,7 +1063,7 @@ fn a_redirect_from_the_propose_route_is_reported_and_not_followed_and_the_sent_b
     }
     let seen: Arc<Mutex<Vec<Req>>> = Arc::new(Mutex::new(Vec::new()));
     let s2 = seen.clone();
-    let (w, server, _) = setup_propose(
+    let (w, server, _, _) = setup_propose(
         "redirect",
         Box::new(move |r| {
             s2.lock().unwrap().push(r.clone());
@@ -901,7 +1138,7 @@ fn a_token_file_other_users_can_read_is_not_used_and_without_a_token_a_send_is_n
         eprintln!("skipping: needs prikk on PATH");
         return;
     }
-    let (w, server, _) = setup_propose("tokenfile", Box::new(|_| full(500, &[], b"{}")));
+    let (w, server, _, _) = setup_propose("tokenfile", Box::new(|_| full(500, &[], b"{}")));
     w.commit(1, "work");
     let state = w.dir.join("state");
     let open = w.dir.join("open-token");

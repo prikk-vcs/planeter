@@ -38,6 +38,14 @@ assurance, whether a declaration was kept, and a one-sentence message in the cal
 branch has changed. A pending patch is `forge-approved-unsealed` (in plain words: **accepted and held by this server, not yet signed into the history; nobody has approved it for merging** — the word *approved* is part of a machine value that is in the 0.4.0 contract and is not a review decision): **never** `sealed` (that needs a block read from `log`), and
 `queued` is never read (U-10, IS-47).
 
+## What the advertisement tells a client before it sends (RFC 004 part 10)
+
+`GET …/transport/advertise` carries, besides the refs and the offers: `limits: {max_artifact_bytes, max_objects}` — the operator's
+`PRIKK_EXCHANGE_MAX_BYTES` and `PRIKK_EXCHANGE_MAX_OBJECTS`, so that a client can refuse a too-large piece of work before it uploads (`null`
+when the artifact store is off and proposals are not taken) — and, for each branch, `update_seq`, the tip block's RefState sequence (from the same
+one-block `log` that gives `tip_block`; `null` for a tag), beside `ref_state_id`. A client pins the highest `update_seq` and RefState id it has
+seen per ref (RFC 004 D-8) and refuses a lower number, or the same number with another RefState id, before it downloads anything.
+
 ## Before you push: the have-list (RFC 004 part 8)
 
 A client builds an incremental artifact with `prikk sync build <ref> --have FILE`, where `FILE` is the **have-list** of the receiver:

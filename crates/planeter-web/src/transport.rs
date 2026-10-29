@@ -123,7 +123,16 @@ pub struct RefView {
     closed: Option<bool>,
     tip_block: Option<String>,
     ref_state_id: Option<String>,
+    /// The tip's RefState sequence (RFC 004 D-8): what a client pins to tell an older state from a newer one.
+    update_seq: Option<u64>,
     fetch: Vec<OfferView>,
+}
+
+/// What this server accepts in a proposal (the operator's `PRIKK_EXCHANGE_MAX_BYTES` and `PRIKK_EXCHANGE_MAX_OBJECTS`).
+#[derive(Serialize)]
+pub struct LimitsView {
+    max_artifact_bytes: u64,
+    max_objects: u64,
 }
 
 #[derive(Serialize)]
@@ -131,6 +140,8 @@ pub struct AdvertiseView {
     fingerprint: String,
     refs: Vec<RefView>,
     archive: OfferView,
+    /// The propose bounds, so that a client can refuse a too-large piece of work before it sends it; `null` when proposals are off.
+    limits: Option<LimitsView>,
 }
 
 fn offer_view(o: &Offer) -> OfferView {
@@ -274,6 +285,10 @@ pub(crate) async fn advertise_handler(
     let view = AdvertiseView {
         fingerprint: ad.fingerprint,
         archive: offer_view(&ad.archive),
+        limits: rt.propose.as_ref().map(|p| LimitsView {
+            max_artifact_bytes: p.config().max_artifact_bytes,
+            max_objects: p.config().max_objects,
+        }),
         refs: ad
             .refs
             .iter()
@@ -292,6 +307,7 @@ pub(crate) async fn advertise_handler(
                 closed: (r.class == RefClass::Branch).then_some(r.closed),
                 tip_block: r.tip_block.clone(),
                 ref_state_id: r.ref_state_id.clone(),
+                update_seq: r.update_seq,
                 fetch: offers.iter().map(offer_view).collect(),
             })
             .collect(),

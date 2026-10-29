@@ -5,6 +5,14 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **The advertisement says what a client needs before it sends or fetches (RFC 004 part 10).** `GET …/transport/advertise` now carries `limits`
+  (the largest artifact and the most objects a proposal may carry; `null` when proposals are off) and, per branch, `update_seq` (the tip's RefState
+  sequence). `planeter-client` uses them: work over a bound is refused before any upload with the server's number in the sentence, and a fetch
+  refuses a lower `update_seq`, or the same number with another state, before downloading anything. Nothing existing changed (two new fields).
+- **The container image can no longer be shipped dead (D-51).** The release workflow now loads the image it built, runs it (`planeter`, `prikk`,
+  `bwrap`, `prlimit`) and checks the release binary's glibc needs against the image's, in every mode, before anything is pushed or attested; a
+  new check (`tools/glibc-check`) and `planeter-pin-check` enforce it.
+
 - **`planeter-client`: clone, fetch and propose from your own computer (RFC 004 part 9).** A new program, separate from the server, for a person
   with their own prikk and their own keys. `clone` downloads a repository, checks it with your prikk and shows the maintainer keys it carries
   in full; **only the keys you type are trusted**. `fetch` lands the server's newer state as received copies and never touches your branches;

@@ -260,6 +260,20 @@ pub fn run(ctx: &mut Ctx<'_>, args: &ProposeArgs) -> Result<(), Failure> {
         return Ok(());
     }
 
+    // The server's bounds, when its advertisement states them (RFC 004 part 10): the number of patches is known before the build, the size
+    // after it; both are refused here, before anything is uploaded, with the server's own number in the sentence.
+    if let Some((_, max_objects)) = advert.limits
+        && new_patches.len() as u64 > max_objects
+    {
+        return Err(Failure::new(
+            REFUSED,
+            t(ctx.lang, Key::ProposeTooManyObjects)
+                .with("count", new_patches.len())
+                .with("limit", max_objects)
+                .text(),
+        ));
+    }
+
     ctx.say(t(ctx.lang, Key::ProposeStepBuild).text());
     let artifact = scratch.path().join("work.artifact");
     let have_arg = have_file.to_string_lossy().into_owned();
@@ -275,18 +289,14 @@ pub fn run(ctx: &mut Ctx<'_>, args: &ProposeArgs) -> Result<(), Failure> {
         .len();
     // The bound, when the server states one (the advertisement does not carry it yet: the server answers 413 before it reads a
     // byte of the body, so a too-large send costs one request).
-    if let Some(limit) = advert
-        .raw
-        .get("limits")
-        .and_then(|l| l.get("max_artifact_bytes"))
-        .and_then(|v| v.as_u64())
-        && artifact_len > limit
+    if let Some((max_bytes, _)) = advert.limits
+        && artifact_len > max_bytes
     {
         return Err(Failure::new(
             REFUSED,
             t(ctx.lang, Key::ProposeOverBound)
                 .with("size", show_size(artifact_len))
-                .with("limit", show_size(limit))
+                .with("limit", show_size(max_bytes))
                 .text(),
         ));
     }

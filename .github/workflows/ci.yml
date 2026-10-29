@@ -14,6 +14,9 @@ permissions:
 env:
   CARGO_INCREMENTAL: "0"
   CARGO_TERM_COLOR: always
+  # The prikk release the `client` job installs to run the client's commands on every system (RFC 004 part 10 T3): the floor, so that the
+  # commands are tested against the oldest prikk planeter promises to work with. `planeter-floor-check` keeps it equal to the other floors.
+  PRIKK_VERSION: "0.54.0"
 
 jobs:
   build:
@@ -145,6 +148,34 @@ jobs:
           rustup default 1.99.0
           rustc --version
           cargo --version
+
+      # prikk publishes release assets for Linux, macOS (arm64) and Windows (x86_64): the client's commands are tested with the real thing.
+      # Pinned by version, checksum-verified against the release's own `.sha256` before extraction, as the Dockerfile does.
+      - name: Install prikk (the floor, checksum verified)
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$RUNNER_OS" in
+            Linux) T=x86_64-unknown-linux-gnu; EXT=tar.gz ;;
+            macOS) T=aarch64-apple-darwin; EXT=tar.gz ;;
+            Windows) T=x86_64-pc-windows-msvc; EXT=zip ;;
+          esac
+          mkdir -p "$RUNNER_TEMP/prikk-dl" "$RUNNER_TEMP/prikk-bin"
+          cd "$RUNNER_TEMP/prikk-dl"
+          curl -fsSLO "https://github.com/prikk-vcs/prikk/releases/download/${PRIKK_VERSION}/prikk-${T}.${EXT}"
+          curl -fsSLO "https://github.com/prikk-vcs/prikk/releases/download/${PRIKK_VERSION}/prikk-${T}.${EXT}.sha256"
+          cat "prikk-${T}.${EXT}.sha256"
+          if command -v sha256sum >/dev/null 2>&1; then sha256sum -c "prikk-${T}.${EXT}.sha256"; else shasum -a 256 -c "prikk-${T}.${EXT}.sha256"; fi
+          if [ "$EXT" = zip ]; then
+            powershell -NoProfile -Command "Expand-Archive -Path 'prikk-${T}.zip' -DestinationPath '$(cygpath -w "$RUNNER_TEMP/prikk-bin")'"
+          else
+            tar -xzf "prikk-${T}.${EXT}" -C "$RUNNER_TEMP/prikk-bin"
+          fi
+          ls -l "$RUNNER_TEMP/prikk-bin"
+          echo "$RUNNER_TEMP/prikk-bin" >> "$GITHUB_PATH"
+      - name: prikk runs here
+        shell: bash
+        run: prikk --version
 
       - name: Native tools present on this runner
         shell: bash

@@ -174,6 +174,9 @@ pub struct RefInfo {
     pub closed: bool,
     pub ref_state_id: Option<String>,
     pub tip_block: Option<String>,
+    /// The tip block's `update_seq`: the ref's RefState sequence (RFC 004 D-8), read from the same one-block `log` as the tip. `None` for
+    /// a tag, and for a ref whose log could not be read.
+    pub update_seq: Option<u64>,
 }
 
 /// One thing a client can fetch.
@@ -448,21 +451,23 @@ impl ExportService {
         // The tip of a ref is shown when `log` gives it. A log that cannot be read is "no tip" (the advertisement still lists the
         // ref) — except one that **printed more than it may** (IS-55): that is not "no tip", it is a repository this server cannot
         // describe, and the advertisement fails as any unreadable one does.
-        let tip = |name: &str| -> Result<Option<String>, FetchError> {
+        let tip = |name: &str| -> Result<Option<(String, u64)>, FetchError> {
             match driver.log(Some(name), Some(1)) {
-                Ok(l) => Ok(l.blocks.first().map(|b| b.block_id.clone())),
+                Ok(l) => Ok(l.blocks.first().map(|b| (b.block_id.clone(), b.update_seq))),
                 Err(e @ PrikkError::OutputTooLarge { .. }) => Err(unavailable("a log", e)),
                 Err(_) => Ok(None),
             }
         };
         let mut refs = Vec::new();
         for b in &branches.branches {
+            let t = tip(&b.ref_name)?;
             refs.push(RefInfo {
                 name: b.ref_name.clone(),
                 class: RefClass::Branch,
                 closed: b.closed,
                 ref_state_id: Some(b.ref_state_id.clone()),
-                tip_block: tip(&b.ref_name)?,
+                tip_block: t.as_ref().map(|(id, _)| id.clone()),
+                update_seq: t.map(|(_, seq)| seq),
             });
         }
         for t in &tags.tags {
@@ -472,15 +477,18 @@ impl ExportService {
                 closed: false,
                 ref_state_id: None,
                 tip_block: Some(t.target_block_id.clone()),
+                update_seq: None,
             });
         }
         for r in &branches.received {
+            let t = tip(&r.ref_name)?;
             refs.push(RefInfo {
                 name: r.ref_name.clone(),
                 class: RefClass::Received,
                 closed: false,
                 ref_state_id: Some(r.ref_state_id.clone()),
-                tip_block: tip(&r.ref_name)?,
+                tip_block: t.as_ref().map(|(id, _)| id.clone()),
+                update_seq: t.map(|(_, seq)| seq),
             });
         }
         let listing = Listing {

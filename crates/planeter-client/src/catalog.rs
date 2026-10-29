@@ -165,6 +165,7 @@ keys! {
     ProposeBranchGone => "propose.branch_gone",
     ProposeBaseNotInHistory => "propose.base_not_in_history",
     ProposeOverBound => "propose.over_bound",
+    ProposeTooManyObjects => "propose.too_many_objects",
     ProposeTitleNeeded => "propose.title_needed",
     ProposeIncomplete => "propose.incomplete",
     ProposeIncompleteRetry => "propose.incomplete_retry",
@@ -208,6 +209,8 @@ keys! {
     FetchNotARepository => "fetch.not_a_repository",
     FetchSplitView => "fetch.split_view",
     FetchNoSequence => "fetch.no_sequence",
+    FetchOlder => "fetch.older_state",
+    FetchSameNumber => "fetch.same_number",
     // prikk and local state
     PrikkMissing => "prikk.missing",
     PrikkTooOld => "prikk.too_old",

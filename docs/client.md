@@ -54,11 +54,20 @@ neither, it stops before downloading anything and says how. A `--trust-key` the 
 put in your repository.
 
 **`fetch`** knows the server from the clone it made (the address is recorded in this program's state directory, never in the
-repository). `304` means nothing changed. **Freshness (RFC 004 D-8):** the program records, per server and repository, the tip of each
-published branch it was shown, in the state directory; on the next fetch the new archive is first landed in a throwaway repository, and
-if a recorded tip is not part of the history the server now shows for that branch, the fetch stops with the split-view sentence and
-**nothing reaches your repository**. The advertisement carries no `update_seq` yet, so an older state cannot be told from a newer one by
-number: the program says so on every fetch and compares what each branch continues from instead.
+repository). `304` means nothing changed. **Freshness (RFC 004 D-8):** the program records, per server and repository, for each published
+branch it was shown, the tip, the RefState id and the **`update_seq`** (the advertisement carries it), in the state directory; the number
+is only ever raised. On the next fetch the advertisement is compared with the record **before anything is downloaded**: a *lower*
+`update_seq`, or the *same* number with another RefState id, stops the fetch at once (the server is going back in time, or two servers
+answer under one name). A *higher* number is downloaded, landed in a throwaway repository, and the recorded tip must be part of the
+history it shows for that branch, else the fetch stops with the split-view sentence; either way **nothing reaches your repository**. The
+same number with the same state is the state already seen. A server whose advertisement has no `update_seq` (an older planeter) falls back
+to the continuation check alone, and the program says so; that sentence appears only then.
+
+**`propose` and the server's bounds.** The advertisement also says what a proposal may carry (`limits.max_artifact_bytes` and
+`limits.max_objects`, absent when the server takes no proposals). The program refuses work over either bound **before uploading anything**,
+with the server's own number in the sentence and the remedy (send smaller pieces, or ask the person who runs the server to raise the
+limit): the patch count before the build, the artifact's size after it. Against a server that states no bound it sends, and the server's
+`413` — answered before a byte of the body is read — is the check.
 
 ## The token
 
@@ -94,7 +103,10 @@ your user profile, whose access list is private by default. The token is added t
 `PLANETER_TOKEN` (the token); `HTTPS_PROXY`, `NO_PROXY` and their lower-case forms; `LC_ALL`, `LC_MESSAGES`, `LANG` (the language);
 `PLANETER_CLIENT_STATE_DIR` (where the program keeps its two small records — the tips it was shown, and which directory came from which
 server — default: the platform's usual state directory); `PLANETER_CLIENT_PRIKK` (the path of the prikk program to run instead of the one
-on `PATH`; the tests use it for a stand-in). prikk finds your keys by its own rules (your home directory); the program never reads them.
+on `PATH`). **Why it exists:** the tests run a stand-in prikk through it, and a person with prikk in an unusual place can name it. **What it
+is not:** a way to choose another version-control tool (the program speaks prikk's commands and reads prikk's reports), and not a secret —
+whatever it names runs with your own rights, exactly as the `prikk` on your `PATH` would. It is deliberately not in `--help`. prikk finds
+your keys by its own rules (your home directory); the program never reads them.
 
 ## Exit codes
 
@@ -119,8 +131,19 @@ and `go` are not needed. The runners carry them anyway; a clean checkout on a ma
 (MSVC); other targets were not tried. The binary is separate from the server's (`planeter`), and the server's crates do not depend on its
 HTTP and TLS stack (a test in `tools/boundary-check` keeps it so).
 
-**What CI runs.** The program is built, and its HTTP/TLS core, command line and messages are tested, on Linux, macOS and Windows. The three
-commands themselves are tested on **Linux** only (they need prikk and, for the end-to-end test, the server's sandbox).
+**What CI covers.** The `client` job builds the program and runs `cargo test -p planeter-client` on `ubuntu-24.04`, `macos-15` and
+`windows-2025`, after installing prikk 0.54.0 (the floor) from the project's release assets, pinned by version and checked against the release's
+own `.sha256` (prikk publishes Linux, macOS arm64 and Windows x86_64 builds). Which tests run where:
+
+| Tests | Linux | macOS | Windows |
+|---|---|---|---|
+| the HTTP/TLS core, the command line, the messages, the freshness comparison, the floor, `--version` (`http`, `cli`, `catalog`, `freshness`, `floor`, `version`) | yes | yes | yes |
+| the prikk runner against the real prikk (`prikk_runner`) | yes | yes | yes |
+| `clone`, `fetch`, `propose` against a stub server with the real prikk (`flows`), and the proxy variables (`proxy`) | yes | yes | **no** — they set up prikk's key directory with `HOME` and a `#!/bin/sh` wrapper and use POSIX file modes; prikk's key location on Windows differs, and a test must not write to a developer's real keys |
+| the real planeter server behind TLS, with the real client (`crates/planeter/tests/client_e2e.rs`, in the `build` job) | where the server's sandbox works (Linux) | no (the server is Linux only) | no |
+
+So the three commands are exercised on Linux and macOS; on Windows the program is built and its stack, command line, messages and prikk
+runner are tested.
 
 ## Not here
 

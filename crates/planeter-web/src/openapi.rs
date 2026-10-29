@@ -240,18 +240,24 @@ fn schemas() -> Value {
             "size": {"type": "integer", "minimum": 0, "nullable": true, "description": "The last known size of an export of it; null until the first export (it may be stale)."},
             "etag": {"type": "string", "description": "The `ETag` a fetch of it would return now."}
         })),
-        "AdvertisedRef": obj(&["name", "state", "kind", "closed", "tip_block", "ref_state_id", "fetch"], json!({
+        "AdvertisedRef": obj(&["name", "state", "kind", "closed", "tip_block", "ref_state_id", "update_seq", "fetch"], json!({
             "name": string_prop(),
             "state": {"type": "string", "enum": ["published", "received"]},
             "kind": {"type": "string", "enum": ["branch", "tag", "received"]},
             "closed": {"type": "boolean", "nullable": true},
             "tip_block": nullable_string(), "ref_state_id": nullable_string(),
+            "update_seq": {"type": "integer", "minimum": 0, "nullable": true, "description": "The tip's RefState sequence (RFC 004 D-8), from the tip block's `update_seq`; null for a tag. A client pins the highest it has seen per ref: a lower number, or the same number with another `ref_state_id`, is a state it must not accept."},
             "fetch": array_of("Offer")
         })),
-        "Advertisement": obj(&["fingerprint", "refs", "archive"], json!({
+        "Limits": obj(&["max_artifact_bytes", "max_objects"], json!({
+            "max_artifact_bytes": {"type": "integer", "minimum": 1, "description": "The largest artifact a proposal may carry (`PRIKK_EXCHANGE_MAX_BYTES`); a larger one is refused with 413 before its body is read."},
+            "max_objects": {"type": "integer", "minimum": 1, "description": "The most patches, and the most blobs, an artifact may declare (`PRIKK_EXCHANGE_MAX_OBJECTS`)."}
+        })),
+        "Advertisement": obj(&["fingerprint", "refs", "archive", "limits"], json!({
             "fingerprint": {"type": "string", "description": "The repository's state fingerprint."},
             "refs": array_of("AdvertisedRef"),
-            "archive": {"$ref": "#/components/schemas/Offer"}
+            "archive": {"$ref": "#/components/schemas/Offer"},
+            "limits": {"allOf": [{"$ref": "#/components/schemas/Limits"}], "nullable": true, "description": "What a proposal may carry, so that a client can refuse a too-large piece of work before sending it; null when this server takes no proposals."}
         })),
         "ProposedRevision": obj(&["id", "seq"], json!({"id": string_prop(), "seq": {"type": "integer", "minimum": 1}})),
         "ProposedClaim": obj(&["claim_id", "outcome"], json!({

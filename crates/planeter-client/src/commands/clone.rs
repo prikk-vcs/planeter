@@ -215,15 +215,7 @@ pub fn run(ctx: &mut Ctx<'_>, args: &CloneArgs) -> Result<(), Failure> {
     let mut rec = state::load(&state_dir, &url.display(), ctx.lang)?;
     rec.etag = etag;
     rec.refs.clear();
-    for r in advert.refs.iter().filter(|r| r.published) {
-        rec.refs.insert(
-            r.name.clone(),
-            state::RefRecord {
-                tip_block: r.tip_block.clone(),
-                ref_state_id: r.ref_state_id.clone(),
-            },
-        );
-    }
+    state::record_refs(&mut rec, &advert);
     state::save(&state_dir, &rec, ctx.lang)?;
 
     if args.no_adopt || trusted.is_empty() {

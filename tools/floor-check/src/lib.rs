@@ -1,20 +1,21 @@
 #![forbid(unsafe_code)]
 //! `planeter-floor-check` — the prikk-floor gate (RFC 010 D-2).
 //!
-//! planeter names its minimum prikk version in three files that must move together:
+//! planeter names its minimum prikk version in four files that must move together:
 //! `MIN_PRIKK_VERSION` in `crates/planeter-prikk/src/cli.rs`, `PRIKK_VERSION` in
-//! `.github/workflows/release.yml`, and `ARG PRIKK_VERSION` in the `Dockerfile`. This tool reads all
-//! three and reports whether they are one and the same `X.Y.Z`. It parses only the declaration lines
+//! `.github/workflows/release.yml` and in `.github/workflows/ci.yml` (the prikk the client's tests install), and
+//! `ARG PRIKK_VERSION` in the `Dockerfile`. This tool reads all four and reports whether they are one and the same `X.Y.Z`. It parses only the declaration lines
 //! (a mention in a comment or a doc line is not a floor).
 
 use std::fmt;
 use std::fs;
 use std::path::Path;
 
-/// The three files, relative to the repository root, and how each declares the floor.
-const SOURCES: [(&str, Kind); 3] = [
+/// The four files, relative to the repository root, and how each declares the floor.
+const SOURCES: [(&str, Kind); 4] = [
     ("crates/planeter-prikk/src/cli.rs", Kind::RustConst),
     (".github/workflows/release.yml", Kind::WorkflowEnv),
+    (".github/workflows/ci.yml", Kind::WorkflowEnv),
     ("Dockerfile", Kind::DockerArg),
 ];
 
@@ -60,11 +61,11 @@ impl fmt::Display for Report {
             }
         }
         if self.agrees() {
-            writeln!(f, "floor-check: OK — the three prikk floors agree")
+            writeln!(f, "floor-check: OK — the four prikk floors agree")
         } else {
             writeln!(
                 f,
-                "floor-check: FAILED — the three prikk floors must be one X.Y.Z"
+                "floor-check: FAILED — the four prikk floors must be one X.Y.Z"
             )
         }
     }

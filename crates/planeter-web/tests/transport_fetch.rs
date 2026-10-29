@@ -417,6 +417,27 @@ async fn advertise_names_the_refs_the_kinds_the_fingerprint_and_no_path() {
     assert_eq!(main["state"], "published");
     assert_eq!(main["kind"], "branch");
     assert_eq!(main["tip_block"].as_str().unwrap().len(), 64);
+    // The tip's RefState sequence (RFC 004 D-8) is what prikk's own log says of that block; a tag has none.
+    let log = Command::new("prikk")
+        .args([
+            "log",
+            "--format",
+            "json",
+            "--limit",
+            "1",
+            "--ref",
+            "heads/main",
+        ])
+        .current_dir(&fx.open_path)
+        .output()
+        .unwrap();
+    let log: serde_json::Value = serde_json::from_slice(&log.stdout).unwrap();
+    assert_eq!(main["update_seq"], log["blocks"][0]["update_seq"]);
+    assert!(main["update_seq"].as_u64().unwrap() >= 1);
+    let tag = refs.iter().find(|x| x["name"] == "tags/v1").unwrap();
+    assert!(tag["update_seq"].is_null());
+    // This fixture takes no proposals: the bounds are null.
+    assert!(j["limits"].is_null(), "{}", j["limits"]);
     assert_eq!(main["fetch"][0]["kind"], "bundle");
     assert_eq!(main["fetch"][0]["ref"], "heads/main");
     // Beside the bundle, a published ref offers its have-list (RFC 004 part 8); a received ref offers neither.
