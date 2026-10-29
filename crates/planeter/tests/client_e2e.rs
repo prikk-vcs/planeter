@@ -481,7 +481,7 @@ fn the_client_clones_fetches_and_proposes_against_a_real_server_behind_tls() {
             .replace(&key, "<the whole public key>")
             .replace(&dir.display().to_string(), "<scratch>")
             .replace(
-                &format!("{}", url.rsplit_once('/').map_or("", |(a, _)| a)),
+                url.rsplit_once('/').map_or("", |(a, _)| a),
                 "https://127.0.0.1:<port>/alice",
             );
         std::fs::write(path, text).unwrap();
