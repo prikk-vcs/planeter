@@ -22,6 +22,7 @@
   (D-38, T0); landing observed from facts (absent from `sync pending` and in a block `log` lists; one `sync pending` per repository per state);
   the list, detail, close and reviewer-download API; the pages; the retention sweep of the files of finished proposals. Japanese texts
   are drafts for the reviewers (addendum 6).
+- **The prikk 0.55 re-baseline built 2026-10-29, review pending** (`rfcs/handoffs/005-change-review/prikk-0-55-rebaseline-handoff-v2.md`): the floor stays 0.54.0; the suite on 0.55.0 drifts in one test only (the `extract` pending-parent claim, which 0.55.0 names `claim-parent-not-sealed`); the `extract` driver reads the two new ids (15 in all); the seven read verbs and `extract` re-validated on 0.55.0 (nothing tripped; one RSS figure moved by more than 5 %, downwards); `sync accept` measured on 0.55.0 against 0.54.1 in one session: about 2.6 to 3.8 times faster for patch-shaped artifacts, memory unchanged; no default changed.
 - **RFC 005 part 5b (the prikk 0.54 re-baseline and the `extract` driver) built 2026-10-25, awaiting review**
   (`rfcs/handoffs/005-change-review/prikk-0-54-rebaseline-and-extract-driver-handoff-v2.md`): the floor is 0.54.0 (IS-46 closed); `verify`
   reads the `unreached objects` line; the `extract` driver with its strict readers, its own destination and the cost rule measured on
@@ -92,7 +93,7 @@
   form is **not planned**. The owner's ruling on what M2 becomes is pending; the scoping notes are
   private working material (`.git-exclude/specs/`), not decisions.
 - **Supply chain:** `cargo deny` / `cargo audit` **green as of 2026-10-15** (IS-22 closed: `ammonia` 4.2.3, `yoke-derive` 0.8.4, lock-only). Checked at every push, release, re-baseline and RFC disposition (RFC 010 D-3).
-- **Runtime floor:** prikk ≥ 0.54.0 (`MIN_PRIKK_VERSION`, raised at the 0.54 re-baseline, 2026-10-24: the `show <block-id>` fix, PK-70, and `extract`; it was 0.52.0 since 2026-10-15 and was not bumped at 0.53.0), bubblewrap, curl for SSO. Local binary: 0.54.1.
+- **Runtime floor:** prikk ≥ 0.54.0 (`MIN_PRIKK_VERSION`, raised at the 0.54 re-baseline, 2026-10-24: the `show <block-id>` fix, PK-70, and `extract`; it was 0.52.0 since 2026-10-15 and was not bumped at 0.53.0), bubblewrap, curl for SSO. Local binary: 0.55.0 (the floor stays 0.54.0; the 0.55 re-baseline, 2026-10-29).
 - **Team:** migrating to a two-agent team (high-capability architect/reviewer + mid-capability
   implementer) under the owner's workflow (owner-directed 2026-09-24). **First assignment (owner ruling):
   the prikk 0.47.0 re-baseline** — [`../rfcs/handoffs/010-upstream-and-supply-chain-maintenance/prikk-0-47-0-rebaseline-handoff-v1.md`](../rfcs/handoffs/010-upstream-and-supply-chain-maintenance/prikk-0-47-0-rebaseline-handoff-v1.md),

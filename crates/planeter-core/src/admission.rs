@@ -56,6 +56,9 @@ pub const CONTENT_MAX_BYTES: u64 = 4 * MIB;
 ///
 /// The floor is 0.54.0; the table was re-measured on **0.54.1** (the same code, an installer fix) at the 0.54 re-baseline:
 /// the seven read verbs on the eleven fixtures of the investigation (nothing tripped its 1.5 × ceiling), and `extract` anew.
+///
+/// Re-validated on **0.55.0** (2026-10-29) with the same script: nothing tripped its ceiling and `extract`'s figures moved by at most 1 MiB; the
+/// table test requires the floor's own minor version, so this stays 0.54.1 until the floor moves.
 pub const MEASURED_ON: (u64, u64, u64) = (0, 54, 1);
 
 /// The most entries a store walk will visit before giving up (a sane store has about forty files).

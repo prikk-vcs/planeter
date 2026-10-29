@@ -5,6 +5,10 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **prikk 0.55.0 re-baseline (the floor stays 0.54.0).** Nothing in 0.55.0 is required, so the floor does not move. Re-validated on 0.55.0: the suite (one test drifts, by design: see
+  the `extract` entry below), the cost table's seven read verbs and `extract` (no ceiling tripped; memory figures moved by at most 1 MiB), and `sync accept`, which is about
+  2.6 to 3.8 times faster for artifacts of many small patches and unchanged in memory. No default (object bound, deadline, ceilings) is changed by this release.
+
 - **The `extract` driver knows prikk 0.55.0's two refusals.** `claim-parent-not-sealed` (a claim whose parent is accepted but not sealed yet; 0.54.x said
   `damaged-repository`) is its own outcome, `ClaimParentNotSealed`, with prikk's text kept verbatim; `destination-inside-repository` is a named driver bug
   (the driver never passes such a destination). The list of ids is 15; the floor stays 0.54.0, so the 0.54.x mapping stays. See `docs/extract.md`.
