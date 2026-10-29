@@ -969,6 +969,7 @@ name = "planeter-client"
 version = "0.4.0"
 dependencies = [
  "rustls",
+ "rustls-pki-types",
  "serde",
  "serde_json",
  "ureq",
