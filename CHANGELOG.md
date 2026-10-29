@@ -9,6 +9,9 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
   (the largest artifact and the most objects a proposal may carry; `null` when proposals are off) and, per branch, `update_seq` (the tip's RefState
   sequence). `planeter-client` uses them: work over a bound is refused before any upload with the server's number in the sentence, and a fetch
   refuses a lower `update_seq`, or the same number with another state, before downloading anything. Nothing existing changed (two new fields).
+- **The container image is now based on Debian 13 (trixie) and is run before it is shipped (D-51).** The image used `debian:bookworm-slim` (glibc 2.36),
+  but the release binary — built on a newer system — needs glibc 2.38 (amd64) or 2.39 (arm64) and could not start there (observed). The base is now
+  `debian:trixie-slim` (glibc 2.41), pinned by digest. Operators who run the image see no other change; bubblewrap is 0.12 and util-linux 2.41 in it.
 - **The container image can no longer be shipped dead (D-51).** The release workflow now loads the image it built, runs it (`planeter`, `prikk`,
   `bwrap`, `prlimit`) and checks the release binary's glibc needs against the image's, in every mode, before anything is pushed or attested; a
   new check (`tools/glibc-check`) and `planeter-pin-check` enforce it.
