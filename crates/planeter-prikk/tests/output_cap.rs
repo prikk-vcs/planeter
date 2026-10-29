@@ -98,7 +98,13 @@ fn a_flood_on_stdout_is_cut_the_child_is_killed_and_the_call_is_quick() {
     assert!(run.stdout.is_empty());
     assert!(took < Duration::from_secs(10), "{took:?}");
     use std::os::unix::process::ExitStatusExt;
-    assert_eq!(run.status.signal(), Some(9), "killed, not left to finish");
+    // The reader closes its end when it cuts the call and the child is killed; on a loaded host the child can notice the closed
+    // pipe first and end by SIGPIPE (seen at load 29). Either way it was stopped, not left to finish.
+    let signal = run.status.signal();
+    assert!(
+        matches!(signal, Some(9) | Some(13)),
+        "killed (SIGKILL or SIGPIPE), not left to finish: {signal:?}"
+    );
 }
 
 #[test]

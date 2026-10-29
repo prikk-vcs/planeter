@@ -2729,7 +2729,15 @@ async fn after_an_unfinished_accept_recovery_runs_by_itself_and_the_same_artifac
         );
         std::thread::sleep(Duration::from_millis(100));
     }
-    let runs = w.recoveries.recent(&repo, 5).unwrap();
+    // The flag is cleared a step before the run's own record gets its outcome: wait for the record, not only the flag.
+    let end = std::time::Instant::now() + Duration::from_secs(30);
+    let runs = loop {
+        let runs = w.recoveries.recent(&repo, 5).unwrap();
+        if runs.iter().all(|r| r.outcome.is_some()) || std::time::Instant::now() >= end {
+            break runs;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    };
     assert_eq!(runs.len(), 1);
     assert_eq!(
         (runs[0].actor.as_str(), runs[0].outcome.as_deref()),
