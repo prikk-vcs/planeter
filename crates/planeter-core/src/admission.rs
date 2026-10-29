@@ -142,10 +142,13 @@ impl ReadVerb {
             // 16 MiB × 63: 8.6; 8 MiB × 128: 8.35). 9.0 × covers the worst measured with 5 %; the ceiling (1.5 ×) is 13.5 ×.
             // The store size does not enter. 8 MiB is prikk's floor plus the pending set (5,000 pending: +4 MiB).
             ReadVerb::Extract => (0, 0, 90, 8 * MIB, COST_FLOOR),
-            // `sync have` (prikk 0.55.0, RFC 004 part 8 T0): the file is 32 bytes a patch (92 B for 1, 32,060 B for 1,000); the process
-            // peaks at VmPeak 8.3 MiB (1 patch) and 8.9 MiB (1,000 patches), resident 1.2 and 4.5 MiB, in two to five milliseconds.
-            // That is the floor class (light pool), whatever the store size: flat at the floor. The longer shapes are in the review
-            // request's table; a test holds the rule to every measured row.
+            // `sync have` (prikk 0.55.0 and 0.54.1 alike, RFC 004 part 8 T0): the file is 32 bytes a patch plus 60 (92 B for 1, 32,060 B for
+            // 1,000, 160,060 B for 5,000); VmPeak 8.4, 8.9 and 10.0 MiB at those sizes, in one to four milliseconds; the least RLIMIT_DATA
+            // under which it still runs is 1 MiB (1 and 1,000 patches) and 2 MiB (5,000); after the forge has accepted 5,000 unsealed
+            // patches (which the file does not list but the process reads) VmPeak is 10.0 to 11.6 MiB and the least RLIMIT_DATA 2 to 3.5
+            // MiB. The ceiling of 1.5 x the floor is 24 MiB: more than six times the room at the largest measured shape (5,000 sealed and
+            // 5,000 pending), and about three times at 20,000 sealed (extrapolated, labelled so in the review request). That is the floor
+            // class (light pool), whatever the store size: flat at the floor. A test holds the rule to every measured row.
             ReadVerb::SyncHave => (0, 0, 0, 0, COST_FLOOR),
         };
         CostRule {

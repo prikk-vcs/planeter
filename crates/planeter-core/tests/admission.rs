@@ -151,6 +151,25 @@ fn the_table_never_under_predicts_a_measured_case() {
         ("hist1000", ReadVerb::Refs, 2405152, 8966144),
         ("files10k", ReadVerb::Log, 7389309, 10194944),
         ("files10k", ReadVerb::Refs, 7389309, 8966144),
+        // `sync have` (RFC 004 part 8 T0, prikk 0.55.0 and 0.54.1 alike): VmPeak, the whole address space of the process, for a branch of
+        // 1, 1,000 and 5,000 sealed one-file patches (`have-route-logs/t0/results-*.jsonl`).
+        ("have1", ReadVerb::SyncHave, 2820, 8808039),
+        ("have1000", ReadVerb::SyncHave, 696981, 9332327),
+        ("have5000", ReadVerb::SyncHave, 3464477, 10485760),
+        // The same forges after they accepted 5,000 unsealed patches (the have-list does not list them, but the process reads them).
+        ("have1+pending5000", ReadVerb::SyncHave, 3484800, 10485760),
+        (
+            "have1000+pending5000",
+            ReadVerb::SyncHave,
+            4178961,
+            10590618,
+        ),
+        (
+            "have5000+pending5000",
+            ReadVerb::SyncHave,
+            6946457,
+            12163482,
+        ),
     ];
     let mut worst = (0.0_f64, "");
     let mut over = Vec::new();

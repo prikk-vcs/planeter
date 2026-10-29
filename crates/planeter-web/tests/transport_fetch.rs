@@ -28,7 +28,7 @@ use planeter_store::{
     MembershipStore, Owner, RepoId, RepositoryRecord, RepositoryStore, RevisionStore, UserId,
     Visibility,
 };
-use planeter_transport::{ExportConfig, ExportService, Metrics, Spool};
+use planeter_transport::{ExportConfig, ExportService, Kind, Metrics, Spool};
 use planeter_web::{AppState, ContentOrigin, RateLimiter, TransportRuntime, router};
 
 /// Collect a response body (the axum body is a stream; no extra crate is needed).
@@ -141,6 +141,7 @@ struct Fx {
     spool_dir: PathBuf,
     open_path: PathBuf,
     metrics: Arc<Metrics>,
+    store: Arc<InMemoryRepositoryStore>,
 }
 
 struct Opts {
@@ -150,6 +151,8 @@ struct Opts {
     principal_limit: u32,
     sandbox: planeter_prikk::Sandbox,
     transport: bool,
+    /// The read memory budget of the gate, in bytes (none: the default gate).
+    gate_budget: Option<u64>,
 }
 
 impl Default for Opts {
@@ -164,6 +167,7 @@ impl Default for Opts {
             principal_limit: 10_000,
             sandbox: planeter_prikk::Sandbox::Unconfined,
             transport: true,
+            gate_budget: None,
         }
     }
 }
@@ -282,7 +286,10 @@ fn fixture(name: &str, o: Opts) -> Fx {
     });
     let router = router(AppState {
         read,
-        gate: Arc::new(planeter_web::PrikkGate::default()),
+        gate: Arc::new(match o.gate_budget {
+            Some(b) => planeter_web::PrikkGate::default().with_budget(b),
+            None => planeter_web::PrikkGate::default(),
+        }),
         auth_gate: Arc::new(planeter_web::BlockingGate::auth_default()),
         auth,
         content_origin: ContentOrigin::new("https://raw.planeter.example"),
@@ -303,6 +310,7 @@ fn fixture(name: &str, o: Opts) -> Fx {
         spool_dir,
         open_path,
         metrics,
+        store,
     }
 }
 
@@ -2311,4 +2319,49 @@ async fn a_writer_holding_the_repository_does_not_make_a_have_list_busy() {
         String::from_utf8_lossy(&r.body)
     );
     drop(w);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_have_list_hit_is_served_without_admission_and_a_miss_is_admitted_by_its_cost() {
+    if skip() {
+        return;
+    }
+    // A budget no read fits in: every production is refused as over budget (`422 too_large`), a hit is not a production.
+    let fx = fixture(
+        "have-admission",
+        Opts {
+            gate_budget: Some(8 << 20),
+            ..Opts::default()
+        },
+    );
+    let miss = call(&fx.router, HAVE_MAIN, &[]).await;
+    assert_eq!(
+        (miss.status, miss.code().as_str()),
+        (StatusCode::UNPROCESSABLE_ENTITY, "too_large"),
+        "{}",
+        String::from_utf8_lossy(&miss.body)
+    );
+    assert!(walk(&fx.spool_dir.join("objects")).is_empty());
+    // Warm the spool outside the gate (the service itself), then ask over HTTP: a hit, served as it is.
+    let record = fx.store.get(&RepoId::new("r-open")).unwrap().unwrap();
+    fx.export
+        .artifact(&record, Kind::Have, Some("heads/main"))
+        .expect("the service produces it");
+    let hit = call(&fx.router, HAVE_MAIN, &[]).await;
+    assert_eq!(
+        hit.status,
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&hit.body)
+    );
+    assert!(hit.body.starts_with(b"PSYNCHV1"));
+    // Another ref is a miss again.
+    let other = call(
+        &fx.router,
+        "/api/v1/repos/alice/open/transport/have?ref=heads/dev",
+        &[],
+    )
+    .await;
+    assert_eq!(other.code(), "too_large");
+    assert_eq!(fx.metrics.snapshot().refusals["over_budget"], 2);
 }

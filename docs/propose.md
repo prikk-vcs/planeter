@@ -57,7 +57,7 @@ each **published branch** (`kind=have`, with the size once it is known and the `
   the spool file, so a slow client holds no lock and no process. Unlike an export it takes the **R lease** (it only reads: a writer is never
   made to wait for it, nor it for a writer) and no export slot; a hit is served as it is, a miss is admitted against the read memory budget by
   its row of the cost table (`ReadVerb::SyncHave`: flat, at the floor; the light pool).
-* **Bounds:** the file is 32 bytes a patch (92 B for one patch, 32,060 B for 1,000) and the route refuses to keep or serve more than
+* **Bounds:** the file is 32 bytes a patch plus 60 (92 B for one patch, 32,060 B for 1,000, 160,060 B for 5,000: measured; larger shapes follow the line) and the route refuses to keep or serve more than
   `HAVE_MAX_BYTES` (8 MiB, about 260,000 patches). `sync have` writes a file with `--output`, so the driver's output limit (1 MiB, the stdout
   of every fixed-shape verb) bounds only its two lines of stdout; the file is bounded by that constant and by the sandbox's data ceiling.
 * The same rate limits as the other transport reads apply. The client for this route is `planeter-client` (`docs/client.md`).
