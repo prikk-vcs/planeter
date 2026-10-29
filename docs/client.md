@@ -89,6 +89,13 @@ your user profile, whose access list is private by default. The token is added t
 | "The server at … could not be reached" | refused, unknown host, no route | check the address and your connection |
 | "The secure connection … could not be made" | any other TLS failure | run again with `--verbose` for rustls' own words |
 
+## Environment
+
+`PLANETER_TOKEN` (the token); `HTTPS_PROXY`, `NO_PROXY` and their lower-case forms; `LC_ALL`, `LC_MESSAGES`, `LANG` (the language);
+`PLANETER_CLIENT_STATE_DIR` (where the program keeps its two small records — the tips it was shown, and which directory came from which
+server — default: the platform's usual state directory); `PLANETER_CLIENT_PRIKK` (the path of the prikk program to run instead of the one
+on `PATH`; the tests use it for a stand-in). prikk finds your keys by its own rules (your home directory); the program never reads them.
+
 ## Exit codes
 
 `0` done · `1` the server refused (or a state of yours it cannot work with) · `2` the command line is wrong · `3` the network or TLS failed
@@ -111,6 +118,9 @@ by the `cc` crate: the system compiler on Linux and macOS, the MSVC build tools 
 and `go` are not needed. The runners carry them anyway; a clean checkout on a machine with only a compiler builds. Tested: Windows x86_64
 (MSVC); other targets were not tried. The binary is separate from the server's (`planeter`), and the server's crates do not depend on its
 HTTP and TLS stack (a test in `tools/boundary-check` keeps it so).
+
+**What CI runs.** The program is built, and its HTTP/TLS core, command line and messages are tested, on Linux, macOS and Windows. The three
+commands themselves are tested on **Linux** only (they need prikk and, for the end-to-end test, the server's sandbox).
 
 ## Not here
 
