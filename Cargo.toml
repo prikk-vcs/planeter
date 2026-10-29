@@ -15,6 +15,7 @@ members = [
     "tools/boundary-check",
     "tools/floor-check",
     "tools/glibc-check",
+    "tools/image-identity",
     "tools/pin-check",
 ]
 

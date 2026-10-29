@@ -299,6 +299,32 @@ jobs:
           jq -er '."containerimage.digest"' meta.json > "digest/${ARCH}"
           grep -Eqx 'sha256:[0-9a-f]{64}' "digest/${ARCH}"
           cat "digest/${ARCH}"
+      # The pushed image is the image that was run (D-51, identity): read the registry's own answer for the digest just pushed - its
+      # index, this architecture's image manifest, that manifest's config digest - and require it to be the id of the loaded image
+      # that was run and checked above. A mismatch fails the job before the digest is handed on; nothing here is tolerated.
+      - name: The pushed image is the image that was run (identity)
+        if: github.event_name == 'push'
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          IMAGE_ID="$(cat image-id.txt)"
+          printf '%s\n' "${IMAGE_ID}" | grep -Eqx 'sha256:[0-9a-f]{64}'
+          ref="ghcr.io/prikk-vcs/planeter"
+          pushed="$(cat "digest/${ARCH}")"
+          docker buildx imagetools inspect --raw "${ref}@${pushed}" > pushed-index.json
+          platform="$(cargo run --locked --release -q -p planeter-image-identity -- platform pushed-index.json "${ARCH}")"
+          docker buildx imagetools inspect --raw "${ref}@${platform}" > pushed-manifest.json
+          config="$(cargo run --locked --release -q -p planeter-image-identity -- config pushed-manifest.json)"
+          echo "run:    ${IMAGE_ID}"
+          echo "pushed: ${config} (manifest ${platform} in index ${pushed})"
+          if ! cargo run --locked --release -q -p planeter-image-identity -- same "${IMAGE_ID}" "${config}"; then
+            echo "--- the loaded image ---"
+            docker image inspect "${IMAGE_ID}" --format 'created={{.Created}} layers={{json .RootFS.Layers}}' || true
+            echo "--- the pushed image's configuration ---"
+            docker buildx imagetools inspect --format '{{json .Image}}' "${ref}@${platform}" || true
+            exit 1
+          fi
       # REHEARSAL ONLY (RFC 010 D-10): the same, to the throwaway package.
       - name: Log in to ghcr (rehearsal)
         if: inputs.mode == 'rehearsal'
@@ -320,6 +346,32 @@ jobs:
           jq -er '."containerimage.digest"' meta.json > "digest/${ARCH}"
           grep -Eqx 'sha256:[0-9a-f]{64}' "digest/${ARCH}"
           cat "digest/${ARCH}"
+      # The pushed image is the image that was run (D-51, identity): read the registry's own answer for the digest just pushed - its
+      # index, this architecture's image manifest, that manifest's config digest - and require it to be the id of the loaded image
+      # that was run and checked above. A mismatch fails the job before the digest is handed on; nothing here is tolerated.
+      - name: The pushed image is the image that was run (identity, rehearsal)
+        if: inputs.mode == 'rehearsal'
+        env:
+          ARCH: ${{ matrix.arch }}
+        run: |
+          set -euo pipefail
+          IMAGE_ID="$(cat image-id.txt)"
+          printf '%s\n' "${IMAGE_ID}" | grep -Eqx 'sha256:[0-9a-f]{64}'
+          ref="ghcr.io/prikk-vcs/planeter-rehearsal"
+          pushed="$(cat "digest/${ARCH}")"
+          docker buildx imagetools inspect --raw "${ref}@${pushed}" > pushed-index.json
+          platform="$(cargo run --locked --release -q -p planeter-image-identity -- platform pushed-index.json "${ARCH}")"
+          docker buildx imagetools inspect --raw "${ref}@${platform}" > pushed-manifest.json
+          config="$(cargo run --locked --release -q -p planeter-image-identity -- config pushed-manifest.json)"
+          echo "run:    ${IMAGE_ID}"
+          echo "pushed: ${config} (manifest ${platform} in index ${pushed})"
+          if ! cargo run --locked --release -q -p planeter-image-identity -- same "${IMAGE_ID}" "${config}"; then
+            echo "--- the loaded image ---"
+            docker image inspect "${IMAGE_ID}" --format 'created={{.Created}} layers={{json .RootFS.Layers}}' || true
+            echo "--- the pushed image's configuration ---"
+            docker buildx imagetools inspect --format '{{json .Image}}' "${ref}@${platform}" || true
+            exit 1
+          fi
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: image-digest-${{ matrix.arch }}

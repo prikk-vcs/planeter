@@ -881,3 +881,156 @@ fn a_docker_run_of_anything_but_a_digest_or_the_image_just_built_still_fails() {
         &["`docker run` of an image not referenced by @sha256"],
     );
 }
+
+// ---- D-51 identity: the pushed image is the image that was run ----
+
+const IDENTITY_REAL: &str = r#"      - name: Identity
+        if: github.event_name == 'push'
+        run: |
+          IMAGE_ID="$(cat image-id.txt)"
+          ref="ghcr.io/prikk-vcs/planeter"
+          cargo run --locked --release -q -p planeter-image-identity -- same "${IMAGE_ID}" "${config}"
+"#;
+const IDENTITY_REHEARSAL: &str = r#"      - name: Identity (rehearsal)
+        if: inputs.mode == 'rehearsal'
+        run: |
+          IMAGE_ID="$(cat image-id.txt)"
+          ref="ghcr.io/prikk-vcs/planeter-rehearsal"
+          cargo run --locked --release -q -p planeter-image-identity -- same "${IMAGE_ID}" "${config}"
+"#;
+
+/// A job that pushes by digest, once for a release and once for a rehearsal, then uploads the digest.
+fn digest_shaped(
+    identity_real: &str,
+    identity_rehearsal: &str,
+    upload_before_rehearsal_identity: bool,
+) -> String {
+    let upload = format!(
+        "      - uses: actions/upload-artifact@{SHA} # v7\n        with:\n          name: digest\n          path: digest/*\n"
+    );
+    let (early, late) = if upload_before_rehearsal_identity {
+        (upload.as_str(), "")
+    } else {
+        ("", upload.as_str())
+    };
+    format!(
+        r#"name: r
+on:
+  push:
+    tags: ["[0-9]+.[0-9]+.[0-9]+"]
+  workflow_dispatch:
+    inputs:
+      mode:
+        type: choice
+        options: [dry-run, rehearsal]
+jobs:
+  image:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: BuildKit builder
+        run: docker buildx create --name b --driver docker-container --driver-opt image=moby/buildkit@{DIGEST} --use
+{GATE}      - name: Log in to ghcr
+        if: github.event_name == 'push'
+        env:
+          GH_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
+        run: printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Build and push by digest
+        if: github.event_name == 'push'
+        run: |
+          docker buildx build --output "type=image,name=ghcr.io/prikk-vcs/planeter,push-by-digest=true,name-canonical=true,push=true" --metadata-file meta.json .
+{identity_real}      - name: Log in to ghcr (rehearsal)
+        if: inputs.mode == 'rehearsal'
+        env:
+          GH_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
+        run: printf '%s' "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+      - name: Build and push by digest (rehearsal)
+        if: inputs.mode == 'rehearsal'
+        run: |
+          docker buildx build --output "type=image,name=ghcr.io/prikk-vcs/planeter-rehearsal,push-by-digest=true,name-canonical=true,push=true" --metadata-file meta.json .
+{early}{identity_rehearsal}{late}"#
+    )
+}
+
+#[test]
+fn a_push_by_digest_followed_by_the_identity_check_passes() {
+    let (code, text) = run(&fixture(
+        "identity-ok",
+        &[(
+            ".github/workflows/release.yml",
+            &digest_shaped(IDENTITY_REAL, IDENTITY_REHEARSAL, false),
+        )],
+    ));
+    assert_eq!(code, 0, "{text}");
+}
+
+#[test]
+fn a_push_by_digest_without_the_identity_check_fails_for_each_push() {
+    expect_fail(
+        "identity-none",
+        &[(
+            ".github/workflows/release.yml",
+            &digest_shaped("", "", false),
+        )],
+        &["job `image` pushes an image by digest without a step after it"],
+    );
+    // Only the rehearsal is checked: the release push is a finding of its own (and the rehearsal one is not).
+    let (code, text) = run(&fixture(
+        "identity-real-missing",
+        &[(
+            ".github/workflows/release.yml",
+            &digest_shaped("", IDENTITY_REHEARSAL, false),
+        )],
+    ));
+    assert_eq!(code, 1, "{text}");
+    assert_eq!(
+        text.matches("pushes an image by digest without a step after it")
+            .count(),
+        1,
+        "{text}"
+    );
+    let (code, text) = run(&fixture(
+        "identity-rehearsal-missing",
+        &[(
+            ".github/workflows/release.yml",
+            &digest_shaped(IDENTITY_REAL, "", false),
+        )],
+    ));
+    assert_eq!(code, 1, "{text}");
+    assert_eq!(
+        text.matches("pushes an image by digest without a step after it")
+            .count(),
+        1,
+        "{text}"
+    );
+}
+
+#[test]
+fn the_identity_check_must_come_before_the_digest_is_handed_on() {
+    // The check after the upload of the digest is too late.
+    expect_fail(
+        "identity-after-upload",
+        &[(
+            ".github/workflows/release.yml",
+            &digest_shaped(IDENTITY_REAL, IDENTITY_REHEARSAL, true),
+        )],
+        &["pushes an image by digest without a step after it"],
+    );
+}
+
+#[test]
+fn a_step_that_only_names_the_tool_is_not_the_check() {
+    // `platform` and `config` read the registry but compare nothing: only `same` is the comparison.
+    let reads_only = IDENTITY_REAL.replace(
+        " same \"${IMAGE_ID}\" \"${config}\"",
+        " platform index.json amd64",
+    );
+    assert_ne!(reads_only, IDENTITY_REAL);
+    expect_fail(
+        "identity-reads-only",
+        &[(
+            ".github/workflows/release.yml",
+            &digest_shaped(&reads_only, IDENTITY_REHEARSAL, false),
+        )],
+        &["pushes an image by digest without a step after it"],
+    );
+}

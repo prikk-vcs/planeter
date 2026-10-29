@@ -38,7 +38,10 @@
 //!   `needs`, by a step that **runs the image the job built** (its own entrypoint) (`docker run … "${IMAGE_ID}"`, the id read from the
 //!   build's `--iidfile` and checked to be `sha256:<64 hex>` in the same step) and by a step that runs
 //!   `planeter-glibc-check`. A `docker run` of that locally built image id is the one `docker run` that needs no
-//!   `@sha256:` in its line.
+//!   `@sha256:` in its line;
+//! - a pushed image that was not checked to be the image that was run (D-51, identity): in a job that pushes an image **by digest**
+//!   (`push-by-digest` to `ghcr.io`), a step that runs `planeter-image-identity … same` must come after each such push and before the
+//!   next push or the upload of the digest (`actions/upload-artifact`), so the digest is not handed on unchecked.
 //!
 //! It has no allow-list. It reads text only, so it understands the shapes this repository uses, and
 //! says so: `cargo install` of tools is deliberately current and is out of scope.
@@ -128,6 +131,7 @@ pub fn check(root: &Path) -> io::Result<Report> {
             let mut hits = scan_workflow(&text);
             hits.extend(scan_release_paths(&text));
             hits.extend(scan_image_gate(&text));
+            hits.extend(scan_image_identity(&text));
             hits
         } else if is_docker {
             scan_dockerfile(&text)
@@ -894,6 +898,48 @@ fn scan_image_gate(text: &str) -> Hits {
                     job.id
                 ),
             ));
+        }
+    }
+    hits
+}
+
+/// A step that pushes an image to the registry by digest (the way the matrix jobs hand a digest on).
+fn pushes_by_digest(step: &Step) -> bool {
+    step.text.contains("ghcr.io") && step.text.contains("push-by-digest") && pushes(&step.text)
+}
+
+fn uploads_an_artifact(step: &Step) -> bool {
+    step.text.contains("actions/upload-artifact")
+}
+
+fn runs_the_identity_check(step: &Step) -> bool {
+    step.text
+        .lines()
+        .any(|l| l.contains("planeter-image-identity") && l.split_whitespace().any(|w| w == "same"))
+}
+
+/// D-51 (identity): after every push by digest, and before the next push or the upload of the digest, the registry's answer is
+/// compared with the image that was run.
+fn scan_image_identity(text: &str) -> Hits {
+    let mut hits = Hits::new();
+    for job in jobs_of(text) {
+        for (i, step) in job.steps.iter().enumerate() {
+            if !pushes_by_digest(step) {
+                continue;
+            }
+            let end = job.steps[i + 1..]
+                .iter()
+                .position(|s| pushes_by_digest(s) || uploads_an_artifact(s))
+                .map_or(job.steps.len(), |k| i + 1 + k);
+            if !job.steps[i + 1..end].iter().any(runs_the_identity_check) {
+                hits.push((
+                    step.line,
+                    format!(
+                        "job `{}` pushes an image by digest without a step after it, before the next push or the upload of the digest, that runs `planeter-image-identity … same` (D-51: the pushed image must be the image that was run)",
+                        job.id
+                    ),
+                ));
+            }
         }
     }
     hits

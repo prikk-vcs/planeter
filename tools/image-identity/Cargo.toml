@@ -1,0 +1,12 @@
+[package]
+name = "planeter-image-identity"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "The image gate's identity check (D-51): the image a release job pushed is the image it ran. Reads a registry's index and manifest; std-only; not a product crate."
+publish = false
+
+[dependencies]
