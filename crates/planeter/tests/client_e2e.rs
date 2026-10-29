@@ -293,9 +293,13 @@ fn the_client_clones_fetches_and_proposes_against_a_real_server_behind_tls() {
             stdout: String::from_utf8_lossy(&out.stdout).into_owned(),
             stderr: String::from_utf8_lossy(&out.stderr).into_owned(),
         };
-        all_output
-            .borrow_mut()
-            .push_str(&format!("{args:?}\n{}\n{}\n", o.stdout, o.stderr));
+        all_output.borrow_mut().push_str(&format!(
+            "$ planeter-client {} …\n[exit {}]\n{}{}\n",
+            args.join(" "),
+            o.code.map_or("?".to_owned(), |c| c.to_string()),
+            o.stdout,
+            o.stderr
+        ));
         o
     };
     let reader_home = dir.join("reader-keys");
@@ -470,4 +474,16 @@ fn the_client_clones_fetches_and_proposes_against_a_real_server_behind_tls() {
         !all_output.borrow().contains("tok-alice"),
         "the token was printed"
     );
+    // The transcript of the flows, for the review request: the maintainer's public key is elided, and so is the token (which is in none).
+    if let Ok(path) = std::env::var("CLIENT_E2E_TRANSCRIPT") {
+        let text = all_output
+            .borrow()
+            .replace(&key, "<the whole public key>")
+            .replace(&dir.display().to_string(), "<scratch>")
+            .replace(
+                &format!("{}", url.rsplit_once('/').map_or("", |(a, _)| a)),
+                "https://127.0.0.1:<port>/alice",
+            );
+        std::fs::write(path, text).unwrap();
+    }
 }

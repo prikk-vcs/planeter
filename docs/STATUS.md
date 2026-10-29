@@ -8,6 +8,10 @@
 
 ## Where we are
 
+- **RFC 004 parts 8 and 9, the honest wording and the Japanese consistency fixes built 2026-10-29, awaiting review** (`rfcs/handoffs/004-transport/have-route-handoff-v2.md`,
+  `client-helper-handoff-v2.md`; `rfcs/handoffs/012-web-ui-foundations/honest-wording-handoff-v1.md`, `japanese-consistency-handoff-v1.md`): the have-list route
+  (`GET …/transport/have`); the `planeter-client` crate (clone, fetch, propose; `docs/client.md`), built in CI on Linux, macOS and Windows; the badge
+  "Held here, not signed in"; the Japanese draft's one-word-per-meaning pass.
 - **IS-54 closed by the `aws_lc_rs` switch (D-50), built 2026-10-29, awaiting review** (`rfcs/handoffs/010-upstream-and-supply-chain-maintenance/advisory-aws-lc-switch-handoff-v1.md`):
   `jsonwebtoken` 11.1.0 on its `aws_lc_rs` backend; `rsa`, `crypto-bigint` and the RustCrypto curve crates leave the tree (lock 214 → 189), the
   `RUSTSEC-2023-0071` ignore is retired, and `cargo deny` and `cargo audit` exit 0 with **no ignore**. The OIDC verifier's 30-row algorithm matrix and the

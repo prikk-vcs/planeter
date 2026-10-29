@@ -573,3 +573,23 @@ fn an_upload_has_an_exact_content_length_and_is_streamed_from_the_file() {
     assert_eq!(&seen[0].body[prefix.len()..], &body(123_456)[..]);
     assert_eq!(seen[0].header("authorization"), Some("Bearer t0ken"));
 }
+
+#[test]
+fn cookies_do_not_exist_a_set_cookie_is_never_sent_back() {
+    let server = Server::start(
+        "good",
+        Arc::new(|_: &Req| {
+            full(
+                200,
+                &[("Set-Cookie", "session=abc; Path=/; HttpOnly")],
+                br#"{"ok":true}"#,
+            )
+        }),
+    );
+    let h = http(&server, true, None, &quick());
+    h.get_json(&server.url("/one")).unwrap();
+    h.get_json(&server.url("/two")).unwrap();
+    for r in server.seen() {
+        assert!(r.header("cookie").is_none(), "a cookie was sent: {r:?}");
+    }
+}

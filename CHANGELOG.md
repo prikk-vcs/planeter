@@ -5,6 +5,25 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **`planeter-client`: clone, fetch and propose from your own computer (RFC 004 part 9).** A new program, separate from the server, for a person
+  with their own prikk and their own keys. `clone` downloads a repository, checks it with your prikk and shows the maintainer keys it carries
+  in full; **only the keys you type are trusted**. `fetch` lands the server's newer state as received copies and never touches your branches;
+  it refuses a server that shows two histories under one name. `propose` builds your work against what the server already holds and sends it as
+  a proposal, then says in plain words that it is held for review and that no branch has changed. It holds no key and signs nothing, speaks
+  https only (no `--insecure`, no redirects followed), takes its token from `PLANETER_TOKEN` or a private file (never the command line), and
+  says each TLS failure as one sentence with the next step. Linux, macOS and Windows; English, with a Japanese draft. See `docs/client.md`.
+  The server gains one read route for it, below.
+- **The have-list over HTTP (RFC 004 part 8).** `GET …/transport/have?ref=heads/NAME` serves what the repository already holds of a branch (the
+  `PSYNCHV1` file of `prikk sync have`, 32 bytes a patch) so that a client can build an incremental push; the advertisement offers it for each
+  published branch. It is made once per state of the repository, under a read lease, checked and served from the spool; a tag and a received
+  ref have none (`no_have_list`). See `docs/propose.md`.
+- **Two badge and line texts no longer say "approved" (D-50).** The badge on a patch the server holds but a maintainer has not signed in reads
+  **Held here, not signed in** (it said "Approved, awaiting signature"), its explanation says the patch is held on this server, and the line
+  under a closed proposal reads **Reason: …**. Nobody approves a patch a keyless server holds; "approved" now belongs to a reviewer's decision.
+  Nothing in the API changed (`forge-approved-unsealed` is still the machine value).
+- **The Japanese draft is consistent with itself (D-50).** `管理者` now means only the administrator of a repository (the person who runs the
+  server is `このサーバーを運用している人`), one word per kind of check, `ドキュメント` throughout. Still a draft; still not shipped.
+
 - **OIDC sign-in verifies ID tokens with `aws-lc-rs` instead of the RustCrypto crates (D-50).** No behaviour changes: the same 30 cases (six algorithms valid, tampered in
   payload and in signature; a key of the wrong kind; HS*, PS* and `none` refused; wrong audience; expired) give the same answers on both backends. The two advisories that
   came with the RustCrypto backend (RUSTSEC-2023-0071 `rsa`, RUSTSEC-2026-0387 `crypto-bigint`) are gone because the crates are, not because they are ignored:
