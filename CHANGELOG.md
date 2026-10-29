@@ -5,6 +5,12 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **OIDC sign-in verifies ID tokens with `aws-lc-rs` instead of the RustCrypto crates (D-50).** No behaviour changes: the same 30 cases (six algorithms valid, tampered in
+  payload and in signature; a key of the wrong kind; HS*, PS* and `none` refused; wrong audience; expired) give the same answers on both backends. The two advisories that
+  came with the RustCrypto backend (RUSTSEC-2023-0071 `rsa`, RUSTSEC-2026-0387 `crypto-bigint`) are gone because the crates are, not because they are ignored:
+  `cargo deny` and `cargo audit` pass with no ignore at all. The price is a C library (`aws-lc-sys`) in the server binary, about 2 MB more, and a longer clean build.
+  Building from source needs `cmake` and a C compiler on the build host (Linux x86_64 and aarch64 were measured).
+
 - **prikk 0.55.0 re-baseline (the floor stays 0.54.0).** Nothing in 0.55.0 is required, so the floor does not move. Re-validated on 0.55.0: the suite (one test drifts, by design: see
   the `extract` entry below), the cost table's seven read verbs and `extract` (no ceiling tripped; memory figures moved by at most 1 MiB), and `sync accept`, which is about
   2.6 to 3.8 times faster for artifacts of many small patches and unchanged in memory. No default (object bound, deadline, ceilings) is changed by this release.

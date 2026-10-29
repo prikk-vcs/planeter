@@ -198,7 +198,8 @@ container does). `planeter-runner` stays unpublished until M4.
      `OidcVerifier` seam stays. 0.1.0 auth = local passwords + scoped tokens + ed25519 SSH keys. **Landed
      2026-09-24 (unreleased):** OIDC on `jsonwebtoken`'s RustCrypto backend with a scoped, justified
      ignore of RUSTSEC-2023-0071 (public-key verification only), provider traffic via a confined `curl`
-     through the egress guard — the owner-ruled shape. Released in 0.2.0.
+     through the egress guard — the owner-ruled shape. Released in 0.2.0. **Backend changed 2026-10-29
+     (D-50, by the owner's delegation): `jsonwebtoken` on `aws_lc_rs`; the `rsa` and `crypto-bigint` crates and the ignore are gone.**
   2. **A persistent store** — **done 2026-09-23** (`94e922d`): SQLite (`rusqlite`, bundled; +16 crates,
      deny/audit clean) behind all four traits — `RepositoryStore` / `MembershipStore` (planeter-store)
      and `AccountStore` / `CredentialStore` (planeter-auth) — over one shared `SqliteDb` (WAL, idempotent
