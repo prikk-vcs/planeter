@@ -67,6 +67,7 @@ case "$1" in
   sync) [ -e "$D/flood-pending" ] && { head -c 20000000 /dev/zero | tr '\0' ' '; exit 0; }
         cat "$D/pending" ;;
   branch) cat "$D/branches.json" ;;
+  tag) echo '{"schema_version":"tag-list-v1","tags":[]}' ;;
   log) [ -e "$D/flood-log" ] && { head -c 200000000 /dev/zero | tr '\0' ' '; exit 0; }
        ref=""; while [ $# -gt 0 ]; do [ "$1" = "--ref" ] && ref="$2"; shift; done; cat "$D/log-$(echo "$ref" | tr / _).json" ;;
   *) echo "stand-in: unexpected $*" >&2; exit 2 ;;
@@ -912,7 +913,8 @@ fn a_call_over_its_output_limit_is_unknown_never_none() {
         "the periodic log line carries the counter"
     );
     // The ref advertisement is the same: a log that cannot be read at all is "no tip" (the ref is still listed); one that printed
-    // more than it may is a repository the server cannot describe.
+    // more than it may is a repository the server cannot describe. (The stand-in answers `branch` and `tag`, so the refusal below
+    // can only come from the tip's `log -n 1`.)
     assert!(
         matches!(
             f.export.advertise(&f.repo),
@@ -921,6 +923,11 @@ fn a_call_over_its_output_limit_is_unknown_never_none() {
         "an advertisement does not list refs without tips it could not read"
     );
     std::fs::remove_file(f.standin().join("flood-log")).unwrap();
+    f.move_state();
+    assert!(
+        f.export.advertise(&f.repo).is_ok(),
+        "control: with a log that answers, the same repository is advertised"
+    );
 
     // `sync pending` that prints 20 MB (limit 16 MiB): the same.
     f.move_state();
