@@ -90,7 +90,10 @@ fn stderr_has_its_own_limit_exactly_and_one_more() {
 
 #[test]
 fn a_flood_on_stdout_is_cut_the_child_is_killed_and_the_call_is_quick() {
-    let (run, took) = sh("yes", OutputLimit::new(4 * MIB, 64 * KIB));
+    let (run, took) = sh(
+        "exec head -c 268435456 /dev/zero",
+        OutputLimit::new(4 * MIB, 64 * KIB),
+    );
     assert_eq!(run.exceeded.map(|e| e.stream), Some(OutputStream::Stdout));
     assert!(run.stdout.is_empty());
     assert!(took < Duration::from_secs(10), "{took:?}");
@@ -101,7 +104,7 @@ fn a_flood_on_stdout_is_cut_the_child_is_killed_and_the_call_is_quick() {
 #[test]
 fn a_flood_on_stderr_is_cut_and_its_tail_is_kept_for_the_log() {
     let (run, took) = sh(
-        "echo START >&2; yes zzzz >&2",
+        "echo START >&2; yes zzzz | head -c 268435456 >&2",
         OutputLimit::new(MIB, 64 * KIB),
     );
     let over = run.exceeded.expect("a stderr flood");
@@ -123,7 +126,7 @@ fn a_flood_on_stderr_is_cut_and_its_tail_is_kept_for_the_log() {
 #[test]
 fn a_child_that_ignores_the_closing_of_the_pipe_and_the_term_signal_is_still_killed() {
     let (run, took) = sh(
-        "trap '' PIPE TERM INT HUP; yes",
+        "trap '' PIPE TERM INT HUP; timeout 30 head -c 268435456 /dev/zero",
         OutputLimit::new(MIB, 64 * KIB),
     );
     assert!(run.exceeded.is_some());
@@ -133,7 +136,10 @@ fn a_child_that_ignores_the_closing_of_the_pipe_and_the_term_signal_is_still_kil
 #[test]
 fn a_grandchild_that_keeps_the_pipes_open_cannot_hold_the_call() {
     // The shell is killed; a `sleep` it started keeps both pipes. The call must still return at once.
-    let (run, took) = sh("(sleep 20 &) ; yes", OutputLimit::new(MIB, 64 * KIB));
+    let (run, took) = sh(
+        "(sleep 20 &) ; timeout 30 head -c 268435456 /dev/zero",
+        OutputLimit::new(MIB, 64 * KIB),
+    );
     assert!(run.exceeded.is_some());
     assert!(took < Duration::from_secs(8), "{took:?}");
 }
@@ -192,9 +198,9 @@ fn a_call_in_the_real_sandbox_that_floods_is_killed_and_leaves_no_process() {
     let t = Instant::now();
     let run = sb
         .run_capped(
-            OsStr::new("/usr/bin/yes"),
+            OsStr::new("/usr/bin/head"),
             &dir,
-            &[],
+            &["-c", "268435456", "/dev/zero"],
             CallLimits::NONE,
             OutputLimit::new(MIB, 64 * KIB),
         )

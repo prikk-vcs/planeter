@@ -30,8 +30,11 @@ fn a_binary_that_prints_without_end_is_unreadable_and_a_normal_one_is_read() {
         std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
         p
     };
-    let endless = write("endless", "#!/bin/sh\nexec yes 'prikk 0.54.1'\n");
-    let on_stderr = write("on-stderr", "#!/bin/sh\nexec yes 'x' >&2\n");
+    let endless = write(
+        "endless",
+        "#!/bin/sh\nyes 'prikk 0.54.1' | head -c 268435456\n",
+    );
+    let on_stderr = write("on-stderr", "#!/bin/sh\nyes 'x' | head -c 268435456 >&2\n");
     let normal = write("normal", "#!/bin/sh\necho 'prikk 0.54.1'\n");
     // Let the files settle (a parallel fork can hold one open for writing for a moment: ETXTBSY).
     std::thread::sleep(Duration::from_millis(50));
