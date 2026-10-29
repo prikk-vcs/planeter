@@ -8,6 +8,8 @@
 # if a forge-signer symbol is present. It passes trivially today (no seal code exists) and stays as the
 # structural guard that keeps INV-2 true as write code arrives.
 #
+# The client helper (`planeter-client`, RFC 004 part 9) holds no key and signs nothing either: its binary is scanned too.
+#
 # The reserved marker: any forge-seal signer MUST name its entry point so its symbol contains the string
 # below (e.g. `forge_seal_sign_history`), so this check can find it if it ever ships in a default build.
 set -euo pipefail
@@ -28,6 +30,7 @@ fi
 shopt -s nullglob
 artifacts=(
   target/release/planeter
+  target/release/planeter-client
   target/release/deps/planeter_core-*.rlib
   target/release/deps/libplaneter_core-*.rlib
 )
