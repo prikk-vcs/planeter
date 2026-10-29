@@ -86,6 +86,9 @@ pub enum ReadVerb {
     /// cost is a multiple of the configured extraction byte bound ([`planeter_prikk::extract::DEFAULT_MAX_BYTES`]), because the
     /// largest file of a point is not known before the call and `--plan-only` costs the same memory as a write (measured).
     Extract,
+    /// `sync have <ref> --output` (RFC 004 part 8): the have-list of one published branch, written to a file. Its memory is small and
+    /// follows the branch's patches, not the store (measured: `have-route-logs/t0/` of the part's review request).
+    SyncHave,
 }
 
 /// How a verb's cost is derived: `max(floor, (S × store_tenths + CONTENT_MAX_BYTES × content_tenths) / 10)`.
@@ -107,7 +110,7 @@ pub struct CostRule {
 
 impl ReadVerb {
     /// Every verb (kept in step with the enum by `tests/admission.rs`).
-    pub const ALL: [ReadVerb; 8] = [
+    pub const ALL: [ReadVerb; 9] = [
         ReadVerb::Log,
         ReadVerb::Show,
         ReadVerb::Refs,
@@ -116,6 +119,7 @@ impl ReadVerb {
         ReadVerb::FileContent,
         ReadVerb::Verify,
         ReadVerb::Extract,
+        ReadVerb::SyncHave,
     ];
 
     /// The cost rule: **the one table**. No wildcard arm — a new verb must be given a cost here.
@@ -138,6 +142,11 @@ impl ReadVerb {
             // 16 MiB × 63: 8.6; 8 MiB × 128: 8.35). 9.0 × covers the worst measured with 5 %; the ceiling (1.5 ×) is 13.5 ×.
             // The store size does not enter. 8 MiB is prikk's floor plus the pending set (5,000 pending: +4 MiB).
             ReadVerb::Extract => (0, 0, 90, 8 * MIB, COST_FLOOR),
+            // `sync have` (prikk 0.55.0, RFC 004 part 8 T0): the file is 32 bytes a patch (92 B for 1, 32,060 B for 1,000); the process
+            // peaks at VmPeak 8.3 MiB (1 patch) and 8.9 MiB (1,000 patches), resident 1.2 and 4.5 MiB, in two to five milliseconds.
+            // That is the floor class (light pool), whatever the store size: flat at the floor. The longer shapes are in the review
+            // request's table; a test holds the rule to every measured row.
+            ReadVerb::SyncHave => (0, 0, 0, 0, COST_FLOOR),
         };
         CostRule {
             measured_on: MEASURED_ON,
@@ -181,6 +190,7 @@ impl ReadVerb {
             ReadVerb::FileContent => "file",
             ReadVerb::Verify => "verify",
             ReadVerb::Extract => "extract",
+            ReadVerb::SyncHave => "have",
         }
     }
 }

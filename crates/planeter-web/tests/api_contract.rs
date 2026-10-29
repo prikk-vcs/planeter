@@ -35,7 +35,7 @@ use planeter_web::errors::ErrorCode;
 use planeter_web::{AppState, BlockingGate, ContentOrigin, PrikkGate, TrustedProxies, router};
 
 /// The routes the API is meant to have, written down independently of `api::paths`.
-const EXPECTED_PATHS: [&str; 24] = [
+const EXPECTED_PATHS: [&str; 25] = [
     "/api/v1/repos/{owner}/{name}/history",
     "/api/v1/repos/{owner}/{name}/change/{target}",
     "/api/v1/repos/{owner}/{name}/file",
@@ -45,6 +45,7 @@ const EXPECTED_PATHS: [&str; 24] = [
     "/api/v1/repos/{owner}/{name}/verify",
     "/api/v1/repos/{owner}/{name}/transport/advertise",
     "/api/v1/repos/{owner}/{name}/transport/fetch",
+    "/api/v1/repos/{owner}/{name}/transport/have",
     "/api/v1/repos/{owner}/{name}/transport/propose",
     "/api/v1/repos/{owner}/{name}/recovery",
     "/api/v1/repos/{owner}/{name}/proposals",
@@ -250,7 +251,7 @@ fn every_code_has_one_plain_sentence_and_the_shape_is_stable() {
             assert_eq!(text.matches(". ").count(), allowed, "sentences: {text:?}");
         }
     }
-    assert_eq!(seen.len(), 48);
+    assert_eq!(seen.len(), 49);
 }
 
 #[test]
@@ -855,7 +856,7 @@ fn api_routes_are_registered_only_through_the_shared_paths() {
         .map(str::trim)
         .filter(|l| l.contains(".route("))
         .collect();
-    assert_eq!(route_lines.len(), 24, "{route_lines:?}");
+    assert_eq!(route_lines.len(), 25, "{route_lines:?}");
     assert!(
         route_lines.iter().all(|l| l.contains("paths::")),
         "a route is registered with a literal path: {route_lines:?}"

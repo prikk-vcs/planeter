@@ -282,6 +282,11 @@ pub const CATALOG: &[Entry] = &[
         "error.bundle_of_received_ref.hint",
         "Fetch the whole repository with kind=archive instead.",
     ),
+    msg("error.no_have_list.message", "That ref has no have-list."),
+    msg(
+        "error.no_have_list.hint",
+        "Ask for the have-list of a published branch: take the name from the advertisement.",
+    ),
     msg(
         "error.not_verified.message",
         "The exported artifact did not pass verification, so it was not served.",

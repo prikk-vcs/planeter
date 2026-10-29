@@ -217,9 +217,10 @@ docker run --rm ghcr.io/prikk-vcs/planeter:X.Y.Z --version
   at once and exits **1** (a request cut off by that is the client's to retry; the sandbox's children die with the server).
   Set your supervisor's stop timeout above the drain. `SIGKILL` and power loss are not graceful: the lock file stays and the
   next start replaces it (above).
-- **Artifact fetches: advertise and fetch (RFC 004 part 2).** With **`PLANETER_SPOOL_DIR`** set, two routes serve a repository
+- **Artifact fetches: advertise, fetch and the have-list (RFC 004 parts 2 and 8).** With **`PLANETER_SPOOL_DIR`** set, three routes serve a repository
   to a reader of it: `GET /api/v1/repos/{owner}/{name}/transport/advertise` (the refs, the state fingerprint and the fetches on
-  offer) and `…/transport/fetch?kind=archive|bundle[&ref=…]` (a whole artifact: `200`, `304` for a matching `If-None-Match`,
+  offer) and `…/transport/have?ref=heads/NAME` (the have-list of a branch, 32 bytes a patch, for a client that builds an incremental push; it takes the
+  read lease and is admitted by the read memory budget, see `docs/propose.md`) and `…/transport/fetch?kind=archive|bundle[&ref=…]` (a whole artifact: `200`, `304` for a matching `If-None-Match`,
   `206`/`416` for a `Range` within the one current artifact). **The cost of a changed-state fetch is the artifact's size**; the
   mitigations are, in the order a request meets them: the `ETag` (a `304` costs no export); the **cache** (an artifact is
   exported once per repository state, verified, spooled, and served from the spool file); **single flight** (concurrent

@@ -93,7 +93,8 @@ pub const TABLE: &[Rule] = &[
         stdout: Stdout::Fixed(MIB),
         largest: 6923,
         measured: "at most 3 KiB: --version 13 B, init 41 B, key status 911 B, trust list of 64 keys 6.9 KB, config list 48 B, bundle verify 840 B, \
-                   archive export 476 B, sync summary 90 B, sync have 107 B, sync build 319 B, unlock 24 B, status 604 B, extract --format json \
+                   archive export 476 B, sync summary 90 B, sync have 107 B (63 B on 0.55.0; the have-list itself is a file written by --output, not stdout: the \
+                   server bounds it by `HAVE_MAX_BYTES`, 32 bytes a patch measured), sync build 319 B, unlock 24 B, status 604 B, extract --format json \
                    421 B (the same for 10,000 files, plan-only or not)",
         why: "bounded by construction: one report of a fixed shape (a key list is bounded by the 64 keys of the creation form); 1 MiB is > 100 \
               times the largest measured",

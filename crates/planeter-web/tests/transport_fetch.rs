@@ -411,6 +411,10 @@ async fn advertise_names_the_refs_the_kinds_the_fingerprint_and_no_path() {
     assert_eq!(main["tip_block"].as_str().unwrap().len(), 64);
     assert_eq!(main["fetch"][0]["kind"], "bundle");
     assert_eq!(main["fetch"][0]["ref"], "heads/main");
+    // Beside the bundle, a published ref offers its have-list (RFC 004 part 8); a received ref offers neither.
+    assert_eq!(main["fetch"][1]["kind"], "have");
+    assert_eq!(main["fetch"][1]["ref"], "heads/main");
+    assert_eq!(main["fetch"].as_array().unwrap().len(), 2);
     assert!(
         main["fetch"][0]["size"].is_null(),
         "no size before the first export"
@@ -1731,6 +1735,7 @@ async fn the_advertisement_serializes_to_exactly_the_fields_the_document_declare
         "unknown_ref",
         "unknown_kind",
         "bundle_of_received_ref",
+        "no_have_list",
         "not_verified",
         "export_failed",
         "rate_limited",
@@ -1744,6 +1749,20 @@ async fn the_advertisement_serializes_to_exactly_the_fields_the_document_declare
     assert!(
         doc["paths"]["/api/v1/repos/{owner}/{name}/transport/advertise"]["get"]["responses"]["429"]
             .is_object()
+    );
+    let have = &doc["paths"]["/api/v1/repos/{owner}/{name}/transport/have"]["get"];
+    for status in ["200", "206", "304", "422", "429", "503"] {
+        assert!(
+            have["responses"][status].is_object(),
+            "the have-list documents {status}"
+        );
+    }
+    assert!(
+        have["parameters"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| p["name"] == "ref" && p["required"] == true)
     );
 }
 
@@ -1862,4 +1881,434 @@ fi"#,
         vec![std::ffi::OsString::from("other-export")],
         "only the directory that was not ours remains: {left:?}"
     );
+}
+
+// ================================================================================================ RFC 004 part 8: the have-list
+
+/// A stand-in body that is the real prikk for everything (the listing of refs, the log) except `sync have`, which runs
+/// `have_body` (the arguments are `sync have REF --output FILE`).
+fn real_but(have_body: &str) -> String {
+    format!(r#"if [ "$1" = sync ] && [ "$2" = have ]; then {have_body}; else exec prikk "$@"; fi"#)
+}
+
+const HAVE_MAIN: &str = "/api/v1/repos/alice/open/transport/have?ref=heads/main";
+
+/// What the repository's own `prikk sync have <ref>` writes (keyless: it needs no key of the repository).
+fn local_have(repo: &Path, ref_name: &str, out: &Path) -> Vec<u8> {
+    let st = Command::new("prikk")
+        .args(["sync", "have", ref_name, "--output", out.to_str().unwrap()])
+        .current_dir(repo)
+        .output()
+        .unwrap();
+    assert!(
+        st.status.success(),
+        "{}",
+        String::from_utf8_lossy(&st.stderr)
+    );
+    std::fs::read(out).unwrap()
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_have_list_is_the_psynchv1_file_with_its_length_etag_and_no_cache_and_a_matching_etag_is_304()
+ {
+    if skip() {
+        return;
+    }
+    let fx = fixture("have-serve", Opts::default());
+    let r = call(&fx.router, HAVE_MAIN, &[]).await;
+    assert_eq!(
+        r.status,
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&r.body)
+    );
+    assert!(
+        r.body.starts_with(b"PSYNCHV1"),
+        "{:?}",
+        &r.body[..r.body.len().min(16)]
+    );
+    assert_eq!(r.h("content-type"), "application/octet-stream");
+    assert_eq!(r.h("content-length"), r.body.len().to_string());
+    assert_eq!(r.h("cache-control"), "private, no-cache");
+    assert!(r.h("etag").starts_with('"'));
+    assert!(
+        r.h("content-disposition").contains(".have"),
+        "{}",
+        r.h("content-disposition")
+    );
+    // It is what prikk itself writes for that ref of that repository.
+    let local = local_have(
+        &fx.open_path,
+        "heads/main",
+        &write_tmp("have-local-main", b""),
+    );
+    assert_eq!(r.body, local, "the served have-list is prikk's own");
+    // The advertisement offers it, with the ETag the route returns, and its size once it is known.
+    let adv = call(&fx.router, ADVERTISE, &[]).await.json();
+    let main = adv["refs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|x| x["name"] == "heads/main")
+        .unwrap();
+    let offer = main["fetch"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|o| o["kind"] == "have")
+        .unwrap();
+    assert_eq!(offer["etag"], r.h("etag"));
+    assert_eq!(offer["size"].as_u64().unwrap(), r.body.len() as u64);
+    // The conditional request: no body, the same ETag.
+    let again = call(&fx.router, HAVE_MAIN, &[("if-none-match", r.h("etag"))]).await;
+    assert_eq!(again.status, StatusCode::NOT_MODIFIED);
+    assert!(again.body.is_empty());
+    assert_eq!(again.h("etag"), r.h("etag"));
+    // A repeat is served from the spool: one production.
+    let third = call(&fx.router, HAVE_MAIN, &[]).await;
+    assert_eq!((third.status, &third.body), (StatusCode::OK, &r.body));
+    // Two answered, one 304; a have-list is not an export.
+    let snap = fx.metrics.snapshot();
+    assert_eq!(
+        (
+            snap.fetches_changed,
+            snap.fetches_unchanged,
+            snap.by_kind.get("have").copied()
+        ),
+        (2, 1, Some(3)),
+        "{snap:?}"
+    );
+    assert_eq!(snap.per_repo["r-open"].exports, 0, "{snap:?}");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_etag_of_a_have_list_is_the_refs_state_and_differs_per_ref_and_from_the_bundles() {
+    if skip() {
+        return;
+    }
+    let fx = fixture("have-etag", Opts::default());
+    let main = call(&fx.router, HAVE_MAIN, &[]).await;
+    let dev = call(
+        &fx.router,
+        "/api/v1/repos/alice/open/transport/have?ref=heads/dev",
+        &[],
+    )
+    .await;
+    let bundle = call(&fx.router, FETCH_BUNDLE, &[]).await;
+    for r in [&main, &dev] {
+        assert_eq!(r.status, StatusCode::OK);
+    }
+    let etags: BTreeSet<&str> = [main.h("etag"), dev.h("etag"), bundle.h("etag")].into();
+    assert_eq!(etags.len(), 3, "one ETag per (kind, ref): {etags:?}");
+    // A validator of another ref does not make this one a 304.
+    let wrong = call(&fx.router, HAVE_MAIN, &[("if-none-match", dev.h("etag"))]).await;
+    assert_eq!(wrong.status, StatusCode::OK);
+    // A write moves the state: the have-list is produced again, with a new ETag.
+    let w = fx
+        .leases
+        .acquire(
+            &RepoId::new("r-open"),
+            LeaseClass::Write,
+            "sync accept",
+            Duration::ZERO,
+        )
+        .unwrap();
+    fx.export.write_completed(&w).unwrap();
+    drop(w);
+    let after = call(&fx.router, HAVE_MAIN, &[("if-none-match", main.h("etag"))]).await;
+    assert_eq!(
+        after.status,
+        StatusCode::OK,
+        "a stale validator is not a 304 after a write"
+    );
+    assert_ne!(after.h("etag"), main.h("etag"));
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn only_a_published_branch_has_a_have_list_and_the_refusals_are_named() {
+    if skip() {
+        return;
+    }
+    let fx = fixture("have-refusals", Opts::default());
+    // `recv` only received a ref: the advertisement offers nothing for it, and the route says why.
+    let adv = call(
+        &fx.router,
+        "/api/v1/repos/alice/recv/transport/advertise",
+        &[],
+    )
+    .await
+    .json();
+    let received = adv["refs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["state"] == "received")
+        .unwrap();
+    assert!(received["fetch"].as_array().unwrap().is_empty());
+    let name = received["name"].as_str().unwrap().to_owned();
+    let r = call(
+        &fx.router,
+        &format!("/api/v1/repos/alice/recv/transport/have?ref={name}"),
+        &[],
+    )
+    .await;
+    assert_eq!(
+        (r.status, r.code().as_str()),
+        (StatusCode::UNPROCESSABLE_ENTITY, "no_have_list")
+    );
+    assert!(!r.body.starts_with(b"PSYNCHV1"));
+    // A tag has none either (prikk: `sync have` takes a branch), and the advertisement does not offer it.
+    let r = call(
+        &fx.router,
+        "/api/v1/repos/alice/open/transport/have?ref=tags/v1",
+        &[],
+    )
+    .await;
+    assert_eq!(
+        (r.status, r.code().as_str()),
+        (StatusCode::UNPROCESSABLE_ENTITY, "no_have_list")
+    );
+    let adv = call(&fx.router, ADVERTISE, &[]).await.json();
+    let tag = adv["refs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|x| x["name"] == "tags/v1")
+        .unwrap();
+    let kinds: Vec<&str> = tag["fetch"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|o| o["kind"].as_str().unwrap())
+        .collect();
+    assert_eq!(kinds, ["bundle"]);
+    // An unknown ref, and no ref at all.
+    let r = call(
+        &fx.router,
+        "/api/v1/repos/alice/open/transport/have?ref=heads/nope",
+        &[],
+    )
+    .await;
+    assert_eq!(
+        (r.status, r.code().as_str()),
+        (StatusCode::UNPROCESSABLE_ENTITY, "unknown_ref")
+    );
+    let r = call(&fx.router, "/api/v1/repos/alice/open/transport/have", &[]).await;
+    assert_eq!(
+        (r.status, r.code().as_str()),
+        (StatusCode::BAD_REQUEST, "invalid_request")
+    );
+    // Nothing was produced for a refusal.
+    assert!(walk(&fx.spool_dir.join("objects")).is_empty());
+    // The texts follow Accept-Language.
+    let ja = call(
+        &fx.router,
+        &format!("/api/v1/repos/alice/recv/transport/have?ref={name}"),
+        &[("accept-language", "ja")],
+    )
+    .await;
+    assert!(
+        ja.json()["message"].as_str().unwrap().contains("have"),
+        "{}",
+        ja.json()
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn the_have_list_is_read_gated_like_the_advertisement_and_hidden_and_absent_answer_alike() {
+    if skip() {
+        return;
+    }
+    let fx = fixture("have-matrix", Opts::default());
+    let private = "/api/v1/repos/alice/app/transport/have?ref=heads/main";
+    let ghost = "/api/v1/repos/alice/ghost/transport/have?ref=heads/main";
+    // Anonymous: the public repository answers, the private and the absent one are the same 404.
+    assert_eq!(
+        call(&fx.router, HAVE_MAIN, &[]).await.status,
+        StatusCode::OK
+    );
+    let (hidden, absent) = (
+        call(&fx.router, private, &[]).await,
+        call(&fx.router, ghost, &[]).await,
+    );
+    assert_eq!(hidden.status, StatusCode::NOT_FOUND);
+    assert_eq!(
+        (hidden.status, hidden.body.clone()),
+        (absent.status, absent.body.clone())
+    );
+    // The owner's token reads the private one; a stranger's token is the same 404 as the anonymous one.
+    let alice = [("authorization", "Bearer tok-alice")];
+    let r = call(&fx.router, private, &alice).await;
+    assert_eq!(r.status, StatusCode::OK);
+    assert!(r.body.starts_with(b"PSYNCHV1"));
+    let stranger = [("authorization", "Bearer tok-nobody")];
+    let s = call(&fx.router, private, &stranger).await;
+    assert_eq!((s.status, s.body), (hidden.status, hidden.body));
+    // A ref the repository lacks is told only to a reader.
+    let q = call(
+        &fx.router,
+        "/api/v1/repos/alice/app/transport/have?ref=heads/nope",
+        &[],
+    )
+    .await;
+    assert_eq!(q.status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn without_a_spool_the_have_route_says_so_and_a_stranger_still_gets_404() {
+    if skip() {
+        return;
+    }
+    let fx = fixture(
+        "have-off",
+        Opts {
+            transport: false,
+            ..Opts::default()
+        },
+    );
+    let r = call(&fx.router, HAVE_MAIN, &[]).await;
+    assert_eq!(
+        (r.status, r.code().as_str()),
+        (StatusCode::SERVICE_UNAVAILABLE, "transport_off")
+    );
+    let hidden = call(
+        &fx.router,
+        "/api/v1/repos/alice/app/transport/have?ref=heads/main",
+        &[],
+    )
+    .await;
+    assert_eq!(hidden.status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_have_list_that_prikk_did_not_write_properly_is_never_served_and_never_kept() {
+    if skip() {
+        return;
+    }
+    let dir = scratch("have-bad-bin");
+    // `sync have` writes junk and succeeds: the file is not a have-list.
+    let bin = stand_in(&dir, &real_but(r#"echo junk > "$5""#));
+    let fx = fixture(
+        "have-bad",
+        Opts {
+            binary: Some(bin),
+            ..Opts::default()
+        },
+    );
+    let r = call(&fx.router, HAVE_MAIN, &[]).await;
+    assert_eq!(
+        (r.status, r.code().as_str()),
+        (StatusCode::SERVICE_UNAVAILABLE, "not_verified")
+    );
+    assert!(!String::from_utf8_lossy(&r.body).contains("junk"));
+    assert!(walk(&fx.spool_dir.join("objects")).is_empty());
+    assert!(walk(&fx.spool_dir.join("incoming")).is_empty());
+    // A failing or killed `sync have` leaves nothing half-served either: the partial file is discarded.
+    let dir = scratch("have-killed-bin");
+    let bin = stand_in(&dir, &real_but(r#"printf PSYNCHV1 > "$5"; kill -9 $$"#));
+    let fx = fixture(
+        "have-killed",
+        Opts {
+            binary: Some(bin),
+            ..Opts::default()
+        },
+    );
+    let r = call(&fx.router, HAVE_MAIN, &[]).await;
+    assert_eq!(r.status, StatusCode::SERVICE_UNAVAILABLE);
+    assert_eq!(r.code(), "export_failed");
+    assert!(walk(&fx.spool_dir.join("objects")).is_empty());
+    assert!(walk(&fx.spool_dir.join("incoming")).is_empty());
+    // The next request produces it again (a failure is not cached).
+    let again = call(&fx.router, HAVE_MAIN, &[]).await;
+    assert_eq!(again.code(), "export_failed");
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 8)]
+async fn a_have_list_takes_the_read_lease_so_a_writer_is_never_blocked_by_it_nor_it_by_a_writer() {
+    if skip() {
+        return;
+    }
+    // A slow `sync have`: while it runs, the repository's write lease is free to take at once (an export would hold X).
+    let dir = scratch("have-slow-bin");
+    let marker = dir.join("started");
+    let bin = stand_in(
+        &dir,
+        &real_but(&format!(
+            r#"touch {m}; sleep 2; printf 'PSYNCHV1' > "$5""#,
+            m = marker.display()
+        )),
+    );
+    let fx = Arc::new(fixture(
+        "have-slow",
+        Opts {
+            binary: Some(bin),
+            ..Opts::default()
+        },
+    ));
+    let router = fx.router.clone();
+    let pending = tokio::spawn(async move { call(&router, HAVE_MAIN, &[]).await });
+    let end = Instant::now() + Duration::from_secs(20);
+    while !marker.exists() {
+        assert!(Instant::now() < end, "the stand-in never started");
+        tokio::time::sleep(Duration::from_millis(20)).await;
+    }
+    // A read lease is a counter that excludes no one; an X or W lease would be held by name (`holder_of`) and would make the
+    // writer below wait.
+    assert_eq!(
+        fx.leases.holder_of(&RepoId::new("r-open")),
+        None,
+        "no exclusive lease is held by a have-list"
+    );
+    let t = Instant::now();
+    let w = fx
+        .leases
+        .acquire(
+            &RepoId::new("r-open"),
+            LeaseClass::Write,
+            "sync accept",
+            Duration::ZERO,
+        )
+        .expect("a writer does not wait for a have-list");
+    assert!(t.elapsed() < Duration::from_millis(500));
+    drop(w);
+    let r = pending.await.unwrap();
+    assert_eq!(
+        r.status,
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&r.body)
+    );
+    // Served from the spool, a slow client holds no lease: the response is complete here and the repository is free.
+    assert_eq!(fx.leases.holder_of(&RepoId::new("r-open")), None);
+    assert!(
+        fx.leases
+            .try_acquire(&RepoId::new("r-open"), LeaseClass::Write, "sync accept")
+            .is_ok()
+    );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_writer_holding_the_repository_does_not_make_a_have_list_busy() {
+    if skip() {
+        return;
+    }
+    let fx = fixture("have-w-lease", Opts::default());
+    let w = fx
+        .leases
+        .acquire(
+            &RepoId::new("r-open"),
+            LeaseClass::Write,
+            "sync accept",
+            Duration::ZERO,
+        )
+        .unwrap();
+    // An archive fetch is busy beside a writer (X excludes W); a have-list is a read and is not.
+    let r = call(&fx.router, HAVE_MAIN, &[]).await;
+    assert_eq!(
+        r.status,
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&r.body)
+    );
+    drop(w);
 }

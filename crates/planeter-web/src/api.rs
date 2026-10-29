@@ -35,7 +35,8 @@ use crate::reviews::{comment_handler, decision_handler, hide_handler, unhide_han
 use crate::routes::{Action, Class, Routes};
 use crate::security::{ContentOrigin, app_security_headers, raw_content_headers};
 use crate::transport::{
-    advertise_handler, fetch_handler, propose_handler, recovery_plan_handler, recovery_run_handler,
+    advertise_handler, fetch_handler, have_handler, propose_handler, recovery_plan_handler,
+    recovery_run_handler,
 };
 
 /// Default and maximum history page size (bounded — `STD-3`).
@@ -87,6 +88,7 @@ pub mod paths {
     pub const VERIFY: &str = "/api/v1/repos/{owner}/{name}/verify";
     pub const TRANSPORT_ADVERTISE: &str = "/api/v1/repos/{owner}/{name}/transport/advertise";
     pub const TRANSPORT_FETCH: &str = "/api/v1/repos/{owner}/{name}/transport/fetch";
+    pub const TRANSPORT_HAVE: &str = "/api/v1/repos/{owner}/{name}/transport/have";
     pub const TRANSPORT_PROPOSE: &str = "/api/v1/repos/{owner}/{name}/transport/propose";
     pub const RECOVERY: &str = "/api/v1/repos/{owner}/{name}/recovery";
     pub const PROPOSALS: &str = "/api/v1/repos/{owner}/{name}/proposals";
@@ -110,7 +112,7 @@ pub mod paths {
     pub const REPOS_IMPORT_CONFIRM: &str = "/api/v1/repos/import/{stage}/confirm";
     pub const OPENAPI: &str = "/api/v1/openapi.json";
     /// Every route, in document order.
-    pub const ALL: [&str; 24] = [
+    pub const ALL: [&str; 25] = [
         HISTORY,
         CHANGE,
         FILE,
@@ -120,6 +122,7 @@ pub mod paths {
         VERIFY,
         TRANSPORT_ADVERTISE,
         TRANSPORT_FETCH,
+        TRANSPORT_HAVE,
         TRANSPORT_PROPOSE,
         RECOVERY,
         PROPOSALS,
@@ -146,8 +149,12 @@ pub fn routes() -> Routes {
     let description = Class::public(
         "the API's own description: it names no repository and serves no repository data",
     );
-    // The transport's two reads (RFC 004 part 2).
-    let (advertise, fetch) = (get(advertise_handler), get(fetch_handler));
+    // The transport's reads (RFC 004 part 2, and the have-list of part 8).
+    let (advertise, fetch, have) = (
+        get(advertise_handler),
+        get(fetch_handler),
+        get(have_handler),
+    );
     // The write side (RFC 004 part 3b): authorized for `Propose`, which the handler checks after the read gate.
     let propose_class = Class::Authorized(Action::Propose);
     let propose = axum::routing::post(propose_handler);
@@ -190,6 +197,7 @@ pub fn routes() -> Routes {
         .route(paths::VERIFY, read, &["GET"], get(verify_handler))
         .route(paths::TRANSPORT_ADVERTISE, read, &["GET"], advertise)
         .route(paths::TRANSPORT_FETCH, read, &["GET"], fetch)
+        .route(paths::TRANSPORT_HAVE, read, &["GET"], have)
         .route(paths::TRANSPORT_PROPOSE, propose_class, &["POST"], propose)
         .route(paths::RECOVERY, admin_class, &["GET", "POST"], recovery)
         .route(paths::PROPOSALS, read, &["GET"], get(list_handler))

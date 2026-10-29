@@ -38,6 +38,30 @@ assurance, whether a declaration was kept, and a one-sentence message in the cal
 branch has changed. A pending patch is `forge-approved-unsealed` (in plain words: **accepted and held by this server, not yet signed into the history; nobody has approved it for merging** — the word *approved* is part of a machine value that is in the 0.4.0 contract and is not a review decision): **never** `sealed` (that needs a block read from `log`), and
 `queued` is never read (U-10, IS-47).
 
+## Before you push: the have-list (RFC 004 part 8)
+
+A client builds an incremental artifact with `prikk sync build <ref> --have FILE`, where `FILE` is the **have-list** of the receiver:
+what it already holds of that branch. The server serves it, so a client over HTTP needs no out-of-band step:
+
+`GET /api/v1/repos/{owner}/{name}/transport/have?ref=heads/NAME` → the `PSYNCHV1` file as `application/octet-stream`, with
+`Content-Length`, an `ETag` and `Cache-Control: private, no-cache`; a matching `If-None-Match` is `304`. The advertisement offers it for
+each **published branch** (`kind=have`, with the size once it is known and the `ETag`).
+
+* **Only a published branch has one.** A tag (prikk refuses `sync have` for it: "ref namespace is reserved") and a received ref
+  (`remotes/…`) have none: `422 no_have_list`. An unknown ref is `422 unknown_ref`, a missing `ref` is `400 invalid_request`; a hidden and
+  an absent repository are the same `404`, as for every transport read.
+* **What it covers:** the branch's **sealed history** only. A patch the server has accepted but not yet signed in (held, pending) is **not**
+  in it, so a later artifact carries the pending patches again and only the new ones are `added` (the second-revision test shows it).
+* **How it is made:** by the same service that exports an archive — keyed by (repository, ref, state fingerprint), produced into a working
+  directory outside the repository, checked (the magic `PSYNCHV1` and a size bound), renamed into the spool, single flight, and served from
+  the spool file, so a slow client holds no lock and no process. Unlike an export it takes the **R lease** (it only reads: a writer is never
+  made to wait for it, nor it for a writer) and no export slot; a hit is served as it is, a miss is admitted against the read memory budget by
+  its row of the cost table (`ReadVerb::SyncHave`: flat, at the floor; the light pool).
+* **Bounds:** the file is 32 bytes a patch (92 B for one patch, 32,060 B for 1,000) and the route refuses to keep or serve more than
+  `HAVE_MAX_BYTES` (8 MiB, about 260,000 patches). `sync have` writes a file with `--output`, so the driver's output limit (1 MiB, the stdout
+  of every fixed-shape verb) bounds only its two lines of stdout; the file is bounded by that constant and by the sandbox's data ceiling.
+* The same rate limits as the other transport reads apply. The client for this route is `planeter-client` (`docs/client.md`).
+
 ## The order of the checks
 
 Everything before the accept is decided without writing anything; the first rule that fails names the refusal.

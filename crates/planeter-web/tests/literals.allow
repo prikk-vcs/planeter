@@ -60,7 +60,7 @@ exact :: headers.rs :: max-age=15552000 :: an HSTS value
 exact :: authn.rs :: Bearer  :: the Authorization scheme prefix
 
 # --- errors.rs: the stable machine codes and the OpenAPI prose (developer-facing, English by decision)
-re :: errors.rs :: ^(not_found|unavailable|busy|invalid_request|method_not_allowed|raw_elsewhere|too_large|internal|transport_off|unknown_ref|unknown_kind|bundle_of_received_ref|not_verified|export_failed|rate_limited|range_not_satisfiable)$ :: a stable machine-readable error code
+re :: errors.rs :: ^(not_found|unavailable|busy|invalid_request|method_not_allowed|raw_elsewhere|too_large|internal|transport_off|unknown_ref|unknown_kind|bundle_of_received_ref|no_have_list|not_verified|export_failed|rate_limited|range_not_satisfiable)$ :: a stable machine-readable error code
 exact :: errors.rs :: document :: a placeholder name
 re :: errors.rs :: ^(reason_required|proposal_final|artifact_removed|comments_closed|decisions_closed|revision_not_current|self_approval|comment_state)$ :: a stable machine-readable error code (RFC 005 part 5)
 re :: errors.rs :: ^(a proposal is closed with a reason|the proposal has landed or been closed|the files of that revision were kept|the proposal finished more than|a decision was named for|the submitter of a revision cannot|the comment is already hidden).* :: ErrorCode::description: OpenAPI prose for developers, English by decision (D-3d)
@@ -77,7 +77,7 @@ exact :: quota.rs :: used :: a placeholder name
 exact :: errors.rs :: code :: a JSON field name
 exact :: errors.rs :: message :: a JSON field name
 exact :: errors.rs :: hint :: a JSON field name
-re :: errors.rs :: ^(no such resource, or|the repository could not be read|too many requests|a malformed parameter|the method is not supported|the raw route, asked|the response would exceed|an internal fault|artifact fetches are not set up|the repository has no ref|the fetch kind is neither|a bundle of a received ref|the exported artifact did not verify|the export failed, hit|too many requests from this|a byte range the current).* :: ErrorCode::description: OpenAPI prose for developers, English by decision (D-3d)
+re :: errors.rs :: ^(no such resource, or|the repository could not be read|too many requests|a malformed parameter|the method is not supported|the raw route, asked|the response would exceed|an internal fault|artifact fetches are not set up|the repository has no ref|the fetch kind is neither|a bundle of a received ref|the have-list of a ref that has none|the exported artifact did not verify|the export failed, hit|too many requests from this|a byte range the current).* :: ErrorCode::description: OpenAPI prose for developers, English by decision (D-3d)
 
 # --- templates: `|safe` is for sanitised repository content only
 safe :: file.html :: html :: the Markdown renderer's output, sanitised by ammonia (RFC 003 T4); not catalog output
@@ -114,6 +114,8 @@ exact :: transport.rs :: bytes= :: the HTTP Range unit
 exact :: transport.rs :: the read task ended :: an internal error value for a failed read task; never shown
 exact :: transport.rs :: {}-{}.archive :: a download file name built from the owner and repository names
 exact :: transport.rs :: {}-{}-{}.bundle :: a download file name built from the owner, repository and ref names
+exact :: transport.rs :: {}-{}-{}.have :: a download file name built from the owner, repository and ref names (the have-list, RFC 004 part 8)
+exact :: transport.rs :: have :: the label of the have-list job in the read gate (a log word, never shown)
 exact :: transport.rs :: bytes */{size} :: the Content-Range of an unsatisfiable range
 exact :: transport.rs :: application/octet-stream :: a media type
 exact :: transport.rs :: attachment; filename="{filename}" :: the Content-Disposition of a download

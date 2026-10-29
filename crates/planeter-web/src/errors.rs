@@ -65,6 +65,8 @@ pub enum ErrorCode {
     UnknownKind,
     /// 422: a bundle of a received ref was asked for; the archive carries it (PK-60).
     BundleOfReceivedRef,
+    /// 422: the have-list of a ref that has none was asked for; only a published branch has one (RFC 004 part 8).
+    NoHaveList,
     /// 503: the exported artifact did not verify and was not served.
     NotVerified,
     /// 503: the export failed, hit its deadline or its memory ceiling, or the artifact exceeds the spool.
@@ -141,7 +143,7 @@ pub enum ErrorCode {
 
 impl ErrorCode {
     /// Every code, in a fixed order (the OpenAPI enum).
-    pub const ALL: [ErrorCode; 48] = [
+    pub const ALL: [ErrorCode; 49] = [
         ErrorCode::NotFound,
         ErrorCode::Unavailable,
         ErrorCode::Busy,
@@ -154,6 +156,7 @@ impl ErrorCode {
         ErrorCode::UnknownRef,
         ErrorCode::UnknownKind,
         ErrorCode::BundleOfReceivedRef,
+        ErrorCode::NoHaveList,
         ErrorCode::NotVerified,
         ErrorCode::ExportFailed,
         ErrorCode::RateLimited,
@@ -207,6 +210,7 @@ impl ErrorCode {
             ErrorCode::UnknownRef => "unknown_ref",
             ErrorCode::UnknownKind => "unknown_kind",
             ErrorCode::BundleOfReceivedRef => "bundle_of_received_ref",
+            ErrorCode::NoHaveList => "no_have_list",
             ErrorCode::NotVerified => "not_verified",
             ErrorCode::ExportFailed => "export_failed",
             ErrorCode::RateLimited => "rate_limited",
@@ -254,7 +258,8 @@ impl ErrorCode {
             ErrorCode::TooLarge
             | ErrorCode::UnknownRef
             | ErrorCode::UnknownKind
-            | ErrorCode::BundleOfReceivedRef => StatusCode::UNPROCESSABLE_ENTITY,
+            | ErrorCode::BundleOfReceivedRef
+            | ErrorCode::NoHaveList => StatusCode::UNPROCESSABLE_ENTITY,
             ErrorCode::Unavailable
             | ErrorCode::Busy
             | ErrorCode::TransportOff
@@ -322,6 +327,7 @@ impl ErrorCode {
                 Key::ErrBundleOfReceivedMessage,
                 Key::ErrBundleOfReceivedHint,
             ),
+            ErrorCode::NoHaveList => (Key::ErrNoHaveListMessage, Key::ErrNoHaveListHint),
             ErrorCode::NotVerified => (Key::ErrNotVerifiedMessage, Key::ErrNotVerifiedHint),
             ErrorCode::ExportFailed => (Key::ErrExportFailedMessage, Key::ErrExportFailedHint),
             ErrorCode::RateLimited => (Key::ErrRateLimitedMessage, Key::ErrRateLimitedHint),
@@ -642,6 +648,9 @@ impl ErrorCode {
             ErrorCode::UnknownKind => "the fetch kind is neither `archive` nor `bundle`",
             ErrorCode::BundleOfReceivedRef => {
                 "a bundle of a received ref was asked for; the archive carries received refs"
+            }
+            ErrorCode::NoHaveList => {
+                "the have-list of a ref that has none was asked for; only a published branch has one"
             }
             ErrorCode::NotVerified => "the exported artifact did not verify and was not served",
             ErrorCode::ExportFailed => {

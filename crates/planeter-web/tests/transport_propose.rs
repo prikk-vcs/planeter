@@ -188,6 +188,26 @@ impl Client {
         prikk(&self.repo, &self.keys, &["seal", "--allow-no-audit"]);
     }
 
+    /// The artifact `sync build` makes against a have-list the forge **served** (RFC 004 part 8), not one made locally.
+    fn artifact_against(&self, have: &Path, name: &str) -> Vec<u8> {
+        let art = self.repo.join(format!("{name}.art"));
+        let _ = std::fs::remove_file(&art);
+        prikk(
+            &self.repo,
+            &self.keys,
+            &[
+                "sync",
+                "build",
+                "heads/main",
+                "--have",
+                have.to_str().unwrap(),
+                "--output",
+                art.to_str().unwrap(),
+            ],
+        );
+        std::fs::read(&art).unwrap()
+    }
+
     /// The artifact that closes the gap between this client and `forge` (what `sync build` makes against the
     /// forge's `sync have`).
     fn artifact(&self, forge: &Path, name: &str) -> Vec<u8> {
@@ -963,6 +983,92 @@ async fn a_second_revision_to_the_same_proposal_and_a_resend_of_an_identical_art
     );
     assert!(v["message"].as_str().unwrap().contains("already recorded"));
     assert_eq!(w.metrics.snapshot().proposals_already_recorded, 1);
+}
+
+/// RFC 004 part 8: the have-list the client builds against is the one the forge serves over HTTP, found through the
+/// advertisement; the artifact is built with prikk's `sync build --have` and `propose` accepts it.
+#[tokio::test]
+async fn a_client_builds_against_the_have_list_the_forge_serves_and_propose_accepts_it() {
+    if skip() {
+        return;
+    }
+    let mut w = world("have-served", Opts::default());
+    w.client.commit(2);
+    let adv = get_as(
+        &w,
+        "/api/v1/repos/alice/forge/transport/advertise",
+        None,
+        &[],
+    )
+    .await
+    .json();
+    let main = adv["refs"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|r| r["name"] == "heads/main")
+        .unwrap();
+    let offer = main["fetch"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|o| o["kind"] == "have")
+        .expect("the advertisement offers the branch's have-list");
+    let served = get_as(
+        &w,
+        "/api/v1/repos/alice/forge/transport/have?ref=heads/main",
+        None,
+        &[],
+    )
+    .await;
+    assert_eq!(served.status, StatusCode::OK);
+    assert!(served.body.starts_with(b"PSYNCHV1"));
+    assert_eq!(
+        served.headers.get("etag").unwrap().to_str().unwrap(),
+        offer["etag"].as_str().unwrap()
+    );
+    let have = w.base.join("served.have");
+    std::fs::write(&have, &served.body).unwrap();
+    // It is what the forge's own prikk says, byte for byte, so a client's artifact is the same either way.
+    let art = w.client.artifact_against(&have, "served");
+    let local = w.client.artifact(&w.forge, "local");
+    assert_eq!(
+        art, local,
+        "built against the served have-list or a local one"
+    );
+    let reply = propose_as(
+        &w,
+        "forge",
+        "tok-alice",
+        serde_json::json!({
+            "title": "Built against the served have-list",
+            "base": w.client.tip_before(2),
+            "declared_patches": w.client.patch_ids(2),
+            "client": "tests/1"
+        }),
+        &art,
+    )
+    .await;
+    assert_eq!(
+        reply.status,
+        StatusCode::CREATED,
+        "{}",
+        String::from_utf8_lossy(&reply.body)
+    );
+    assert_eq!(reply.json()["added_count"], 2);
+    // The accept moved the forge's state: the offered have-list has a new ETag (a client re-asks after a push).
+    let after = get_as(
+        &w,
+        "/api/v1/repos/alice/forge/transport/have?ref=heads/main",
+        None,
+        &[(
+            "if-none-match",
+            served.headers.get("etag").unwrap().to_str().unwrap(),
+        )],
+    )
+    .await;
+    assert_eq!(after.status, StatusCode::OK, "a write is a new state");
+    assert!(after.body.starts_with(b"PSYNCHV1"));
 }
 
 #[tokio::test]

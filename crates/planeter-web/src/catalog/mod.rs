@@ -446,6 +446,8 @@ keys! {
     ErrUnknownKindHint => "error.unknown_kind.hint",
     ErrBundleOfReceivedMessage => "error.bundle_of_received_ref.message",
     ErrBundleOfReceivedHint => "error.bundle_of_received_ref.hint",
+    ErrNoHaveListMessage => "error.no_have_list.message",
+    ErrNoHaveListHint => "error.no_have_list.hint",
     ErrNotVerifiedMessage => "error.not_verified.message",
     ErrNotVerifiedHint => "error.not_verified.hint",
     ErrExportFailedMessage => "error.export_failed.message",

@@ -14,12 +14,19 @@
 //!    that does not verify is **never served** and never kept; a verified one is renamed into the spool;
 //! 4. the caller serves the bytes **from the spool file**: prikk is never streamed to a client, so a slow client can
 //!    hold no lock and no process.
+//!
+//! A third kind, the **have-list** (`sync have <ref>`, the `PSYNCHV1` file that tells a sender what this repository already
+//! holds, RFC 004 part 8), goes through the same cache key, single flight, work directory and spool, with three differences:
+//! it takes the **R lease** (it only reads), no export slot (the read gate's weighted admission bounds it, and exports and
+//! have-lists never starve each other), and a **check of the file itself** (the magic and a size bound) in place of a prikk
+//! verify, because prikk has no verb that verifies a have-list.
 
 use std::collections::HashMap;
 use std::fs::File;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
+use planeter_core::admission::{ReadVerb, ceiling_for, store_size};
 use planeter_core::{CallLimits, HostingService, LeaseClass, LeaseError, LeaseManager};
 use planeter_prikk::{PrikkError, PrikkRepo};
 use planeter_store::{RepositoryRecord, RevisionStore};
@@ -35,6 +42,9 @@ pub enum Kind {
     Bundle,
     /// The whole repository (`archive export`), the only way to carry a received ref (PK-60).
     Archive,
+    /// The have-list of one published ref (`sync have`): what this repository holds, for a sender's incremental
+    /// `sync build --have` (RFC 004 part 8). Not a `fetch` kind: it has its own route.
+    Have,
 }
 
 impl Kind {
@@ -42,8 +52,10 @@ impl Kind {
         match self {
             Kind::Bundle => "bundle",
             Kind::Archive => "archive",
+            Kind::Have => "have",
         }
     }
+    /// The kinds a **fetch** names (`kind=archive|bundle`); a have-list has its own route and is never parsed here.
     pub fn parse(s: &str) -> Option<Kind> {
         match s {
             "bundle" => Some(Kind::Bundle),
@@ -88,6 +100,9 @@ pub enum FetchError {
     UnknownRef,
     /// A bundle of a received ref cannot be exported (PK-60): the archive carries it.
     BundleOfReceivedRef,
+    /// This ref has no have-list: only a published **branch** has one (RFC 004 part 8). prikk refuses `sync have` for a tag
+    /// ("ref namespace is reserved") and a received ref is not published.
+    NoHaveList,
     /// The exported file did not verify: it was not served and not kept.
     NotVerified,
     /// prikk failed (or could not run) the export; nothing was kept.
@@ -110,6 +125,7 @@ impl FetchError {
             FetchError::RefRequired => "ref_required",
             FetchError::UnknownRef => "unknown_ref",
             FetchError::BundleOfReceivedRef => "bundle_of_received_ref",
+            FetchError::NoHaveList => "no_have_list",
             FetchError::NotVerified => "not_verified",
             FetchError::ExportFailed => "export_failed",
             FetchError::Deadline => "export_deadline",
@@ -118,6 +134,27 @@ impl FetchError {
             FetchError::Unavailable => "unavailable",
         }
     }
+}
+
+/// The magic that opens a have-list (`prikk sync have`).
+const HAVE_MAGIC: &[u8] = b"PSYNCHV1";
+
+/// The most a have-list may be, in bytes: 8 MiB. A have-list is 32 bytes a patch plus 60 (92 B for one patch, 32,060 B for 1,000;
+/// RFC 004 part 8, T0), so this is about 260,000 patches — more than twice the 100,000-patch shape the output tables call the largest
+/// legitimate (3.2 MB). A bigger file is not a have-list this server will keep or serve.
+pub const HAVE_MAX_BYTES: u64 = 8 << 20;
+
+/// Whether the file prikk wrote is a have-list this server will serve: it opens with the magic and is within the bound.
+fn have_list_is_sound(file: &std::path::Path) -> bool {
+    use std::io::Read;
+    let Ok(mut f) = File::open(file) else {
+        return false;
+    };
+    let Ok(meta) = f.metadata() else {
+        return false;
+    };
+    let mut head = [0u8; HAVE_MAGIC.len()];
+    meta.len() <= HAVE_MAX_BYTES && f.read_exact(&mut head).is_ok() && head == *HAVE_MAGIC
 }
 
 /// What a ref is, for the advertisement.
@@ -499,7 +536,13 @@ impl ExportService {
             .iter()
             .map(|r| {
                 let offers = match r.class {
-                    RefClass::Branch | RefClass::Tag => vec![offer(Kind::Bundle, Some(&r.name))],
+                    // A published branch offers its bundle and its have-list (what a sender needs for an incremental push); a tag has
+                    // no have-list (prikk: `sync have` takes a branch).
+                    RefClass::Branch => vec![
+                        offer(Kind::Bundle, Some(&r.name)),
+                        offer(Kind::Have, Some(&r.name)),
+                    ],
+                    RefClass::Tag => vec![offer(Kind::Bundle, Some(&r.name))],
                     RefClass::Received => vec![],
                 };
                 (r.clone(), offers)
@@ -515,7 +558,8 @@ impl ExportService {
     // ------------------------------------------------------------------------------------ fetch
 
     /// Validate a request and compute its `ETag` for the **current** state without exporting anything: a bundle
-    /// needs a published ref the repository holds (a received ref points to the archive); an archive ignores `ref`.
+    /// needs a published ref the repository holds (a received ref points to the archive); a have-list needs a published
+    /// **branch** (a tag and a received ref have none); an archive ignores `ref`.
     /// Returns the normalised ref and the `ETag`. A client whose `If-None-Match` equals it has the current copy.
     pub fn plan(
         &self,
@@ -526,11 +570,14 @@ impl ExportService {
         let fp = self.state(record)?;
         let ref_name = match kind {
             Kind::Archive => None,
-            Kind::Bundle => {
+            Kind::Bundle | Kind::Have => {
                 let name = ref_name.ok_or(FetchError::RefRequired)?;
                 let listing = self.listing(record, &fp)?;
                 match listing.refs.iter().find(|r| r.name == name) {
                     None => return Err(FetchError::UnknownRef),
+                    Some(r) if kind == Kind::Have && r.class != RefClass::Branch => {
+                        return Err(FetchError::NoHaveList);
+                    }
                     Some(r) if r.class == RefClass::Received => {
                         return Err(FetchError::BundleOfReceivedRef);
                     }
@@ -565,6 +612,19 @@ impl ExportService {
                 .remove(key);
             None
         }
+    }
+
+    /// The artifact for a request **only if it is already in the spool** (the current state, the object intact): no
+    /// export, no lease, no wait. The have-list route asks this first so that a hit is served without being admitted
+    /// against the memory budget. `ref_name` must be the normalised one from [`ExportService::plan`].
+    pub fn peek(
+        &self,
+        record: &RepositoryRecord,
+        kind: Kind,
+        ref_name: Option<&str>,
+    ) -> Result<Option<Artifact>, FetchError> {
+        let fp = self.state(record)?;
+        Ok(self.cached(&self.key(record, kind, ref_name, &fp)))
     }
 
     /// The artifact for a request: from the spool if the current state was exported and the object is intact,
@@ -662,19 +722,30 @@ impl ExportService {
     /// The leader's work: slot, X lease, export, release X, verify, adopt, index.
     fn export(&self, record: &RepositoryRecord, key: &CacheKey) -> Result<Artifact, FetchError> {
         let waited = Instant::now();
-        if !self.slots.acquire(self.config.lease_wait) {
-            return Err(FetchError::Busy {
-                retry_after: self.config.lease_wait,
-            });
-        }
-        let _slot = SlotGuard(&self.slots);
+        // A have-list only reads: the R lease, and no export slot (the read gate's memory admission bounds it).
+        let have = key.kind == Kind::Have;
+        let _slot = if have {
+            None
+        } else {
+            if !self.slots.acquire(self.config.lease_wait) {
+                return Err(FetchError::Busy {
+                    retry_after: self.config.lease_wait,
+                });
+            }
+            Some(SlotGuard(&self.slots))
+        };
         let operation = match key.kind {
             Kind::Archive => "archive export",
             Kind::Bundle => "bundle export",
+            Kind::Have => "sync have",
         };
         let lease = match self.leases.acquire(
             &record.repo_id,
-            LeaseClass::Export,
+            if have {
+                LeaseClass::Read
+            } else {
+                LeaseClass::Export
+            },
             operation,
             self.config.lease_wait,
         ) {
@@ -704,7 +775,16 @@ impl ExportService {
             FetchError::Unavailable
         })?;
         let partial = work.file();
-        let limits = CallLimits::data_ceiling(self.config.data_ceiling);
+        let limits = if have {
+            // The have-list's own row of the read cost table (RFC 011): the memory follows the ref's patches, not the export's.
+            let size = store_size(&record.path).map_err(|e| {
+                eprintln!("planeter: cannot size a repository for a have-list: {e}");
+                FetchError::Unavailable
+            })?;
+            CallLimits::data_ceiling(ceiling_for(ReadVerb::SyncHave.cost(size), None))
+        } else {
+            CallLimits::data_ceiling(self.config.data_ceiling)
+        };
         let driver = self
             .hosting
             .open_record_sandboxed(record, limits, self.sandbox_for_export(&work))
@@ -715,6 +795,7 @@ impl ExportService {
         let exported = match key.kind {
             Kind::Archive => driver.archive_export(&partial),
             Kind::Bundle => driver.bundle_export(key.ref_name.as_deref().unwrap_or(""), &partial),
+            Kind::Have => driver.sync_have(key.ref_name.as_deref().unwrap_or(""), &partial),
         };
         // X is released as soon as the bytes are written: verification and serving hold no lock.
         drop(lease);
@@ -726,6 +807,8 @@ impl ExportService {
         let verified = match key.kind {
             Kind::Archive => driver.archive_verify(&partial).map(|r| r.passed()),
             Kind::Bundle => driver.bundle_verify(&partial).map(|()| true),
+            // prikk has no verb that verifies a have-list: the file is checked here, for what it must be.
+            Kind::Have => Ok(have_list_is_sound(&partial)),
         };
         match verified {
             Ok(true) => {}
@@ -749,7 +832,9 @@ impl ExportService {
                 FetchError::Unavailable
             }
         })?;
-        self.metrics.export(&key.repo);
+        if !have {
+            self.metrics.export(&key.repo);
+        }
         {
             let mut index = self
                 .index

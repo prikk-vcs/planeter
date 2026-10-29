@@ -1,7 +1,7 @@
-//! The transport's read side over HTTP (RFC 004 D-2, D-11, D-12): `GET …/transport/advertise` and
-//! `GET …/transport/fetch?kind=archive|bundle[&ref=…]`.
+//! The transport's read side over HTTP (RFC 004 D-2, D-11, D-12): `GET …/transport/advertise`,
+//! `GET …/transport/fetch?kind=archive|bundle[&ref=…]` and `GET …/transport/have?ref=…` (the have-list, part 8).
 //!
-//! Both routes are `Authorized(Read)` through the route registry, answer a hidden and an absent repository
+//! All three routes are `Authorized(Read)` through the route registry, answer a hidden and an absent repository
 //! identically (`404`), and sit behind the rate limits of [`RateLimiter`], which are applied **before** the
 //! repository is looked at and keyed by the caller only, so a rate-limit answer says nothing about any repository.
 //! A fetch is a whole artifact exported once and **served from the spool file** by a chunked file stream: prikk's output
@@ -226,6 +226,7 @@ fn fetch_failure(state: &AppState, export: &ExportService, e: &FetchError) -> Re
         }
         FetchError::UnknownRef => code_response(state, ErrorCode::UnknownRef),
         FetchError::BundleOfReceivedRef => code_response(state, ErrorCode::BundleOfReceivedRef),
+        FetchError::NoHaveList => code_response(state, ErrorCode::NoHaveList),
         FetchError::NotVerified => code_response(state, ErrorCode::NotVerified),
         FetchError::Deadline => {
             code_response_with_keys(state, ErrorCode::ExportFailed, ErrorCode::EXPORT_DEADLINE)
@@ -474,6 +475,12 @@ fn artifact_name(owner: &str, name: &str, kind: Kind, ref_name: Option<&str>) ->
             clean(name),
             clean(r.unwrap_or("ref"))
         ),
+        (Kind::Have, r) => format!(
+            "{}-{}-{}.have",
+            clean(owner),
+            clean(name),
+            clean(r.unwrap_or("ref"))
+        ),
     }
 }
 
@@ -515,11 +522,88 @@ pub(crate) async fn fetch_handler(
             }
         },
     };
+    serve_planned(
+        &state,
+        &export,
+        record,
+        (&owner, &name),
+        kind,
+        q.ref_name,
+        &headers,
+        started,
+    )
+    .await
+}
+
+/// The have-list of one published ref (RFC 004 part 8): `GET …/transport/have?ref=NAME`. The same gate, limits, `ETag`,
+/// spool and single flight as a fetch; the file is `PSYNCHV1`, what this repository already holds of the ref, for a
+/// sender's `prikk sync build <ref> --have`.
+pub(crate) async fn have_handler(
+    State(state): State<AppState>,
+    Path((owner, name)): Path<(String, String)>,
+    q: Result<Query<HaveQuery>, QueryRejection>,
+    peer: crate::client_ip::PeerAddr,
+    headers: HeaderMap,
+) -> Response {
+    let started = Instant::now();
+    let principal = crate::principal::principal_from_request(&headers, &state).await;
+    let runtime = state.transport.clone();
+    if let Some(rt) = &runtime
+        && let Some(refused) = limits(&state, rt, peer, &headers, &principal)
+    {
+        return refused;
+    }
+    let record = match readable(&state, &principal, &owner, &name).await {
+        Ok(r) => r,
+        Err(e) => return error_response(&state, e),
+    };
+    let Some(rt) = runtime else {
+        return code_response(&state, ErrorCode::TransportOff);
+    };
+    let Ok(Query(q)) = q else {
+        return error_response(&state, Failure::Invalid);
+    };
+    serve_planned(
+        &state,
+        &rt.export,
+        record,
+        (&owner, &name),
+        Kind::Have,
+        q.ref_name,
+        &headers,
+        started,
+    )
+    .await
+}
+
+#[derive(Debug, serde::Deserialize)]
+pub struct HaveQuery {
+    #[serde(rename = "ref")]
+    ref_name: Option<String>,
+}
+
+/// What a fetch and a have-list share once the caller may read the repository and the kind is known: plan (validate
+/// the ref, compute the `ETag`), answer `304` to a current copy, produce the artifact if the spool lacks it, serve it
+/// from the spool file.
+#[allow(clippy::too_many_arguments)]
+async fn serve_planned(
+    state: &AppState,
+    export: &Arc<ExportService>,
+    record: planeter_store::RepositoryRecord,
+    (owner, name): (&str, &str),
+    kind: Kind,
+    ref_in: Option<String>,
+    headers: &HeaderMap,
+    started: Instant,
+) -> Response {
+    let state = state.clone();
+    let export = Arc::clone(export);
+    let (owner, name) = (owner.to_owned(), name.to_owned());
     // The metrics and the log line name the repository by its opaque id (no owner or name beyond the access log).
     let repo_label = record.repo_id.as_str().to_owned();
     // The planned request: validated ref and the ETag of the current state, without any export.
     let plan = {
-        let (export, record, ref_name) = (Arc::clone(&export), record.clone(), q.ref_name.clone());
+        let (export, record, ref_name) = (Arc::clone(&export), record.clone(), ref_in);
         state
             .gate
             .run(move || export.plan(&record, kind, ref_name.as_deref()))
@@ -534,7 +618,7 @@ pub(crate) async fn fetch_handler(
         }
     };
     // A client whose copy is current: no export, no bytes.
-    if none_match(&headers, &etag) {
+    if none_match(headers, &etag) {
         export.metrics().fetch(
             &repo_label,
             &FetchRecord {
@@ -552,15 +636,21 @@ pub(crate) async fn fetch_handler(
             .unwrap_or_else(|_| code_response(&state, ErrorCode::Internal));
     }
     // Export if needed (its own bound on concurrent exports, not the read gate's slots, so reads are never
-    // starved by exports), then serve from the spool.
-    let artifact = {
-        let (export, record, ref_name) = (Arc::clone(&export), record.clone(), ref_name.clone());
-        offload(move || export.artifact(&record, kind, ref_name.as_deref())).await
-    };
-    let artifact = match artifact {
-        Ok(Ok(a)) => a,
-        Ok(Err(e)) => return fetch_failure(&state, &export, &e),
-        Err(_) => return error_response(&state, Failure::Internal),
+    // starved by exports), then serve from the spool. A have-list is a read: a hit is served as it is, a miss is admitted
+    // against the read memory budget by its row of the cost table (RFC 011).
+    let artifact = if kind == Kind::Have {
+        match have_artifact(&state, &export, &record, ref_name.clone()).await {
+            Ok(a) => a,
+            Err(resp) => return *resp,
+        }
+    } else {
+        let (job_export, record, ref_name) =
+            (Arc::clone(&export), record.clone(), ref_name.clone());
+        match offload(move || job_export.artifact(&record, kind, ref_name.as_deref())).await {
+            Ok(Ok(a)) => a,
+            Ok(Err(e)) => return fetch_failure(&state, &export, &e),
+            Err(_) => return error_response(&state, Failure::Internal),
+        }
     };
     let size = artifact.size;
     let range = {
@@ -633,6 +723,55 @@ pub(crate) async fn fetch_handler(
     builder
         .body(body)
         .unwrap_or_else(|_| code_response(&state, ErrorCode::Internal))
+}
+
+/// The have-list artifact: from the spool if it is there (no admission, no lease), otherwise produced under the read gate's
+/// **weighted admission** by the have-list's row of the cost table (RFC 011, RFC 004 part 8), which also bounds how many
+/// run at once. A refusal comes back as the response to send.
+async fn have_artifact(
+    state: &AppState,
+    export: &Arc<ExportService>,
+    record: &planeter_store::RepositoryRecord,
+    ref_name: Option<String>,
+) -> Result<planeter_transport::Artifact, Box<Response>> {
+    let failed = |e: FetchError| Box::new(fetch_failure(state, export, &e));
+    let internal = || Box::new(error_response(state, Failure::Internal));
+    let peeked = {
+        let (export, record, ref_name) = (Arc::clone(export), record.clone(), ref_name.clone());
+        offload(move || export.peek(&record, Kind::Have, ref_name.as_deref())).await
+    };
+    match peeked {
+        Ok(Ok(Some(hit))) => return Ok(hit),
+        Ok(Ok(None)) => {}
+        Ok(Err(e)) => return Err(failed(e)),
+        Err(_) => return Err(internal()),
+    }
+    let path = record.path.clone();
+    let cost = match offload(move || planeter_core::admission::store_size(&path)).await {
+        Ok(Ok(size)) => planeter_core::admission::ReadVerb::SyncHave.cost(size),
+        Ok(Err(_)) => return Err(failed(FetchError::Unavailable)),
+        Err(_) => return Err(internal()),
+    };
+    let (job_export, record, ref_name) = (Arc::clone(export), record.clone(), ref_name);
+    let produced = state
+        .gate
+        .run_weighted(cost, "have", move || {
+            job_export.artifact(&record, Kind::Have, ref_name.as_deref())
+        })
+        .await;
+    match produced {
+        Ok(Ok(a)) => Ok(a),
+        Ok(Err(e)) => Err(failed(e)),
+        Err(crate::gate::AdmitError::TooLarge { .. }) => {
+            export.metrics().refusal("over_budget");
+            Err(Box::new(error_response(state, Failure::OverBudget)))
+        }
+        Err(crate::gate::AdmitError::Busy) => {
+            export.metrics().refusal("busy");
+            Err(Box::new(error_response(state, Failure::Busy)))
+        }
+        Err(crate::gate::AdmitError::Aborted) => Err(internal()),
+    }
 }
 
 // ------------------------------------------------------------------------------------------------ propose

@@ -56,6 +56,7 @@ fn the_verb_list_is_complete_and_exhaustively_matched() {
             ReadVerb::FileContent => 5,
             ReadVerb::Verify => 6,
             ReadVerb::Extract => 7,
+            ReadVerb::SyncHave => 8,
         }
     }
     for (i, v) in ReadVerb::ALL.iter().enumerate() {

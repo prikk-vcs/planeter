@@ -252,8 +252,8 @@ fn the_table_lists_the_routes_the_contract_knows_and_every_public_entry_has_a_re
         .collect();
     assert_eq!(
         authorized.len(),
-        9 + 2 + 9,
-        "9 API reads, the transport's advertise and fetch, and 9 repository pages"
+        9 + 3 + 9,
+        "9 API reads, the transport's advertise, fetch and have-list, and 9 repository pages"
     );
     assert!(authorized.iter().all(|p| p.contains("{owner}")));
 }

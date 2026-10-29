@@ -305,6 +305,14 @@ pub const CATALOG: &[Entry] = &[
         "代わりに kind=archive でリポジトリ全体を取得してください。",
     ),
     msg(
+        "error.no_have_list.message",
+        "その ref には、have リストがありません。",
+    ),
+    msg(
+        "error.no_have_list.hint",
+        "公開されたブランチの have リストを取得してください。名前はアドバタイズから確認できます。",
+    ),
+    msg(
         "error.not_verified.message",
         "エクスポートしたアーティファクトが検証に通らなかったため、提供しませんでした。",
     ),

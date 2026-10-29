@@ -235,7 +235,7 @@ fn schemas() -> Value {
             "current_branch": nullable_string(), "branches": array_of("Branch"), "tags": array_of("Tag")
         })),
         "Offer": obj(&["kind", "ref", "size", "etag"], json!({
-            "kind": {"type": "string", "enum": ["bundle", "archive"]},
+            "kind": {"type": "string", "enum": ["bundle", "archive", "have"]},
             "ref": nullable_string(),
             "size": {"type": "integer", "minimum": 0, "nullable": true, "description": "The last known size of an export of it; null until the first export (it may be stale)."},
             "etag": {"type": "string", "description": "The `ETag` a fetch of it would return now."}
@@ -1049,6 +1049,57 @@ pub fn document(content_origin: &str) -> Value {
                 ErrorCode::UnknownRef,
                 ErrorCode::UnknownKind,
                 ErrorCode::BundleOfReceivedRef,
+                ErrorCode::NotVerified,
+                ErrorCode::ExportFailed,
+                ErrorCode::RangeNotSatisfiable,
+            ],
+        ),
+    );
+    paths_obj.insert(
+        paths::TRANSPORT_HAVE.into(),
+        with_errors(
+            {
+                let mut params = owner_name();
+                params.push(param(
+                    "ref",
+                    "query",
+                    true,
+                    "The published branch (`heads/…`) whose have-list is wanted; take it from the advertisement. A tag and a received ref (`remotes/…`) have none (`no_have_list`).",
+                    json!({"type": "string"}),
+                ));
+                json!({"get": {
+                    "operationId": "getTransportHave",
+                    "summary": "What the repository already holds of a ref, so a sender can build an incremental artifact",
+                    "description": "The **have-list** of one published branch: the `PSYNCHV1` file `prikk sync have <ref>` writes, which a sender passes to `prikk sync build <ref> --have FILE` so that its artifact carries only what this repository lacks. It covers the ref's sealed history **and the patches this repository has accepted but not yet sealed**, so a pending patch is not sent again. Produced once per state of the repository (keyed by the repository, the ref and the state fingerprint) under a **read** lease, checked (its magic and its size bound) and spooled; served from the spool file with single flight, so a slow client holds no lock and no process. `304` when `If-None-Match` matches the `ETag`; `Range` is honoured as for a fetch. The cost of a changed-state request is one `sync have` call, admitted against the read memory budget by its row of the cost table; the mitigations are the cache, single flight and the rate limits. The advertisement offers it per published branch (`kind=have`).",
+                    "parameters": params,
+                    "security": [{"bearerToken": []}, {"sessionCookie": []}, {}],
+                    "responses": {
+                        "200": {
+                            "description": "The have-list.",
+                            "headers": {
+                                "ETag": {"description": "Derived from the repository, the ref and the state fingerprint: equal for equal states.", "schema": {"type": "string"}},
+                                "Accept-Ranges": {"description": "`bytes`.", "schema": {"type": "string"}},
+                                "Content-Disposition": {"description": "`attachment` with a file name ending `.have`.", "schema": {"type": "string"}}
+                            },
+                            "content": {"application/octet-stream": {"schema": {"type": "string", "format": "binary"}}}
+                        },
+                        "206": {
+                            "description": "A byte range of the one current have-list.",
+                            "headers": {"Content-Range": {"description": "`bytes first-last/size`.", "schema": {"type": "string"}}},
+                            "content": {"application/octet-stream": {"schema": {"type": "string", "format": "binary"}}}
+                        },
+                        "304": {"description": "Not modified (the request's `If-None-Match` matched `ETag`)."}
+                    },
+                }})
+            },
+            &[
+                ErrorCode::Busy,
+                ErrorCode::TransportOff,
+                ErrorCode::RateLimited,
+                ErrorCode::InvalidRequest,
+                ErrorCode::UnknownRef,
+                ErrorCode::NoHaveList,
+                ErrorCode::TooLarge,
                 ErrorCode::NotVerified,
                 ErrorCode::ExportFailed,
                 ErrorCode::RangeNotSatisfiable,
