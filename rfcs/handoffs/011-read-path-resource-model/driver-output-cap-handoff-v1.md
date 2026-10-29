@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | RFC 011 bounds a prikk call's **memory** (`prlimit --data`), **time** (deadline) and **lifetime** (dies with the server). It does not bound what planeter **collects**: `Sandbox::run` reads the child's stdout and stderr into `Vec<u8>` without limit. The memory ceiling protects the host from the child, not from our own buffer; a hostile archive with a million tiny branches makes `archive import --format json` print a report as large as the archive (≤ the 100 MiB edge bound), `log --limit 100000` on a long history is large by nature, and a damaged archive may print a long `damaged` list. Found by the dev team in part 7 (question 8); recorded as IS-55 and threat-model RR-16. This handoff closes it for **every** prikk call. |
-| Status | **Assigned** (2026-10-28). Independent of the supply-chain ruling and of the other open work. |
+| Status | **Done, reviewed Approved (2026-10-29; commits `676b4ac`…`0c0616b`).** IS-55 closed. (Originally: Assigned 2026-10-28. Independent of the supply-chain ruling and of the other open work. |
 | Basis | [`../../accepted/011-read-path-resource-model.md`](../../accepted/011-read-path-resource-model.md) D-2 (ceilings), D-5 (child lifetime); `crates/planeter-prikk/src/sandbox.rs` (`Sandbox::run`, the spawn-and-collect function, `Output`), `crates/planeter-prikk/src/cli.rs` (the typed verbs and `PrikkError`), `crates/planeter-core/src/admission.rs`; `repository-creation-review-request.md` §7 question 8; threat model v0.5 RR-16. |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 

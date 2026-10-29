@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | prikk 0.55.0 is out (letter of 2026-10-29, ledger PK-73). For planeter it changes little by design, and asks one thing of us: the `sync accept` number on 0.55.0. This handoff **re-baselines** (suite and re-validation on 0.55.0, the floor stays 0.54.0), teaches the `extract` driver the two ids 0.55.0 adds, and **re-measures the accept** (faster writes may change the per-object cost that RFC 004 D-5.4's object bound and deadline are set from). No UI, no new feature. |
-| Status | **Assigned** (2026-10-29). **Precondition: the owner installs prikk 0.55.0 on this machine** (`prikk --version` must say 0.55.0; the architect will say so in the handoff message). Do it **after** the IS-55 delivery (`driver-output-cap-handoff-v1.md`) so the two do not share a tree. |
+| Status | **Done, reviewed Approved (2026-10-29; commits `8e60b97`, `bf24297`).** (Originally: Assigned 2026-10-29. **Precondition: the owner installs prikk 0.55.0 on this machine** (`prikk --version` must say 0.55.0; the architect will say so in the handoff message). Do it **after** the IS-55 delivery (`driver-output-cap-handoff-v1.md`) so the two do not share a tree. |
 | Basis | Ledger PK-73 and PK-70/PK-71; prikk's letter `.git-exclude/upstream/prikk/receive/2026-10-29-0-55-0-is-out-and-our-answers-to-your-two-letters.md`; [`prikk-0-54-rebaseline-and-extract-driver-handoff-v2.md`](prikk-0-54-rebaseline-and-extract-driver-handoff-v2.md) (the driver, the 13 ids, `ClaimParentNotSealedOrDamaged`); RFC 004 D-5.3/D-5.4/R-3 (as amended), `cost_model` in `propose.rs`, `CostRule` in `admission.rs`, `MEASURED_ON`; ledger PK-68 (one flush per object), PK-69. |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 

@@ -522,8 +522,8 @@ A change that breaks one of these is a security bug, not a preference. Several m
   determined member can use their quota; closing a proposal does not shrink the repository. The pending set grows
   with every accepted proposal (about 1.1 MiB of accept memory per 1,000 pending patches, PK-69) until a key-holding
   action seals it somewhere.
-- **RR-13 — Accept time is a disk flush per object (PK-68).** The deadline and the object bound are safe on the
-  measured hosts (70–260 s for 5,000 objects); an operator on slow storage must lower the bound. The limits that
+- **RR-13 — Accept time is a disk flush per object (PK-68; 2.6–3.8× faster on prikk 0.55.0, PK-75).** The deadline and the object bound are safe on the
+  measured hosts (70–260 s for 5,000 objects on 0.54.1; 32–81 s on 0.55.0); an operator on slow storage must lower the bound. The limits that
   count requests (rate limits) are in memory, per process, and reset on restart (as RR-11).
 - **RR-14 — The creator's trust decision (v0.5).** Typing a maintainer's whole public key makes the creator compare it
   with what the maintainer told them through another channel; a creator who is deceived, or who types what the
@@ -533,9 +533,11 @@ A change that breaks one of these is a security bug, not a preference. Several m
   maintainer; nothing in planeter merges, seals or publishes, and no ref protection can be enforced by it (INV-2).
   Spam by many accounts is bounded by per-principal rate limits, moderation (hiding) and the account-creation policy of
   the deployment.
-- **RR-16 — The driver buffers a prikk call's output in memory without a cap (v0.5; open, IS-55).** The memory ceiling
-  bounds the child, not planeter's buffer; a hostile archive with very many refs makes a report as large as the
-  archive (≤ the edge bound). To be closed by a per-call cap with a named refusal.
+- **RR-16 — The driver's buffer of a prikk call's output (v0.5; closed 2026-10-29, IS-55).** The memory ceiling bounds
+  the child, not planeter's buffer; now every prikk call's stdout and stderr are collected under a finite per-verb cap
+  (≥ 2× the largest legitimate output, measured: ledger PK-74), the child is killed on overflow, and overflow is a
+  named, counted refusal handled by every caller (never a truncated parse, never "none"). Residual: four of the
+  table's `largest` values are extrapolated.
 - **ASSUME-1 — The operator and host are trusted; planeter defends against network actors and malicious
   users, not a hostile operator** (TB-8).
 - **ASSUME-2 — prikk's offline `verify` is correct and is the ultimate arbiter of history integrity.**
