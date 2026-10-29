@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | The rules that produced planeter's dependency tree, and the record of every supply-chain decision (accepted with its measured cost, rejected with its reason), so settled battles are not re-fought and new ones are decided the same way. |
-| As of | 2026-10-21 (lock: 214 crates; +2 for graceful shutdown, see the ledger) |
+| As of | 2026-10-29 (lock: 189 crates; −25 for the `aws_lc_rs` backend, see the ledger; no advisory ignore) |
 | Basis | RFC 010 (D-3 supply-chain gate at project events, D-4 triage ladder, D-5 pinned build chain); RFC 001 (the sandboxed-subprocess pattern), threat model `T-11` (supply chain) and `C-8` (egress), `deny.toml`, `.cargo/audit.toml`, the 0.1.0–0.2.0 review packages |
 
 ## Rules
@@ -14,12 +14,13 @@
    new licenses: …". A scratch measurement never rides inside a larger command.
 2. **Licenses are an allow-list** (`deny.toml`): Apache-2.0, MIT, Apache-2.0 WITH LLVM-exception,
    Unicode-3.0, MPL-2.0 (file-level copyleft; enters via ammonia's CSS parser), BSD-3-Clause (axum's
-   `matchit`), ISC (dev-only `simple_asn1`). Adding one is a decision request to the owner with the
+   `matchit`), ISC (`aws-lc-rs`, `aws-lc-sys`, `untrusted`, `simple_asn1`). Adding one is a decision request to the owner with the
    crate, the path by which it enters, and why the license is compatible with Apache-2.0.
 3. **Advisories are not ignored, except scoped and justified in both files** (`deny.toml` with a
-   `reason`, `.cargo/audit.toml`). The one standing ignore: RUSTSEC-2023-0071 (Marvin, `rsa`) —
-   planeter performs public-key verification only; no RSA private-key operation exists in the tree.
-   An ignore is re-examined at every dependency change that touches its path.
+   `reason`, `.cargo/audit.toml`). **There is no standing ignore** (since 2026-10-29): the one that
+   existed, RUSTSEC-2023-0071 (Marvin, `rsa`), was retired by removing the crate from the tree, not by
+   arguing about reachability (see "Supply-chain triage record"). An ignore is re-examined at every
+   dependency change that touches its path.
 4. **Prefer a confined subprocess to an in-process client** when the capability is a whole protocol
    stack: prikk (the VCS) and curl (outbound HTTPS) run under bubblewrap with `--unshare-all --clearenv`,
    read-only system view, and only the mounts they need. An in-process TLS/SSH/HTTP stack is adopted
@@ -109,6 +110,14 @@ labelled `rehearsal` in their subject name. Its run id is recorded with any chan
 | 2026-10-23 | `askama` 0.13 default features trimmed (`default-features = false`, `features = ["derive", "std"]`), **manifest change** | 213 → 212 (−1: `basic-toml`; the `serde`/`serde_derive` edges only `askama_derive` and `askama_parser` held are dropped, `serde` stays for other crates); deny: advisories ok on a freshly fetched database; audit: no `basic-toml` warning | RUSTSEC-2026-0374 (`basic-toml` unmaintained, reached through `askama_derive`'s optional `config` feature, which `planeter-web` does not use: no `askama.toml`). RFC 010 D-4 rung 2, so no ignore; the comment on the dependency line says to re-enable `config` only if an `askama.toml` is needed and the advisory is resolved. Evidence: the whole test suite and the compile (no template uses a feature the trim removed) |
 | 2026-10-21 | `tokio` `signal` feature in the `planeter` binary (graceful shutdown, RFC 004 part 2 T0b), **manifest change** | 212 → 214 (+2: `signal-hook-registry` 1.4.8, `errno` 0.3.14; `libc` and `windows-sys` were already there) | measured before adoption: deny 0 (advisories, bans, licenses, sources ok), audit 0 (214 crates, 1,348 advisories); both crates `MIT OR Apache-2.0`; `signal-hook-registry` is the signal registry tokio itself builds on (`vorner/signal-hook`), a 21 KB crate (48 KB of source) that uses `unsafe` internally, as installing a signal handler requires (planeter's own crates stay `forbid(unsafe_code)`); `errno` 12 KB, a handful of `unsafe` blocks around `errno` access; no `libc`-free safe alternative exists, and a hand-written one would need `unsafe` in planeter |
 | 2026-10-21 | `futures-core` as a direct dependency of `planeter-web` (the `Stream` trait of the spool-file body), **manifest change** | 214 → 214 (+0: already in the lock through `axum`) | a body that reads the artifact in chunks needs the trait's name; no new crate |
+| 2026-10-29 | `jsonwebtoken` 10.3.0 → 11.1.0, backend `rust_crypto` → `aws_lc_rs` (`planeter-auth`; the `planeter-web` dev-dependency too), **manifest change** (D-50) | 214 → 189 (−25: 36 crates out — `rsa`, `crypto-bigint`, `p256`, `p384`, `ecdsa`, `elliptic-curve`, `primeorder`, `ed25519-dalek` and the rest of that tree, and `jsonwebtoken` 10.3.0 itself — and 11 in: `aws-lc-rs` 1.19.0, `aws-lc-sys` 0.47.0, `untrusted`, `cmake`, `dunce`, `fs_extra`, `jobserver`, `zeroize_derive`, `getrandom` 0.4.3, `r-efi`, `jsonwebtoken` 11.1.0); deny: advisories, bans, licenses, sources ok with **no ignore** (fresh database); audit: 0 vulnerabilities (189 crates); new licenses: none needing a new allow (MIT-0, CC0-1.0 and LGPL-2.1-or-later occur only as one choice of an OR expression) | retires RUSTSEC-2023-0071 (ignore removed) and RUSTSEC-2026-0387 by removing the crates; adds a C library (`aws-lc-sys`, built with `cmake` and `cc`) to the server; binary +2 MB |
+
+## Supply-chain triage record
+
+| Advisory | Crate path | Reachable? How shown | Decision | Evidence |
+|---|---|---|---|---|
+| RUSTSEC-2023-0071 (`rsa`, Marvin timing side channel on private-key operations) | `jsonwebtoken` `rust_crypto` → `rsa` | Not by planeter's code: verification only; no RSA private key exists in the process (pinned by `crates/planeter-auth/tests/no_signing_in_production.rs`) | Was ignored (owner, 2026-09-24); **retired 2026-10-29 (D-50)** by removing the crate | `Cargo.lock` has no `rsa`; `cargo deny` and `cargo audit` exit 0 with no ignore |
+| RUSTSEC-2026-0387 (`crypto-bigint` 0.5.5, timing variability on secret integers) | `jsonwebtoken` `rust_crypto` → `p256`/`p384` → `elliptic-curve` → `crypto-bigint` | Only on ES256/ES384 *verification* with public keys; no private key in the process | **Backend switched**, not ignored (D-50): the crate leaves the tree | `Cargo.lock` has no `crypto-bigint`; `cargo deny` and `cargo audit` exit 0; the 30-row algorithm matrix (`crates/planeter-auth/tests/oidc_algorithms.rs`) behaves the same on both backends |
 
 ## Ledger — rejected (do not re-propose without new facts)
 
@@ -117,7 +126,7 @@ labelled `rehearsal` in their subject name. Its run id is recorded with any chan
 | 2026-09-23 | `ssh-key` (OpenSSH key parsing) | locks the unfixable `rsa` advisory into the lock with no scoping possible → hand-rolled ed25519 parser (fingerprints identical to `ssh-keygen -lf`) |
 | 2026-09-23 | `maud`, `axum-extra` (cookies) | open advisories in their trees → askama + hand-rolled cookie helpers |
 | 2026-09-23 | in-process `rustls` + `russh` (TLS and SSH transport) | +165 crates; cargo-deny licenses **and** advisories failing; russh's own advisory (RUSTSEC-2026-0154) plus `rsa` → **proxy-terminated TLS + host OpenSSH `ForceCommand`** (owner-ruled) |
-| 2026-09-24 | `jsonwebtoken` 9 / `ring` or `aws-lc-rs` backends | +39 crates and a cargo-deny license failure → RustCrypto backend (owner-ruled) |
+| 2026-09-24 | `jsonwebtoken` 9 / `ring` or `aws-lc-rs` backends | +39 crates and a cargo-deny license failure → RustCrypto backend (owner-ruled). **History:** reversed 2026-10-29 (D-50, by the owner's delegation): the `aws_lc_rs` backend is now adopted (ledger above); the licences it needs (ISC, with BSD-3-Clause and MIT-0 in choice clauses) are permissive and were allowed |
 | 2026-09-24 | `reqwest` / `hyper` + `rustls` (outbound HTTPS for OIDC) | reintroduces the rejected TLS tree → confined `curl` through the egress guard (owner-ruled) |
 
 ## Runtime prerequisites (not crates, but part of the supply chain)

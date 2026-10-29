@@ -1,4 +1,5 @@
 # cargo-audit configuration (the CI `supply-chain` job runs `cargo audit`).
-# Keep in step with deny.toml's [advisories].ignore and its rationale.
+# No advisory is ignored: the one standing ignore (RUSTSEC-2023-0071, `rsa`) was retired when jsonwebtoken
+# moved to the `aws_lc_rs` backend (D-50, 2026-10-29), which removed the crate. Keep in step with deny.toml.
 [advisories]
-ignore = ["RUSTSEC-2023-0071"] # RustCrypto rsa / Marvin: private-key side channel; planeter verifies with public keys only
+ignore = []
