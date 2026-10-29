@@ -1,0 +1,37 @@
+{
+ "_comment": "THROWAWAY test keys, generated for tests/oidc_algorithms.rs with openssl (gen-test-keys.py in the review request). They sign nothing real: no identity provider, account or deployment trusts them. Do not reuse.",
+ "rsa": {
+  "pem": "-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDQvLe1rGmvEoji\nT1XSdcwT9dfW/g8ccw9SbYAnN90hywlOJQCD9GFPafjj4o2I/+0LPUBZteE6cfrb\nGmMFDGJc+60YKsMmMulgNXDgsnnvw8xdN5OFAfeqQpEFNOakho1LiOEsKtZdpZ28\nTAHaT3OX5c50mVJoFFfYPmipLK3SgbEJEJvdSRygBviKbx0vKQrj1onRNBpUxD9P\nvDngtmtC3TYiF0QcXcztm3t+CltU72UFEvRQBpEu2y355KTgEEQGK9cr535FTpqo\nfrRK36kfiRO7zgHMJ2DGvg9UeaMgHxTl4gqwTQJivmQyI6KR+lyjjQ6SISrmyflf\n1XzumWHtAgMBAAECggEAA85sCAmQwcsGO0UYqHiblAHjJjTYhLJct4WTguORrs0k\nql4PpyF8n+yZbFpmd1InZ6PZOaBsOBH5lnCGhrkcu4AM0KPuacmxvMMIJGjMwyUE\n9jeglWNCAtUpfNQs6WD94sBfKjfOCwz7KHBbz271m9+O/d6bTbr+YRZQidbsqWDJ\nwXJ1kiL8+vzfsbACujsxoP0CWdEbtryCVqJBVM+jZ7ypVD7X3ohSa85vFkQc6lCI\noHqSPI8ziPadobpZXrStIdSVsSB0SHKRKK1zgdeEEE6gc8Odx5ZQPOUKVvZPlZnb\n584948e6deUqFD7VX1YZRT8UrQVxVUp3FQvP+JlsFwKBgQDzGWmDF8CetjxAJ+vA\nSLohYZoB0FORXG1BFU09vxonm7kP96D2Uj3foJF5TGFu+e20DqVUem0EZ9KRzzfc\nadWp8WTYwiiDKdB1I30XaF6NnZuGGUXiDSn/HNF1UmhGTlYfeIhngTL8lI7GdvTS\n+7lj767uSB5AhzBnPty3HJeHfwKBgQDb0HwNJyfjIlRYBYvzGoD/SfIBFh+hKd36\nLGnCatENVKelgUIOo3q/eky6a5uKwEOLMnzk+2A2Xk/0Bw72qK529s1emGnGJCt/\nqovotvPyKAo/iBuN8hsGu0rZ36eEGb38jX8ZIlx7+owZu+fKDrlps95y5G8EaVgI\nkij7eBNskwKBgGK0pMTXthw7PkeGbhDK9thq+s9VuTjCYJIWhiBWIdaHQiMblr2t\nMvZECg1IWB9pV3zOnY6pju5FAZi2nKXgSyMPorToUO7A4aVOXZJNjGbP4cAXLurU\nEYNGPj320eQKFqn8lNYB/aPU5gvrbQjlsKbFQS/7FF17BspFGfU3pMcdAoGAF3An\nig9+xU1HyQruXUGaN55e25bMUJbyQFa0ADL7j3xTU+ZwcLclw3z66XXH5AeULCd6\nAcB8BdAQnmiSQ+LAl5bBVzDRNnts1/QLbwjzAgMa9KNCrOP/1bvqw0iByCgmheNg\nhgGP8vhIMAZFNNpVEtxG/+EzpTjGVkOfcxDeoVkCgYBwNu+AK7HPTSw0qz8LjHZ3\n8Ybh4sWjavaxy8GjSb8u3hxe0K8p0zPKzfrhwAR6ugRUvlNkIQea6iI0tIMs/zhZ\nFjrM0HuMKJVnNWnCKVrvmMnAT2POqq83kFJNkWVLWkYkwHg0ppRPCqfEJRrkp90v\nr+a19JEhtpeXmk6KOc9YSA==\n-----END PRIVATE KEY-----\n",
+  "jwk": {
+   "kty": "RSA",
+   "n": "0Ly3taxprxKI4k9V0nXME_XX1v4PHHMPUm2AJzfdIcsJTiUAg_RhT2n44-KNiP_tCz1AWbXhOnH62xpjBQxiXPutGCrDJjLpYDVw4LJ578PMXTeThQH3qkKRBTTmpIaNS4jhLCrWXaWdvEwB2k9zl-XOdJlSaBRX2D5oqSyt0oGxCRCb3UkcoAb4im8dLykK49aJ0TQaVMQ_T7w54LZrQt02IhdEHF3M7Zt7fgpbVO9lBRL0UAaRLtst-eSk4BBEBivXK-d-RU6aqH60St-pH4kTu84BzCdgxr4PVHmjIB8U5eIKsE0CYr5kMiOikfpco40OkiEq5sn5X9V87plh7Q",
+   "e": "AQAB"
+  }
+ },
+ "p256": {
+  "pem": "-----BEGIN PRIVATE KEY-----\nMIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQglmLUr+IJnaY9C1dq\npudrpveWRRGa/qEFxjjMOJNR5FmhRANCAAQXTqBvxkX9PTwYYUKb9qA1D81Urch+\nTEfKFGIMkmPGuhcf6puHoU4HCvpvK6V5Mr89V6A50pGTU1sZp7NdAvDK\n-----END PRIVATE KEY-----\n",
+  "jwk": {
+   "kty": "EC",
+   "crv": "P-256",
+   "x": "F06gb8ZF_T08GGFCm_agNQ_NVK3IfkxHyhRiDJJjxro",
+   "y": "Fx_qm4ehTgcK-m8rpXkyvz1XoDnSkZNTWxmns10C8Mo"
+  }
+ },
+ "p384": {
+  "pem": "-----BEGIN PRIVATE KEY-----\nMIG2AgEAMBAGByqGSM49AgEGBSuBBAAiBIGeMIGbAgEBBDBkkv6cFYYJuDYSpgTY\n+zYXWQ/t1j/wrnwHH96f33cZ0PaVHBSFjS3QuhOjs9AUCnihZANiAASzIIeXRw53\ncKZLZ+PtVaLMxV9ShK3kLr7v14slWRM7HxrD0Km61WGnc9DRBAR18CsV05H6zI6S\nD5e+Y4P0MXllmLCyCS4nzOsiT8+KjXhOFvDrR3GwKb8Jom6K4T/6+w8=\n-----END PRIVATE KEY-----\n",
+  "jwk": {
+   "kty": "EC",
+   "crv": "P-384",
+   "x": "syCHl0cOd3CmS2fj7VWizMVfUoSt5C6-79eLJVkTOx8aw9CputVhp3PQ0QQEdfAr",
+   "y": "FdOR-syOkg-XvmOD9DF5ZZiwsgkuJ8zrIk_Pio14Thbw60dxsCm_CaJuiuE_-vsP"
+  }
+ },
+ "ed": {
+  "pem": "-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIGEx2bto5iP9e94B8yQ8c8+GxEfY8rrqdi7EWbTAG6Ox\n-----END PRIVATE KEY-----\n",
+  "jwk": {
+   "kty": "OKP",
+   "crv": "Ed25519",
+   "x": "Dz7hTaAUSamFeMWfSWwIHjfkzEzP6D95CNKTt4qmXio"
+  }
+ }
+}
