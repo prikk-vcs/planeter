@@ -1,0 +1,12 @@
+[package]
+name = "planeter-glibc-check"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "The image gate (D-51): the highest glibc version a release binary strictly needs must not exceed the glibc of the image that carries it. Std-only; not a product crate."
+publish = false
+
+[dependencies]

@@ -32,7 +32,13 @@
 //!   rehearsal package without `inputs.mode == 'rehearsal'`, or a rehearsal-conditioned step that can also
 //!   run on a tag push (`github.event_name == 'push'` or `||` in its condition); a rehearsal-conditioned
 //!   step that pushes to anything but the rehearsal package; and a rehearsal-conditioned step that names a
-//!   release, tag or crates.io command.
+//!   release, tag or crates.io command;
+//! - an image that is pushed or attested before it has been run (D-51): a step that pushes an image or attests
+//!   one (`ghcr.io` in a push, an `actions/attest` of an image) must be preceded, in its job or in a job it
+//!   `needs`, by a step that **runs the image the job built** (its own entrypoint) (`docker run … "${IMAGE_ID}"`, the id read from the
+//!   build's `--iidfile` and checked to be `sha256:<64 hex>` in the same step) and by a step that runs
+//!   `planeter-glibc-check`. A `docker run` of that locally built image id is the one `docker run` that needs no
+//!   `@sha256:` in its line.
 //!
 //! It has no allow-list. It reads text only, so it understands the shapes this repository uses, and
 //! says so: `cargo install` of tools is deliberately current and is out of scope.
@@ -121,6 +127,7 @@ pub fn check(root: &Path) -> io::Result<Report> {
         let found = if is_workflow {
             let mut hits = scan_workflow(&text);
             hits.extend(scan_release_paths(&text));
+            hits.extend(scan_image_gate(&text));
             hits
         } else if is_docker {
             scan_dockerfile(&text)
@@ -345,6 +352,22 @@ fn value_of<'a>(line: &'a str, key: &str) -> Option<&'a str> {
     Some(rest.trim().trim_matches(['"', '\'']))
 }
 
+/// `true` when line `i` is a `docker run` of the image this job just built: its image argument is `"${IMAGE_ID}"` and, within the
+/// ten lines before it (the same step), `IMAGE_ID` was checked to be `sha256:<64 hex>`.
+fn runs_local_image_id(text: &str, i: usize) -> bool {
+    let lines: Vec<&str> = text.lines().collect();
+    let Some(line) = lines.get(i) else {
+        return false;
+    };
+    if !line.contains("\"${IMAGE_ID}\"") {
+        return false;
+    }
+    let from = i.saturating_sub(10);
+    lines[from..i]
+        .iter()
+        .any(|l| l.contains("IMAGE_ID") && l.contains("grep -Eqx 'sha256:[0-9a-f]{64}'"))
+}
+
 fn scan_workflow(text: &str) -> Hits {
     let mut hits = Hits::new();
     for (i, line) in text.lines().enumerate() {
@@ -423,7 +446,8 @@ fn scan_workflow(text: &str) -> Hits {
             }
         }
         for cmd in ["docker run", "docker pull"] {
-            if code.contains(cmd) && !has_digest_ref(code) {
+            let local_id = cmd == "docker run" && runs_local_image_id(text, i);
+            if code.contains(cmd) && !has_digest_ref(code) && !local_id {
                 hits.push((
                     n,
                     format!("`{cmd}` of an image not referenced by @sha256:<64 hex> digest"),
@@ -745,6 +769,129 @@ fn scan_release_paths(text: &str) -> Hits {
                 n,
                 format!(
                     "a rehearsal step names a release, tag or crates.io action or command ({w:?})"
+                ),
+            ));
+        }
+    }
+    hits
+}
+
+// ---------------------------------------------------------------- the image gate (D-51)
+
+/// One job of a workflow: its id, the jobs it needs, and its steps in order.
+struct Job {
+    id: String,
+    needs: Vec<String>,
+    steps: Vec<Step>,
+}
+
+/// The jobs of a workflow (the repository's shape: jobs at two spaces, `needs:` at four).
+fn jobs_of(text: &str) -> Vec<Job> {
+    let lines: Vec<&str> = text.lines().collect();
+    let mut starts: Vec<(usize, String)> = Vec::new();
+    let mut in_jobs = false;
+    for (i, line) in lines.iter().enumerate() {
+        if strip_comment(line).trim_end() == "jobs:" {
+            in_jobs = true;
+        } else if in_jobs && let Some(id) = job_id(line) {
+            starts.push((i, id.to_owned()));
+        }
+    }
+    let all_steps = steps_of(text);
+    let mut jobs = Vec::new();
+    for (k, (start, id)) in starts.iter().enumerate() {
+        let end = starts.get(k + 1).map_or(lines.len(), |(s, _)| *s);
+        let mut needs = Vec::new();
+        for line in &lines[*start..end] {
+            if indent_of(line) == 4
+                && let Some(v) = value_of(line, "needs")
+            {
+                needs.extend(
+                    v.trim_matches(['[', ']'])
+                        .split(',')
+                        .map(|w| w.trim().trim_matches(['"', '\'']).to_owned())
+                        .filter(|w| !w.is_empty()),
+                );
+            }
+        }
+        let steps = all_steps
+            .iter()
+            .filter(|s| s.line > *start && s.line <= end)
+            .map(|s| Step {
+                line: s.line,
+                condition: s.condition.clone(),
+                text: s.text.clone(),
+            })
+            .collect();
+        jobs.push(Job {
+            id: id.clone(),
+            needs,
+            steps,
+        });
+    }
+    jobs
+}
+
+/// A step that publishes an image: it pushes to a registry, or it attests an image.
+fn publishes_image(step: &Step) -> bool {
+    let names_registry = step.text.contains("ghcr.io");
+    names_registry && (pushes(&step.text) || step.text.contains("actions/attest"))
+}
+
+/// The image's own entrypoint (planeter) is what is run: a `docker run --entrypoint …` of some other program proves nothing.
+fn runs_the_image(step: &Step) -> bool {
+    step.text.lines().any(|l| {
+        l.contains("docker run") && l.contains("\"${IMAGE_ID}\"") && !l.contains("--entrypoint")
+    })
+}
+
+fn runs_the_glibc_check(step: &Step) -> bool {
+    step.text.contains("planeter-glibc-check")
+}
+
+/// D-51: nothing that is pushed or attested as an image before the image has been run and its binary's glibc needs checked.
+fn scan_image_gate(text: &str) -> Hits {
+    let jobs = jobs_of(text);
+    // A job is a gate when both steps come before its first publishing step (or it publishes nothing).
+    let gated = |job: &Job| {
+        let first_publish = job
+            .steps
+            .iter()
+            .position(publishes_image)
+            .unwrap_or(job.steps.len());
+        let before = &job.steps[..first_publish];
+        before.iter().any(runs_the_image) && before.iter().any(runs_the_glibc_check)
+    };
+    let mut hits = Hits::new();
+    for job in &jobs {
+        let Some(step) = job.steps.iter().find(|s| publishes_image(s)) else {
+            continue;
+        };
+        if gated(job) {
+            continue;
+        }
+        // Or every route into it passes a gate: the jobs it needs (transitively) include one.
+        let mut seen: Vec<&str> = Vec::new();
+        let mut stack: Vec<&str> = job.needs.iter().map(String::as_str).collect();
+        let mut upstream_gate = false;
+        while let Some(id) = stack.pop() {
+            if seen.contains(&id) {
+                continue;
+            }
+            seen.push(id);
+            if let Some(j) = jobs.iter().find(|j| j.id == id) {
+                if gated(j) && j.steps.iter().any(runs_the_image) {
+                    upstream_gate = true;
+                }
+                stack.extend(j.needs.iter().map(String::as_str));
+            }
+        }
+        if !upstream_gate {
+            hits.push((
+                step.line,
+                format!(
+                    "job `{}` pushes or attests an image without a step before it that runs the image (`docker run … \"${{IMAGE_ID}}\"`) and a step that runs `planeter-glibc-check`, in this job or in a job it needs (D-51)",
+                    job.id
                 ),
             ));
         }

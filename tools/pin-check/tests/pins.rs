@@ -315,6 +315,16 @@ fn a_channel_in_the_msrv_job_is_still_refused() {
 
 // ---------------------------------------------------------------- the rehearsal cannot reach the real package (RFC 010 D-10)
 
+/// The two steps of the image gate (D-51): run the image the job built, then check the binary's glibc needs against the image's.
+const GATE: &str = r#"      - name: Run the image
+        run: |
+          IMAGE_ID="$(cat image-id.txt)"
+          printf '%s\n' "${IMAGE_ID}" | grep -Eqx 'sha256:[0-9a-f]{64}'
+          docker run --rm "${IMAGE_ID}" --version
+      - name: Check the glibc needs
+        run: cargo run --locked -p planeter-glibc-check -- ctx/amd64/planeter "$(docker run --rm --entrypoint ldd "${IMAGE_ID}" --version | head -n 1)"
+"#;
+
 /// A release-shaped workflow: the real publish steps are push-only (one by its job's `if`), the rehearsal
 /// steps are rehearsal-only and name only the rehearsal package.
 fn release_shaped(extra_rehearsal_step: &str) -> String {
@@ -334,7 +344,7 @@ jobs:
     steps:
       - name: BuildKit builder
         run: docker buildx create --name b --driver docker-container --driver-opt image=moby/buildkit@{DIGEST} --use
-      - name: Log in to ghcr
+{GATE}      - name: Log in to ghcr
         if: github.event_name == 'push'
         env:
           GH_TOKEN: ${{{{ secrets.GITHUB_TOKEN }}}}
@@ -755,5 +765,119 @@ fn a_rehearsal_push_by_a_script_to_another_package_fails() {
         "script-push-flag",
         &[(".github/workflows/release.yml", &release_shaped(step))],
         &["pushes to something other than"],
+    );
+}
+
+// ---------------------------------------------------------------- the image gate (D-51)
+
+#[test]
+fn a_workflow_that_runs_the_image_and_checks_its_glibc_before_it_pushes_passes() {
+    let (code, text) = run(&fixture(
+        "gate-ok",
+        &[(".github/workflows/release.yml", &release_shaped(""))],
+    ));
+    assert_eq!(code, 0, "{text}");
+}
+
+#[test]
+fn a_push_or_an_attestation_before_the_image_is_run_fails() {
+    // The gate removed altogether: the pushes and the attestation of the job are all findings, one per job.
+    let wf = release_shaped("").replace(GATE, "");
+    expect_fail(
+        "gate-missing",
+        &[(".github/workflows/release.yml", &wf)],
+        &["job `image` pushes or attests an image without a step before it that runs the image"],
+    );
+    // Only the run, or only the glibc check, is not the gate.
+    let only_run = release_shaped("").replace(
+        "      - name: Check the glibc needs\n        run: cargo run --locked -p planeter-glibc-check -- ctx/amd64/planeter \"$(docker run --rm --entrypoint ldd \"${IMAGE_ID}\" --version | head -n 1)\"\n",
+        "",
+    );
+    assert_ne!(only_run, release_shaped(""));
+    expect_fail(
+        "gate-run-only",
+        &[(".github/workflows/release.yml", &only_run)],
+        &["without a step before it that runs the image"],
+    );
+    let only_check = release_shaped("").replace(
+        "          docker run --rm \"${IMAGE_ID}\" --version\n",
+        "          true\n",
+    );
+    assert_ne!(only_check, release_shaped(""));
+    expect_fail(
+        "gate-check-only",
+        &[(".github/workflows/release.yml", &only_check)],
+        &["without a step before it that runs the image"],
+    );
+    // The gate after the push is too late.
+    let late = release_shaped("").replace(GATE, "").replace(
+        "      - name: Build and push\n        if: github.event_name == 'push'",
+        &format!("{GATE}      - name: Build and push\n        if: github.event_name == 'push'"),
+    );
+    expect_fail(
+        "gate-late",
+        &[(".github/workflows/release.yml", &late)],
+        &["pushes or attests an image without a step before it"],
+    );
+}
+
+#[test]
+fn a_publishing_job_may_rely_on_a_gate_in_a_job_it_needs_and_not_on_one_it_does_not() {
+    // Gate in `build`, publication in `ship` (which needs it): fine.
+    let split = |needs: &str| {
+        format!(
+            r#"name: r
+on:
+  push:
+    tags: ["[0-9]+.[0-9]+.[0-9]+"]
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+{GATE}  ship:
+    if: github.event_name == 'push'
+{needs}    runs-on: ubuntu-24.04
+    steps:
+      - name: Join
+        run: docker buildx imagetools create --tag ghcr.io/prikk-vcs/planeter:"$TAG" a b
+"#
+        )
+    };
+    let (code, text) = run(&fixture(
+        "gate-needs",
+        &[(
+            ".github/workflows/release.yml",
+            &split("    needs: build\n"),
+        )],
+    ));
+    assert_eq!(code, 0, "{text}");
+    expect_fail(
+        "gate-not-needed",
+        &[(".github/workflows/release.yml", &split(""))],
+        &["job `ship` pushes or attests an image"],
+    );
+}
+
+#[test]
+fn a_docker_run_of_anything_but_a_digest_or_the_image_just_built_still_fails() {
+    // `${IMAGE_ID}` is accepted only after the id was checked to be sha256:<64 hex> in the same step.
+    let unchecked = release_shaped("").replace(
+        "          printf '%s\\n' \"${IMAGE_ID}\" | grep -Eqx 'sha256:[0-9a-f]{64}'\n",
+        "",
+    );
+    assert_ne!(unchecked, release_shaped(""));
+    expect_fail(
+        "run-unchecked-id",
+        &[(".github/workflows/release.yml", &unchecked)],
+        &["`docker run` of an image not referenced by @sha256"],
+    );
+    let by_tag = release_shaped("").replace(
+        "docker run --rm \"${IMAGE_ID}\" --version",
+        "docker run --rm planeter:latest --version",
+    );
+    expect_fail(
+        "run-by-tag",
+        &[(".github/workflows/release.yml", &by_tag)],
+        &["`docker run` of an image not referenced by @sha256"],
     );
 }
