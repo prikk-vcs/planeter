@@ -132,8 +132,10 @@ platform claims it cannot run (prikk RFC 107's lesson).
   and loaded: (1) **it is run** — `planeter --version` (the line must read `planeter X.Y.Z`), `prikk --version`, `bwrap --version`,
   `prlimit --version` — by the id of the image just built (`docker run … "${IMAGE_ID}"`, the id checked to be `sha256:<64 hex>`); (2)
   **`tools/glibc-check`** reads the highest *strict* `GLIBC_` version need of the binary (`readelf -V`: a need flagged `WEAK` is reported, not failed)
-  and fails if it exceeds the glibc of the image, read from the image with `ldd --version` (never a constant); (3) after the push by digest,
-  the pushed image's config digest must equal the id that was run (the pushed image is the tested image). `planeter-pin-check` refuses a workflow
+  and fails if it exceeds the glibc of the image, read from the image with `ldd --version` (never a constant). **What the gate does not prove:** the image that is
+  pushed is built by a second `buildx build` invocation from the same inputs and the same BuildKit cache as the one that was run, not the very same
+  object (a check that the two config digests are equal failed in the rehearsal of 2026-10-29: for a manifest list with its attestation the build's
+  metadata file carries no `containerimage.config.digest`, so that check was removed rather than faked). `planeter-pin-check` refuses a workflow
   in which a step that pushes or attests an image is not preceded, in its job or a job it `needs`, by a step that runs the image and a step that
   runs `planeter-glibc-check`. A dry run, a rehearsal and a release all pass through it.
 
