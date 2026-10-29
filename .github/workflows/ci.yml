@@ -163,6 +163,17 @@ jobs:
           echo "clean release build: $((end - start)) s"
           ls -l target/release/planeter-client*
 
+      # A measurement, not a gate (continue-on-error): what does the build need? The same build with nasm and cmake taken off PATH.
+      - name: Measure the native build requirements (build again without nasm and cmake on PATH)
+        shell: bash
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          clean=$(printf '%s' "$PATH" | tr ':' '\n' | grep -viE 'nasm|cmake' | paste -sd: -)
+          for t in nasm cmake; do if PATH="$clean" command -v "$t" >/dev/null 2>&1; then echo "$t is still on PATH"; else echo "$t is off PATH"; fi; done
+          PATH="$clean" CARGO_TARGET_DIR=target-without-nasm-cmake cargo build -p planeter-client --release --locked
+          echo "build without nasm and cmake: exit=$?"
+
       - name: Test planeter-client
         shell: bash
         run: |
