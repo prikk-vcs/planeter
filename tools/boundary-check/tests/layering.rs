@@ -82,3 +82,44 @@ fn gate_catches_a_planted_upward_edge() {
     let longer = "planeter-webhook = \"1\"\n";
     assert!(!declares_dep_on(longer, "planeter-web"));
 }
+
+/// The client helper (RFC 004 part 9, D-50) is a program a person runs on their own machine; the server must not gain its HTTP
+/// and TLS stack, and the helper must not gain the server's crates.
+const CLIENT_ONLY_DEPS: &[&str] = &["ureq", "rustls", "webpki-roots", "planeter-client"];
+
+#[test]
+fn the_servers_crates_do_not_depend_on_the_clients_stack() {
+    let root = workspace_root();
+    for name in LOWER_CORE.iter().chain(UPPER.iter()).chain(&["planeter"]) {
+        let path = root.join("crates").join(name).join("Cargo.toml");
+        let manifest =
+            fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+        for dep in CLIENT_ONLY_DEPS {
+            assert!(
+                !declares_dep_on(&manifest, dep),
+                "the server crate `{name}` declares a dependency on `{dep}`, the client helper's stack (D-50)"
+            );
+        }
+    }
+}
+
+#[test]
+fn the_client_depends_on_no_server_crate() {
+    let path = workspace_root().join("crates/planeter-client/Cargo.toml");
+    let manifest =
+        fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    for dep in LOWER_CORE.iter().chain(UPPER.iter()).chain(&["planeter"]) {
+        assert!(
+            !declares_dep_on(&manifest, dep),
+            "the client helper declares a dependency on the server crate `{dep}`"
+        );
+    }
+}
+
+#[test]
+fn the_client_boundary_check_finds_a_planted_edge() {
+    let planted = "[dependencies]\nureq = \"3\"\n";
+    assert!(CLIENT_ONLY_DEPS.iter().any(|d| declares_dep_on(planted, d)));
+    let clean = "[dependencies]\nserde = \"1\"\n";
+    assert!(!CLIENT_ONLY_DEPS.iter().any(|d| declares_dep_on(clean, d)));
+}

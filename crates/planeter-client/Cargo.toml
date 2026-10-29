@@ -1,0 +1,22 @@
+[package]
+name = "planeter-client"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "A person's own prikk, talking to a planeter forge: clone, fetch and propose, over https (RFC 004 part 9)."
+
+[[bin]]
+name = "planeter-client"
+path = "src/main.rs"
+
+[dependencies]
+# D-50 (2026-10-29): the HTTP/TLS stack is ureq 3 + rustls with the aws-lc-rs provider + the compiled-in webpki-roots, https only.
+# No cookies, gzip, json or platform verifier. `rustls` is named so that the provider can be installed (ureq's `rustls-no-provider`
+# leaves the choice to the program); it adds no crate to the tree (ureq already depends on it).
+ureq = { version = "3", default-features = false, features = ["rustls-no-provider", "rustls-webpki-roots"] }
+rustls = { version = "0.23", default-features = false, features = ["aws-lc-rs", "std", "tls12"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

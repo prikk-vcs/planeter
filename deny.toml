@@ -26,6 +26,13 @@ allow = [
     "ISC",
 ]
 
+# D-50 (2026-10-29): the Mozilla root list that `planeter-client` compiles in (`webpki-roots`) is published under the data licence
+# CDLA-Permissive-2.0 (permissive: it requires keeping the licence text with the data, nothing of the code around it). It is allowed
+# for that one crate only, not as a licence in general; `webpki-root-certs` is not used and is not covered.
+[[licenses.exceptions]]
+crate = "webpki-roots"
+allow = ["CDLA-Permissive-2.0"]
+
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"

@@ -120,3 +120,54 @@ jobs:
 
       - name: cargo-audit
         run: cargo audit
+
+  # RFC 004 part 9, T0 (D-50): the client helper's dependency set (ureq + rustls with aws-lc-rs + webpki-roots) builds, and its tests run,
+  # on the three systems a person may use. The server is Linux only; this crate is not. Runner labels are pinned (no `-latest`).
+  # The native tools the build found are printed so the build requirements per system are measured, not assumed.
+  client:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+          - os: macos-15
+          - os: windows-2025
+    runs-on: ${{ matrix.os }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Rust toolchain (pinned, one compiler for CI and release)
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.99.0 --profile minimal --no-self-update
+          rustup default 1.99.0
+          rustc --version
+          cargo --version
+
+      - name: Native tools present on this runner
+        shell: bash
+        run: |
+          for t in cc gcc clang cmake nasm perl go ninja make; do
+            if command -v "$t" >/dev/null 2>&1; then echo "$t: $("$t" --version 2>&1 | head -n 1)"; else echo "$t: absent"; fi
+          done
+
+      - name: Build planeter-client (release, locked), with its time and size
+        shell: bash
+        run: |
+          set -euo pipefail
+          start=$(date +%s)
+          cargo build -p planeter-client --release --locked
+          end=$(date +%s)
+          echo "clean release build: $((end - start)) s"
+          ls -l target/release/planeter-client*
+
+      - name: Test planeter-client
+        shell: bash
+        run: |
+          set -euo pipefail
+          start=$(date +%s)
+          cargo test -p planeter-client --locked
+          end=$(date +%s)
+          echo "build and test of the test profile: $((end - start)) s"

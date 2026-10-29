@@ -11,6 +11,7 @@ members = [
     "crates/planeter-registry",
     "crates/planeter",
     "crates/planeter-runner",
+    "crates/planeter-client",
     "tools/boundary-check",
     "tools/floor-check",
     "tools/pin-check",
