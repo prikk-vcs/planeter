@@ -39,5 +39,5 @@ tower = { version = "0.5", features = ["util"] }
 # `ammonia`; nothing new enters `Cargo.lock`.
 html5ever = "0.40"
 # Test-only: sign ES256 ID tokens from a PEM fixture for the OIDC flow test.
-jsonwebtoken = { version = "10", default-features = false, features = ["rust_crypto", "use_pem"] }
+jsonwebtoken = { version = "11", default-features = false, features = ["aws_lc_rs", "use_pem"] }
 planeter-prikk = { path = "../planeter-prikk", version = "0.4.0" }

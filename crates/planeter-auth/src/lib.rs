@@ -11,7 +11,7 @@
 //! [`hashing::mint_token`]); [`sshkey`] parses OpenSSH **ed25519** public keys to fingerprints. The
 //! [`hashing::InsecureStubHasher`] remains only as a fast test double. **OIDC** is implemented (2026-09-24,
 //! owner-ruled): [`oidc::OidcProvider`] runs the PKCE code flow and verifies ID tokens against the
-//! provider's JWKS with `jsonwebtoken`'s RustCrypto backend, fetching only through the egress guard +
+//! provider's JWKS with `jsonwebtoken`'s `aws_lc_rs` backend, fetching only through the egress guard +
 //! confined `curl`; accounts are linked to `(issuer, subject)` administratively — no auto-provisioning.
 
 pub mod authenticator;

@@ -1,5 +1,5 @@
 //! OIDC / OAuth 2.0 sign-in (RFC 002 T2, `STD-2`; owner-ruled 2026-09-24): the **authorization-code flow
-//! with PKCE**, ID tokens verified against the provider's **JWKS** with `jsonwebtoken` (RustCrypto
+//! with PKCE**, ID tokens verified against the provider's **JWKS** with `jsonwebtoken` (`aws_lc_rs`
 //! backend — RS256/ES256/EdDSA, never `none`), every outbound request (discovery, JWKS, token exchange)
 //! made through the [`HttpsFetcher`] — i.e. the egress guard + confined `curl`. Nothing here is
 //! home-grown crypto.
