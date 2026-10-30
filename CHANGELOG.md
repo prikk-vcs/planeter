@@ -15,6 +15,14 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 - **The container image can no longer be shipped dead (D-51).** The release workflow now loads the image it built, runs it (`planeter`, `prikk`,
   `bwrap`, `prlimit`) and checks the release binary's glibc needs against the image's, in every mode, before anything is pushed or attested; a
   new check (`tools/glibc-check`) and `planeter-pin-check` enforce it.
+- **The pushed image is checked to be the image that was run (D-51).** After each architecture's image is pushed, the release workflow reads the
+  registry's own index, takes the `linux/<arch>` manifest and requires its config digest to equal the id of the image that was run; a mismatch
+  fails the job before the digest is handed on. A new tool (`tools/image-identity`) does the reading and `planeter-pin-check` requires the step.
+- **`planeter-client` tells the truth when prikk cannot be started (RFC 004 part 11).** "prikk was not found" is said only when there is no such
+  program; a prikk that is there but cannot be started (no permission, a directory, a script whose interpreter is gone, `Text file busy`) is told
+  with the system's reason and the next step, and one that starts but does not say its version is told what it said. The program also passes
+  `HOME` and `XDG_CONFIG_HOME` on to the prikk it starts explicitly (the same values it always inherited). The `flows` tests no longer write
+  executables, and the test server closes connections gracefully; both were causes of failures under load.
 
 - **`planeter-client`: clone, fetch and propose from your own computer (RFC 004 part 9).** A new program, separate from the server, for a person
   with their own prikk and their own keys. `clone` downloads a repository, checks it with your prikk and shows the maintainer keys it carries

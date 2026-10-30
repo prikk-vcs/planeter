@@ -70,7 +70,7 @@ pub fn run(ctx: &mut Ctx<'_>, args: &FetchArgs) -> Result<(), Failure> {
     }
     let origin = state::origin_of(&state_dir, &dir).ok_or_else(not_a_clone)?;
     let url = parse_url(ctx, &origin)?;
-    let mine = Prikk::new(&dir, ctx.lang, ctx.prikk_program.clone());
+    let mine = Prikk::in_ctx(ctx, &dir);
     mine.check()?;
     let http = client(ctx, &url, &args.common, false)?;
     let mut rec = state::load(&state_dir, &url.display(), ctx.lang)?;
@@ -166,7 +166,7 @@ pub fn run(ctx: &mut Ctx<'_>, args: &FetchArgs) -> Result<(), Failure> {
         let trial_dir = scratch.path().join("trial");
         std::fs::create_dir_all(&trial_dir)
             .map_err(|e| crate::commands::local(ctx, &trial_dir, &e))?;
-        let trial = Prikk::new(&trial_dir, ctx.lang, ctx.prikk_program.clone());
+        let trial = Prikk::in_ctx(ctx, &trial_dir);
         trial.run("make a trial repository", &["init", "."])?;
         trial.run(
             "land the archive in a trial repository",

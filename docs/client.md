@@ -103,10 +103,15 @@ your user profile, whose access list is private by default. The token is added t
 `PLANETER_TOKEN` (the token); `HTTPS_PROXY`, `NO_PROXY` and their lower-case forms; `LC_ALL`, `LC_MESSAGES`, `LANG` (the language);
 `PLANETER_CLIENT_STATE_DIR` (where the program keeps its two small records — the tips it was shown, and which directory came from which
 server — default: the platform's usual state directory); `PLANETER_CLIENT_PRIKK` (the path of the prikk program to run instead of the one
-on `PATH`). **Why it exists:** the tests run a stand-in prikk through it, and a person with prikk in an unusual place can name it. **What it
+on `PATH`). **Why it exists:** a test runs a stand-in prikk through it, and a person with prikk in an unusual place can name it. **What it
 is not:** a way to choose another version-control tool (the program speaks prikk's commands and reads prikk's reports), and not a secret —
 whatever it names runs with your own rights, exactly as the `prikk` on your `PATH` would. It is deliberately not in `--help`. prikk finds
-your keys by its own rules (your home directory); the program never reads them.
+your keys by its own rules (your home directory); the program never reads them: it passes `HOME` and `XDG_CONFIG_HOME` on to the prikk it
+starts, unchanged (the tests give each person their own).
+
+**When prikk will not start.** "prikk was not found" is said only when there is no such program. A prikk that is there and cannot be started
+is told as that, with the system's own reason (`Permission denied`, `Text file busy`, a script whose interpreter is gone) and the next step
+(run `prikk --version` by itself); a prikk that starts but does not say a version is told what it said instead.
 
 ## Exit codes
 
@@ -139,11 +144,29 @@ own `.sha256` (prikk publishes Linux, macOS arm64 and Windows x86_64 builds). Wh
 |---|---|---|---|
 | the HTTP/TLS core, the command line, the messages, the freshness comparison, the floor, `--version` (`http`, `cli`, `catalog`, `freshness`, `floor`, `version`) | yes | yes | yes |
 | the prikk runner against the real prikk (`prikk_runner`) | yes | yes | yes |
-| `clone`, `fetch`, `propose` against a stub server with the real prikk (`flows`), and the proxy variables (`proxy`) | yes | yes | **no** — they set up prikk's key directory with `HOME` and a `#!/bin/sh` wrapper and use POSIX file modes; prikk's key location on Windows differs, and a test must not write to a developer's real keys |
+| `clone`, `fetch`, `propose` against a stub server with the real prikk (`flows`), and the proxy variables (`proxy`) | yes | yes | **no** — they give each person their own `HOME` for prikk's keys and use POSIX file modes; prikk's key location on Windows differs, and a test must not write to a developer's real keys |
+| a prikk that is there but cannot be started, told as that and not as "not found" (`prikk_start`) | yes | yes | no (modes and scripts) |
 | the real planeter server behind TLS, with the real client (`crates/planeter/tests/client_e2e.rs`, in the `build` job) | where the server's sandbox works (Linux) | no (the server is Linux only) | no |
 
 So the three commands are exercised on Linux and macOS; on Windows the program is built and its stack, command line, messages and prikk
 runner are tested.
+
+**Tests that must not flake.** The `flows` suite starts the real prikk from about twenty threads at once, against stub servers in the same
+process. Two things were found to fail only under load, and are why the suite is written as it is: a test never writes an executable (a
+script open for writing in a thread's forked child cannot be started, `Text file busy`, so the tests give each person their own `HOME`
+through the context and run the one real prikk), and the stub server closes a connection gracefully (shuts down its writing side and reads
+what the client still sends before it closes; a socket closed with unread data answers with RST, which can throw away the response the
+client had not yet read). To check that it stays so, run the stress target by hand; it is ignored by default:
+
+```text
+cargo test -p planeter-client --test stress -- --ignored --nocapture
+PLANETER_STRESS_RUNS=50 PLANETER_STRESS_CPUS=0,1 cargo test -p planeter-client --test stress -- --ignored --nocapture
+```
+
+It runs the `flows` suite `PLANETER_STRESS_RUNS` times (default 10), one run after the other, and fails on the first run that fails, naming
+the failing tests. With `PLANETER_STRESS_CPUS` (Linux, `taskset`) every run is confined to those CPUs and one busy loop per CPU is started
+on them; the busy loops are children of the test and are stopped through their handles. Run it inside a memory-limited scope
+(`systemd-run --user --scope -p MemoryMax=8G -p MemorySwapMax=0 …`). There is no scheduled CI job for it.
 
 ## Not here
 

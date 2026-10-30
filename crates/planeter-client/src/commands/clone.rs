@@ -89,7 +89,7 @@ pub fn run(ctx: &mut Ctx<'_>, args: &CloneArgs) -> Result<(), Failure> {
         ));
     }
     let scratch = Scratch::new(ctx)?;
-    let probe = Prikk::new(scratch.path(), ctx.lang, ctx.prikk_program.clone());
+    let probe = Prikk::in_ctx(ctx, scratch.path());
     probe.check()?;
     let http = client(ctx, &url, &args.common, false)?;
 
@@ -248,7 +248,7 @@ fn land(
     no_adopt: bool,
 ) -> Result<(), Failure> {
     std::fs::create_dir_all(dir).map_err(|e| local(ctx, dir, &e))?;
-    let prikk = Prikk::new(dir, ctx.lang, ctx.prikk_program.clone());
+    let prikk = Prikk::in_ctx(ctx, dir);
     prikk.run("make the repository", &["init", "."])?;
     for &i in trusted {
         prikk.run(

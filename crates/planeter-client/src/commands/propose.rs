@@ -186,7 +186,7 @@ pub fn run(ctx: &mut Ctx<'_>, args: &ProposeArgs) -> Result<(), Failure> {
                 .text(),
         ));
     }
-    let prikk = Prikk::new(&repo_dir, ctx.lang, ctx.prikk_program.clone());
+    let prikk = Prikk::in_ctx(ctx, &repo_dir);
     prikk.check()?;
     let description = match &args.description_file {
         Some(p) => Some(std::fs::read_to_string(p).map_err(|e| local(ctx, p, &e))?),

@@ -79,6 +79,13 @@ fn pump(mut tls: rustls::StreamOwned<rustls::ServerConnection, TcpStream>, mut u
                 let _ = tls.flush();
                 tls.conn.send_close_notify();
                 let _ = tls.flush();
+                // A graceful close (an RST from a socket closed with unread data can discard the response the client has not read).
+                let _ = tls.sock.shutdown(std::net::Shutdown::Write);
+                let _ = tls
+                    .sock
+                    .set_read_timeout(Some(std::time::Duration::from_secs(5)));
+                let mut sink = [0u8; 4096];
+                while matches!(tls.sock.read(&mut sink), Ok(n) if n > 0) {}
                 break;
             }
             Ok(n) => {

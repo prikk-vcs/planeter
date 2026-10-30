@@ -5,6 +5,7 @@ pub mod fetch;
 pub mod propose;
 
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::Ctx;
 use crate::catalog::{Key, t};
@@ -52,14 +53,21 @@ pub struct Scratch {
 }
 
 impl Scratch {
+    /// A new directory under `TMPDIR` as the context sees it (the program's own environment, for the real thing; a directory of the
+    /// test's own, in a test, so a test's scratch is not at the mercy of whatever else sweeps the shared temporary directory), or the
+    /// system's temporary directory. The name is unique in this process (a counter) as well as across processes (the process id and the
+    /// time), and the directory is made exclusively: one that already exists is never shared with, nor removed by, another run.
     pub fn new(ctx: &Ctx<'_>) -> Result<Scratch, Failure> {
-        let base = std::env::temp_dir();
+        static COUNTER: AtomicU64 = AtomicU64::new(0);
+        let base = (ctx.env)("TMPDIR")
+            .filter(|d| !d.is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(std::env::temp_dir);
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_nanos())
             .unwrap_or(0);
-        let path = base.join(format!("planeter-client-{}-{nanos}", std::process::id()));
-        std::fs::create_dir_all(&path).map_err(|e| {
+        let failed = |path: &Path, e: std::io::Error| {
             Failure::new(
                 LOCAL,
                 t(ctx.lang, Key::LocalFile)
@@ -67,8 +75,20 @@ impl Scratch {
                     .with("reason", e.to_string())
                     .text(),
             )
-        })?;
-        Ok(Scratch { path })
+        };
+        std::fs::create_dir_all(&base).map_err(|e| failed(&base, e))?;
+        loop {
+            let n = COUNTER.fetch_add(1, Ordering::Relaxed);
+            let path = base.join(format!(
+                "planeter-client-{}-{nanos}-{n}",
+                std::process::id()
+            ));
+            match std::fs::create_dir(&path) {
+                Ok(()) => return Ok(Scratch { path }),
+                Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
+                Err(e) => return Err(failed(&path, e)),
+            }
+        }
     }
 
     pub fn path(&self) -> &Path {

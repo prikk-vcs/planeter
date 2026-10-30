@@ -390,6 +390,14 @@ pub static CATALOG: &[Entry] = &[
         "お使いの prikk は {found} ですが、このプログラムには {floor} 以降が必要です。prikk を更新してください。",
     ),
     msg(
+        "prikk.cannot_start",
+        "prikk は見つかりましたが、起動できませんでした：{reason}。prikk だけで動くか確かめてください：prikk --version",
+    ),
+    msg(
+        "prikk.no_version",
+        "prikk がバージョンを答えませんでした（答えたのは「{said}」）。prikk だけで動くか確かめてください：prikk --version",
+    ),
+    msg(
         "prikk.failed",
         "お使いの prikk で「{step}」ができませんでした：{reason}",
     ),

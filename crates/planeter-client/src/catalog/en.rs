@@ -390,6 +390,14 @@ pub static CATALOG: &[Entry] = &[
         "prikk.too_old",
         "Your prikk is {found}, and this program needs {floor} or later. Update prikk.",
     ),
+    msg(
+        "prikk.cannot_start",
+        "prikk was found but could not be started: {reason}. Check that it runs by itself: prikk --version.",
+    ),
+    msg(
+        "prikk.no_version",
+        "prikk did not say which version it is (it said: “{said}”). Check that it runs by itself: prikk --version.",
+    ),
     msg("prikk.failed", "Your prikk could not do “{step}”: {reason}"),
     msg(
         "local.file",

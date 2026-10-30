@@ -214,6 +214,8 @@ keys! {
     // prikk and local state
     PrikkMissing => "prikk.missing",
     PrikkTooOld => "prikk.too_old",
+    PrikkCannotStart => "prikk.cannot_start",
+    PrikkNoVersion => "prikk.no_version",
     PrikkFailed => "prikk.failed",
     LocalFile => "local.file",
     LocalState => "local.state",

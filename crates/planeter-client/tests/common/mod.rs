@@ -3,7 +3,7 @@
 #![allow(dead_code)]
 
 use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
+use std::net::{Shutdown, TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -94,14 +94,25 @@ fn config(cert: &str) -> Arc<rustls::ServerConfig> {
 }
 
 fn read_request(stream: &mut dyn Read) -> Option<Req> {
-    let mut head = Vec::new();
-    let mut byte = [0u8; 1];
-    while !head.ends_with(b"\r\n\r\n") {
-        if stream.read(&mut byte).ok()? == 0 || head.len() > 64 * 1024 {
+    // The head in chunks (a byte at a time costs a TLS record read each); what follows the head in the last chunk is the start of
+    // the body.
+    let mut buf: Vec<u8> = Vec::new();
+    let mut chunk = [0u8; 4096];
+    let head_end = loop {
+        if let Some(at) = buf.windows(4).position(|w| w == b"\r\n\r\n") {
+            break at + 4;
+        }
+        if buf.len() > 64 * 1024 {
             return None;
         }
-        head.push(byte[0]);
-    }
+        let n = stream.read(&mut chunk).ok()?;
+        if n == 0 {
+            return None;
+        }
+        buf.extend_from_slice(&chunk[..n]);
+    };
+    let head = buf[..head_end].to_vec();
+    let mut early_body = buf[head_end..].to_vec();
     let text = String::from_utf8_lossy(&head).into_owned();
     let mut lines = text.lines();
     let mut first = lines.next()?.split(' ');
@@ -115,14 +126,28 @@ fn read_request(stream: &mut dyn Read) -> Option<Req> {
         .find(|(k, _)| k.eq_ignore_ascii_case("content-length"))
         .and_then(|(_, v)| v.parse::<usize>().ok())
         .unwrap_or(0);
-    let mut body = vec![0u8; len];
-    stream.read_exact(&mut body).ok()?;
+    early_body.truncate(len);
+    let mut body = early_body;
+    let have = body.len();
+    body.resize(len, 0);
+    stream.read_exact(&mut body[have..]).ok()?;
     Some(Req {
         method,
         path,
         headers,
         body,
     })
+}
+
+/// End a connection the way TCP means it: say we are done writing, then read what the other side still sends until it ends too. A
+/// socket closed with unread data in its receive queue answers with RST instead of FIN, and an RST can throw away response bytes the
+/// client has not read yet (a loaded machine is exactly where they have not): the client then sees a failed or a truncated answer.
+fn close_gracefully(tcp: &TcpStream) {
+    let _ = tcp.shutdown(Shutdown::Write);
+    let _ = tcp.set_read_timeout(Some(Duration::from_secs(5)));
+    let mut sink = [0u8; 4096];
+    let mut reader = tcp;
+    while matches!(reader.read(&mut sink), Ok(n) if n > 0) {}
 }
 
 fn write_reply(w: &mut dyn Write, reply: Reply) {
@@ -182,6 +207,7 @@ impl Server {
                     write_reply(&mut tls, reply);
                     tls.conn.send_close_notify();
                     let _ = tls.flush();
+                    close_gracefully(&tls.sock);
                 });
             }
         });

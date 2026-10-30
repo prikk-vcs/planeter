@@ -284,6 +284,10 @@ fn client(
     let mut input = Cursor::new(stdin.as_bytes().to_vec());
     let home_s = home.display().to_string();
     let state_s = state.display().to_string();
+    // The client's scratch directories go under a directory of this test's own, not the shared /tmp.
+    let tmp = state.with_file_name("tmp");
+    std::fs::create_dir_all(&tmp).unwrap();
+    let tmp_s = tmp.display().to_string();
     let extra: Vec<(String, String)> = extra
         .iter()
         .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
@@ -292,14 +296,15 @@ fn client(
         match name {
             "HOME" | "XDG_CONFIG_HOME" => Some(home_s.clone()),
             "PLANETER_CLIENT_STATE_DIR" => Some(state_s.clone()),
+            "TMPDIR" => Some(tmp_s.clone()),
             _ => extra
                 .iter()
                 .find(|(k, _)| k == name)
                 .map(|(_, v)| v.clone()),
         }
     };
-    // The real prikk reads its keys from HOME: the child inherits this process's environment, so give it the right one.
-    // (`Command` in the client does not clear the environment; the HOME of the test process is set per call below.)
+    // The real prikk reads its keys from HOME: the client passes the context's HOME and XDG_CONFIG_HOME on to the prikk it starts, so
+    // each call below is a different person without a wrapper program (and without writing an executable in a test process).
     let code = {
         let mut ctx = Ctx {
             lang: Lang::En,
@@ -310,7 +315,7 @@ fn client(
             stdin: &mut input,
             interactive,
             cwd: cwd.to_path_buf(),
-            prikk_program: Some(home_wrapper(home)),
+            prikk_program: None,
             timeouts: http::Timeouts::default(),
         };
         let mut all: Vec<String> = args.iter().map(|s| (*s).to_owned()).collect();
@@ -323,25 +328,6 @@ fn client(
         out: String::from_utf8_lossy(&out).into_owned(),
         err: String::from_utf8_lossy(&err).into_owned(),
     }
-}
-
-/// A one-line shell wrapper that runs the real prikk with HOME set to `home` (prikk finds the person's keys there).
-fn home_wrapper(home: &Path) -> std::ffi::OsString {
-    let dir = home.join("..").join("wrappers");
-    std::fs::create_dir_all(&dir).unwrap();
-    let name = format!("prikk-as-{}", home.file_name().unwrap().to_string_lossy());
-    let path = dir.join(name);
-    std::fs::write(
-        &path,
-        format!(
-            "#!/bin/sh\nHOME='{h}' XDG_CONFIG_HOME='{h}' exec prikk \"$@\"\n",
-            h = home.display()
-        ),
-    )
-    .unwrap();
-    use std::os::unix::fs::PermissionsExt;
-    std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
-    path.into_os_string()
 }
 
 fn setup_propose(
