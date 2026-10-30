@@ -3,132 +3,33 @@
 | | |
 |---|---|
 | Document | The dated brief a new session reads **first**: where the project is, what is held and why, what is pending on whom, and the issue register. Updated at every release, RFC disposition and owner ruling. |
-| As of | 2026-10-20 — planeter **0.4.0 released** (tag on `e13102b`, GitHub release, nine crates on crates.io); 0.3.0 was released 2026-10-18; 0.2.0 was released 2026-09-24; prikk is at **0.53.0** (installed 2026-10-21; **re-baselined, no drift, floor stays 0.52.0**: `rfcs/handoffs/010-upstream-and-supply-chain-maintenance/prikk-0-53-0-rebaseline-handoff-v1.md`, built 2026-10-21, awaiting review); upstream facts folded into ledger v1.5 |
+| As of | 2026-10-30 — planeter **0.4.0** is the last release (tag `e13102b`, 2026-10-20); **0.5.0 is a release candidate** (`404614e` on `main`, rehearsal green; the tag waits for the owner, SCHEDULE D-54). prikk **0.55.0** is installed (floor **0.54.0**, SCHEDULE D-47/D-48). The previous long "where we are" log was replaced by this brief; the history is in `SCHEDULE.md` (decisions D-1…D-54), `CHANGELOG.md`, the issue register below and git. |
 | Read next | [`src/planeter-00-project-charter.md`](src/planeter-00-project-charter.md) (background, goals, governance) → [`../ROADMAP.md`](../ROADMAP.md) → [`SCHEDULE.md`](SCHEDULE.md) (themes, plans, concerns) → [`../rfcs/README.md`](../rfcs/README.md) → [`../rfcs/handoffs/README.md`](../rfcs/handoffs/README.md) and the active handoff → [`src/planeter-prikk-dependency-ledger.md`](src/planeter-prikk-dependency-ledger.md) → [`src/planeter-03-threat-model-v0.1.md`](src/planeter-03-threat-model-v0.1.md) (v0.3) → [`UPSTREAM.md`](UPSTREAM.md) → [`dependency-policy.md`](dependency-policy.md) |
 
 ## Where we are
 
-- **RFC 004 parts 8 and 9, the honest wording and the Japanese consistency fixes built 2026-10-29, awaiting review** (`rfcs/handoffs/004-transport/have-route-handoff-v2.md`,
-  `client-helper-handoff-v2.md`; `rfcs/handoffs/012-web-ui-foundations/honest-wording-handoff-v1.md`, `japanese-consistency-handoff-v1.md`): the have-list route
-  (`GET …/transport/have`); the `planeter-client` crate (clone, fetch, propose; `docs/client.md`), built in CI on Linux, macOS and Windows; the badge
-  "Held here, not signed in"; the Japanese draft's one-word-per-meaning pass.
-- **IS-54 closed by the `aws_lc_rs` switch (D-50), built 2026-10-29, awaiting review** (`rfcs/handoffs/010-upstream-and-supply-chain-maintenance/advisory-aws-lc-switch-handoff-v1.md`):
-  `jsonwebtoken` 11.1.0 on its `aws_lc_rs` backend; `rsa`, `crypto-bigint` and the RustCrypto curve crates leave the tree (lock 214 → 189), the
-  `RUSTSEC-2023-0071` ignore is retired, and `cargo deny` and `cargo audit` exit 0 with **no ignore**. The OIDC verifier's 30-row algorithm matrix and the
-  "no signing in production" pin are tests now (`crates/planeter-auth/tests/`). The ledger and triage record are in `docs/dependency-policy.md`.
-- **RFC 004 part 7 (creating a repository, empty or from an archive) built 2026-10-27, awaiting review**
-  (`rfcs/handoffs/004-transport/repository-creation-handoff-v2.md`): the `creating | ready` state and the kill-safe order, the start-up
-  sweep with its guards, the empty and the archive paths (stage and verify, then confirm with the typed fingerprints) over the API and the
-  pages, the cost of the two archive calls measured on prikk 0.54.1 (3.0 × and 6.0 × the largest blob; prikk bounds neither), a SIGKILL
-  test of the real server. `docs/creation.md`. Part 6 was **reviewed Approved**.
-- **RFC 005 part 6 (comments and review decisions) built 2026-10-27, reviewed Approved (D-42)**
-  (`rfcs/handoffs/005-change-review/comments-and-decisions-handoff-v2.md`): comments and decisions as records (SQLite triggers make a comment
-  immutable), the pure rules, the API, the review line and the forms on the proposal page, hiding. Part 5a and the advisory measurement were **reviewed Approved**;
-  IS-54 (the crypto-bigint advisory) was waiting for the owner and was decided on 2026-10-29 (D-50).
-- **RFC 005 part 5 (proposals you can see) built 2026-10-25, awaiting review**
-  (`rfcs/handoffs/005-change-review/proposals-read-side-handoff-v2.md`): the word *proposal* in everything a person or a program reads
-  (D-38, T0); landing observed from facts (absent from `sync pending` and in a block `log` lists; one `sync pending` per repository per state);
-  the list, detail, close and reviewer-download API; the pages; the retention sweep of the files of finished proposals. Japanese texts
-  are drafts for the reviewers (addendum 6).
-- **The prikk 0.55 re-baseline built 2026-10-29, review pending** (`rfcs/handoffs/005-change-review/prikk-0-55-rebaseline-handoff-v2.md`): the floor stays 0.54.0; the suite on 0.55.0 drifts in one test only (the `extract` pending-parent claim, which 0.55.0 names `claim-parent-not-sealed`); the `extract` driver reads the two new ids (15 in all); the seven read verbs and `extract` re-validated on 0.55.0 (nothing tripped; one RSS figure moved by more than 5 %, downwards); `sync accept` measured on 0.55.0 against 0.54.1 in one session: about 2.6 to 3.8 times faster for patch-shaped artifacts, memory unchanged; no default changed.
-- **RFC 005 part 5b (the prikk 0.54 re-baseline and the `extract` driver) built 2026-10-25, awaiting review**
-  (`rfcs/handoffs/005-change-review/prikk-0-54-rebaseline-and-extract-driver-handoff-v2.md`): the floor is 0.54.0 (IS-46 closed); `verify`
-  reads the `unreached objects` line; the `extract` driver with its strict readers, its own destination and the cost rule measured on
-  0.54.1 (`docs/extract.md`). Parts 4b and 4c were **reviewed Approved** / built.
-- **RFC 004 part 4c built 2026-10-24, awaiting review** (`rfcs/handoffs/004-transport/accept-bound-default-handoff-v2.md`): the default
-  `PRIKK_EXCHANGE_MAX_BYTES` is 100 MiB (a 4 GiB host admits it; 256 MiB needs about 8.1 GiB); the start-up log names what the
-  configured budget admits and whether the bound fits. Part 4b was **reviewed Approved** (IS-52 closed).
-- **RFC 004 part 4b built 2026-10-22, awaiting review** (`rfcs/handoffs/004-transport/accept-cost-model-handoff-v2.md`): IS-52 — the
-  accept's cost measured over twenty-odd artifacts (single blobs of 1 to 250 MiB, many files, many patches, an edited file) and
-  modelled in one place (`cost_model`: 10 MiB + 7.0 × bytes + 2 KiB × the object bound, ceiling 1.5 ×); the object bound defaults to
-  5000; the largest allowed artifact is accepted end to end through the real sandbox. Parts 4a and 5a were **reviewed Approved**.
-- **RFC 004 part 4a built 2026-10-22, awaiting review** (`rfcs/handoffs/004-transport/recovery-followups-handoff-v2.md`): IS-51 (the
-  repair step is reachable, with its negative tests); the process witness reads working directories and open files; the glossary's
-  words for the person who runs the server; the accept-time-per-patch measurement (PK-68) is a report, not a change. Part 4 was
-  **reviewed Approved (2026-10-22)**; IS-50 closed.
-- **RFC 004 part 4 built 2026-10-22, reviewed Approved** (`rfcs/handoffs/004-transport/recovery-handoff-v2.md`): recovery — the
-  procedure with its witnesses, plan and records (`recoveries`, `recovery_steps`); unattended runs at start and after an unfinished
-  accept, only when every witness agrees; the administrator's door (`GET`/`POST …/recovery`, `RepoAdmin`); the test hook of part 3b
-  replaced by the real procedure in the kill tests (a real server SIGKILLed at four points of a 300-patch accept, and once in a
-  1,000-patch accept). IS-50 fixed (an open intent owes its artifact's bytes to the quotas); the three wording fixes; the
-  propose-specific `transport_off` and the memory-ceiling tests; the 20,000-patch `sync pending` measurement. Runbook in
-  `docs/propose.md`. Part 3b was **reviewed Approved (2026-10-22)**.
-- **RFC 004 part 3b built 2026-10-22, reviewed Approved** (`rfcs/handoffs/004-transport/propose-and-accept-handoff-v2.md`): propose,
-  the write side of the transport — `POST …/transport/propose` (framed body, bearer token only, bounded at the edge, streamed to
-  disk), the order of the checks, the W lease and the intent journal around `sync accept` in the sandbox (own deadline, memory
-  admission from the heavy pool), the revision derived from the intent and recorded in one transaction, `needs-recovery` on any
-  accept that does not finish, and a start-up reconcile that flags a repository whose write lease a killed server left behind.
-  Tested with real prikk, the real sandbox, and a real server SIGKILLed in the middle of a 1,000-patch accept. `docs/propose.md`.
-  Recovery itself is part 4. Part 3a was **reviewed Approved (2026-10-22)**; its three corrections are in this part (T0).
-- **RFC 004 part 3a built 2026-10-21, reviewed Approved** (`rfcs/handoffs/005-change-review/change-model-and-journal-handoff-v2.md`):
-  the records (`changes`, `revisions`, `intents`, `repo_flags`; the atomic `complete_intent_with_revision`; usage queries), the
-  pure rules (derivation from an intent, declarations, base, states, landing, quotas, the sealed-from-`log` rule) and their
-  tests, in `docs/proposals.md`. No route yet. Also: the export sandbox mounts a working directory of its own, not the whole
-  spool (the part-2 review's decision). Part 2 itself was **reviewed Approved (2026-10-21)**.
-- **RFC 004 part 2 built 2026-10-21, reviewed Approved** (`rfcs/handoffs/004-transport/advertise-and-fetch-handoff-v2.md`): the
-  transport's read side — `GET …/transport/advertise` and `…/transport/fetch` (whole, verified, spooled, cached,
-  conditional artifacts; single flight; ranges; rate limits; counters) — plus a graceful shutdown on SIGTERM/SIGINT and the
-  rule that a CI job never proposes. Nothing writes through the transport yet (part 3). Lock 212 → 214 crates (the signal
-  registry, reviewed; `docs/dependency-policy.md`).
-- **0.4.0 released (2026-10-20).** Signed tag `0.4.0` on `e13102b`; Release run 39324966875 green; GitHub release
-  with both tarballs, checksums and build-info; the nine crates published in order. The content is RFC 011 in full:
-  reads admitted by estimated memory in two pools, a per-call ceiling, `prlimit` as a required program, `422
-  too_large`, children that die with the server. Verified: tarball checksum, build attestation (`refs/tags/0.4.0`),
-  `planeter --version` from the tarball (`0.4.0`, commit `e13102b`, `prikk-floor 0.52.0`), `cargo install planeter
-  --version 0.4.0 --locked`; both advisory gates re-run with a fresh database on the exact commit immediately before
-  tagging. **Not verified:** the image's attestation and tags (ghcr package private, D-15), the aarch64 binary.
-- **0.3.0 released (2026-10-18).** Signed tag `0.3.0` on `1ffb337`; Release run 39088637876 green; GitHub release
-  with both tarballs, checksums and build-info; the nine crates published in order. The first tag attempt (on
-  `41538a0`) failed its `cargo-deny` gate on RUSTSEC-2026-0373 (ammonia, IS-38) and published nothing; that tag was
-  deleted (decision D-17) and 0.3.0 was re-tagged on the corrected commit. Verified: tarball checksum, build
-  attestation (`gh attestation verify`, ref `refs/tags/0.3.0`), `planeter --version` from the tarball
-  (`0.3.0`, commit `1ffb337`, `prikk-floor 0.52.0`), `cargo install planeter --version 0.3.0 --locked` builds and
-  runs (`commit unknown`, as designed for a build without `PLANETER_GIT_COMMIT`). **Not verified:** the image's
-  attestation and tags (the ghcr package is private; making it public is the owner's step, D-15) and the aarch64
-  binary. Next: the RFC 011 implementation (0.4.0 line) and the web-UI foundations RFC (T14).
-- **Shipped: 0.2.0 (2026-09-24)** — host + browse + auth: bubblewrap-sandboxed prikk hosting, browse UI
-  and read API, local passwords (Argon2id), OpenID Connect SSO (accounts linked administratively),
-  scoped tokens, ed25519 SSH keys, sessions + CSRF, per-account and per-IP login throttles, trusted
-  reverse proxies, SQLite. Attested Linux tarballs, `ghcr.io/prikk-vcs/planeter:0.2.0`, nine crates on
-  crates.io. Full notes: [`../CHANGELOG.md`](../CHANGELOG.md); procedure and log: [`RELEASING.md`](RELEASING.md).
-- **Milestones:** M0 and M1 done; 0.1.1 and 0.2.0 were read-side increments during the M2 hold.
-  **M2 (keyless clone + push) is HELD** — measured on prikk 0.46.0, a keyless forge cannot build
-  incremental-fetch artifacts (`sync build` needs a maintainer key, PK-27) and a planeter-created
-  repository has no servable branch until prikk RFC 154 adoption. It resumes when prikk ships
-  **RFC 155 then RFC 154, after prikk 0.49.0**, with a v2 transport handoff.
-  **2026-10-15 — the hold's premise was overtaken (ledger v1.5, section D):** RFC 155 shipped in 0.51.0
-  (`prikk archive`, whole-repository; closure fix in 0.52.0); RFC 154 is **unscheduled**; a keyless delta
-  form is **not planned**. The owner's ruling on what M2 becomes is pending; the scoping notes are
-  private working material (`.git-exclude/specs/`), not decisions.
-- **Supply chain:** `cargo deny` / `cargo audit` **green as of 2026-10-15** (IS-22 closed: `ammonia` 4.2.3, `yoke-derive` 0.8.4, lock-only). Checked at every push, release, re-baseline and RFC disposition (RFC 010 D-3).
-- **Runtime floor:** prikk ≥ 0.54.0 (`MIN_PRIKK_VERSION`, raised at the 0.54 re-baseline, 2026-10-24: the `show <block-id>` fix, PK-70, and `extract`; it was 0.52.0 since 2026-10-15 and was not bumped at 0.53.0), bubblewrap, curl for SSO. Local binary: 0.55.0 (the floor stays 0.54.0; the 0.55 re-baseline, 2026-10-29).
-- **Team:** migrating to a two-agent team (high-capability architect/reviewer + mid-capability
-  implementer) under the owner's workflow (owner-directed 2026-09-24). **First assignment (owner ruling):
-  the prikk 0.47.0 re-baseline** — [`../rfcs/handoffs/010-upstream-and-supply-chain-maintenance/prikk-0-47-0-rebaseline-handoff-v1.md`](../rfcs/handoffs/010-upstream-and-supply-chain-maintenance/prikk-0-47-0-rebaseline-handoff-v1.md),
-  held until prikk 0.47.0 is released and installed. **Overtaken 2026-10-15:** prikk is at 0.52.0, it is
-  re-issued as [`../rfcs/handoffs/010-upstream-and-supply-chain-maintenance/prikk-0-52-0-rebaseline-handoff-v2.md`](../rfcs/handoffs/010-upstream-and-supply-chain-maintenance/prikk-0-52-0-rebaseline-handoff-v2.md)
-  (T1 schema check, `trust_check` exit code, floor, ledger v1.7); **assignable: 0.52.0 is installed (2026-10-15)**.
-- **Active handoffs (RFC 010, accepted 2026-10-15), in order:** [`../rfcs/handoffs/010-upstream-and-supply-chain-maintenance/supply-chain-advisories-lock-update-handoff-v1.md`](../rfcs/handoffs/010-upstream-and-supply-chain-maintenance/supply-chain-advisories-lock-update-handoff-v1.md) (it lands before the push), `maintenance-gates-handoff-v1.md`, `build-identity-handoff-v1.md` (all three done and approved); **now assigned:** `maintenance-gates-handoff-v2.md`, `../rfcs/handoffs/002-authorization/auth-blocking-handoff-v1.md` (IS-24), `../rfcs/handoffs/003-read-path/raw-origin-gating-handoff-v1.md` (IS-16); and the two measurement handoffs are startable; formerly: the read-path follow-on [`../rfcs/handoffs/003-read-path/read-concurrency-handoff-v1.md`](../rfcs/handoffs/003-read-path/read-concurrency-handoff-v1.md) (IS-4). The 0.52.0 re-baseline is implemented and conditionally approved (push waits on the lock update). The T13 measurement handoffs under RFC 004 and RFC 006 are authorized and follow the push. Handoffs 004–009 are v1 (pre-measurement) — see the quarantine rule in [`../rfcs/handoffs/README.md`](../rfcs/handoffs/README.md).
+- **Built and reviewed since 0.4.0 (the content of 0.5.0):** the transport — advertise, fetch, the forge's have-list, keyless **propose** with an intent journal, **recovery** (witnesses, plan, administrator's door), a measured memory/time model for accepts; **proposals** you can see, comment on and decide on (landed only from published history, stale approvals never count); **creating a repository**, empty or from a maintainer's archive, with the creator typing each key to trust; the **output cap** on everything prikk prints; **`planeter-client`** (clone, fetch, propose) on a stack of `ureq` + rustls/aws-lc; the OIDC verifier on aws-lc (no advisory, **no ignore**); honest wording ("Held here, not signed in"); a release pipeline that **runs the image and proves the pushed image is the one run**. The Japanese catalog is a draft in preview. Details: `CHANGELOG.md` `[0.5.0]`, `docs/security-review-0.5.0.md`, `docs/src/planeter-03-threat-model-v0.1.md` v0.6, `docs/src/planeter-02-external-design-v0.1.md` v0.3.
+- **Release 0.5.0:** the candidate commit is reviewed except one small item (SCHEDULE D-55): the compiler pin 1.99.0 → 1.99.1 (a patch with a fix for an x86_64 FFI-`bool` miscompilation; our release links C) with a new rehearsal. Then the owner's tag, the Release run, verification, the ten crates (`planeter-client` last), and the owner's choice on the ghcr package's visibility. Steps: `docs/RELEASING.md`.
+- **Held and why:** the **file-by-file review view** waits for prikk 0.56.0 (extraction of a chain of pending claims; 0.55.0 already names the case `claim-parent-not-sealed`); **merging / D-8** is model A today and **model B after prikk 0.56.0** (RFC 004 "D-8 — decided"); **checks/CI** (RFC 006 v2) and **issues** are separate RFCs; **SSH** is not planned; distribution of `planeter-client` as release binaries is later.
+- **Open watch items:** IS-57's two unproven fixes (reopen if "the downloaded file is not a repository archive", "the key … is not one this repository carries" or "the request to the server failed" reappears in a gate or CI run); BuildKit 0.33.1 → 0.34.1 (no advisory forces it); the container's sandbox is not exercised inside the image in CI.
 
 ## Pending on the owner
 
+- **Authorize the tag `0.5.0`** (signed tag, the GitHub release, crates.io for the ten published crates) once the candidate is final; the architect schedules and verifies, the owner authorizes (SCHEDULE D-54).
+- **Make the `ghcr.io/prikk-vcs/planeter` package public** when you wish (until then the image attestation cannot be verified anonymously; the tarball attestations verify). Since 0.4.0's arm64 image could not have started (glibc), the first image worth making public is 0.5.0's.
+- **The Japanese sign-off** by the owner and the colleague: the sheet and its addenda (1–13 and later) in `.git-exclude/review-requests/japanese-review-sheet*.md`; nothing Japanese ships before it (`JA_REVIEWED` false).
+- **Possibly reserve the crate name `planeter-client`** on crates.io before the tag (a 0.0.0 placeholder, as was done for `planeter`), or publish it first after the tag.
+- Send prikk's letters as they are drafted (none pending now: the 0.55.0 letter was sent 2026-10-29).
 
-- Make the `ghcr.io/prikk-vcs/planeter` package public (until then the image attestation cannot be
-  verified anonymously; the tarball attestations verify).
-- **Convey** the architect's requirements note for prikk's 0.54.0 read-only command design round, once the spike reports (SCHEDULE plan 1, step 4). prikk's plan letter of 2026-10-15 is folded into ledger v1.6 (PK-46, PK-47); our reply to it needs nothing urgent.
-- **Release 0.3.0 is authorized (D-11, 2026-10-15).** Your acts at release time (SCHEDULE §5, R6): make the `ghcr.io/prikk-vcs/planeter` package public, sign and push the tag `0.3.0`, authorize the publish. The steps before that are the dev team's and the architect's.
-- The measurement spike (SCHEDULE D-7) is **authorized (owner, 2026-10-15)**; it is **startable now** (prikk 0.52.0 is installed, the lock update is pushed). Handoff: [`../rfcs/handoffs/010-upstream-and-supply-chain-maintenance/transport-measurement-spike-handoff-v1.md`](../rfcs/handoffs/010-upstream-and-supply-chain-maintenance/transport-measurement-spike-handoff-v1.md) (measurement only, scratch directory, no repository change).
-- Rule on what M2 becomes (SCHEDULE D-8) once the spike reports.
-
-## Pending upstream (prikk's actual releases and plan, from its letters and ROADMAP of 2026-10-13/15)
+## Pending upstream (prikk's releases and plan, from its letters through 2026-10-29)
 
 | prikk | What touches planeter | planeter action |
 |---|---|---|
-| **0.47.0–0.50.0** (released) | PK-30 fix, `PRIKK_EXCHANGE_MAX_BYTES` (0.47.0); recovery and cost at depth (0.48.0); crash-state recovery, import refusals, dependency-ordered writes, `ref complete` (0.49.0); corrections (0.50.0) | one re-baseline handoff v2 against **0.52.0** (the 0.47.0 handoff is overtaken); floor decision (PK-42) |
-| **0.51.0** (released 2026-10-13) | RFC 155 as `prikk archive`; closure defect for repositories that accepted a push | do not serve archives from 0.51.0 |
-| **0.52.0** (released) | archive closure fix; export refuses over-256 MiB objects; `verify` names a failed received ref; `trust maintainer check` exit code | re-baseline target; spike M1–M11 (RFC 004 scoping); `trust_check` exit-status handling |
-| **0.53.0 / 0.54.0 / 0.55.0** (prikk owner's plan, 2026-10-15; PK-46) | 0.53.0 commit cost (**released 2026-10-18, installed and re-baselined 2026-10-21: the 14 `schema_version` ids identical in shape to 0.52.0, every prikk text planeter matches equal, the cost table unchanged**); 0.54.0 the read-only "files at a point" command (design round first, shown to us) and removal of unreachable received content; 0.55.0 `bundle import` memory | requirements note before the 0.54.0 design round; CI snapshots use copy/overlay until the command exists |
-| **unscheduled** | RFC 154 adoption act; a keyless delta archive and the append-only promise (**not scheduled; decided with our first-deployment numbers, not before 0.55.0**, PK-47); RFC 158 Stages B–D incl. format 8 | plan as unavailable; instrument fetches from the first deployment; revisit on prikk's word (PK-35, PK-47) |
+| **0.54.0 / 0.54.1** (2026-10-24) | `extract` (with `largest_file_bytes`, `claim_parent_block_id`, `refusal-v1` + `reason`), `show <block-id>` fixed (IS-46), `verify` prints `unreached objects` | done: floor 0.54.0, the extract driver, PK-70 |
+| **0.55.0** (2026-10-29, installed) | `claim-parent-not-sealed`, `destination-inside-repository`, streaming `bundle import/verify/preview`, **`sync accept` 2.6–3.8× faster (PK-75)** | done: the driver reads 15 refusal ids; accept defaults stay while the floor is 0.54.0 (object bound to 10,000 when the floor moves) |
+| **0.56.0** (planned by prikk's owner) | **chain-of-pending-claims `extract`**; a classification of a delivery against a received ref and **refusal of an older/diverged one by default**; signer of a received tip "if there is room"; `archive verify`'s "carried, not adopted" text corrected (planeter will be told the new wording first); the `sync pending` help says "this repository's own queue" | the file-by-file review view; model B of D-8 (RFC 008 revision, policy record, delivery route, selection rule); floor to 0.56.0 then; do not depend on the `archive verify` wording |
+| **unscheduled** | RFC 154 adoption act; RFC 158 reclamation of unreached objects; a keyless delta archive | plan as unavailable (PK-35, PK-47, PK-73) |
+
 
 ## Issue register
 

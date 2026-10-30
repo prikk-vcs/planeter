@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | Everything planned for 0.5.0 is built and reviewed (D-53). This handoff prepares **the release-candidate commit** exactly as `docs/RELEASING.md` ("Before the tag") describes, and stops before the tag: **tagging, the GitHub release, crates.io publication and making the ghcr package public are not part of it** (the architect asks the owner for the tag when this is reviewed). Version: **0.5.0** (SemVer 0.x: new features and removals that break the read API — `verified_sessions`/`total_sessions` of the verify API, IS-49 — need a minor). |
-| Status | **Assigned** (2026-10-30). |
+| Status | **Done, reviewed Approved (2026-10-30; candidate `404614e`)**, with one pin to move before the tag: `compiler-pin-1-99-1-handoff-v1.md`. (Originally: Assigned 2026-10-30.) |
 | Basis | `docs/RELEASING.md` (steps 1–5, "Dry run", "Rehearsal", "crates.io"), `CHANGELOG.md` `[Unreleased]`, `docs/SCHEDULE.md` §5 for 0.3.0/0.4.0 (the shape of a release record), `docs/security-review-0.5.0.md`, the threat model v0.6, `ROADMAP.md`, `README.md`. |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 
