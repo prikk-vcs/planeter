@@ -382,12 +382,17 @@ docker run --rm ghcr.io/prikk-vcs/planeter:X.Y.Z --version
   The image attestation cannot be verified anonymously while the ghcr.io package is private (owner
   action pending).
 
-- **0.5.0 (<date of the tag>).** *Template, filled after the tag.* Release candidate commit `<hash>`; rehearsal run `<id>` (both
-  architectures: build, image run, glibc check, push, identity, manifest list and attestation); gates and advisory-database HEAD `<hash>`
-  immediately before the tag; tag `<hash>`; Release run `<id>`; the tarball checksum, build-provenance attestation, `planeter --version`
-  (commit, `prikk-floor 0.54.0`) and the image attestation verified after the fact: `<result>`; crates.io: ten crates, in the order above
-  (`planeter-client` is new); `cargo install planeter --version 0.5.0 --locked` and `cargo install planeter-client --version 0.5.0 --locked`:
-  `<result>`; the ghcr package visibility: `<owner action>`.
+- **0.5.0 (2026-10-31).** Release candidate commit `68be90a` (the compiler pin 1.99.1 on top of the reviewed candidate `404614e`; the tag
+  commit `1213f71` differs from it by the CHANGELOG heading's date only); rehearsal run 41130380817 (both architectures: build, image run, glibc
+  check, push, identity, manifest list and attestation); the architect's gates immediately before the tag on advisory-database HEAD `2295466`:
+  `cargo deny` and `cargo audit` exit 0 with no ignore, 1,139 tests, CI green on the tag commit; tag `1213f71` (signed, bare `0.5.0`); Release
+  run 41141154961, every job green (gates, both builds, both images with the run, glibc and identity steps, manifest list and attestation of the real
+  package, publish). Verified after the fact: both tarballs' checksums (`sha256sum -c`), both build-provenance attestations (`gh attestation verify`,
+  signed from `refs/tags/0.5.0`), `planeter --version` of the x86_64 binary (`planeter 0.5.0`, commit `1213f71`, `prikk-floor 0.54.0`, built by rustc
+  1.99.1). **The image's attestation could not be verified: the ghcr package is private** (owner action pending; the first image worth making public).
+  crates.io: ten crates, in the order above, published in one session (`planeter-client` is new and was published last; the new-crate limit did not
+  bite); `cargo install planeter --version 0.5.0 --locked` and `cargo install planeter-client --version 0.5.0 --locked` build and run
+  (`planeter 0.5.0`, `planeter-client 0.5.0`).
 
 ## If a job fails
 
