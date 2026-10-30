@@ -132,12 +132,19 @@ platform claims it cannot run (prikk RFC 107's lesson).
   and loaded: (1) **it is run** — `planeter --version` (the line must read `planeter X.Y.Z`), `prikk --version`, `bwrap --version`,
   `prlimit --version` — by the id of the image just built (`docker run … "${IMAGE_ID}"`, the id checked to be `sha256:<64 hex>`); (2)
   **`tools/glibc-check`** reads the highest *strict* `GLIBC_` version need of the binary (`readelf -V`: a need flagged `WEAK` is reported, not failed)
-  and fails if it exceeds the glibc of the image, read from the image with `ldd --version` (never a constant). **What the gate does not prove:** the image that is
-  pushed is built by a second `buildx build` invocation from the same inputs and the same BuildKit cache as the one that was run, not the very same
-  object (a check that the two config digests are equal failed in the rehearsal of 2026-10-29: for a manifest list with its attestation the build's
-  metadata file carries no `containerimage.config.digest`, so that check was removed rather than faked). `planeter-pin-check` refuses a workflow
-  in which a step that pushes or attests an image is not preceded, in its job or a job it `needs`, by a step that runs the image and a step that
-  runs `planeter-glibc-check`. A dry run, a rehearsal and a release all pass through it.
+  and fails if it exceeds the glibc of the image, read from the image with `ldd --version` (never a constant). (3) **Identity** (rehearsal and release, where there is a push): the image that is pushed is built by a
+  second `buildx build` from the same inputs and BuildKit cache as the one that was run, so after the push the job asks the **registry** what it
+  holds: it reads the index of the pushed digest (`docker buildx imagetools inspect --raw`), takes the manifest for `linux/<arch>` (the attestation
+  manifests, platform `unknown/unknown`, are not images and never match), reads that manifest's **config digest** and requires it to equal the id of
+  the loaded image that was run (`planeter-image-identity platform | config | same`, `tools/image-identity`). A config digest commits to the image's
+  layers, so equal digests mean the same filesystem and the same start command. A mismatch fails the job before the digest is handed on, naming both
+  ids and printing the loaded image's layers and the pushed image's configuration; **there is no tolerance** and no retry. (A first attempt to
+  compare the build's metadata file failed in the rehearsal of 2026-10-29 because, for a manifest list with its attestation, that file carries no
+  config digest; reading the registry is what replaced it.) A dry run pushes nothing, so it has no identity step; its text stays: the dry run proves
+  the image starts, not that a pushed one is the same. `planeter-pin-check` refuses a workflow in which a step that pushes or attests an image is not
+  preceded, in its job or a job it `needs`, by a step that runs the image and a step that runs `planeter-glibc-check`, and in which a push by digest is
+  not followed, before the next push or the upload of the digest, by a step that runs `planeter-image-identity … same`.
+  A dry run, a rehearsal and a release all pass through (1) and (2); (3) runs wherever there is a push.
 
 **Updating one of these (RFC 010 D-9)** is a reviewed change, one pin per change, with the record in its review:
 old and new tag and **full SHA** (or image digest); that the SHA is the tag's commit **in the upstream
