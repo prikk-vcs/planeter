@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | The image-glibc gate (D-51) runs the image it builds and checks the binary against its glibc before anything is pushed. Its review request states the one thing it does not prove: the pushed image comes from a **second** `buildx build` over the same inputs and cache, not the identical object. The first attempt to compare (the build metadata's config digest) failed because a manifest list carries none. For a release pipeline whose point is "what we tested is what we shipped" (owner: *robust*, *safe*), a gap that is *probably* never true is still a gap; close it by **checking the registry side**. |
-| Status | **Assigned** (2026-10-30). Small. |
+| Status | **Done, reviewed Approved (2026-10-30; commits `2bcd713`, `2de96f7`).** (Originally: Assigned 2026-10-30.) |
 | Basis | `.github/workflows/release.yml` (jobs `image`: the build-and-load, run, check and push-by-digest steps; `image-publish`/`image-rehearsal`), `image-glibc-review-request.md` §4 and §8.1, `docs/RELEASING.md` ("The image gate"), `tools/pin-check`. |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 
