@@ -52,7 +52,7 @@ and `ARG PRIKK_VERSION` in the `Dockerfile` are one `X.Y.Z`. The base image of t
 release workflow runs the image and checks the binary's glibc needs against it before any push (`tools/glibc-check`). `tools/pin-check` fails on any workflow `uses:` that
 is not a 40-hex commit SHA, any `image:` or Dockerfile `FROM` without a digest, and any toolchain named by
 channel. It also fails when the `toolchain:` inputs across the workflows are not one and the same version
-(CI, the manual checkpoint and the release build with **one compiler**, `1.99.0`), and when a `runs-on` or
+(CI, the manual checkpoint and the release build with **one compiler**, `1.99.1`), and when a `runs-on` or
 matrix `os` names a moving label (`*-latest`): runners are named (`ubuntu-24.04`,
 `ubuntu-24.04-arm`). **The declared minimum compiler** (`rust-version` in the root `Cargo.toml`, `1.88.0`,
 IS-32) means: the lowest stable compiler that builds the whole workspace with `--locked`, which is the

@@ -117,6 +117,8 @@ platform claims it cannot run (prikk RFC 107's lesson).
 * **Toolchain:** installed by the runner's own `rustup` at the one pinned version (`rustup toolchain install
   X.Y.Z --profile minimal …`); `pin-check` reads the version from that command as it did from the former
   `toolchain:` input (one build compiler across workflows, the `msrv` job's exception, no channel or `latest`).
+  **Currently 1.99.1** (reviewed 2026-10-30, moved from 1.99.0 before the 0.5.0 tag: the patch release fixes a miscompilation of FFI `bool` return values on x86_64;
+  the release binaries link C). The `msrv` job stays on the declared minimum, 1.88.0.
 * **Container tooling:** the runner's `docker` and `buildx`, and one outside artifact: the **BuildKit image**
   of the builder, `moby/buildkit@sha256:…` (v0.33.1 at this writing), written in the `BuildKit builder` step of
   the `image` job. `pin-check` fails on a `docker buildx create` without a digest-pinned `image=`, on a `docker

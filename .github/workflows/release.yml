@@ -61,8 +61,8 @@ jobs:
       - name: Rust toolchain (pinned, one compiler for CI and release)
         run: |
           set -euo pipefail
-          rustup toolchain install 1.99.0 --profile minimal --component rustfmt --component clippy --no-self-update
-          rustup default 1.99.0
+          rustup toolchain install 1.99.1 --profile minimal --component rustfmt --component clippy --no-self-update
+          rustup default 1.99.1
           rustc --version
           cargo --version
       - name: Tag must equal the workspace version
@@ -110,8 +110,8 @@ jobs:
       - name: Rust toolchain (pinned, one compiler for CI and release)
         run: |
           set -euo pipefail
-          rustup toolchain install 1.99.0 --profile minimal --no-self-update
-          rustup default 1.99.0
+          rustup toolchain install 1.99.1 --profile minimal --no-self-update
+          rustup default 1.99.1
           rustc --version
           cargo --version
 
@@ -264,8 +264,8 @@ jobs:
       - name: Rust toolchain for the glibc check (pinned, one compiler for CI and release)
         run: |
           set -euo pipefail
-          rustup toolchain install 1.99.0 --profile minimal --no-self-update
-          rustup default 1.99.0
+          rustup toolchain install 1.99.1 --profile minimal --no-self-update
+          rustup default 1.99.1
           rustc --version
           cargo --version
       - name: Check the binary's glibc needs against the image's glibc (every mode)

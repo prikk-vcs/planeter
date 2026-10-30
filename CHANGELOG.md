@@ -323,6 +323,8 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ### Under the hood
 
+- **The release is built with Rust 1.99.1.** The one compiler of CI and release moved from 1.99.0 to 1.99.1, a patch release that fixes a miscompilation of FFI `bool` return values on x86_64. The minimum supported compiler is unchanged (1.88.0).
+
 - **OIDC sign-in verifies ID tokens with `aws-lc-rs` instead of the RustCrypto crates (D-50).** No behaviour changes: the same 30 cases (six algorithms valid, tampered in
   payload and in signature; a key of the wrong kind; HS*, PS* and `none` refused; wrong audience; expired) give the same answers on both backends. The two advisories that
   came with the RustCrypto backend (RUSTSEC-2023-0071 `rsa`, RUSTSEC-2026-0387 `crypto-bigint`) are gone because the crates are, not because they are ignored:
