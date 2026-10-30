@@ -169,6 +169,30 @@ docker run --rm ghcr.io/prikk-vcs/planeter:X.Y.Z --version
 
 ## Deploying
 
+> **The shape of a 0.5.0 deployment (one page; the details are in the bullets below and in `planeter --help`, the single list of settings).**
+>
+> * **Process:** one `planeter` per database (a lock refuses a second), behind a **TLS-terminating reverse proxy** you declare with `PLANETER_TRUSTED_PROXIES`;
+>   a second host name for raw content (`PLANETER_CONTENT_ORIGIN`). In a container (the release image, Debian 13) or as a binary with `prikk` (at least the floor),
+>   `bwrap` and `prlimit` on `PATH` (`curl` too if you enable single sign-on).
+> * **Four places on disk, and what each is for:** `PLANETER_DB` (the SQLite database) and `PLANETER_REPOS_ROOT` (the hosted prikk repositories) are **the record** —
+>   back them up together. `PLANETER_ARTIFACT_DIR` (required for proposals and for creating a repository from an archive; absolute, outside the repositories) holds
+>   **accepted artifacts and staged archives**: the artifacts are the stored bytes of every revision, so back it up with the other two. `PLANETER_SPOOL_DIR` (optional,
+>   its own volume) holds exports being served and is **disposable**. Give the artifact directory and the spool volumes of their own so one cannot fill the other.
+> * **Backups:** planeter has **no online backup command** (OPS-3 is open). A consistent backup is taken with the server stopped, or from one filesystem snapshot that covers the database,
+>   the repositories and the artifact directory at the same instant. A restore is the same three together; after a restore, run `verify` on a repository before trusting it.
+> * **Memory:** the budget for prikk work defaults to a quarter of usable memory (256 MiB to 8 GiB). A proposal of the default largest size (100 MiB) needs about 0.7 GiB of it, so a host with
+>   **4 GiB of memory admits the default bound and a 2 GiB host does not** (the start-up line says which, and what to change). Raise `PRIKK_EXCHANGE_MAX_BYTES` only with the budget:
+>   256 MiB needs about 1.8 GiB of budget (a host of about 9 GiB at the default share).
+> * **Disk and time:** accepting a proposal costs one disk flush per patch or blob (14 ms on a quiet disk, up to 52 ms on a loaded one; about 3 times faster on prikk 0.55), so the default of 5,000
+>   objects and 600 s leaves a wide margin; on slow storage lower the object bound.
+> * **Running the image:** the sandbox needs user namespaces inside the container (see the **Container** bullet). The release pipeline proves that the image **starts** (`planeter`, `prikk`, `bwrap`,
+>   `prlimit`) and that the pushed image is the one that was run; it does **not** run the sandbox inside the container, so test your run options once with a real proposal.
+> * **When something goes wrong after a crash:** a repository that was in the middle of a write is flagged and, when every witness agrees, recovered by the server at the next start; otherwise it
+>   stays flagged, reads keep working, and `GET …/recovery` (for the repository's administrator) shows why and the exact commands (`docs/propose.md`, "Recovery").
+> * **Upgrading:** stop, replace the binary or image, start; the database migrates itself (idempotent) and the start-up log lists what it found and swept. Read the release's CHANGELOG
+>   section for anything marked as breaking.
+
+
 - **Binary:** needs `prikk` (≥ the floor in `build-info.txt`), `bwrap` and **`prlimit`** (util-linux) on
   `PATH`, plus `curl` if SSO is enabled. `timeout` (coreutils) is no longer used. Configure with
   `PLANETER_ADDR`, `PLANETER_REPOS_ROOT`, `PLANETER_DB`, `PLANETER_CONTENT_ORIGIN`, and

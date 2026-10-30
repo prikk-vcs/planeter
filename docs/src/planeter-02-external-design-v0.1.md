@@ -3,12 +3,39 @@
 | | |
 |---|---|
 | Document | planeter External Design (black-box view) |
-| Version | v0.2 (2026-09-24 — the revision section below records what shipped, what measurement corrected and what was ruled through planeter 0.2.0; the v0.1 body of 2026-09-15 stands and is not rewritten) |
+| Version | v0.3 (2026-10-30 — the revision section for the 0.5.0 work: transport, proposals and review, creation, recovery, the client; v0.2 2026-09-24 — the revision section below records what shipped, what measurement corrected and what was ruled through planeter 0.2.0; the v0.1 body of 2026-09-15 stands and is not rewritten) |
 | Date | 2026-09-24 (v0.2); 2026-09-15 (v0.1) |
 | Inputs | planeter Requirements v0.1 (`planeter-01-requirements-spec-v0.1.md`) — cited as PU/NG/CAP/STD/SEC/INT/OPS/BN/UD/OQ; **forge-commons** (the standards frame); **prikk reality** (2026-09-15 survey, prikk `HEAD f6cbd057`); RFC 145 (Shape D), RFC 116 (sync as artifacts); the stikk integration precedent; project rules |
 | Scope | WHAT planeter exposes at its boundaries — its transport, web, API, authentication, CI, registry and webhook surfaces, and its prikk-integration surface — **for the parts designable before the owner's open questions (OQ-1…OQ-7) are settled.** The design goes up to the write/merge **trust gate** and **stops** there (§8), rather than presuming where signing keys live. |
 | Not | internal architecture, database schema, wire/artifact byte formats (prikk's), the OpenAPI document itself, or code. |
 | ID scheme | `BD-` boundary · `AC-` actor · `TX-` transport surface · `WEB-` web surface · `API-` REST surface · `AUTH-` identity/authorization surface · `CI-` CI/runner surface · `REG-` registry surface · `HOOK-` webhook surface · `PK-` prikk-integration surface · `FL-` interaction flow · `CT-` external data contract · `OP-` operational behaviour · `GATED-` a surface blocked on an owner question or a prikk-side dependency |
+
+## Revision v0.3 (2026-10-30) — the black box after the 0.5.0 work
+
+What changed from the outside since v0.2, in one place. The interfaces are specified by the OpenAPI document the server serves
+(`/api/v1/openapi.json`, held to the code by a drift guard) and by the documents named below; this section is the map, not a copy.
+
+- **Boundary and actors:** one new actor — **the person with their own prikk and keys** — and one new program on their computer, **`planeter-client`**
+  (separate from the server; drives the user's own prikk; holds no key; `docs/client.md`). The forge stays **keyless** (OQ-1 (a), INV-2); nothing in the
+  product signs, seals, merges or publishes.
+- **Transport (TX), as built (RFC 004):** TX-01 fetch is a whole, verified, spooled artifact (`GET …/transport/fetch`, `ETag`/`Range`); the forge's **have-list**
+  is served for a branch (`…/transport/have`) so a client can build an incremental artifact (prikk's `sync build --have` needs a key, which is why the client,
+  not the server, builds); the **advertisement** (`…/transport/advertise`) lists refs, tips, `ref_state_id`, `update_seq`, the offers and, when proposals are on, the
+  bounds (`limits`). TX-02 **propose** (`POST …/transport/propose`, bearer token only, a framed body; `docs/propose.md`): the artifact is accepted by prikk's
+  `sync accept` under a write lease, journalled by an intent, and recorded as a **revision of a proposal** only from a complete run; a write that did not finish
+  flags the repository for recovery and the same artifact sent again resumes it. TX-03 SSH is **not built**; the HTTPS surface and the client are the supported path.
+- **Proposals and review (RFC 005; the word is *proposal*, D-38):** pages and API to list, read, close, download (for reviewers), comment on and decide on a
+  proposal (`…/proposals…`); a proposal is **landed only when its patches are in a block of a published branch** (D-40); an approval belongs to one revision and a
+  stale one counts for nothing; a patch is shown `Sealed`, `Held here, not signed in`, or *unknown* (never from `queued`). `docs/proposals.md`.
+- **Repositories (RFC 004 D-4):** a person can create an empty repository or one **from a maintainer's archive in two steps** (stage and verify; then confirm by
+  **typing each maintainer key to trust, never prefilled**); creation is all-or-nothing and kill-safe. `docs/creation.md`.
+- **Recovery (RFC 004 D-6):** `GET/POST …/recovery` for the repository's administrator; the server recovers by itself when every witness agrees (`docs/propose.md`).
+- **Operation (OP):** new operator settings, all listed by `planeter --help` (one list, held to the code by a test); a measured memory model for accepts
+  (ledger PK-68, PK-69, PK-72); a retention sweep; counters in the periodic and shutdown log lines; the release image is **run and checked before it is shipped** (RELEASING).
+- **What is still not designed (GATED):** what a branch is while publication is unavailable is **model A today** (the forge never moves a branch) and **model B after prikk 0.56.0**
+  (RFC 004 "D-8 — decided"); the file-by-file review view waits for prikk 0.56.0's chain extraction; checks/CI (RFC 006) and issues are separate RFCs; SSH is not built; notifications
+  and suggested changes are not in scope.
+- **Languages:** English; Japanese is a **draft in preview** until the owner and a colleague sign it off (`PLANETER_PREVIEW_LANGUAGES=ja`).
 
 ## Revision v0.2 (2026-09-24) — the black box after 0.2.0
 
