@@ -3,7 +3,7 @@
 Releases are bare version tags; each section is the release's notes (assembled into the GitHub
 release by `release.yml`). Kept by hand, per release, so nothing here goes stale by templating.
 
-## [0.5.0] — unreleased until tagged — propose, review, create: the first release in which a person can put work to the forge, and the forge still holds no key
+## [0.5.0] — 2026-10-31 — propose, review, create: the first release in which a person can put work to the forge, and the forge still holds no key
 
 0.5.0 is the first release in which a person can **propose work** to the forge, have it **reviewed** (comments and decisions), and **create a repository** (empty, or from a maintainer's archive), with the forge still holding no key: nothing a proposal carries is sealed, merged or published by the server, and nobody approves a patch a keyless server holds. It also ships `planeter-client`, a separate program for a person with their own prikk and their own keys, and a release chain that runs the image it ships. **Breaking changes are listed first** under "For people who run a server" (the verify API's removed fields, the change API's `assurance`, the required prikk 0.54.0, the new defaults of the proposal bounds, the image base).
 
