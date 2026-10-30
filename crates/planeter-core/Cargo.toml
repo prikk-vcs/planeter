@@ -6,6 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
+readme.workspace = true
 description = "planeter's forge domain: hosting, the single pure default-deny authorize() decision, the honest read path, and the security seams."
 
 [features]
@@ -15,8 +16,8 @@ description = "planeter's forge domain: hosting, the single pure default-deny au
 forge-seal = []
 
 [dependencies]
-planeter-prikk = { path = "../planeter-prikk", version = "0.4.0" }
-planeter-store = { path = "../planeter-store", version = "0.4.0" }
+planeter-prikk = { path = "../planeter-prikk", version = "0.5.0" }
+planeter-store = { path = "../planeter-store", version = "0.5.0" }
 # Read-path view-models derive Serialize so the web/API surface (RFC 003 T3) can emit them as JSON.
 serde = { version = "1", features = ["derive"] }
 # The egress guard (T-8/C-8) parses outbound URLs; `url` is already in the tree via ammonia.

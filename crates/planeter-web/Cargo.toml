@@ -6,13 +6,14 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
+readme.workspace = true
 description = "planeter's HTTP surface: the browse UI and GET read API, sign-in (local or OIDC) with sessions and CSRF, strict sanitization, CSP, trusted-proxy client IPs and an isolated content origin."
 
 [dependencies]
-planeter-core = { path = "../planeter-core", version = "0.4.0" }
-planeter-auth = { path = "../planeter-auth", version = "0.4.0" }
-planeter-store = { path = "../planeter-store", version = "0.4.0" }
-planeter-transport = { path = "../planeter-transport", version = "0.4.0" }
+planeter-core = { path = "../planeter-core", version = "0.5.0" }
+planeter-auth = { path = "../planeter-auth", version = "0.5.0" }
+planeter-store = { path = "../planeter-store", version = "0.5.0" }
+planeter-transport = { path = "../planeter-transport", version = "0.5.0" }
 
 # T4 rendering safety (RFC 003 / STD-6): strict HTML sanitization + a pure-Rust Markdown renderer.
 ammonia = "4"
@@ -40,4 +41,4 @@ tower = { version = "0.5", features = ["util"] }
 html5ever = "0.40"
 # Test-only: sign ES256 ID tokens from a PEM fixture for the OIDC flow test.
 jsonwebtoken = { version = "11", default-features = false, features = ["aws_lc_rs", "use_pem"] }
-planeter-prikk = { path = "../planeter-prikk", version = "0.4.0" }
+planeter-prikk = { path = "../planeter-prikk", version = "0.5.0" }

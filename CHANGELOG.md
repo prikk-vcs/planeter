@@ -3,127 +3,31 @@
 Releases are bare version tags; each section is the release's notes (assembled into the GitHub
 release by `release.yml`). Kept by hand, per release, so nothing here goes stale by templating.
 
-## [Unreleased]
+## [0.5.0] — unreleased until tagged — propose, review, create: the first release in which a person can put work to the forge, and the forge still holds no key
 
-- **The advertisement says what a client needs before it sends or fetches (RFC 004 part 10).** `GET …/transport/advertise` now carries `limits`
-  (the largest artifact and the most objects a proposal may carry; `null` when proposals are off) and, per branch, `update_seq` (the tip's RefState
-  sequence). `planeter-client` uses them: work over a bound is refused before any upload with the server's number in the sentence, and a fetch
-  refuses a lower `update_seq`, or the same number with another state, before downloading anything. Nothing existing changed (two new fields).
-- **The container image is now based on Debian 13 (trixie) and is run before it is shipped (D-51).** The image used `debian:bookworm-slim` (glibc 2.36),
-  but the release binary — built on a newer system — needs glibc 2.38 (amd64) or 2.39 (arm64) and could not start there (observed). The base is now
-  `debian:trixie-slim` (glibc 2.41), pinned by digest. Operators who run the image see no other change; bubblewrap is 0.12 and util-linux 2.41 in it.
-- **The container image can no longer be shipped dead (D-51).** The release workflow now loads the image it built, runs it (`planeter`, `prikk`,
-  `bwrap`, `prlimit`) and checks the release binary's glibc needs against the image's, in every mode, before anything is pushed or attested; a
-  new check (`tools/glibc-check`) and `planeter-pin-check` enforce it.
-- **The pushed image is checked to be the image that was run (D-51).** After each architecture's image is pushed, the release workflow reads the
-  registry's own index, takes the `linux/<arch>` manifest and requires its config digest to equal the id of the image that was run; a mismatch
-  fails the job before the digest is handed on. A new tool (`tools/image-identity`) does the reading and `planeter-pin-check` requires the step.
-- **`planeter-client` tells the truth when prikk cannot be started (RFC 004 part 11).** "prikk was not found" is said only when there is no such
-  program; a prikk that is there but cannot be started (no permission, a directory, a script whose interpreter is gone, `Text file busy`) is told
-  with the system's reason and the next step, and one that starts but does not say its version is told what it said. The program also passes
-  `HOME` and `XDG_CONFIG_HOME` on to the prikk it starts explicitly (the same values it always inherited). The `flows` tests no longer write
-  executables, and the test server closes connections gracefully; both were causes of failures under load.
+0.5.0 is the first release in which a person can **propose work** to the forge, have it **reviewed** (comments and decisions), and **create a repository** (empty, or from a maintainer's archive), with the forge still holding no key: nothing a proposal carries is sealed, merged or published by the server, and nobody approves a patch a keyless server holds. It also ships `planeter-client`, a separate program for a person with their own prikk and their own keys, and a release chain that runs the image it ships. **Breaking changes are listed first** under "For people who run a server" (the verify API's removed fields, the change API's `assurance`, the required prikk 0.54.0, the new defaults of the proposal bounds, the image base).
 
-- **`planeter-client`: clone, fetch and propose from your own computer (RFC 004 part 9).** A new program, separate from the server, for a person
-  with their own prikk and their own keys. `clone` downloads a repository, checks it with your prikk and shows the maintainer keys it carries
-  in full; **only the keys you type are trusted**. `fetch` lands the server's newer state as received copies and never touches your branches;
-  it refuses a server that shows two histories under one name. `propose` builds your work against what the server already holds and sends it as
-  a proposal, then says in plain words that it is held for review and that no branch has changed. It holds no key and signs nothing, speaks
-  https only (no `--insecure`, no redirects followed), takes its token from `PLANETER_TOKEN` or a private file (never the command line), and
-  says each TLS failure as one sentence with the next step. Linux, macOS and Windows; English, with a Japanese draft. See `docs/client.md`.
-  The server gains one read route for it, below.
-- **The have-list over HTTP (RFC 004 part 8).** `GET …/transport/have?ref=heads/NAME` serves what the repository already holds of a branch (the
-  `PSYNCHV1` file of `prikk sync have`, 32 bytes a patch) so that a client can build an incremental push; the advertisement offers it for each
-  published branch. It is made once per state of the repository, under a read lease, checked and served from the spool; a tag and a received
-  ref have none (`no_have_list`). See `docs/propose.md`.
-- **Two badge and line texts no longer say "approved" (D-50).** The badge on a patch the server holds but a maintainer has not signed in reads
-  **Held here, not signed in** (it said "Approved, awaiting signature"), its explanation says the patch is held on this server, and the line
-  under a closed proposal reads **Reason: …**. Nobody approves a patch a keyless server holds; "approved" now belongs to a reviewer's decision.
-  Nothing in the API changed (`forge-approved-unsealed` is still the machine value).
-- **The Japanese draft is consistent with itself (D-50).** `管理者` now means only the administrator of a repository (the person who runs the
-  server is `このサーバーを運用している人`), one word per kind of check, `ドキュメント` throughout. Still a draft; still not shipped.
+**Distribution of `planeter-client`:** 0.5.0 ships it through crates.io (`cargo install planeter-client`) and as source; release-asset binaries of the client are not part of this release.
 
-- **OIDC sign-in verifies ID tokens with `aws-lc-rs` instead of the RustCrypto crates (D-50).** No behaviour changes: the same 30 cases (six algorithms valid, tampered in
-  payload and in signature; a key of the wrong kind; HS*, PS* and `none` refused; wrong audience; expired) give the same answers on both backends. The two advisories that
-  came with the RustCrypto backend (RUSTSEC-2023-0071 `rsa`, RUSTSEC-2026-0387 `crypto-bigint`) are gone because the crates are, not because they are ignored:
-  `cargo deny` and `cargo audit` pass with no ignore at all. The price is a C library (`aws-lc-sys`) in the server binary, about 2 MB more, and a longer clean build.
-  Building from source needs `cmake` and a C compiler on the build host (Linux x86_64 and aarch64 were measured).
+### For people who run a server
 
-- **prikk 0.55.0 re-baseline (the floor stays 0.54.0).** Nothing in 0.55.0 is required, so the floor does not move. Re-validated on 0.55.0: the suite (one test drifts, by design: see
-  the `extract` entry below), the cost table's seven read verbs and `extract` (no ceiling tripped; memory figures moved by at most 1 MiB), and `sync accept`, which is about
-  2.6 to 3.8 times faster for artifacts of many small patches and unchanged in memory. No default (object bound, deadline, ceilings) is changed by this release.
+- **The verification page no longer shows "N of M sessions verified", and the verify endpoint no longer returns
+  `verified_sessions` and `total_sessions` (IS-49) — a breaking change to the success body of
+  `GET …/verify`.** prikk's `active_sessions` is not a tally of work (`count` is the number of session folders,
+  always one; `verified_count` a fixed 1), so the sentence next to the badge suggested progress that does not exist.
+  The checks, the verdict, the stages and the badge are unchanged.
 
-- **The `extract` driver knows prikk 0.55.0's two refusals.** `claim-parent-not-sealed` (a claim whose parent is accepted but not sealed yet; 0.54.x said
-  `damaged-repository`) is its own outcome, `ClaimParentNotSealed`, with prikk's text kept verbatim; `destination-inside-repository` is a named driver bug
-  (the driver never passes such a destination). The list of ids is 15; the floor stays 0.54.0, so the 0.54.x mapping stays. See `docs/extract.md`.
-
-- **A cap on what the server reads from a prikk call (IS-55).** The memory ceiling bounded prikk, not the server's own buffer: a hostile archive with
-  very many refs could make `archive import --format json` print a report as large as the archive. Every prikk call is now read up to a limit per
-  verb (a table with its measurements, each limit at least twice the largest legitimate output measured on prikk 0.54.1) and **killed beyond it**; the
-  call fails as a named error, is counted by verb and logged, and is never read as an empty or a partial report. A read is then *unavailable*, an accept
-  *incomplete*, a creation refused (the repository removed whole), recovery's witness *unknown*. The start-up probe and the outbound fetch are bounded the
-  same way. **Landing is observed from the newest `PLANETER_OBSERVATION_BLOCKS` blocks of each published branch (default 10,000; 100 to 100,000):** a
-  proposal whose patches are all found lands; a patch not found in a log that filled the window is shown as *unknown* ("This server cannot tell whether
-  this patch has been signed in"), never as held, and the proposal stays open; a landed proposal shows its patches as signed in without reading the log
-  again. The counters (`output_too_large` by verb, `sightings_unavailable`) are in the retention sweep's log line and at shutdown. See `docs/proposals.md`.
-
-- **Creating a repository — empty, or from a maintainer's archive (RFC 004 part 7).** A person can now make a repository through the pages (`/new`) or the
-  API. **Empty**: one step, `POST /api/v1/repos`. **From an archive** (the file `prikk archive export` writes): two steps — upload it and see what it holds
-  (the maintainer keys it lists, its branches and where each would land, whether it would pass prikk's checks), then **type the fingerprints of the keys you
-  trust** (the whole public key, which the maintainer can read off their own machine; the page never fills them in). Only the keys you typed are trusted; the
-  rest are explicitly left out, and their branches are kept as received copies. The repository is built in one order — name reserved, directory, `init`, trust, import,
-  `verify`, you as administrator, ready — and **a failure, a timeout or a kill at any step removes it whole**; at every start the server removes (and logs) what a killed
-  one left, never following a link and never outside the repository root. Your own namespace or an organization you belong to; one refusal for every other owner; quotas
-  per owner (50 / 500); 10 creations an hour per person; names are lowercase and the server's own words (`new`, `api`, `login`, `static`, `import`, … derived from its routes)
-  are reserved. A staged archive is kept 24 hours, at most 2 per person. The pages upload with a bounded `multipart/form-data` reader of our own (no new dependency).
-  Settings: `PLANETER_IMPORT_MAX_MB`, `PLANETER_CREATE_DEADLINE_SECS`, `PLANETER_STAGE_BUDGET_MB`, `PLANETER_REPO_QUOTA_USER`, `PLANETER_REPO_QUOTA_ORG`,
-  `PLANETER_CREATIONS_PER_HOUR`. Measured on prikk 0.54.1: `archive verify` holds 3.0 × the largest blob and `archive import` 6.0 ×, and **prikk bounds neither**.
-  See `docs/creation.md`.
-
-- **Comments and review decisions (RFC 005 part 6).** People can now talk about a proposal and say what they think of a revision. **Comments**
-  (Markdown, shown through the sanitizer) sit in one-level threads and may be anchored to a patch, a path and lines; they are never edited or deleted, and a maintainer
-  who administers the repository can **hide** one with a reason (its text is then shown to administrators only, everyone else sees the reason) and show it again. A reviewer
-  (`write` and above) records one **decision** per revision — approve or request changes — that is shown on that revision and **never carried to a later one**: a later revision shows
-  "approved on revision 1" and counts it for nothing. Nobody approves their own work. The proposal page gains one **review line** (*Awaiting review*, *Approved by 2 people*,
-  *Changes requested by 1 person*) and, under *Details*, the decisions, the comments and the forms; the list shows the word too. API: `POST …/comments`,
-  `…/decisions`, `…/comments/{cid}/hide` and `…/unhide` (bearer tokens only), and `review` and `comments` in the proposal's detail. Limits: 20 comments and 10 decisions per person per proposal per hour
-  (`PLANETER_COMMENTS_PER_HOUR`, `PLANETER_DECISIONS_PER_HOUR`). Nothing here merges or blocks anything. See `docs/proposals.md`.
-
-- **Landing is observed from published history only (RFC 005 D-6 amended, D-40), and three small corrections.** A proposal has *landed*
-  when every one of its patches is in a block of a **published** branch of the repository; `sync pending` is no longer consulted, and
-  history merely **received** here (an archive import without `--adopt`) never counts — it is shown under *Details* as a sighting
-  ("Also found in history received here (not verified here)"; `received_sightings` in the JSON). A patch in a published block is shown
-  as signed in even if the queue still lists it. Until a key-holding action publishes history here, a proposal usually stays open; the
-  documentation says so. A closed proposal now shows its reason beside the state (cut at 200 characters; the full text under *Details*).
-  **Recovery no longer stops for prikk 0.54's "unreached object" warning** when it names no repair: it is a note in the plan and in the record
-  of the `doctor` step, and the server recovers by itself (any other warning or error still stops it). **The server refuses to start
-  with a prikk below 0.54.0**, with the pin's own sentence. The propose route's check that a declared patch is already held now reads all of a
-  ref's history (prikk's own default of the newest 20 blocks missed older patches). `tokio` 1.53.1 → 1.53.3 (lock only; RUSTSEC-2026-0386).
-
-- **Proposals you can see, and the word "proposal" everywhere (RFC 005 part 5).** What a person puts forward for review is now a
-  **proposal** in every sentence and every name a person or a program reads: the pages, the API (`proposal_id`, `created_proposal`,
-  `unknown_proposal`, `proposal_not_open`, `not_your_proposal`, the quotas `open_proposals` and `revisions_per_proposal`), the messages in both
-  languages, and the documentation. (*Change* keeps its glossary meaning, a recorded unit of history; the code's internal name for a
-  proposal stays *change*, and nothing stored is renamed.) **This is a rename of the propose API's fields and error codes that no release
-  has carried yet**, so nothing outside the repository breaks.
-  New: `GET /api/v1/repos/{owner}/{name}/proposals` and `…/proposals/{id}` (anyone who may read), `POST …/proposals/{id}/close` (the
-  opener, or whoever may close; bearer token; a reason is required), and `GET …/proposals/{id}/revisions/{seq}/artifact` (for whoever holds
-  `review` or `merge-seal`: the accepted files byte for byte, with `Range`); the pages `/{owner}/{name}/proposals` and `/{owner}/{name}/proposals/{id}`
-  (the default view is a title, who proposed it, the state, one sentence, a one-line summary and the actions you may take; everything else is
-  under *Details*); the repository navigation shows *Proposals* when there are some or you may propose.
-  **A proposal now lands only when the repository says so:** every one of its patches has left `sync pending` **and** is in a block `log`
-  lists (a patch that merely left the pending list is not landed), observed with one `sync pending` per repository per state, never
-  one call per item. **A landed or closed proposal keeps its files for 30 days** (`PLANETER_PROPOSAL_GRACE_DAYS`), after which a retention
-  sweep (`PLANETER_RETENTION_SWEEP_MINUTES`, hourly, also at start) removes the files nothing else needs and never the records; the download
-  then answers `410 artifact_removed` with the date. See `docs/proposals.md`.
-
-- **The `extract` driver and the `verify` line of prikk 0.54 (no page, no API yet).** planeter can now ask prikk for the files of a
-  point of history (`prikk extract`) into a working directory it makes itself, outside the repository, and removes afterwards:
-  prikk 0.54 does not refuse a destination inside the repository, so the driver never takes one from a caller. The extracted tree is
-  treated as untrusted and is never read by the driver. prikk's `refusal-v1` document (13 ids) and `extract-report-v1` are read
-  strictly; a claim whose parent is still pending is not reported as damage. `verify` now sees prikk's new `unreached objects`
-  line and array (a warning, recorded and not shown). The memory cost of `extract` is measured and admitted like a read (about
-  twice the largest file, up to 8.6 × for a file edited many times; admitted at 9 × the extraction bound + 8 MiB). See `docs/extract.md`.
+- **The change page no longer says "Verified" for a sealed patch (IS-44) — and the change API's `assurance`
+  changes with it.** The change page showed the badge **Verified** for any patch that is signed into the history,
+  although no verification runs on that page. A sealed patch is now labelled **Signed into the history** in a plain
+  (not green) badge, and **Verified** appears only where a verification ran and passed: the repository, history and
+  verification pages. **API (breaking for a client of `GET …/change/{target}`):** the `assurance` of a sealed
+  patch is now `"sealed"` instead of `"prikk-verified"`; `"forge-approved-unsealed"` (queued) is unchanged, and
+  `"prikk-verified"` remains a value of the schema but no change response carries it. A stage of `GET …/verify`
+  that is `halted` now carries `after` (the id of the stage it stopped after), as a `not_evaluated` one carries
+  `blocked_by`; `detail` is unchanged. Wording: the Verification page's failed explanation says "They are listed
+  below."; the history page explains the *rollback* tag when it shows one; a stopped check reads "stopped early
+  (after …)"; "Showing … · branch …" and the "Too large to show here" title follow their neighbours.
 
 - **The prikk floor moves to 0.54.0 (the 0.54 re-baseline).** planeter now requires prikk **0.54.0 or later** (the container image carries it;
   `MIN_PRIKK_VERSION`, the release workflow and the Dockerfile agree). Why: 0.54.0 fixes `show <block-id>` for a block that edits a
@@ -148,6 +52,66 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
   of usable memory; the start-up log says whether it does. **`PRIKK_EXCHANGE_MAX_OBJECTS` now defaults to 5000** (was 20000):
   the accept's time is one disk flush per patch or blob, 15 to 50 ms on the test machine, so 20,000 of them could pass the 600 s
   deadline. The bound counts patches and blobs separately.
+
+- **The container image is now based on Debian 13 (trixie) and is run before it is shipped (D-51).** The image used `debian:bookworm-slim` (glibc 2.36),
+  but the release binary — built on a newer system — needs glibc 2.38 (amd64) or 2.39 (arm64) and could not start there (observed). The base is now
+  `debian:trixie-slim` (glibc 2.41), pinned by digest. Operators who run the image see no other change; bubblewrap is 0.12 and util-linux 2.41 in it.
+
+- **Foundations for the transport (RFC 004, part 1) — nothing is reachable from the network that was not before.**
+  (1) **A test that every route authorizes (IS-14).** Every route of the web surface is registered in one table with
+  its authorization class — it checks `authorize()` or is on a short list of public routes, each with a written
+  reason — and a test fails the build for a route that is not in it, or that is in it but leaks. (2) **A new
+  permission, `propose`** (`Action::ALL` now has ten entries): granted to `write` and above; never to an anonymous
+  visitor; to any signed-in user only when a repository's new setting `proposals` is `any-authenticated` (default
+  `members`). The database gets a `proposals` column on first start, safely repeatable. No page or API uses it yet.
+  (3) **A lease for each repository** (reads / exports / writes) with bounded waits, and a **record of who holds an
+  exclusive lease**, so a crash is visible at the next start. (4) **Only one server per database:** a second server
+  on the same database file is refused at start (`<database>.lock`; see RELEASING). (5) **An artifact store and an
+  export spool** (`PLANETER_ARTIFACT_DIR`, `PLANETER_SPOOL_DIR`, `PLANETER_SPOOL_BUDGET_MB`; optional, unset by
+  default): content-addressed, written atomically, the spool bounded and evicting its oldest. (6) **The sandbox can
+  take two optional mounts** (accepted artifacts read-only; the export spool read-write); without them the
+  sandbox is byte for byte what it was.
+
+- **The database gains the tables behind proposed changes (RFC 004 part 3a; nothing uses them yet).** Opening an existing
+  database now also creates `changes`, `revisions`, `intents` and `repo_flags` (idempotent; every earlier table is
+  untouched, and reopening changes nothing). Nothing writes to them until the transport's write side is built, so a
+  server updated to this version behaves as before. The design note is `docs/proposals.md`. The export sandbox now mounts
+  only a working directory of its own, never the whole spool (`<spool>/work/<id>`, created and removed per export;
+  leftovers from a crash are cleaned when the server starts).
+
+- **The transport's read side: advertise and fetch (RFC 004 part 2), and a graceful shutdown.** With an export spool
+  configured (`PLANETER_SPOOL_DIR`), a reader of a repository can ask what it holds
+  (`GET /api/v1/repos/{owner}/{name}/transport/advertise`) and fetch it as one whole, **verified** artifact
+  (`…/transport/fetch?kind=archive|bundle[&ref=…]`): `200`, `304` for an unchanged state, `206`/`416` for byte ranges,
+  `503 busy` with `Retry-After` when exports are at capacity, `429` past the rate limit, and named refusals (unknown ref
+  or kind, a bundle of a received ref, an artifact that did not verify — never served —, an export that failed or hit its
+  deadline or memory ceiling). New operator settings: `PLANETER_EXPORT_CONCURRENCY`, `PLANETER_EXPORT_LEASE_WAIT_SECS`,
+  `PLANETER_EXPORT_DEADLINE_SECS`, `PLANETER_EXPORT_MEMORY_MB`, `PLANETER_TRANSPORT_RATE_PER_MIN`. Reads of a repository
+  are never blocked by an export. **The server now stops gracefully on SIGTERM and SIGINT**: it finishes the requests in
+  flight (at most `PLANETER_SHUTDOWN_DRAIN_SECS`, default 30), removes its lock file and exits 0; a second signal stops it at
+  once. **A CI job is never allowed to propose a change.** The dependency tree gains two small crates for the signals
+  (`signal-hook-registry`, `errno`; deny and audit clean; see `docs/dependency-policy.md`).
+
+- **A cap on what the server reads from a prikk call (IS-55).** The memory ceiling bounded prikk, not the server's own buffer: a hostile archive with
+  very many refs could make `archive import --format json` print a report as large as the archive. Every prikk call is now read up to a limit per
+  verb (a table with its measurements, each limit at least twice the largest legitimate output measured on prikk 0.54.1) and **killed beyond it**; the
+  call fails as a named error, is counted by verb and logged, and is never read as an empty or a partial report. A read is then *unavailable*, an accept
+  *incomplete*, a creation refused (the repository removed whole), recovery's witness *unknown*. The start-up probe and the outbound fetch are bounded the
+  same way. **Landing is observed from the newest `PLANETER_OBSERVATION_BLOCKS` blocks of each published branch (default 10,000; 100 to 100,000):** a
+  proposal whose patches are all found lands; a patch not found in a log that filled the window is shown as *unknown* ("This server cannot tell whether
+  this patch has been signed in"), never as held, and the proposal stays open; a landed proposal shows its patches as signed in without reading the log
+  again. The counters (`output_too_large` by verb, `sightings_unavailable`) are in the retention sweep's log line and at shutdown. See `docs/proposals.md`.
+
+- **Landing is observed from published history only (RFC 005 D-6 amended, D-40), and three small corrections.** A proposal has *landed*
+  when every one of its patches is in a block of a **published** branch of the repository; `sync pending` is no longer consulted, and
+  history merely **received** here (an archive import without `--adopt`) never counts — it is shown under *Details* as a sighting
+  ("Also found in history received here (not verified here)"; `received_sightings` in the JSON). A patch in a published block is shown
+  as signed in even if the queue still lists it. Until a key-holding action publishes history here, a proposal usually stays open; the
+  documentation says so. A closed proposal now shows its reason beside the state (cut at 200 characters; the full text under *Details*).
+  **Recovery no longer stops for prikk 0.54's "unreached object" warning** when it names no repair: it is a note in the plan and in the record
+  of the `doctor` step, and the server recovers by itself (any other warning or error still stops it). **The server refuses to start
+  with a prikk below 0.54.0**, with the pin's own sentence. The propose route's check that a declared patch is already held now reads all of a
+  ref's history (prikk's own default of the newest 20 blocks missed older patches). `tokio` 1.53.1 → 1.53.3 (lock only; RUSTSEC-2026-0386).
 
 - **Recovery follow-ups (RFC 004 part 4a).** An administrator's recovery run can now actually repair: when `doctor` lists problems
   and **every one of them names** one of the idempotent repairs (`--repair-wal-tail`, `--repair-index`,
@@ -179,6 +143,8 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
   `needs_recovery` hint is now two sentences) and the OpenAPI document says in plain words what `forge-approved-unsealed` means.
   Runbook: `docs/propose.md`.
 
+### For people who use it
+
 - **Propose: a change can be put on the forge (RFC 004 part 3b).** With `PLANETER_ARTIFACT_DIR` set (and the export spool), an
   authenticated principal who may propose (`write` and above; any signed-in reader if the repository's `proposals` setting is
   `any-authenticated`) can `POST …/transport/propose` an artifact built by `prikk sync build`: it is checked, accepted under the
@@ -196,56 +162,74 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
   and changes within their 30-day grace), and a change's current patch set keeps a declared patch that a later undeclared push
   would have dropped. Design note: `docs/propose.md`.
 
-- **The database gains the tables behind proposed changes (RFC 004 part 3a; nothing uses them yet).** Opening an existing
-  database now also creates `changes`, `revisions`, `intents` and `repo_flags` (idempotent; every earlier table is
-  untouched, and reopening changes nothing). Nothing writes to them until the transport's write side is built, so a
-  server updated to this version behaves as before. The design note is `docs/proposals.md`. The export sandbox now mounts
-  only a working directory of its own, never the whole spool (`<spool>/work/<id>`, created and removed per export;
-  leftovers from a crash are cleaned when the server starts).
+- **Proposals you can see, and the word "proposal" everywhere (RFC 005 part 5).** What a person puts forward for review is now a
+  **proposal** in every sentence and every name a person or a program reads: the pages, the API (`proposal_id`, `created_proposal`,
+  `unknown_proposal`, `proposal_not_open`, `not_your_proposal`, the quotas `open_proposals` and `revisions_per_proposal`), the messages in both
+  languages, and the documentation. (*Change* keeps its glossary meaning, a recorded unit of history; the code's internal name for a
+  proposal stays *change*, and nothing stored is renamed.) **This is a rename of the propose API's fields and error codes that no release
+  has carried yet**, so nothing outside the repository breaks.
+  New: `GET /api/v1/repos/{owner}/{name}/proposals` and `…/proposals/{id}` (anyone who may read), `POST …/proposals/{id}/close` (the
+  opener, or whoever may close; bearer token; a reason is required), and `GET …/proposals/{id}/revisions/{seq}/artifact` (for whoever holds
+  `review` or `merge-seal`: the accepted files byte for byte, with `Range`); the pages `/{owner}/{name}/proposals` and `/{owner}/{name}/proposals/{id}`
+  (the default view is a title, who proposed it, the state, one sentence, a one-line summary and the actions you may take; everything else is
+  under *Details*); the repository navigation shows *Proposals* when there are some or you may propose.
+  **A proposal now lands only when the repository says so:** every one of its patches has left `sync pending` **and** is in a block `log`
+  lists (a patch that merely left the pending list is not landed), observed with one `sync pending` per repository per state, never
+  one call per item. **A landed or closed proposal keeps its files for 30 days** (`PLANETER_PROPOSAL_GRACE_DAYS`), after which a retention
+  sweep (`PLANETER_RETENTION_SWEEP_MINUTES`, hourly, also at start) removes the files nothing else needs and never the records; the download
+  then answers `410 artifact_removed` with the date. See `docs/proposals.md`.
 
-- **The verification page no longer shows "N of M sessions verified", and the verify endpoint no longer returns
-  `verified_sessions` and `total_sessions` (IS-49) — a breaking change to the success body of
-  `GET …/verify`.** prikk's `active_sessions` is not a tally of work (`count` is the number of session folders,
-  always one; `verified_count` a fixed 1), so the sentence next to the badge suggested progress that does not exist.
-  The checks, the verdict, the stages and the badge are unchanged.
+- **Comments and review decisions (RFC 005 part 6).** People can now talk about a proposal and say what they think of a revision. **Comments**
+  (Markdown, shown through the sanitizer) sit in one-level threads and may be anchored to a patch, a path and lines; they are never edited or deleted, and a maintainer
+  who administers the repository can **hide** one with a reason (its text is then shown to administrators only, everyone else sees the reason) and show it again. A reviewer
+  (`write` and above) records one **decision** per revision — approve or request changes — that is shown on that revision and **never carried to a later one**: a later revision shows
+  "approved on revision 1" and counts it for nothing. Nobody approves their own work. The proposal page gains one **review line** (*Awaiting review*, *Approved by 2 people*,
+  *Changes requested by 1 person*) and, under *Details*, the decisions, the comments and the forms; the list shows the word too. API: `POST …/comments`,
+  `…/decisions`, `…/comments/{cid}/hide` and `…/unhide` (bearer tokens only), and `review` and `comments` in the proposal's detail. Limits: 20 comments and 10 decisions per person per proposal per hour
+  (`PLANETER_COMMENTS_PER_HOUR`, `PLANETER_DECISIONS_PER_HOUR`). Nothing here merges or blocks anything. See `docs/proposals.md`.
 
-- **The transport's read side: advertise and fetch (RFC 004 part 2), and a graceful shutdown.** With an export spool
-  configured (`PLANETER_SPOOL_DIR`), a reader of a repository can ask what it holds
-  (`GET /api/v1/repos/{owner}/{name}/transport/advertise`) and fetch it as one whole, **verified** artifact
-  (`…/transport/fetch?kind=archive|bundle[&ref=…]`): `200`, `304` for an unchanged state, `206`/`416` for byte ranges,
-  `503 busy` with `Retry-After` when exports are at capacity, `429` past the rate limit, and named refusals (unknown ref
-  or kind, a bundle of a received ref, an artifact that did not verify — never served —, an export that failed or hit its
-  deadline or memory ceiling). New operator settings: `PLANETER_EXPORT_CONCURRENCY`, `PLANETER_EXPORT_LEASE_WAIT_SECS`,
-  `PLANETER_EXPORT_DEADLINE_SECS`, `PLANETER_EXPORT_MEMORY_MB`, `PLANETER_TRANSPORT_RATE_PER_MIN`. Reads of a repository
-  are never blocked by an export. **The server now stops gracefully on SIGTERM and SIGINT**: it finishes the requests in
-  flight (at most `PLANETER_SHUTDOWN_DRAIN_SECS`, default 30), removes its lock file and exits 0; a second signal stops it at
-  once. **A CI job is never allowed to propose a change.** The dependency tree gains two small crates for the signals
-  (`signal-hook-registry`, `errno`; deny and audit clean; see `docs/dependency-policy.md`).
+- **Creating a repository — empty, or from a maintainer's archive (RFC 004 part 7).** A person can now make a repository through the pages (`/new`) or the
+  API. **Empty**: one step, `POST /api/v1/repos`. **From an archive** (the file `prikk archive export` writes): two steps — upload it and see what it holds
+  (the maintainer keys it lists, its branches and where each would land, whether it would pass prikk's checks), then **type the fingerprints of the keys you
+  trust** (the whole public key, which the maintainer can read off their own machine; the page never fills them in). Only the keys you typed are trusted; the
+  rest are explicitly left out, and their branches are kept as received copies. The repository is built in one order — name reserved, directory, `init`, trust, import,
+  `verify`, you as administrator, ready — and **a failure, a timeout or a kill at any step removes it whole**; at every start the server removes (and logs) what a killed
+  one left, never following a link and never outside the repository root. Your own namespace or an organization you belong to; one refusal for every other owner; quotas
+  per owner (50 / 500); 10 creations an hour per person; names are lowercase and the server's own words (`new`, `api`, `login`, `static`, `import`, … derived from its routes)
+  are reserved. A staged archive is kept 24 hours, at most 2 per person. The pages upload with a bounded `multipart/form-data` reader of our own (no new dependency).
+  Settings: `PLANETER_IMPORT_MAX_MB`, `PLANETER_CREATE_DEADLINE_SECS`, `PLANETER_STAGE_BUDGET_MB`, `PLANETER_REPO_QUOTA_USER`, `PLANETER_REPO_QUOTA_ORG`,
+  `PLANETER_CREATIONS_PER_HOUR`. Measured on prikk 0.54.1: `archive verify` holds 3.0 × the largest blob and `archive import` 6.0 ×, and **prikk bounds neither**.
+  See `docs/creation.md`.
 
-- **A Japanese draft and a language switcher (RFC 012 D-3; IS-27) — Japanese is not shipped yet.** The footer of every
-  page, the sign-in page included, now has a **language switcher**: a button for each available language, written in
-  its own language (English, 日本語), the current one marked; choosing one remembers it in a cookie
-  (`planeter_lang`, a language code only) and returns to the same page; no script. The Japanese catalog is a **draft
-  for its two reviewers** (the owner and a colleague) and is offered **only** when the operator sets
-  `PLANETER_PREVIEW_LANGUAGES=ja` (off by default, logged at start); without it Japanese is not offered and the
-  switcher shows English only. English wording is unchanged. The Japanese typography uses system fonts only. New
-  checks cover Japanese (completeness, placeholders, retired and forbidden terms, the glossary's Japanese tables,
-  every page state), and a test pins that a language not signed off is not shipped.
+- **`planeter-client`: clone, fetch and propose from your own computer (RFC 004 part 9).** A new program, separate from the server, for a person
+  with their own prikk and their own keys. `clone` downloads a repository, checks it with your prikk and shows the maintainer keys it carries
+  in full; **only the keys you type are trusted**. `fetch` lands the server's newer state as received copies and never touches your branches;
+  it refuses a server that shows two histories under one name. `propose` builds your work against what the server already holds and sends it as
+  a proposal, then says in plain words that it is held for review and that no branch has changed. It holds no key and signs nothing, speaks
+  https only (no `--insecure`, no redirects followed), takes its token from `PLANETER_TOKEN` or a private file (never the command line), and
+  says each TLS failure as one sentence with the next step. Linux, macOS and Windows; English, with a Japanese draft. See `docs/client.md`.
+  The server gains one read route for it, below.
 
-- **Foundations for the transport (RFC 004, part 1) — nothing is reachable from the network that was not before.**
-  (1) **A test that every route authorizes (IS-14).** Every route of the web surface is registered in one table with
-  its authorization class — it checks `authorize()` or is on a short list of public routes, each with a written
-  reason — and a test fails the build for a route that is not in it, or that is in it but leaks. (2) **A new
-  permission, `propose`** (`Action::ALL` now has ten entries): granted to `write` and above; never to an anonymous
-  visitor; to any signed-in user only when a repository's new setting `proposals` is `any-authenticated` (default
-  `members`). The database gets a `proposals` column on first start, safely repeatable. No page or API uses it yet.
-  (3) **A lease for each repository** (reads / exports / writes) with bounded waits, and a **record of who holds an
-  exclusive lease**, so a crash is visible at the next start. (4) **Only one server per database:** a second server
-  on the same database file is refused at start (`<database>.lock`; see RELEASING). (5) **An artifact store and an
-  export spool** (`PLANETER_ARTIFACT_DIR`, `PLANETER_SPOOL_DIR`, `PLANETER_SPOOL_BUDGET_MB`; optional, unset by
-  default): content-addressed, written atomically, the spool bounded and evicting its oldest. (6) **The sandbox can
-  take two optional mounts** (accepted artifacts read-only; the export spool read-write); without them the
-  sandbox is byte for byte what it was.
+- **The have-list over HTTP (RFC 004 part 8).** `GET …/transport/have?ref=heads/NAME` serves what the repository already holds of a branch (the
+  `PSYNCHV1` file of `prikk sync have`, 32 bytes a patch) so that a client can build an incremental push; the advertisement offers it for each
+  published branch. It is made once per state of the repository, under a read lease, checked and served from the spool; a tag and a received
+  ref have none (`no_have_list`). See `docs/propose.md`.
+
+- **The advertisement says what a client needs before it sends or fetches (RFC 004 part 10).** `GET …/transport/advertise` now carries `limits`
+  (the largest artifact and the most objects a proposal may carry; `null` when proposals are off) and, per branch, `update_seq` (the tip's RefState
+  sequence). `planeter-client` uses them: work over a bound is refused before any upload with the server's number in the sentence, and a fetch
+  refuses a lower `update_seq`, or the same number with another state, before downloading anything. Nothing existing changed (two new fields).
+
+- **`planeter-client` tells the truth when prikk cannot be started (RFC 004 part 11).** "prikk was not found" is said only when there is no such
+  program; a prikk that is there but cannot be started (no permission, a directory, a script whose interpreter is gone, `Text file busy`) is told
+  with the system's reason and the next step, and one that starts but does not say its version is told what it said. The program also passes
+  `HOME` and `XDG_CONFIG_HOME` on to the prikk it starts explicitly (the same values it always inherited). The `flows` tests no longer write
+  executables, and the test server closes connections gracefully; both were causes of failures under load.
+
+- **Two badge and line texts no longer say "approved" (D-50).** The badge on a patch the server holds but a maintainer has not signed in reads
+  **Held here, not signed in** (it said "Approved, awaiting signature"), its explanation says the patch is held on this server, and the line
+  under a closed proposal reads **Reason: …**. Nobody approves a patch a keyless server holds; "approved" now belongs to a reviewer's decision.
+  Nothing in the API changed (`forge-approved-unsealed` is still the machine value).
 
 - **A missing file or folder is now said to be missing (IS-45).** In a repository you may read, a file or folder that
   is not there used to show "There is no repository at this address, or you do not have access to it." It now says
@@ -254,18 +238,6 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
   read a repository can tell it apart from one that is not there**. **The API is unchanged**: a missing path is the
   same `404 not_found` (same headers and body) as a missing or hidden repository, and `GET …/tree` with a prefix that
   has nothing under it still answers `200` with no entries.
-
-- **The change page no longer says "Verified" for a sealed patch (IS-44) — and the change API's `assurance`
-  changes with it.** The change page showed the badge **Verified** for any patch that is signed into the history,
-  although no verification runs on that page. A sealed patch is now labelled **Signed into the history** in a plain
-  (not green) badge, and **Verified** appears only where a verification ran and passed: the repository, history and
-  verification pages. **API (breaking for a client of `GET …/change/{target}`):** the `assurance` of a sealed
-  patch is now `"sealed"` instead of `"prikk-verified"`; `"forge-approved-unsealed"` (queued) is unchanged, and
-  `"prikk-verified"` remains a value of the schema but no change response carries it. A stage of `GET …/verify`
-  that is `halted` now carries `after` (the id of the stage it stopped after), as a `not_evaluated` one carries
-  `blocked_by`; `detail` is unchanged. Wording: the Verification page's failed explanation says "They are listed
-  below."; the history page explains the *rollback* tag when it shows one; a stopped check reads "stopped early
-  (after …)"; "Showing … · branch …" and the "Too large to show here" title follow their neighbours.
 
 - **The pages use plain words (RFC 012 D-4; IS-30).** The wording follows `docs/glossary.md`, which the owner
   approved. The four trust badges: *prikk-verified* → **Verified**; *forge-approved, unsealed* → **Approved,
@@ -338,6 +310,51 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
   objects) is still `503`; no page ever says "verified" unless prikk's verdict is ok and every stage was
   evaluated. A repository with a damaged ref pointer index (stages blocked behind a failed `refs` stage) is
   likewise shown as unverified now, not as unavailable. No wording changed.
+
+- **A Japanese draft and a language switcher (RFC 012 D-3; IS-27) — Japanese is not shipped yet.** The footer of every
+  page, the sign-in page included, now has a **language switcher**: a button for each available language, written in
+  its own language (English, 日本語), the current one marked; choosing one remembers it in a cookie
+  (`planeter_lang`, a language code only) and returns to the same page; no script. The Japanese catalog is a **draft
+  for its two reviewers** (the owner and a colleague) and is offered **only** when the operator sets
+  `PLANETER_PREVIEW_LANGUAGES=ja` (off by default, logged at start); without it Japanese is not offered and the
+  switcher shows English only. English wording is unchanged. The Japanese typography uses system fonts only. New
+  checks cover Japanese (completeness, placeholders, retired and forbidden terms, the glossary's Japanese tables,
+  every page state), and a test pins that a language not signed off is not shipped.
+
+### Under the hood
+
+- **OIDC sign-in verifies ID tokens with `aws-lc-rs` instead of the RustCrypto crates (D-50).** No behaviour changes: the same 30 cases (six algorithms valid, tampered in
+  payload and in signature; a key of the wrong kind; HS*, PS* and `none` refused; wrong audience; expired) give the same answers on both backends. The two advisories that
+  came with the RustCrypto backend (RUSTSEC-2023-0071 `rsa`, RUSTSEC-2026-0387 `crypto-bigint`) are gone because the crates are, not because they are ignored:
+  `cargo deny` and `cargo audit` pass with no ignore at all. The price is a C library (`aws-lc-sys`) in the server binary, about 2 MB more, and a longer clean build.
+  Building from source needs `cmake` and a C compiler on the build host (Linux x86_64 and aarch64 were measured).
+
+- **prikk 0.55.0 re-baseline (the floor stays 0.54.0).** Nothing in 0.55.0 is required, so the floor does not move. Re-validated on 0.55.0: the suite (one test drifts, by design: see
+  the `extract` entry below), the cost table's seven read verbs and `extract` (no ceiling tripped; memory figures moved by at most 1 MiB), and `sync accept`, which is about
+  2.6 to 3.8 times faster for artifacts of many small patches and unchanged in memory. No default (object bound, deadline, ceilings) is changed by this release.
+
+- **The `extract` driver knows prikk 0.55.0's two refusals.** `claim-parent-not-sealed` (a claim whose parent is accepted but not sealed yet; 0.54.x said
+  `damaged-repository`) is its own outcome, `ClaimParentNotSealed`, with prikk's text kept verbatim; `destination-inside-repository` is a named driver bug
+  (the driver never passes such a destination). The list of ids is 15; the floor stays 0.54.0, so the 0.54.x mapping stays. See `docs/extract.md`.
+
+- **The `extract` driver and the `verify` line of prikk 0.54 (no page, no API yet).** planeter can now ask prikk for the files of a
+  point of history (`prikk extract`) into a working directory it makes itself, outside the repository, and removes afterwards:
+  prikk 0.54 does not refuse a destination inside the repository, so the driver never takes one from a caller. The extracted tree is
+  treated as untrusted and is never read by the driver. prikk's `refusal-v1` document (13 ids) and `extract-report-v1` are read
+  strictly; a claim whose parent is still pending is not reported as damage. `verify` now sees prikk's new `unreached objects`
+  line and array (a warning, recorded and not shown). The memory cost of `extract` is measured and admitted like a read (about
+  twice the largest file, up to 8.6 × for a file edited many times; admitted at 9 × the extraction bound + 8 MiB). See `docs/extract.md`.
+
+- **The container image can no longer be shipped dead (D-51).** The release workflow now loads the image it built, runs it (`planeter`, `prikk`,
+  `bwrap`, `prlimit`) and checks the release binary's glibc needs against the image's, in every mode, before anything is pushed or attested; a
+  new check (`tools/glibc-check`) and `planeter-pin-check` enforce it.
+
+- **The pushed image is checked to be the image that was run (D-51).** After each architecture's image is pushed, the release workflow reads the
+  registry's own index, takes the `linux/<arch>` manifest and requires its config digest to equal the id of the image that was run; a mismatch
+  fails the job before the digest is handed on. A new tool (`tools/image-identity`) does the reading and `planeter-pin-check` requires the step.
+
+- **The Japanese draft is consistent with itself (D-50).** `管理者` now means only the administrator of a repository (the person who runs the
+  server is `このサーバーを運用している人`), one word per kind of check, `ドキュメント` throughout. Still a draft; still not shipped.
 
 ## [0.4.0] — 2026-10-19 — the read-path resource model: memory-weighted admission, a per-call ceiling, children that die with the server
 

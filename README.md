@@ -4,10 +4,13 @@
 service that hosts prikk repositories and the collaboration around them: repositories, review, issues,
 CI, and packages.
 
-> **Status: v0 — host + browse + auth are released (0.2.0); clone/push is next.** planeter hosts and
-> serves prikk repositories today: multi-repository hosting, a browse UI and a read API, sign-in with
-> local passwords or SSO, scoped tokens, and per-repository authorization. Clone/push waits on prikk
-> shipping RFC 155 and RFC 154; review, CI and packages follow. **1.0 is an explicit owner gate.**
+> **Status: v0 — 0.5.0 is the first release in which a person can propose work, have it reviewed, and create a
+> repository; the forge still holds no key.** planeter hosts and serves prikk repositories (multi-repository
+> hosting, a browse UI and a read API, sign-in with local passwords or SSO, scoped tokens, per-repository
+> authorization), and now lets a signed-in person **propose** a change (held for review; no branch moves),
+> **review** it (comments and decisions), and **create** a repository (empty, or from a maintainer's archive, trusting
+> only the keys the person types). `planeter-client` is the separate program for a person's own computer.
+> Merging into a branch waits for prikk 0.56.0; **1.0 is an explicit owner gate.**
 > Releases: [`CHANGELOG.md`](CHANGELOG.md) · plan: [`ROADMAP.md`](ROADMAP.md).
 
 ## Overview
@@ -58,6 +61,10 @@ Install one of:
 - **crates.io:** `cargo install planeter --locked` — an install path, not the release artifact (it
   cannot carry the prerequisites above).
 
+**On your own computer** (a person with their own prikk and keys): `cargo install planeter-client --locked`, or build it from source
+(`cargo build -p planeter-client --release --locked`). 0.5.0 ships the client through crates.io and as source; release-asset binaries of it
+are not part of this release. See [`docs/client.md`](docs/client.md).
+
 Run it:
 
 ```sh
@@ -80,8 +87,17 @@ deployment notes are in [`docs/RELEASING.md`](docs/RELEASING.md).
 - **Auth** (RFC 002): local passwords (Argon2id), OpenID Connect SSO (accounts linked administratively),
   scoped tokens, ed25519 SSH keys, sessions with CSRF protection, per-account and per-IP login
   throttles; one pure, default-deny `authorize()` consulted on every path.
-- **Not yet:** clone/push (held on prikk RFC 155/154), change review and merge, issues, CI, packages.
-  The [roadmap](ROADMAP.md) has the order and the reasons.
+- **Propose, review, create** (RFC 004, RFC 005): a signed-in person who may propose sends work built by their own prikk
+  (`prikk sync build`); the server checks and accepts it as a **proposal** — held for review, **nothing sealed, merged or published**.
+  Reviewers comment and record a decision per revision (approve or request changes); nothing here merges or blocks anything. A person can
+  create a repository through the pages or the API, empty or from a maintainer's archive. A repository left unfinished by a write is
+  recovered by the server when every witness agrees, or by an administrator by a written, recorded procedure.
+- **Clone, fetch, propose from your computer** (RFC 004): `planeter-client` ([`docs/client.md`](docs/client.md)) — separate from the
+  server, holds no key and signs nothing, https only; **only the maintainer keys you type are trusted**.
+- **Not yet:** merging a proposal into a branch (the maintainer seals with their own prikk and the forge adopts the result: waiting for
+  prikk 0.56.0's guard against older or diverged deliveries, model B of RFC 004 D-8), a file-by-file review view (waiting for 0.56.0's
+  extraction of a chain of pending claims), issues, checks and CI, packages. SSH is not planned: transport is https behind your
+  reverse proxy. The [roadmap](ROADMAP.md) has the order and the reasons.
 
 ## Following the design
 

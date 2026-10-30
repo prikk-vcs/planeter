@@ -1,7 +1,7 @@
 # Releasing planeter
 
 planeter releases an **application**: a bare version tag → `release.yml` → attested binaries + a
-container image → a GitHub release. The nine `planeter-*` crates are **also** published to crates.io
+container image → a GitHub release. The ten `planeter-*` crates (nine until 0.4.0; `planeter-client` joined in 0.5.0) are **also** published to crates.io
 after the release run is green, as an install path (`cargo install planeter`); `planeter-runner` is not
 published until M4. **Tagging and publishing are owner-authorized.**
 
@@ -380,6 +380,13 @@ docker run --rm ghcr.io/prikk-vcs/planeter:X.Y.Z --version
   The image attestation cannot be verified anonymously while the ghcr.io package is private (owner
   action pending).
 
+- **0.5.0 (<date of the tag>).** *Template, filled after the tag.* Release candidate commit `<hash>`; rehearsal run `<id>` (both
+  architectures: build, image run, glibc check, push, identity, manifest list and attestation); gates and advisory-database HEAD `<hash>`
+  immediately before the tag; tag `<hash>`; Release run `<id>`; the tarball checksum, build-provenance attestation, `planeter --version`
+  (commit, `prikk-floor 0.54.0`) and the image attestation verified after the fact: `<result>`; crates.io: ten crates, in the order above
+  (`planeter-client` is new); `cargo install planeter --version 0.5.0 --locked` and `cargo install planeter-client --version 0.5.0 --locked`:
+  `<result>`; the ghcr package visibility: `<owner action>`.
+
 ## If a job fails
 
 The workflow is idempotent up to `publish`: re-run the failed job with `gh run rerun <run-id> --failed`
@@ -400,12 +407,19 @@ crates.io requires every intra-workspace dependency to carry a version, and reje
 dependencies are not yet published — so publish in dependency order, each with the workspace version:
 
 ```sh
-for c in planeter-prikk planeter-store planeter-core planeter-auth \
-         planeter-web planeter-transport planeter-ci planeter-registry planeter; do
+for c in planeter-prikk planeter-store planeter-core planeter-auth planeter-ci planeter-registry \
+         planeter-transport planeter-web planeter \
+         planeter-client; do
   cargo publish -p "$c" --locked
 done
 ```
 
-Dry-run only the leaves (`planeter-prikk`, `planeter-store`) before the first real publish: a dry-run
-of a crate whose internal dependencies are unpublished fails by construction. The crate name
+That is the order cargo itself computes (`planeter-web` depends on `planeter-transport`, so transport comes first; `planeter-client` has no
+workspace dependency and may be published at any point; it is last here so a failure leaves the server's crates complete). **Before the first
+real publish, dry-run the whole set at once:** `cargo publish --workspace --exclude planeter-runner --dry-run --locked` packages every crate,
+builds each from its package against the others' packages, and uploads nothing (cargo 1.90 or later; it replaces dry-running only the leaves, which
+was all that could be done when a crate's internal dependencies were unpublished). `planeter-runner` stays unpublished (`publish = false`).
+`planeter-client` is a **new crate name** on crates.io: it is not reserved (checked 2026-10-30: the registry answers 404), so publish it promptly
+after the tag; the new-crate rate limit (a burst of five, then about one per ten minutes) applies to it only. `cargo package --list -p <crate>` shows
+what each package contains; the client's package leaves out `tests/fixtures/` (the tests' TLS certificates and private keys). The crate name
 `planeter` is reserved by the owner (a `0.0.0` placeholder, 2026-09-16).

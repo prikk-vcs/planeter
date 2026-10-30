@@ -170,5 +170,5 @@ on them; the busy loops are children of the test and are stopped through their h
 
 ## Not here
 
-Distribution (release assets, `cargo install planeter-client`), SSH, a `merge`/`seal`/`publish` command, signing of any kind, auto-update
+Release-asset binaries of the client (0.5.0 ships it through crates.io, `cargo install planeter-client --locked`, and as source), SSH, a `merge`/`seal`/`publish` command, signing of any kind, auto-update
 and telemetry are not part of this program.

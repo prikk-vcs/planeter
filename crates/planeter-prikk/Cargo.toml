@@ -6,6 +6,7 @@ rust-version.workspace = true
 license.workspace = true
 authors.workspace = true
 repository.workspace = true
+readme.workspace = true
 description = "planeter's prikk boundary: drives the prikk CLI as a sandboxed subprocess and types its --format json output."
 
 [dependencies]
