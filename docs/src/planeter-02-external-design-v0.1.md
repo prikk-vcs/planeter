@@ -35,7 +35,7 @@ What changed from the outside since v0.2, in one place. The interfaces are speci
 - **What is still not designed (GATED):** what a branch is while publication is unavailable is **model A today** (the forge never moves a branch) and **model B after prikk 0.56.0**
   (RFC 004 "D-8 — decided"); the file-by-file review view waits for prikk 0.56.0's chain extraction; checks/CI (RFC 006) and issues are separate RFCs; SSH is not built; notifications
   and suggested changes are not in scope.
-- **Languages:** English; Japanese is a **draft in preview** until the owner and a colleague sign it off (`PLANETER_PREVIEW_LANGUAGES=ja`).
+- **Languages:** English and **Japanese**. Japanese was reviewed and signed off by the owner on 2026-10-31 (`JA_SIGNOFF` records who, when, the commit and the review sheet's fingerprint) and is offered to everyone (by `Accept-Language`, the `planeter_lang` cookie, the footer switcher; the client by `LC_ALL`/`LC_MESSAGES`/`LANG`); English is the default. `PLANETER_PREVIEW_LANGUAGES` is kept for a future draft language. Errors the framework would write by itself (an undecodable path, an oversize body, an unknown address) are answered in the project's own words and shape (`docs/messages-and-languages.md`).
 
 ## Revision v0.2 (2026-09-24) — the black box after 0.2.0
 

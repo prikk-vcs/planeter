@@ -95,8 +95,8 @@ These are known and planned, not fixed yet:
   and nothing says that queued work exists (the badge is true: an empty sealed history verifies; the history page
   says "no signed changes"). prikk's `branch --format json` has a data field for it (`unpublished_current_branch`);
   the display waits for the queued-state design (IS-45, noted by the architect, not decided).
-- **Languages.** English and **Japanese** are shipped. Japanese was reviewed by its two reviewers (the owner and a colleague, both
-  fluent) and signed off on 2026-10-31 (`JA_SIGNOFF` in `crates/planeter-web/src/catalog/mod.rs` records who, when, the commit and the
+- **Languages.** English and **Japanese** are shipped. Japanese was reviewed by the owner (a fluent reader of Japanese; the colleague named in the
+  plan did not take part) and signed off on 2026-10-31 (`JA_SIGNOFF` in `crates/planeter-web/src/catalog/mod.rs` records who, when, the commit and the
   sheet); it is offered without any operator setting, chosen by `Accept-Language`, by the `planeter_lang` cookie, or by the switcher.
   The language switcher (a button per language in the footer of every page, no script) shows both languages. What the checks cover for
   Japanese: every message exists with the same placeholders as English, no retired or forbidden term, the glossary's Japanese column
@@ -133,7 +133,7 @@ breaks. A vulnerability is different: see [`SECURITY.md`](../SECURITY.md) and do
 - Chromium（Linux）以外のブラウザーとシステム。実際のシステムでの強制カラー、文字だけの 200 % 拡大、印刷。
 - 実機でのタッチ操作のしやすさ（すべての操作部品は 24 × 24 CSS px 以上ですが、これは最小値であり、快適な大きさではありません）。
 - 実際の右から左へ書く言語（テスト用の言語だけを表示しました）。
-- 言葉が理解されるかどうか。平易な言葉づかいと文の調子には、流暢な人間の読み手が必要です。日本語は 2 人のレビュー担当者が確認しましたが、利用者による確認ではありません。
-- セッションの期限切れ前の警告はありません（測るものがありませんでした）。ページ自身のヘルプや連絡先の案内もありません（WCAG 3.2.6）。
+- 言葉が理解されるかどうか。平易な言葉づかいと文の調子には、流暢な人間の読み手が必要です。日本語は、流暢に読めるオーナー 1 人が確認しましたが、利用者による確認ではありません。
+- ログインの有効期限が切れる前の警告はありません（測るものがありませんでした）。ページ自身のヘルプや連絡先の案内もありません（WCAG 3.2.6）。
 
 **問題の報告。** ページが使えない場合や、ここに誤りを見つけた場合は、プロジェクトのリポジトリ（<https://github.com/prikk-vcs/planeter/issues>）に Issue を開いてください。どのページで、何を使っていて（ブラウザー、支援技術、設定）、何が起きたかを書いてください。どの規則に反するかを知っている必要はありません。脆弱性は別です。[`SECURITY.md`](../SECURITY.md) を見て、公開の Issue は開かないでください。

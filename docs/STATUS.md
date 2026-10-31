@@ -16,7 +16,7 @@
 ## Pending on the owner
 
 - *(Done 2026-10-31: the `ghcr.io/prikk-vcs/planeter` package is public; the 0.5.0 image attestation verifies anonymously.)* **Open on the package:** the arm64 images of **0.3.0 and 0.4.0 cannot start** (their binaries need glibc 2.39; the base had 2.36) and are now public; `0.1.0`–`0.2.0` were not examined. The GitHub release notes of 0.3.0 and 0.4.0 now carry a "Known issue" section pointing to 0.5.0 (2026-10-31).
-- *(Japanese: the owner reviewed and approved the sheet on 2026-10-31; the architect's final check found small fixes and one integration defect; handoff `japanese-final-handoff-v1.md` applies them, records the owner's sign-off and turns Japanese on — SCHEDULE D-63.)*
+- **Japanese is signed off and shipped on `main`** (the owner, 2026-10-31; sheet fingerprint `54ebae05ad914ab6`; SCHEDULE D-63, D-64): corrections, the edge answers that no longer bypass the catalog, `JA_REVIEWED` true, the client from `LANG`, the accessibility statement in Japanese. **It is not in a release yet** (0.5.0 is tagged without it). Open: the owner has not read eight new messages and the Japanese accessibility section (the sign-off record says so); two sentences of `planeter-client`'s help that call Japanese a draft (`japanese-after-signoff-handoff-v1.md`).
 - **Send the reply to prikk's letter of 2026-10-31** (drafted: `.git-exclude/upstream/prikk/send/draft/2026-10-31-reply-to-what-0-56-0-changes.md`; it answers their `archive verify` question and asks three small things).
 
 ## Pending upstream (prikk's releases and plan, from its letters through 2026-10-29)
