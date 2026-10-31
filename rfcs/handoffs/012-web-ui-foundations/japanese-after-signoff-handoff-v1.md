@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | The review of `japanese-final-handoff-v1` found one catalog text that became false when Japanese was signed off and shipped: `planeter-client`'s `help.main`, English **and** Japanese, still says "`--lang en\|ja` the language of the messages (**Japanese is a draft**)". The previous handoff forbade touching it; this one authorizes exactly that change. |
-| Status | **Assigned** (2026-10-31). Tiny. |
+| Status | **Done, reviewed Approved (2026-10-31; commit `ed43dff`).** (Originally: Assigned 2026-10-31.) |
 | Basis | `japanese-final-review-request.md` §6.1; `crates/planeter-client/src/catalog/{en,ja}.rs` (`help.main`); the sign-off record `JA_SIGNOFF`; `tools/ja-sheet` (the sheet lists both rows). |
 | Audience | Dev team. Return a short review-request package (`.git-exclude/review-requests/`). |
 

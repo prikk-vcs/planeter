@@ -29,7 +29,7 @@
 * **aarch64** is built and the image started natively in CI; the server's end-to-end tests run on x86_64 only.
 * **The client's three commands run on Linux and macOS**; Windows runs its HTTP/TLS stack, command line, messages and prikk runner (`docs/client.md`).
 * **No second factor on accounts** (RR-10) and **in-memory rate limits** that reset on restart (RR-11, RR-13).
-* **The Japanese catalog is a draft** and is not shipped.
+* **The Japanese catalog is a draft** and is not shipped. *(Update 2026-10-31, after the tag: the owner reviewed and signed it off, the framework's own error answers were brought into the catalog and the one error shape, and Japanese is on `main` for the next release; no person using assistive technology has tried either language.)*
 
 ## Findings made on the way, all closed before this review
 IS-44/IS-47 (a label said "verified"/"sealed" without the fact), IS-49 (a count that suggested progress that did not exist), IS-50 (disk accumulated by refused declarations was uncounted), IS-51 (an unreachable, untested repair path), IS-52 (the accept memory model was wrong for large blobs), IS-53 (a landing rule that received history could never meet and that trusted unverified refs), IS-54 (a vulnerable crypto path), IS-55 (uncapped collection of prikk output), IS-56 (an image that could not start), IS-57 (a flaky gate and a misleading "not found").
