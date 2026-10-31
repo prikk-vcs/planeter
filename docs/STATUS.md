@@ -15,7 +15,7 @@
 
 ## Pending on the owner
 
-- **Make the `ghcr.io/prikk-vcs/planeter` package public** when you wish (until then the image attestation cannot be verified anonymously; the tarball attestations verify). 0.5.0 is the first release whose image the pipeline ran before shipping (0.4.0's arm64 image could not have started), so it is the first image worth making public; then `gh attestation verify oci://ghcr.io/prikk-vcs/planeter:0.5.0 --repo prikk-vcs/planeter` can be run by anyone.
+- *(Done 2026-10-31: the `ghcr.io/prikk-vcs/planeter` package is public; the 0.5.0 image attestation verifies anonymously.)* **Open on the package:** the arm64 images of **0.3.0 and 0.4.0 cannot start** (their binaries need glibc 2.39; the base had 2.36) and are now public; `0.1.0`–`0.2.0` were not examined. A "known issue" line in those releases' notes is proposed to the owner.
 - **The Japanese sign-off** by the owner and the colleague: the sheet and its addenda (1–13 and later) in `.git-exclude/review-requests/japanese-review-sheet*.md`; nothing Japanese ships before it (`JA_REVIEWED` false).
 - **Send the reply to prikk's letter of 2026-10-31** (drafted: `.git-exclude/upstream/prikk/send/draft/2026-10-31-reply-to-what-0-56-0-changes.md`; it answers their `archive verify` question and asks three small things).
 

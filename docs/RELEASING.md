@@ -389,7 +389,7 @@ docker run --rm ghcr.io/prikk-vcs/planeter:X.Y.Z --version
   run 41141154961, every job green (gates, both builds, both images with the run, glibc and identity steps, manifest list and attestation of the real
   package, publish). Verified after the fact: both tarballs' checksums (`sha256sum -c`), both build-provenance attestations (`gh attestation verify`,
   signed from `refs/tags/0.5.0`), `planeter --version` of the x86_64 binary (`planeter 0.5.0`, commit `1213f71`, `prikk-floor 0.54.0`, built by rustc
-  1.99.1). **The image's attestation could not be verified: the ghcr package is private** (owner action pending; the first image worth making public).
+  1.99.1). **The image's attestation was verified on 2026-10-31 after the owner made the `ghcr.io/prikk-vcs/planeter` package public:** `gh attestation verify oci://ghcr.io/prikk-vcs/planeter:0.5.0 --repo prikk-vcs/planeter` passes (SLSA provenance, subject digest `sha256:0caf4368…` = the tag's index digest, signed from `refs/tags/0.5.0`); the registry serves the index anonymously (amd64, arm64 and their attestation manifests) and `latest` is the same digest. The `planeter-rehearsal` package stays private (anonymous access answers 403).
   crates.io: ten crates, in the order above, published in one session (`planeter-client` is new and was published last; the new-crate limit did not
   bite); `cargo install planeter --version 0.5.0 --locked` and `cargo install planeter-client --version 0.5.0 --locked` build and run
   (`planeter 0.5.0`, `planeter-client 0.5.0`).
