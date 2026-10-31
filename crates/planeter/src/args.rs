@@ -132,8 +132,9 @@ environment:
   PLANETER_AUTOMATIC_RECOVERY   on (default) or off: whether the server recovers a repository left unfinished by a
                                 write by itself, at start and right after the write, when every witness agrees;
                                 off leaves it to an administrator (GET/POST …/recovery)
-  PLANETER_PREVIEW_LANGUAGES    comma-separated draft languages to offer for review (only ja exists); a
-                                draft is not signed off, so it is off by default and logged at start
+  PLANETER_PREVIEW_LANGUAGES    comma-separated draft languages to offer before their sign-off (none exists at
+                                present: Japanese was signed off and is offered without this setting; a
+                                code that is already offered is accepted and ignored)
   PLANETER_OIDC_ISSUER, PLANETER_OIDC_CLIENT_ID, PLANETER_OIDC_REDIRECT_URI
                                 all three enable OpenID Connect sign-in
   PLANETER_OIDC_CLIENT_SECRET   optional OpenID Connect client secret

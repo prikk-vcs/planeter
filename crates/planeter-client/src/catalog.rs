@@ -10,9 +10,9 @@
 pub mod en;
 pub mod ja;
 
-/// Whether the Japanese catalog has been signed off by its reviewers (the owner and a colleague; RFC 012 D-3f). Until it is,
-/// Japanese is a **preview**: it is used only when asked for with `--lang ja`, and never chosen from `LANG` or `LC_ALL`.
-pub const JA_REVIEWED: bool = false;
+/// Whether the Japanese catalog has been signed off by its reviewers (the owner and a colleague; RFC 012 D-3f; the record is the
+/// server's `JA_SIGNOFF`). Japanese is chosen from `LC_ALL`, `LC_MESSAGES` or `LANG` when they say `ja`; `--lang` always wins.
+pub const JA_REVIEWED: bool = true;
 
 /// A language of the catalog.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

@@ -289,13 +289,13 @@ docker run --rm ghcr.io/prikk-vcs/planeter:X.Y.Z --version
   Each fetch logs one line (`planeter: transport fetch repo=<opaque id> kind=… result=changed|unchanged cache=hit|miss|shared
   bytes=… wall_ms=… lease_wait_ms=…`); the counters (changed vs unchanged, kind, bytes, cache, lease wait, per-repository export
   count and hit rate, refusals by reason) are kept in memory for a future metrics endpoint.
-- **Preview of a draft language (RFC 012 D-3f).** The Japanese catalog is compiled in but **not shipped** until its
-  reviewers have signed it off. **`PLANETER_PREVIEW_LANGUAGES=ja`** (comma-separated codes; only `ja` exists) offers
-  it — to `Accept-Language: ja`, to the `planeter_lang` cookie and to the switcher in the footer — so the reviewers can
-  see the pages. **Off by default**: without it Japanese is not negotiated and the switcher shows English only. When
-  on, the server logs `PREVIEW languages on (ja): these catalogs are drafts…` once at start; a code that names no
-  draft language is refused at start with the codes that exist. Do not leave it on in production until the release
-  notes say Japanese is signed off.
+- **Languages (RFC 012 D-3f).** English and **Japanese are on by default**: Japanese was signed off by its reviewers on 2026-10-31
+  (the record is `JA_SIGNOFF`), so a caller who asks for it — `Accept-Language: ja`, the `planeter_lang` cookie or the switcher in the
+  footer — gets it, and **a caller who does not ask is English** (the default is unchanged). No setting is needed. **`PLANETER_PREVIEW_LANGUAGES`**
+  (comma-separated codes) is kept for the next draft language: it offers a catalog its reviewers have not signed off, and logs `PREVIEW
+  languages on (…): these catalogs are drafts…` once at start. No draft language exists at present; naming `ja` (an earlier setting) is
+  accepted, logged as "already offered … the setting is not needed" and changes nothing; any other code is refused at start. The command-line
+  client chooses Japanese from `LC_ALL`, `LC_MESSAGES` or `LANG` when they say `ja`; `--lang` wins.
 - **Sign-in concurrency (IS-24, IS-31):** password verification (Argon2id) runs off the async workers
   behind its own gate, separate from the prikk one. **`PLANETER_AUTH_CONCURRENCY`** is the most
   verifications at once (positive integer; default `min(CPUs, 4)`); **`PLANETER_AUTH_QUEUE_WAIT_SECS`**

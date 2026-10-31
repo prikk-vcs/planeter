@@ -198,7 +198,7 @@ fn a_filled_message_has_no_placeholder_left_and_a_missing_key_is_a_visible_marke
 }
 
 #[test]
-fn the_language_is_the_flag_then_the_environment_and_a_draft_is_never_chosen_from_it() {
+fn the_language_is_the_flag_then_the_environment_and_english_when_neither_says_japanese() {
     let env = |pairs: &'static [(&'static str, &'static str)]| {
         move |name: &str| {
             pairs
@@ -207,18 +207,39 @@ fn the_language_is_the_flag_then_the_environment_and_a_draft_is_never_chosen_fro
                 .map(|(_, v)| (*v).to_owned())
         }
     };
+    // Japanese is signed off (RFC 012 D-3f): the environment can choose it.
+    const { assert!(JA_REVIEWED) };
     assert_eq!(Lang::from_environment(env(&[])), Lang::En);
-    // Japanese is a preview: asked for with --lang only, while its sign-off is pending.
-    // This test pins the rule while the draft is unsigned: when the sign-off comes, `JA_REVIEWED` and this test change together.
-    const { assert!(!JA_REVIEWED) };
     assert_eq!(
         Lang::from_environment(env(&[("LANG", "ja_JP.UTF-8")])),
+        Lang::Ja
+    );
+    assert_eq!(
+        Lang::from_environment(env(&[("LC_MESSAGES", "ja_JP.UTF-8")])),
+        Lang::Ja
+    );
+    assert_eq!(Lang::from_environment(env(&[("LC_ALL", "ja")])), Lang::Ja);
+    // The first of LC_ALL, LC_MESSAGES, LANG that is set and not empty decides.
+    assert_eq!(
+        Lang::from_environment(env(&[("LC_ALL", "ja_JP.UTF-8"), ("LANG", "en_US.UTF-8")])),
+        Lang::Ja
+    );
+    assert_eq!(
+        Lang::from_environment(env(&[("LC_ALL", "en_US.UTF-8"), ("LANG", "ja_JP.UTF-8")])),
         Lang::En
     );
     assert_eq!(
-        Lang::from_environment(env(&[("LC_ALL", "ja_JP.UTF-8"), ("LANG", "en_US.UTF-8")])),
-        Lang::En
+        Lang::from_environment(env(&[("LC_ALL", ""), ("LANG", "ja_JP.UTF-8")])),
+        Lang::Ja,
+        "an empty variable is skipped"
     );
+    // Anything else is English: another language, the C locale, a name that only starts like ja.
+    for other in ["C", "POSIX", "fr_FR.UTF-8", "jam_XX", "de"] {
+        let pairs: &'static [(&'static str, &'static str)] =
+            Box::leak(vec![("LANG", other)].into_boxed_slice());
+        assert_eq!(Lang::from_environment(env(pairs)), Lang::En, "{other}");
+    }
+    // --lang is the flag's own function; it always wins over the environment (the command line applies it first).
     assert_eq!(Lang::from_flag("ja"), Some(Lang::Ja));
     assert_eq!(Lang::from_flag("EN"), Some(Lang::En));
     assert_eq!(Lang::from_flag("fr"), None);

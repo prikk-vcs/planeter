@@ -4,7 +4,12 @@
 use std::process::Command;
 
 fn client() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_planeter-client"))
+    let mut c = Command::new(env!("CARGO_BIN_EXE_planeter-client"));
+    // The tests read English: whatever locale the developer's shell has is not the test's business.
+    c.env("LC_ALL", "C")
+        .env_remove("LC_MESSAGES")
+        .env_remove("LANG");
+    c
 }
 
 #[test]
@@ -64,5 +69,54 @@ fn a_plain_http_address_is_refused_before_anything_is_sent_and_a_missing_token_i
         Some(2),
         "{}",
         String::from_utf8_lossy(&out.stderr)
+    );
+}
+
+/// The program speaks Japanese when the environment says so (after the sign-off), and `--lang` wins over the environment.
+#[test]
+fn the_environment_chooses_japanese_and_the_flag_overrides_it() {
+    let said = |envs: &[(&str, &str)], args: &[&str]| {
+        let mut c = client();
+        c.env_remove("LC_ALL");
+        for (k, v) in envs {
+            c.env(k, v);
+        }
+        let out = c.args(args).output().unwrap();
+        (
+            out.status.code(),
+            String::from_utf8_lossy(&out.stderr).into_owned(),
+        )
+    };
+    let (code, ja) = said(&[("LANG", "ja_JP.UTF-8")], &["no-such-command"]);
+    assert_eq!(code, Some(2));
+    assert!(
+        ja.chars().any(|c| ('\u{3040}'..='\u{30ff}').contains(&c)),
+        "{ja}"
+    );
+    let (code, en) = said(
+        &[("LANG", "ja_JP.UTF-8")],
+        &["--lang", "en", "no-such-command"],
+    );
+    assert_eq!(code, Some(2));
+    assert!(
+        !en.chars().any(|c| ('\u{3040}'..='\u{30ff}').contains(&c)),
+        "{en}"
+    );
+    let (_, plain) = said(&[("LANG", "en_US.UTF-8")], &["no-such-command"]);
+    assert!(
+        !plain
+            .chars()
+            .any(|c| ('\u{3040}'..='\u{30ff}').contains(&c)),
+        "{plain}"
+    );
+    let (_, forced) = said(
+        &[("LANG", "en_US.UTF-8")],
+        &["--lang", "ja", "no-such-command"],
+    );
+    assert!(
+        forced
+            .chars()
+            .any(|c| ('\u{3040}'..='\u{30ff}').contains(&c)),
+        "{forced}"
     );
 }

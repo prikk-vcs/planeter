@@ -3,6 +3,20 @@
 Releases are bare version tags; each section is the release's notes (assembled into the GitHub
 release by `release.yml`). Kept by hand, per release, so nothing here goes stale by templating.
 
+## [Unreleased]
+
+- **Japanese is now available (RFC 012 D-3f).** The Japanese texts of the pages, the API's error messages and `planeter-client` were reviewed by their two
+  reviewers and signed off on 2026-10-31. A caller who asks for Japanese (`Accept-Language: ja`, the `planeter_lang` cookie, or the button in the footer of
+  every page) gets it, with no operator setting; **a caller who does not ask is English, as before**. `PLANETER_PREVIEW_LANGUAGES=ja` (set by an operator who
+  previewed the draft) is still accepted and is no longer needed; the server logs that it is not. `planeter-client` speaks Japanese when `LC_ALL`, `LC_MESSAGES`
+  or `LANG` says `ja` (and with `--lang ja`; `--lang` wins). The review found and fixed 25 inconsistencies of wording before the sign-off (one word for one thing:
+  the verb *change* is 変わる, *sign in* is ログイン, *refused* is 拒否), and one sentence that promised a signature the keyless forge cannot promise.
+- **The server answers in its own words when the framework would not (RFC 012).** A request body over 2 MiB, an address the server cannot decode, an address
+  nobody serves and a method a page does not take used to get the framework's plain-text reply or an empty page. Under `/api/` they are now the API's one JSON
+  shape (`invalid_request` 400, `payload_too_large` **413**, `not_found`, `method_not_allowed`), in the caller's language; elsewhere they are a page with a heading,
+  one sentence and a link, with the same status. The proposal upload and the archive staging keep their own bounds. The OpenAPI document lists the 413 where a body
+  is read.
+
 ## [0.5.0] — 2026-10-31 — propose, review, create: the first release in which a person can put work to the forge, and the forge still holds no key
 
 0.5.0 is the first release in which a person can **propose work** to the forge, have it **reviewed** (comments and decisions), and **create a repository** (empty, or from a maintainer's archive), with the forge still holding no key: nothing a proposal carries is sealed, merged or published by the server, and nobody approves a patch a keyless server holds. It also ships `planeter-client`, a separate program for a person with their own prikk and their own keys, and a release chain that runs the image it ships. **Breaking changes are listed first** under "For people who run a server" (the verify API's removed fields, the change API's `assurance`, the required prikk 0.54.0, the new defaults of the proposal bounds, the image base).

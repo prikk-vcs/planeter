@@ -198,12 +198,12 @@ fn markup_in_a_japanese_message_is_found() {
     );
 }
 
-// -------------------------------------------------------------------------- not signed off, not shipped
+// -------------------------------------------------------------------------- signed off, shipped
 
 /// The rule: a language not signed off is not in `shipped()`. `JA_REVIEWED` is the sign-off; it is `true` only
 /// together with a recorded sign-off (`JA_SIGNOFF`), and `shipped()` lists Japanese exactly then.
 #[test]
-fn a_language_not_signed_off_is_not_shipped() {
+fn a_language_is_shipped_exactly_when_it_is_signed_off_and_the_record_is_kept_with_it() {
     let listed = shipped().iter().any(|d| d.tag == "ja");
     assert_eq!(
         listed, JA_REVIEWED,
@@ -218,15 +218,46 @@ fn a_language_not_signed_off_is_not_shipped() {
     assert_eq!(shipped().len(), if JA_REVIEWED { 2 } else { 1 });
 }
 
+/// The record names who, when, which commit and which sheet (the fingerprint of the wording that was reviewed).
 #[test]
-fn the_preview_setting_names_only_draft_languages() {
-    assert!(previewable().iter().any(|d| d.tag == "ja"));
+fn the_signoff_record_names_who_when_the_commit_and_the_sheet() {
+    let record = JA_SIGNOFF.expect("Japanese is signed off");
+    for needle in ["owner", "2026-10-31", "commit ", "fingerprint "] {
+        assert!(
+            record.contains(needle),
+            "{needle:?} missing from {record:?}"
+        );
+    }
+    // The fingerprint is sixteen hex digits, and the record does not carry a placeholder.
+    let fp = record.split("fingerprint ").last().unwrap();
+    let hex: String = fp.chars().take_while(|c| c.is_ascii_hexdigit()).collect();
+    assert_eq!(hex.len(), 16, "{record:?}");
+    assert!(!record.contains("PLACEHOLDER"), "{record:?}");
+}
+
+#[test]
+fn the_preview_setting_accepts_a_shipped_language_refuses_a_typo_and_names_no_draft() {
+    assert!(
+        previewable().is_empty(),
+        "no draft language exists at present"
+    );
     assert_eq!(enable_preview_languages(""), Ok(vec![]));
     assert_eq!(enable_preview_languages(" , "), Ok(vec![]));
+    // An earlier setting keeps working: a shipped language is accepted and changes nothing (no second switcher button).
+    assert_eq!(enable_preview_languages("ja"), Ok(vec!["ja"]));
+    assert_eq!(enable_preview_languages("JA, en"), Ok(vec!["ja", "en"]));
+    assert_eq!(Lang::from_tag("ja").unwrap().tag(), "ja");
+    let buttons = T::new(EN).languages();
+    assert_eq!(
+        buttons.iter().filter(|l| l.tag == "ja").count(),
+        1,
+        "{buttons:?}"
+    );
     let err = enable_preview_languages("jp").unwrap_err();
-    assert!(err.contains("\"jp\"") && err.contains("ja"), "{err}");
+    assert!(
+        err.contains("\"jp\"") && err.contains("none at present"),
+        "{err}"
+    );
     let err = enable_preview_languages("ja,xx").unwrap_err();
     assert!(err.contains("\"xx\""), "{err}");
-    // The English catalog is not a draft and cannot be "previewed".
-    assert!(enable_preview_languages("en").is_err());
 }

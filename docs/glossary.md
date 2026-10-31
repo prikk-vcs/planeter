@@ -171,13 +171,12 @@ catalog, in the same commit); `tests/glossary.rs` fails if a *Current* cell and 
 `evaluated`, `refs`, `SSO`, or the old navigation labels) comes back. The Japanese translation starts from this
 English.
 
-## 5. Japanese (a draft for the reviewers)
+## 5. Japanese (signed off)
 
-**Status.** A **draft** (handoff `japanese-and-switcher-handoff-v1`, 2026-10-21). The reviewers are **the owner and a
-colleague**, both fluent; nothing here ships until they have gone through `japanese-review-sheet.md` and the dev team has
-integrated their corrections (`JA_REVIEWED` in `catalog/mod.rs`). Until then the catalog is compiled in and checked, and
-offered only to the operator who turns the preview on (`PLANETER_PREVIEW_LANGUAGES=ja`). **The English meaning of every
-trust label is fixed; the Japanese keeps it exactly, and where the draft is unsure it says so here instead of choosing.**
+**Status.** **Signed off** by its reviewers, the owner and a colleague, on 2026-10-31 (`JA_REVIEWED` and the record `JA_SIGNOFF` in
+`catalog/mod.rs`); shipped like English and offered without any operator setting. The reviewed sheet is generated from the catalogs
+(`cargo run -p planeter-ja-sheet`, `docs/messages-and-languages.md`). **The English meaning of every trust label is fixed; the Japanese
+keeps it exactly.** A later correction is an edit of this section and of `ja.rs` together, then a regenerated sheet.
 The style is the polite form (です・ます); headings and badges are noun phrases; Japanese has no plural, so a counted message
 says the same for every count; numbers group with commas (`1,200`).
 

@@ -60,7 +60,8 @@ names; the order and the words around them are the translator's.
    separators, table). Japanese is `JA_DEF`: one plural form (`one == other`), `1,200` grouping.
 3. **Sign-off before shipping (RFC 012 D-3f).** A new language is a *draft*: it is **not** in `shipped()`. It is
    reached only through the operator's preview (`PLANETER_PREVIEW_LANGUAGES=<tag>`, listed in `previewable()`;
-   off by default; logged at start). Steps: write the draft; add the language's section to the glossary (terms,
+   off by default; logged at start). (Japanese went through these steps and was signed off on 2026-10-31; `previewable()` is
+   empty since, and the setting accepts `ja` as already offered.) Steps: write the draft; add the language's section to the glossary (terms,
    hard terms flagged, a message table that `tests/glossary_ja.rs`-style tests compare with the catalog); give
    the reviewers **the generated sheet** (below: one row per message, the trust labels first, grouped so that they
    may stop after any group); integrate their corrections (the rows map to catalog keys one to one); then, in one commit, set
@@ -138,6 +139,6 @@ cargo run -p planeter-ja-sheet -- --check .git-exclude/review-requests/japanese-
 **one commit per group**; a term decided at the top of the sheet is applied wherever it is used, in the commit that decides it. (2) The
 sheet is regenerated and `--check`ed. (3) `JA_REVIEWED = true` (server and client) and `JA_SIGNOFF = Some("<who reviewed>, <date>, commit
 <hash>, sheet fingerprint <fingerprint>")` are set together in one commit (a test refuses one without the other, and a language in
-`shipped()` that is not signed off). (4) **Phase 2**, still open after the sign-off: hide the lone English button of the language
-switcher when only English is offered, and finalize the Japanese wording of the accessibility statement (`accessibility.md`). The first
-page of every generated sheet lists these steps.
+`shipped()` that is not signed off). (4) **Phase 2** is done for Japanese: the switcher always renders one button per available language (no code path hides a lone
+English button; with both languages shipped there are two), and `accessibility.md` has its Japanese version. The first page of
+every generated sheet lists these steps.

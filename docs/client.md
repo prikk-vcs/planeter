@@ -122,8 +122,8 @@ before an answer · `4` your prikk failed or is missing or too old · `5` local 
 
 The output is plain lines. There is no colour (so `NO_COLOR` changes nothing), no spinner and no in-place redraw; progress is an
 occasional whole line. The language is `--lang`, else the first of `LC_ALL`, `LC_MESSAGES`, `LANG`; **English** unless a shipped
-language is named. **Japanese is a draft** for the owner's and a colleague's review (RFC 012 D-3f): it is used only with `--lang ja`
-until `JA_REVIEWED` is set. The messages are in `src/catalog/`; the plain-words rules (no *seal*, *adopt* or *intent* in a sentence) and
+language is named. **Japanese** (signed off on 2026-10-31, RFC 012 D-3f; `JA_REVIEWED`) is chosen when one of those variables says `ja`
+(`ja_JP.UTF-8`, `ja`), and with `--lang ja`; `--lang` always wins over the environment. The messages are in `src/catalog/`; the plain-words rules (no *seal*, *adopt* or *intent* in a sentence) and
 the agreement of the two tables are tests.
 
 ## Building

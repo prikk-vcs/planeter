@@ -1,8 +1,6 @@
-//! The Japanese catalog (RFC 012 D-3, handoff `japanese-and-switcher-handoff-v1`): **a draft for the reviewers**.
-//!
-//! Every message is `needs-review` (see `.git-exclude/review-requests/japanese-review-sheet.md`); the language is
-//! not in [`super::shipped`] until [`super::JA_REVIEWED`] is `true`, which only the reviewers' pass allows. Until
-//! then it is negotiable only when the operator turns the preview on (`PLANETER_PREVIEW_LANGUAGES=ja`).
+//! The Japanese catalog (RFC 012 D-3, handoff `japanese-and-switcher-handoff-v1`): **signed off by its reviewers** (see
+//! [`super::JA_SIGNOFF`]) and shipped like English. The sheet they reviewed is generated from this table
+//! (`cargo run -p planeter-ja-sheet`, `docs/messages-and-languages.md`); a correction is an edit here and in `docs/glossary.md`.
 //!
 //! Style: polite form (です・ます); headings, labels and badges are noun phrases; Japanese has no grammatical
 //! plural, so a message with a count says the same in both forms; the order follows [`super::Key`] and the

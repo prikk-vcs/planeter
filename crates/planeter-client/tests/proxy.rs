@@ -57,6 +57,9 @@ fn clone(dir: &std::path::Path, server_port: u16, env: &[(&str, &str)]) -> (i32,
     .env_remove("no_proxy")
     .env_remove("ALL_PROXY")
     .env_remove("all_proxy")
+    .env("LC_ALL", "C")
+    .env_remove("LC_MESSAGES")
+    .env_remove("LANG")
     .current_dir(dir);
     for (k, v) in env {
         cmd.env(k, v);

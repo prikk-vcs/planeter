@@ -74,7 +74,7 @@ fn start_log(dir: &Path, bin_dir: &Path, preview: Option<&str>) -> String {
 }
 
 #[test]
-fn the_preview_is_off_by_default_logged_when_on_and_a_typo_is_refused() {
+fn the_preview_setting_is_silent_when_empty_accepts_a_shipped_language_and_refuses_a_typo() {
     if !runs("prlimit") {
         eprintln!("skipping: needs prlimit (util-linux)");
         return;
@@ -91,9 +91,15 @@ fn the_preview_is_off_by_default_logged_when_on_and_a_typo_is_refused() {
     let empty = start_log(&dir, &bin_dir, Some(""));
     assert!(!empty.contains("PREVIEW languages"), "{empty}");
 
+    // Japanese is signed off: naming it is accepted, says so once, and is not a "preview".
     let on = start_log(&dir, &bin_dir, Some("ja"));
-    assert!(on.contains("PREVIEW languages on (ja)"), "{on}");
-    assert!(on.contains("not signed off"), "{on}");
+    assert!(on.contains("planeter listening on"), "{on}");
+    assert!(
+        on.contains("ja already offered (signed off); the setting is not needed"),
+        "{on}"
+    );
+    assert!(!on.contains("PREVIEW languages"), "{on}");
+    assert!(!on.contains("not signed off"), "{on}");
 
     let out = command(&dir, &bin_dir)
         .env("PLANETER_PREVIEW_LANGUAGES", "ja,jp")

@@ -1,5 +1,5 @@
-//! Japanese: a **draft** for the reviewers (the owner and a colleague; RFC 012 D-3f). Preview only until `JA_REVIEWED` is `true`:
-//! used with `--lang ja`, never chosen from `LANG`. The words follow the server's Japanese glossary (`docs/glossary.md` §5):
+//! Japanese, signed off by its reviewers (the owner and a colleague; RFC 012 D-3f; `JA_REVIEWED`): chosen from `LC_ALL`, `LC_MESSAGES`
+//! or `LANG` when they say `ja`, and with `--lang ja`. The words follow the server's Japanese glossary (`docs/glossary.md` §5):
 //! 提案, リビジョン, 保持, 鍵を信頼する; `このサーバーを運用している人`, never `管理者` alone.
 
 use super::{Entry, msg};

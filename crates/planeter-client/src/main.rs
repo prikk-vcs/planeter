@@ -1,5 +1,5 @@
 //! The `planeter-client` program: real stdin, stdout and stderr; the language from `LC_ALL`, `LC_MESSAGES` or `LANG`
-//! (English unless a *shipped* language is named; Japanese is a draft and is used only with `--lang ja`).
+//! (English unless a *shipped* language is named; Japanese, signed off, is chosen from the environment when it says `ja`, and with `--lang ja`).
 #![forbid(unsafe_code)]
 
 use std::io::{IsTerminal, Write};

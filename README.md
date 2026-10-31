@@ -94,6 +94,7 @@ deployment notes are in [`docs/RELEASING.md`](docs/RELEASING.md).
   recovered by the server when every witness agrees, or by an administrator by a written, recorded procedure.
 - **Clone, fetch, propose from your computer** (RFC 004): `planeter-client` ([`docs/client.md`](docs/client.md)) — separate from the
   server, holds no key and signs nothing, https only; **only the maintainer keys you type are trusted**.
+- **Languages** (RFC 012): English and Japanese (signed off 2026-10-31) — the pages, the API's error messages and `planeter-client`; a caller who does not ask is English.
 - **Not yet:** merging a proposal into a branch (the maintainer seals with their own prikk and the forge adopts the result: waiting for
   prikk 0.56.0's guard against older or diverged deliveries, model B of RFC 004 D-8), a file-by-file review view (waiting for 0.56.0's
   extraction of a chain of pending claims), issues, checks and CI, packages. SSH is not planned: transport is https behind your

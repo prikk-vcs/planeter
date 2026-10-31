@@ -95,18 +95,15 @@ These are known and planned, not fixed yet:
   and nothing says that queued work exists (the badge is true: an empty sealed history verifies; the history page
   says "no signed changes"). prikk's `branch --format json` has a data field for it (`unpublished_current_branch`);
   the display waits for the queued-state design (IS-45, noted by the architect, not decided).
-- **Languages.** English is the shipped language. **Japanese is a draft in preview**: it is compiled in and
-  checked, but it is offered only to an operator who turns on `PLANETER_PREVIEW_LANGUAGES=ja`, until its two
-  reviewers (the owner and a colleague, both fluent) have gone through it and the dev team has integrated their
-  corrections (`JA_REVIEWED`). The language switcher (a button per language in the footer of every page, no script)
-  exists; with the preview off it shows English only. What the checks cover for Japanese: every message exists with
-  the same placeholders as English, no retired or forbidden term, the glossary's Japanese column equals the catalog,
-  every page state passes the structural checker with `lang="ja"` (and the stand-in and real-prikk states alike),
-  and, measured in Chromium, none of the 61 states scrolls sideways at 320 px, with or without the WCAG
-  text-spacing override, and no target is below 24 px. **Whether the Japanese reads naturally and keeps the
-  meaning of every trust label is for the reviewers; no person who uses assistive technology has tried it, in
-  either language**, and a real right-to-left language is still not rendered. This statement is completed when the
-  reviewers have signed off.
+- **Languages.** English and **Japanese** are shipped. Japanese was reviewed by its two reviewers (the owner and a colleague, both
+  fluent) and signed off on 2026-10-31 (`JA_SIGNOFF` in `crates/planeter-web/src/catalog/mod.rs` records who, when, the commit and the
+  sheet); it is offered without any operator setting, chosen by `Accept-Language`, by the `planeter_lang` cookie, or by the switcher.
+  The language switcher (a button per language in the footer of every page, no script) shows both languages. What the checks cover for
+  Japanese: every message exists with the same placeholders as English, no retired or forbidden term, the glossary's Japanese column
+  equals the catalog, every page state passes the structural checker with `lang="ja"` (the stand-in and real-prikk states alike), and,
+  measured in Chromium (2026-10-23, before the sign-off), none of the 61 states scrolls sideways at 320 px, with or without the WCAG
+  text-spacing override, and no target is below 24 px. **No person who uses assistive technology has tried either language**, and a real
+  right-to-left language is still not rendered. This statement has a Japanese version below, with the same facts.
 - The focus ring is the same colour as links (it stands off the control by a 2 px gap); a designed ring for the
   few places where that is not enough has not been needed so far.
 
@@ -116,3 +113,27 @@ If a page does not work for you, or you find something here that is wrong, open 
 repository (<https://github.com/prikk-vcs/planeter/issues>) and say which page you were on, what you were
 using (browser, assistive technology, settings) and what happened. You do not need to know which rule it
 breaks. A vulnerability is different: see [`SECURITY.md`](../SECURITY.md) and do not open a public issue.
+
+## アクセシビリティ（日本語）
+
+この節は、上の英語の内容と同じ事実を日本語で述べたものです。
+
+**状況：初版の草案です。** このページは、planeter の Web ページが目指すこと、確認したこと、確認していないこと、すでに分かっている不足を述べます。**適合を主張するものではありません。** 標準に照らした監査は行われておらず、支援技術を使う人による試用もまだありません。
+
+**目標。** Web UI は [WCAG 2.2](https://www.w3.org/TR/WCAG22/) のレベル AA を目指しています（RFC 012 D-1）。プログラムで確認できる規則は、テストスイートに組み込んであり、規則を破る変更はビルドで失敗します。
+
+**確認したこと。** すべてツールによる確認で、人によるものではありません。
+- ページの構造（UI が作れるすべてのページと状態）：言語と文字の向き、最上位の見出しがちょうど 1 つで見出しの段が飛ばないこと、キーボードで最初に届くスキップリンク、ヘッダー・メイン・フッターのランドマークと各ナビゲーションの固有の名前、すべての入力欄の見えるラベル、表の見出しと表題、代替テキストのない画像がないこと、「ここ」のような語だけのリンクがないこと、スクリプトやインラインスタイルがないこと。規則ごとに、わざと壊したページがテストにあり、規則が失敗しうることを示しています。
+- 画面に出る言葉はすべて 1 つのメッセージカタログ（RFC 012 D-3）から来て、テストで確認されます。
+- スタイルシート：文字色の組が 4.5:1 未満、操作部品の枠線またはフォーカスリングが 3:1 未満（明るいテーマと暗いテーマの両方）、物理方向の指定、消されたアウトライン、モーションを抑える設定のない動き、24 × 24 CSS px 未満の操作部品、などをテストが検出します。
+- ブラウザーでの測定（2026-10-23、ヘッドレス Chromium、61 の状態）：320 CSS px でも 1280 px でも横にスクロールする状態はなく（WCAG 1.4.12 の文字間隔の上書きがあってもなくても）、24 × 24 CSS px 未満の操作部品もありません。これは 1 回だけ、ビルドに含まれないスクリプトで測定したものです。
+
+**確認していないこと。**
+- スクリーンリーダー、拡大鏡、スイッチ、音声操作など、支援技術を使う人による試用。バッジや表がどう読み上げられるか、ログインの失敗が気づかれるかは、分かっていません。
+- Chromium（Linux）以外のブラウザーとシステム。実際のシステムでの強制カラー、文字だけの 200 % 拡大、印刷。
+- 実機でのタッチ操作のしやすさ（すべての操作部品は 24 × 24 CSS px 以上ですが、これは最小値であり、快適な大きさではありません）。
+- 実際の右から左へ書く言語（テスト用の言語だけを表示しました）。
+- 言葉が理解されるかどうか。平易な言葉づかいと文の調子には、流暢な人間の読み手が必要です。日本語は 2 人のレビュー担当者が確認しましたが、利用者による確認ではありません。
+- セッションの期限切れ前の警告はありません（測るものがありませんでした）。ページ自身のヘルプや連絡先の案内もありません（WCAG 3.2.6）。
+
+**問題の報告。** ページが使えない場合や、ここに誤りを見つけた場合は、プロジェクトのリポジトリ（<https://github.com/prikk-vcs/planeter/issues>）に Issue を開いてください。どのページで、何を使っていて（ブラウザー、支援技術、設定）、何が起きたかを書いてください。どの規則に反するかを知っている必要はありません。脆弱性は別です。[`SECURITY.md`](../SECURITY.md) を見て、公開の Issue は開かないでください。

@@ -285,6 +285,7 @@ fn the_client_clones_fetches_and_proposes_against_a_real_server_behind_tls() {
             .env("PLANETER_CLIENT_STATE_DIR", &state)
             .env_remove("LANG")
             .env_remove("LC_ALL")
+            .env_remove("LC_MESSAGES")
             .stdin(Stdio::null())
             .output()
             .unwrap();

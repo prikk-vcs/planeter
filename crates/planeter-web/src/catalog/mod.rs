@@ -120,8 +120,7 @@ fn plural_ja(_: u64) -> Plural {
     Plural::Other
 }
 
-/// Japanese (RFC 012 D-3, handoff `japanese-and-switcher-handoff-v1`): **a draft for the reviewers**. Compiled
-/// in, checked by the tests, and **not shipped** until [`JA_REVIEWED`] is `true`.
+/// Japanese (RFC 012 D-3): signed off by its reviewers ([`JA_REVIEWED`], [`JA_SIGNOFF`]); shipped like English.
 pub static JA_DEF: LangDef = LangDef {
     tag: "ja",
     endonym: "日本語",
@@ -133,13 +132,15 @@ pub static JA_DEF: LangDef = LangDef {
 };
 
 /// Whether the Japanese catalog has been **signed off** by its reviewers (the owner and a colleague; RFC 012
-/// D-3f). `false` until the reviewed sheet comes back and phase 2 integrates it; `shipped()` lists Japanese only
-/// when this is `true`. A test pins both halves of the rule.
-pub const JA_REVIEWED: bool = false;
+/// D-3f). `true` since the sign-off recorded in [`JA_SIGNOFF`]; [`shipped`] lists Japanese exactly when this is `true`.
+/// A test pins both halves of the rule.
+pub const JA_REVIEWED: bool = true;
 
-/// The record of the sign-off: who reviewed the Japanese catalog and when, set together with [`JA_REVIEWED`]
-/// (a test refuses one without the other). `None` while the catalog is a draft.
-pub const JA_SIGNOFF: Option<&str> = None;
+/// The record of the sign-off: who reviewed the Japanese catalog and when, the commit and the fingerprint of the sheet
+/// (`planeter-ja-sheet`), set together with [`JA_REVIEWED`] (a test refuses one without the other).
+pub const JA_SIGNOFF: Option<&str> = Some(
+    "owner (reviewer), 2026-10-31: approved the sheet with fingerprint 6ba30960fe807d98 (653 messages), then the final corrections of commit 37a6c42aff4f3bfdd83b8dd8e45a6a4281dd24c7; regenerated sheet fingerprint 54ebae05ad914ab6 (661 messages: the eight messages of the edge answers, added in commit 47152d9 by the dev team after the review)",
+);
 
 /// Messages that are **English in every language** (handoff `japanese-consolidated-sheet-handoff-v1`, T3): a key listed here is looked up
 /// in the English table whatever the caller's language, the other tables do not hold it, and the completeness checks ([`audit`]) expect
@@ -173,19 +174,23 @@ pub fn shipped() -> &'static [&'static LangDef] {
     if JA_REVIEWED { &WITH_JA } else { &WITHOUT_JA }
 }
 
-/// The languages that exist as drafts and can be previewed by the operator
-/// (`PLANETER_PREVIEW_LANGUAGES`, handoff T7): compiled in, checked, but not signed off.
+/// The languages that exist as drafts and can be previewed by the operator (`PLANETER_PREVIEW_LANGUAGES`): compiled in,
+/// checked, but not signed off. **None at present** (Japanese was signed off); the mechanism stays for the next draft.
 pub fn previewable() -> &'static [&'static LangDef] {
-    static DRAFTS: [&LangDef; 1] = [&JA_DEF];
-    &DRAFTS
+    &[]
 }
 
-/// Turn on the preview of draft languages for this process: `spec` is a comma-separated list of language codes
-/// (`ja`); an empty value changes nothing. Returns the codes now previewable. An unknown code is an error that
-/// names the ones that exist, so a typo does not silently do nothing.
+/// Turn on the preview of draft languages for this process: `spec` is a comma-separated list of language codes; an empty value
+/// changes nothing. Returns the codes now on. A code that is already shipped (`ja` since the sign-off, or `en`) is accepted and
+/// changes nothing, so that an operator's earlier setting keeps working. An unknown code is an error that names the ones that
+/// can be previewed, so a typo does not silently do nothing.
 pub fn enable_preview_languages(spec: &str) -> Result<Vec<&'static str>, String> {
     let mut enabled = Vec::new();
     for tag in spec.split(',').map(str::trim).filter(|t| !t.is_empty()) {
+        if let Some(def) = shipped().iter().find(|d| d.tag.eq_ignore_ascii_case(tag)) {
+            enabled.push(def.tag);
+            continue;
+        }
         match previewable()
             .iter()
             .find(|d| d.tag.eq_ignore_ascii_case(tag))
@@ -196,9 +201,13 @@ pub fn enable_preview_languages(spec: &str) -> Result<Vec<&'static str>, String>
             }
             None => {
                 let known: Vec<&str> = previewable().iter().map(|d| d.tag).collect();
-                return Err(format!(
-                    "unknown language {tag:?}; the languages that can be previewed are: {}",
+                let known = if known.is_empty() {
+                    "none at present".to_owned()
+                } else {
                     known.join(", ")
+                };
+                return Err(format!(
+                    "unknown language {tag:?}; the languages that can be previewed are: {known}"
                 ));
             }
         }

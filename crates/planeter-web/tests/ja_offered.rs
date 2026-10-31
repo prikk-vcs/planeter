@@ -1,6 +1,7 @@
-//! RFC 012 D-3f, handoff T6/T7: **without the operator's preview, Japanese is not offered**: not negotiated
-//! from `Accept-Language`, not from the cookie, not selectable by the switcher (which shows English only), and
-//! `shipped()` does not list it. (This binary never turns the preview on; `tests/ja_preview.rs` does.)
+//! RFC 012 D-3f, after the sign-off (japanese-final-handoff T3): **Japanese is offered without any operator setting**: it is in
+//! `shipped()`, negotiated from `Accept-Language` and from the cookie, selectable by the switcher (which shows both choices, English
+//! first), and English stays the default for a caller who does not ask. (This binary never names `PLANETER_PREVIEW_LANGUAGES`; the
+//! other half, the setting still being accepted, is in `tests/ja_catalog.rs`.)
 
 use std::sync::Arc;
 
@@ -22,7 +23,7 @@ use planeter_web::{AppState, BlockingGate, ContentOrigin, PrikkGate, TrustedProx
 fn app() -> Router {
     let store = Arc::new(InMemoryRepositoryStore::new());
     let hosting = HostingService::new(
-        std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("ja-not-offered-root"),
+        std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("ja-offered-root"),
         store as Arc<dyn RepositoryStore>,
     )
     .with_sandbox(planeter_prikk::Sandbox::Unconfined);
@@ -79,27 +80,53 @@ fn get(uri: &str, accept: &str, cookie: Option<&str>) -> Request<Body> {
 }
 
 #[test]
-fn japanese_is_not_shipped_and_not_negotiable_without_the_preview() {
+fn japanese_is_shipped_and_negotiable_without_any_setting_and_english_stays_the_default() {
     assert!(
-        !planeter_web::catalog::shipped()
+        planeter_web::catalog::shipped()
             .iter()
-            .any(|d| d.tag == "ja"),
-        "Japanese is not signed off"
+            .any(|d| d.tag == "ja")
     );
-    assert!(planeter_web::catalog::Lang::from_tag("ja").is_none());
-    assert!(planeter_web::catalog::Lang::from_tag("ja-JP").is_none());
+    assert_eq!(
+        planeter_web::catalog::shipped()[0].tag,
+        "en",
+        "English first"
+    );
+    assert_eq!(
+        planeter_web::catalog::Lang::from_tag("ja").unwrap().tag(),
+        "ja"
+    );
+    assert_eq!(
+        planeter_web::catalog::Lang::from_tag("ja-JP")
+            .unwrap()
+            .tag(),
+        "ja"
+    );
     assert_eq!(
         planeter_web::catalog::Lang::negotiate(Some("ja,ja-JP;q=0.9"), None).tag(),
-        "en"
+        "ja"
     );
     assert_eq!(
         planeter_web::catalog::Lang::negotiate(Some("en"), Some("ja")).tag(),
-        "en"
+        "ja",
+        "the cookie beats Accept-Language"
     );
+    // A caller who does not ask for Japanese is English: no header, an unrelated language, an unknown cookie.
+    for (accept, cookie) in [
+        (None, None),
+        (Some("fr,de;q=0.8"), None),
+        (Some("ja"), Some("zz")),
+    ] {
+        let expected = if cookie == Some("zz") { "ja" } else { "en" };
+        assert_eq!(
+            planeter_web::catalog::Lang::negotiate(accept, cookie).tag(),
+            expected,
+            "{accept:?} {cookie:?}"
+        );
+    }
 }
 
 #[tokio::test]
-async fn the_pages_stay_english_and_the_switcher_shows_english_only() {
+async fn the_pages_are_japanese_for_a_japanese_caller_and_the_switcher_shows_both_choices() {
     let r = app();
     for (accept, cookie) in [
         ("ja", None),
@@ -109,24 +136,37 @@ async fn the_pages_stay_english_and_the_switcher_shows_english_only() {
         let (status, headers, body) = send(&r, get("/", accept, cookie)).await;
         assert_eq!(status, StatusCode::OK);
         assert!(
-            body.contains("<html lang=\"en\" dir=\"ltr\">"),
+            body.contains("<html lang=\"ja\" dir=\"ltr\">"),
             "{accept}: {body}"
         );
-        assert_eq!(headers.get("content-language").unwrap(), "en");
+        assert_eq!(headers.get("content-language").unwrap(), "ja");
         let footer = &body[body.find("<footer>").unwrap()..];
+        assert_eq!(
+            footer.matches("action=\"/lang\"").count(),
+            2,
+            "both languages, never one: {footer}"
+        );
+        assert!(
+            footer.contains(">English</button>") && footer.contains(">日本語</button>"),
+            "{footer}"
+        );
         assert!(
             footer.contains(
-                "<button type=\"submit\" lang=\"en\" aria-current=\"true\">English</button>"
+                "<button type=\"submit\" lang=\"ja\" aria-current=\"true\">日本語</button>"
             ),
             "{footer}"
         );
-        assert!(!footer.contains("日本語"), "{footer}");
-        assert_eq!(footer.matches("action=\"/lang\"").count(), 1);
     }
+    // An English caller sees English, with both buttons too.
+    let (_, headers, body) = send(&r, get("/", "en", None)).await;
+    assert!(body.contains("<html lang=\"en\" dir=\"ltr\">"));
+    assert_eq!(headers.get("content-language").unwrap(), "en");
+    let footer = &body[body.find("<footer>").unwrap()..];
+    assert_eq!(footer.matches("action=\"/lang\"").count(), 2);
 }
 
 #[tokio::test]
-async fn choosing_japanese_is_refused_and_sets_nothing() {
+async fn choosing_japanese_sets_the_cookie() {
     let r = app();
     let (_, headers, _) = send(&r, get("/login", "en", None)).await;
     let csrf = headers
@@ -146,11 +186,11 @@ async fn choosing_japanese_is_refused_and_sets_nothing() {
         .body(Body::from(format!("csrf={csrf}&lang=ja&next=/")))
         .unwrap();
     let (status, headers, _) = send(&r, req).await;
-    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert!(status.is_redirection(), "{status}");
     assert!(
-        !headers
+        headers
             .get_all(header::SET_COOKIE)
             .iter()
-            .any(|v| v.to_str().unwrap_or("").starts_with("planeter_lang="))
+            .any(|v| v.to_str().unwrap_or("").starts_with("planeter_lang=ja"))
     );
 }

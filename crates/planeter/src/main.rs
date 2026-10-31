@@ -175,17 +175,32 @@ async fn main() {
         }
     };
 
-    // RFC 012 D-3f: a draft language (Japanese, not yet signed off by its reviewers) is offered only when the
-    // operator asks for it. Off by default; logged once.
+    // RFC 012 D-3f: a draft language (none at present: Japanese was signed off and is offered like English) is offered only when
+    // the operator asks for it, and logged once. A code that is already shipped is accepted and needs no setting.
     match planeter_web::catalog::enable_preview_languages(
         &std::env::var("PLANETER_PREVIEW_LANGUAGES").unwrap_or_default(),
     ) {
-        Ok(tags) if tags.is_empty() => {}
-        Ok(tags) => eprintln!(
-            "planeter: PREVIEW languages on ({}): these catalogs are drafts that their reviewers have not signed off; \
-             turn them off by unsetting PLANETER_PREVIEW_LANGUAGES",
-            tags.join(", ")
-        ),
+        Ok(tags) => {
+            let shipped = |t: &&str| {
+                planeter_web::catalog::shipped()
+                    .iter()
+                    .any(|d| d.tag == **t)
+            };
+            let (already, drafts): (Vec<&str>, Vec<&str>) = tags.iter().partition(shipped);
+            if !already.is_empty() {
+                eprintln!(
+                    "planeter: PLANETER_PREVIEW_LANGUAGES: {} already offered (signed off); the setting is not needed",
+                    already.join(", ")
+                );
+            }
+            if !drafts.is_empty() {
+                eprintln!(
+                    "planeter: PREVIEW languages on ({}): these catalogs are drafts that their reviewers have not signed off; \
+                     turn them off by unsetting PLANETER_PREVIEW_LANGUAGES",
+                    drafts.join(", ")
+                );
+            }
+        }
         Err(e) => {
             eprintln!("planeter: PLANETER_PREVIEW_LANGUAGES: {e}");
             exit_releasing_lock(1);

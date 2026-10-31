@@ -694,8 +694,16 @@ fn the_scanners_can_fail() {
 }
 
 #[test]
-fn the_default_language_is_english_and_registered_languages_are_not_shipped() {
-    assert_eq!(shipped().len(), 1);
-    assert_eq!(shipped()[0].tag, "en");
+fn the_default_language_is_english_and_only_signed_off_languages_are_shipped() {
+    // English first; Japanese after its sign-off; nothing else (a test language registered by another test is not shipped).
+    let tags: Vec<&str> = shipped().iter().map(|d| d.tag).collect();
+    assert_eq!(
+        tags,
+        if catalog::JA_REVIEWED {
+            vec!["en", "ja"]
+        } else {
+            vec!["en"]
+        }
+    );
     assert_eq!(catalog::EN.tag(), "en");
 }
