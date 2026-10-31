@@ -190,7 +190,7 @@ says the same for every count; numbers group with commas (`1,200`).
 | repository | リポジトリ | yes | The usual loan word; on every page (`home.*`, `layout.nav_repository`, the not-found sentences). | Hard term — reviewers decide |
 | branch | ブランチ | yes | The usual loan word (`nav.refs`, `refs.*`, `history.empty`). Alternative: 枝 is not used in software. | Hard term — reviewers decide |
 | tag | タグ | yes | The usual loan word. | Proposed |
-| patch | パッチ | yes | prikk's own word is *patch*; the interface explains it (`explain.patch`: 記録された編集1件). Alternative: 編集 would drop prikk's word. | Hard term — reviewers decide |
+| patch | パッチ | yes | prikk's own word is *patch*; the interface explains it (`explain.patch`: 記録された編集 1 件). Alternative: 編集 would drop prikk's word. | Hard term — reviewers decide |
 | change | 変更 | yes | The one word for a recorded unit of history (prikk: *block*), as in English. Counted with 件 (`history.patch_count`). | Hard term — reviewers decide |
 | history | 履歴 | yes | The usual word for a repository's history. | Proposed |
 | proposal | 提案 | yes | What a person puts forward for review (RFC 005 part 5, D-38): the page headings, the state names and the API messages (`proposals.*`, `proposal.*`, `error.*_proposal.*`). The draft's word for *propose* already; *change* (変更) stays for the recorded unit of history. Counted with 件. | Hard term — reviewers decide |
@@ -253,11 +253,11 @@ the two catalogs). A reviewer's correction changes this cell and `ja.rs` togethe
 | `explain.summary` | "What does this mean?" | "これはどういう意味ですか？" |
 | `explain.verified` | "prikk ran all of its checks on this repository just now, and they found no problems." | "prikk がこのリポジトリに対してすべてのチェックをたった今実行し、問題は見つかりませんでした。" |
 | `explain.signed` | "A maintainer signed this patch into the project's history. The Verification page shows whether the whole repository checks out." | "メンテナーがこのパッチをプロジェクトの履歴に署名して記録しました。リポジトリ全体に問題がないかどうかは、「検証」ページで確認できます。" |
-| `explain.queued` | "This patch is held on this server. A maintainer has not signed it into the project's history, so it is not part of the verified record." | "このパッチは、このサーバーで保持されています。メンテナーがプロジェクトの履歴にまだ署名していないため、検証済みの記録には含まれていません。" |
+| `explain.queued` | "This patch is held on this server. A maintainer has not signed it into the project's history, so it is not part of the verified record." | "このパッチは、このサーバーで保持されています。メンテナーがプロジェクトの履歴に署名していないため、検証済みの記録には含まれていません。" |
 | `explain.failed` | "prikk checked this repository and found problems. The Verification page lists what was found." | "prikk がこのリポジトリをチェックしたところ、問題が見つかりました。見つかった内容は「検証」ページに一覧があります。" |
 | `explain.failed_here` | "prikk checked this repository and found problems. They are listed below." | "prikk がこのリポジトリをチェックしたところ、問題が見つかりました。内容は下に一覧で示します。" |
 | `explain.unavailable` | "Try again in a little while." | "しばらくしてから、もう一度お試しください。" |
-| `explain.patch` | "A patch is one recorded edit." | "パッチとは、記録された編集1件のことです。" |
+| `explain.patch` | "A patch is one recorded edit." | "パッチとは、記録された編集 1 件のことです。" |
 | `explain.rollback` | "A rollback is a change that undoes an earlier change." | "ロールバックとは、以前の変更を取り消す変更のことです。" |
 | `history.rollback` | "rollback" | "ロールバック" |
 | `history.patch_count` | "{count} patch" / "{count} patches" | "パッチ {count} 件" |
@@ -265,7 +265,7 @@ the two catalogs). A reviewer's correction changes this cell and `ja.rs` togethe
 | `refs.branches` | "Branches" | "ブランチ" |
 | `refs.tags` | "Tags" | "タグ" |
 | `refs.current` | "current" | "現在" |
-| `refs.closed` | "closed" | "クローズ済み" |
+| `refs.closed` | "closed" | "閉じている" |
 | `verify.heading` | "Verification" | "検証" |
 | `verify.findings` | "What was found" | "見つかった内容" |
 | `verify.status.evaluated` | "completed" | "完了" |
@@ -279,6 +279,21 @@ the two catalogs). A reviewer's correction changes this cell and `ja.rs` togethe
 | `home.address_label` | "Repository address" | "リポジトリのアドレス" |
 | `unavailable.body` | "This repository could not be read right now. Try again in a little while. If it keeps happening, tell the person who runs this server." | "今はこのリポジトリを読み込めません。しばらくしてから、もう一度お試しください。それでも解決しない場合は、このサーバーを運用している人にお知らせください。" |
 | `not_found.body` | "There is no repository at this address, or you do not have access to it. Check the address, or sign in if the repository is private." | "このアドレスにはリポジトリがないか、アクセスする権限がありません。アドレスを確認してください。非公開のリポジトリの場合は、ログインしてください。" |
+
+### 5.3 One wording, one standard (the final check, 2026-10-31)
+
+Rules the Japanese catalogs follow, each enforced by `tests/ja_consistency.rs` (planted cases both ways) where it can be: the **verb** *change*
+is 変わる / 変える (「どのブランチも変わっていません」); **変更** is the noun *change* only (and the fixed pair 変更を依頼する / 変更依頼あり, which the
+reviewers approved). *Sign in* is ログイン everywhere (シングルサインオン keeps its own name). *Refused* is 拒否 (not 断る / 断られた). *Closed* is
+閉じている (a proposal and a branch alike; 締め切られました for "comments closed on {date}" is a deadline, a different sense). *Confirm* is 確定.
+A space stands between a numeral or placeholder and its counter (`{used} 件`, `1 時間`). Brackets are full-width （ ）. `explain.queued` does **not**
+promise a signature (no まだ): the English has no "yet" by decision D-50, because a keyless forge cannot promise that anyone will sign.
+
+Words with one family and more than one audience or sense, **deliberately left as they are**: 取り込み = take into the repository (the server's
+*accept* and an *import*); 保持 = held (pending) or kept as a received copy; 保管 = kept until a date; 保存 = saved; 確認 = a person checks or confirms
+(and "could not be checked now", on purpose); 検証 = verify; チェック = one stage of a verification; 点検 = what `doctor` does. Dates and times are
+ISO 8601 in UTC in every language (`2026-10-31 14:05 UTC`); sizes use KiB / MiB / GiB; the identifiers `ref`, `field`, `reason`, `Retry-After` and
+`Content-Length` stay in Latin letters in developer texts.
 
 ## 6. Words for the person who runs the server
 

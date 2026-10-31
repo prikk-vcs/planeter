@@ -129,10 +129,10 @@ pub static CATALOG: &[Entry] = &[
         "net.proxy",
         "HTTPS_PROXY に指定されたプロキシを使えませんでした。変数を確認するか、このサーバーについて NO_PROXY を設定してください。",
     ),
-    msg("server.refused", "サーバーが断りました：{message} {hint}"),
+    msg("server.refused", "サーバーが拒否しました：{message} {hint}"),
     msg(
         "server.refused_plain",
-        "サーバーがリクエストを断りました（{status}）が、理由は示されませんでした。もう一度お試しください。続く場合は、このサーバーを運用している人に伝えてください。",
+        "サーバーがリクエストを拒否しました（{status}）が、理由は示されませんでした。もう一度お試しください。続く場合は、このサーバーを運用している人に伝えてください。",
     ),
     msg(
         "server.not_found",

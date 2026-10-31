@@ -231,3 +231,103 @@ fn sizes_are_written_for_a_person() {
     assert_eq!(size(5 << 20), "5.0 MiB");
     assert_eq!(size(3 << 30), "3.0 GiB");
 }
+
+// ---------------------------------------------------------------- the final check (2026-10-31): one wording, one standard
+
+/// The rules of the server's `glossary.md` section 5.3 that apply to the program's sentences.
+fn standard_findings(text: &str) -> Vec<&'static str> {
+    let mut found = Vec::new();
+    if text
+        .replace("シングルサインオン", "")
+        .contains("サインイン")
+    {
+        found.push("サインイン (sign in is ログイン)");
+    }
+    if text.contains("クローズ") {
+        found.push("クローズ (closed is 閉じている)");
+    }
+    if text.contains("断りま") || text.contains("断られ") || text.contains("お断り") {
+        found.push("断る (refused is 拒否)");
+    }
+    if text.contains("変更されていません") || text.contains("何も変更していません")
+    {
+        found.push("変更 as the verb change (変わる / 変える)");
+    }
+    if text.contains("確認待ち") {
+        found.push("確認待ち (confirm is 確定)");
+    }
+    let chars: Vec<char> = text.chars().collect();
+    for (i, c) in chars.iter().enumerate() {
+        if matches!(c, '(' | ')')
+            && [i.checked_sub(1), Some(i + 1)]
+                .into_iter()
+                .flatten()
+                .filter_map(|j| chars.get(j))
+                .any(|n| !n.is_ascii())
+        {
+            found.push("a half-width bracket next to Japanese");
+            break;
+        }
+    }
+    for (i, c) in chars.iter().enumerate() {
+        let counter = *c == '件' || (*c == '時' && chars.get(i + 1) == Some(&'間'));
+        if counter && i > 0 && (chars[i - 1].is_ascii_digit() || chars[i - 1] == '}') {
+            found.push("no space between a numeral or placeholder and its counter");
+            break;
+        }
+    }
+    found
+}
+
+#[test]
+fn the_japanese_catalog_keeps_the_final_standards() {
+    let mut broken = Vec::new();
+    for e in Lang::Ja.entries() {
+        for rule in standard_findings(e.text) {
+            broken.push(format!("`{}`: {rule}", e.key));
+        }
+    }
+    assert_eq!(broken, Vec::<String>::new());
+}
+
+#[test]
+fn each_standard_finds_a_planted_breach_and_lets_the_right_form_through() {
+    for (bad, rule) in [
+        ("サインインしてください。", "サインイン"),
+        ("サーバーが断りました：{message}", "断る"),
+        ("断られた値です。", "断る"),
+        ("ブランチは変更されていません。", "変更 as the verb"),
+        ("履歴(読む範囲)", "half-width bracket"),
+        ("{count}件", "counter"),
+    ] {
+        let found = standard_findings(bad);
+        assert!(
+            found.iter().any(|f| f.contains(rule)),
+            "{bad:?} should break {rule}: {found:?}"
+        );
+    }
+    for ok in [
+        "ログイン",
+        "サーバーが拒否しました：{message}",
+        "ブランチは変わっていません。",
+        "{count} 件",
+        "履歴（読む範囲）",
+    ] {
+        assert_eq!(standard_findings(ok), Vec::<&str>::new(), "{ok:?}");
+    }
+}
+
+/// Two of the final handoff's corrections are the program's own: the server's refusal is 拒否, in both of its sentences.
+#[test]
+fn the_servers_refusal_is_reject_in_both_sentences() {
+    assert_eq!(
+        raw(Lang::Ja, Key::ServerRefused),
+        Some("サーバーが拒否しました：{message} {hint}")
+    );
+    assert_eq!(
+        raw(Lang::Ja, Key::ServerRefusedPlain),
+        Some(
+            "サーバーがリクエストを拒否しました（{status}）が、理由は示されませんでした。もう一度お試しください。続く場合は、このサーバーを運用している人に伝えてください。"
+        )
+    );
+}

@@ -148,7 +148,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "explain.queued",
-        "このパッチは、このサーバーで保持されています。メンテナーがプロジェクトの履歴にまだ署名していないため、検証済みの記録には含まれていません。",
+        "このパッチは、このサーバーで保持されています。メンテナーがプロジェクトの履歴に署名していないため、検証済みの記録には含まれていません。",
     ),
     msg(
         "explain.failed",
@@ -162,7 +162,10 @@ pub const CATALOG: &[Entry] = &[
         "explain.unavailable",
         "しばらくしてから、もう一度お試しください。",
     ),
-    msg("explain.patch", "パッチとは、記録された編集1件のことです。"),
+    msg(
+        "explain.patch",
+        "パッチとは、記録された編集 1 件のことです。",
+    ),
     msg(
         "explain.rollback",
         "ロールバックとは、以前の変更を取り消す変更のことです。",
@@ -190,7 +193,7 @@ pub const CATALOG: &[Entry] = &[
     msg("refs.branches", "ブランチ"),
     msg("refs.tags", "タグ"),
     msg("refs.current", "現在"),
-    msg("refs.closed", "クローズ済み"),
+    msg("refs.closed", "閉じている"),
     msg("refs.no_tags", "タグはありません。"),
     msg("refs.heading", "ブランチとタグ"),
     msg("refs.col.branch", "ブランチ"),
@@ -360,7 +363,7 @@ pub const CATALOG: &[Entry] = &[
     // quota refusals of a proposal (RFC 005 D-9)
     msg(
         "quota.open_proposals.message",
-        "このリポジトリで開いている提案がすでに{used}件あり、上限は{limit}件です。",
+        "このリポジトリで開いている提案がすでに {used} 件あり、上限は {limit} 件です。",
     ),
     msg(
         "quota.open_proposals.hint",
@@ -376,7 +379,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "quota.revisions.message",
-        "この提案にはすでに{used}件のリビジョンがあり、上限は{limit}件です。",
+        "この提案にはすでに {used} 件のリビジョンがあり、上限は {limit} 件です。",
     ),
     msg(
         "quota.revisions.hint",
@@ -397,7 +400,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "error.forbidden.hint",
-        "メンテナーに書き込み権限を依頼するか、サインインしている全員に提案を開放するよう依頼してください。",
+        "メンテナーに書き込み権限を依頼するか、ログインしている全員に提案を開放するよう依頼してください。",
     ),
     msg(
         "error.length_required.message",
@@ -537,11 +540,11 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "propose.held",
-        "あなたの作業はこのサーバーでレビュー待ちとして保持されており、どのブランチも変更されていません。",
+        "あなたの作業はこのサーバーでレビュー待ちとして保持されており、どのブランチも変わっていません。",
     ),
     msg(
         "propose.already_recorded",
-        "このアーティファクトはすでに記録済みのため何も追加されておらず、どのブランチも変更されていません。",
+        "このアーティファクトはすでに記録済みのため何も追加されておらず、どのブランチも変わっていません。",
     ),
     // recovery (RFC 004 part 4)
     msg(
@@ -590,7 +593,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "recovery.blocker.output_unreadable",
-        "リポジトリのツールの出力を読み取れなかったため、何も変更していません。",
+        "リポジトリのツールの出力を読み取れなかったため、何も変えていません。",
     ),
     msg(
         "recovery.blocker.unexpected_lock",
@@ -615,7 +618,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "recovery.outcome.stopped",
-        "復旧は停止し、これ以上は何も変更していません。フラグはまだ立っています。",
+        "復旧は停止し、これ以上は何も変えていません。フラグはまだ立っています。",
     ),
     msg(
         "recovery.outcome.not_now",
@@ -875,7 +878,7 @@ pub const CATALOG: &[Entry] = &[
     msg("proposal.patch.unknown", "判断できません"),
     msg(
         "proposal.patch.unknown_explain",
-        "このサーバーは、このパッチが署名されて履歴に入ったかどうかを判断できません(履歴が、サーバーが読む範囲より長いためです)。",
+        "このサーバーは、このパッチが署名されて履歴に入ったかどうかを判断できません（履歴が、サーバーが読む範囲より長いためです）。",
     ),
     msg("proposal.patch.not_listed", "この場所には記録なし"),
     msg(
@@ -966,11 +969,11 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "error.forbidden_comment.message",
-        "このリポジトリは読めますが、コメントするにはサインインが必要です。",
+        "このリポジトリは読めますが、コメントするにはログインが必要です。",
     ),
     msg(
         "error.forbidden_comment.hint",
-        "サインインするか、アクセストークンを付けてリクエストを送ってください。",
+        "ログインするか、アクセストークンを付けてリクエストを送ってください。",
     ),
     msg(
         "error.forbidden_decision.message",
@@ -990,7 +993,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "error.rate_comments.message",
-        "この1時間に、この提案へ何度もコメントしています。",
+        "この 1 時間に、この提案へ何度もコメントしています。",
     ),
     msg(
         "error.rate_comments.hint",
@@ -998,7 +1001,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "error.rate_decisions.message",
-        "この1時間に、この提案へ何度も判断を記録しています。",
+        "この 1 時間に、この提案へ何度も判断を記録しています。",
     ),
     msg(
         "error.rate_decisions.hint",
@@ -1140,7 +1143,7 @@ pub const CATALOG: &[Entry] = &[
     msg("decision.form.button", "判断を記録する"),
     msg(
         "decision.form.consequence",
-        "これはリビジョン {revision} だけに記録され、このリポジトリを読める全員に見えます。提案が開いている間は変更できます。あとのリビジョンには引き継がれず、何もマージしません。",
+        "これはリビジョン {revision} だけに記録され、このリポジトリを読める全員に見えます。この判断は、提案が開いている間は変えられます。あとのリビジョンには引き継がれず、何もマージしません。",
     ),
     msg(
         "decision.form.self",
@@ -1159,7 +1162,7 @@ pub const CATALOG: &[Entry] = &[
         "unhide.form.consequence",
         "このリポジトリを読める全員に本文が再び見えます。",
     ),
-    msg("hide.refused.heading", "コメントは変更されませんでした"),
+    msg("hide.refused.heading", "コメントは変わりませんでした"),
     msg(
         "hide.refusal.reason",
         "非表示にするには、500 文字までの理由が必要です。",
@@ -1184,7 +1187,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "error.stage_limit.message",
-        "確認待ちのアーカイブがすでに {limit} 件あります。",
+        "確定待ちのアーカイブがすでに {limit} 件あります。",
     ),
     msg(
         "error.stage_limit.hint",
@@ -1288,7 +1291,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "error.invalid_request.name_hint",
-        "この応答の field と reason に、断られた値と理由が示されています。API ドキュメントの項目の通りに直して、もう一度送ってください。",
+        "この応答の field と reason に、拒否された値と理由が示されています。API ドキュメントの項目の通りに直して、もう一度送ってください。",
     ),
     msg(
         "error.import_off.message",
@@ -1361,13 +1364,13 @@ pub const CATALOG: &[Entry] = &[
     msg("new.visibility", "読める人"),
     msg(
         "new.visibility.public",
-        "誰でも（サインインの有無を問わない）",
+        "誰でも（ログインの有無を問わない）",
     ),
-    msg("new.visibility.internal", "サインインしている人なら誰でも"),
+    msg("new.visibility.internal", "ログインしている人なら誰でも"),
     msg("new.visibility.private", "アクセスを与えた人だけ"),
     msg("new.proposals", "提案を送れる人"),
     msg("new.proposals.members", "書き込み権限を与えた人"),
-    msg("new.proposals.any", "読めるサインイン済みの人なら誰でも"),
+    msg("new.proposals.any", "読めるログイン済みの人なら誰でも"),
     msg(
         "new.proposals.any_explain",
         "知らない人からの貢献を受け付ける公開プロジェクトでは、後者を選びます。その人たちの作業はレビュー待ちで保持され、それだけでブランチが変わることはありません。",
@@ -1541,7 +1544,7 @@ pub const CATALOG: &[Entry] = &[
     // repository creation (RFC 004 part 7)
     msg(
         "new.signin",
-        "リポジトリを作成するには、サインインしてください。",
+        "リポジトリを作成するには、ログインしてください。",
     ),
     msg("new.nav", "新しいリポジトリ"),
     msg("stage.prikk", "prikk の説明：{detail}"),
