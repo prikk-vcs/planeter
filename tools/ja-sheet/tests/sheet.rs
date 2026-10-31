@@ -322,7 +322,12 @@ fn a_missing_row_an_unknown_key_a_repeated_row_and_a_row_in_the_wrong_group_are_
 #[test]
 fn a_hand_edit_of_the_key_cell_or_a_truncated_sheet_is_not_clean() {
     let (sheet, rows) = sheet();
-    let truncated = &sheet[..sheet.len() / 2];
+    // Cut in the middle, at a character boundary (the sheet is mostly Japanese).
+    let mut cut = sheet.len() / 2;
+    while !sheet.is_char_boundary(cut) {
+        cut -= 1;
+    }
+    let truncated = &sheet[..cut];
     let drift = check_against(truncated, &rows);
     assert!(
         drift
