@@ -895,6 +895,15 @@ keys! {
     CreatedNoneTrusted => "created.none_trusted",
     CreatedOpen => "created.open",
     CreatedNext => "created.next",
+    // what no route handles, and a request that is too large
+    ErrPayloadTooLargeRequestMessage => "error.payload_too_large.request_message",
+    ErrPayloadTooLargeRequestHint => "error.payload_too_large.request_hint",
+    PageMethodTitle => "page.method_not_allowed.title",
+    PageMethodHeading => "page.method_not_allowed.heading",
+    PageMethodBody => "page.method_not_allowed.body",
+    PagePayloadTitle => "page.payload_too_large.title",
+    PagePayloadHeading => "page.payload_too_large.heading",
+    PagePayloadBody => "page.payload_too_large.body",
 }
 
 /// Marks a response whose text depends on the caller's language, so that the response-policy layer adds

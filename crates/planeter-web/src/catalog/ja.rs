@@ -1558,4 +1558,34 @@ pub const CATALOG: &[Entry] = &[
         "そのアーカイブはもうありません。すでに使われたか、保管期間が過ぎた可能性があります。",
     ),
     msg("stage.gone.link", "リポジトリを作成する"),
+    // ---- what no route handles, and a request that is too large (japanese-final-handoff T2)
+    msg(
+        "error.payload_too_large.request_message",
+        "そのリクエストは、このサーバーが受け付ける大きさを超えています。",
+    ),
+    msg(
+        "error.payload_too_large.request_hint",
+        "もっと小さいリクエストを送るか、このサーバーを運用している人に尋ねてください。",
+    ),
+    msg(
+        "page.method_not_allowed.title",
+        "この操作はここでは使えません · {product}",
+    ),
+    msg(
+        "page.method_not_allowed.heading",
+        "この操作はここでは使えません",
+    ),
+    msg(
+        "page.method_not_allowed.body",
+        "このアドレスは、その種類のリクエストを受け付けないため、何も行いませんでした。前のページに戻って、ページのリンクやボタンから操作してください。",
+    ),
+    msg(
+        "page.payload_too_large.title",
+        "リクエストが大きすぎます · {product}",
+    ),
+    msg("page.payload_too_large.heading", "リクエストが大きすぎます"),
+    msg(
+        "page.payload_too_large.body",
+        "送られた内容が、このサーバーが一度に受け付ける大きさを超えているため、何も行いませんでした。小さくして送り直すか、このサーバーを運用している人に尋ねてください。",
+    ),
 ];

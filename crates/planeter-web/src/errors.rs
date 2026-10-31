@@ -407,6 +407,13 @@ impl ErrorCode {
         hint: Key::ErrTooLargeRawHint,
     };
 
+    /// `payload_too_large` for a request body over what the framework reads for a form or a JSON document (not the proposal's own
+    /// bound, which the plain keys name): the same code and status, and the sentences that are true for any request.
+    pub const TOO_LARGE_REQUEST: ErrorKeys = ErrorKeys {
+        message: Key::ErrPayloadTooLargeRequestMessage,
+        hint: Key::ErrPayloadTooLargeRequestHint,
+    };
+
     /// `invalid_request` for a bundle fetch without a `ref`: the same code and status, and the hint that is true there.
     pub const REF_REQUIRED: ErrorKeys = ErrorKeys {
         message: Key::ErrInvalidRequestMessage,
@@ -665,7 +672,7 @@ impl ErrorCode {
             ErrorCode::Forbidden => "the caller can read the repository but may not propose to it",
             ErrorCode::LengthRequired => "a proposal must declare its length with `Content-Length`",
             ErrorCode::PayloadTooLarge => {
-                "the proposal is larger than this server accepts (refused before the artifact is read)"
+                "the proposal is larger than this server accepts (refused before the artifact is read), or any other request body is larger than the 2 MiB the server reads for a form or a JSON document"
             }
             ErrorCode::NeedsRecovery => {
                 "the repository is waiting for recovery after an unfinished write (reads are not affected)"

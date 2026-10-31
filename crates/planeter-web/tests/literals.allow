@@ -164,3 +164,4 @@ re :: api.rs :: ^creates a repository in the caller's own namespace.* :: the rea
 re :: ui.rs :: ^creates a repository for the signed-in person.* :: the reason a public route is public (route table, IS-14); never shown
 re :: errors.rs :: ^(repository_quota|name_taken|stage_limit|archive_refused|stage_expired|stage_in_use|adoption_refused|creation_verify_failed)$ :: a stable machine-readable error code (RFC 004 part 7)
 re :: errors.rs :: ^(the owner holds as many|a repository with that name exists|too many archives are waiting|prikk refused the archive and|the archive was kept for a day|a confirmation is running on|the typed fingerprints do not match|the repository the archive makes).* :: ErrorCode::description: OpenAPI prose for developers, English by decision (D-3d)
+exact :: edge.rs :: text/plain :: a media-type prefix compared with the framework's own rejection responses (japanese-final-handoff T2); no person reads it

@@ -480,7 +480,7 @@ fn proposal_paths(paths_obj: &mut serde_json::Map<String, Value>) {
                 "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["reason"], "properties": {"reason": {"type": "string", "maxLength": 1000}}}}}},
                 "responses": {"200": {"description": "The proposal, closed.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ProposalClosed"}}}}},
             }}),
-            &[ErrorCode::TransportOff, ErrorCode::RateLimited, ErrorCode::Forbidden, ErrorCode::ReasonRequired, ErrorCode::ProposalFinal],
+            &[ErrorCode::TransportOff, ErrorCode::RateLimited, ErrorCode::Forbidden, ErrorCode::ReasonRequired, ErrorCode::ProposalFinal, ErrorCode::PayloadTooLarge],
         ),
     );
     let cid_param = param(
@@ -507,7 +507,7 @@ fn proposal_paths(paths_obj: &mut serde_json::Map<String, Value>) {
                 }}}}},
                 "responses": {"201": {"description": "The comment, as recorded.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ProposalComment"}}}}},
             }}),
-            &[ErrorCode::TransportOff, ErrorCode::RateLimited, ErrorCode::Forbidden, ErrorCode::CommentsClosed],
+            &[ErrorCode::TransportOff, ErrorCode::RateLimited, ErrorCode::Forbidden, ErrorCode::CommentsClosed, ErrorCode::PayloadTooLarge],
         ),
     );
     paths_obj.insert(
@@ -526,7 +526,7 @@ fn proposal_paths(paths_obj: &mut serde_json::Map<String, Value>) {
                 }}}}},
                 "responses": {"200": {"description": "The decision, and the review as it now stands.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ProposalDecisionRecorded"}}}}},
             }}),
-            &[ErrorCode::TransportOff, ErrorCode::RateLimited, ErrorCode::Forbidden, ErrorCode::DecisionsClosed, ErrorCode::RevisionNotCurrent, ErrorCode::SelfApproval],
+            &[ErrorCode::TransportOff, ErrorCode::RateLimited, ErrorCode::Forbidden, ErrorCode::DecisionsClosed, ErrorCode::RevisionNotCurrent, ErrorCode::SelfApproval, ErrorCode::PayloadTooLarge],
         ),
     );
     let mut hide_params = with_id.clone();
@@ -543,7 +543,7 @@ fn proposal_paths(paths_obj: &mut serde_json::Map<String, Value>) {
                 "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["reason"], "properties": {"reason": {"type": "string", "maxLength": 500}}}}}},
                 "responses": {"200": {"description": "The comment, as an administrator sees it.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ProposalComment"}}}}},
             }}),
-            &[ErrorCode::TransportOff, ErrorCode::RateLimited, ErrorCode::Forbidden, ErrorCode::CommentState],
+            &[ErrorCode::TransportOff, ErrorCode::RateLimited, ErrorCode::Forbidden, ErrorCode::CommentState, ErrorCode::PayloadTooLarge],
         ),
     );
     paths_obj.insert(
@@ -557,7 +557,7 @@ fn proposal_paths(paths_obj: &mut serde_json::Map<String, Value>) {
                 "security": [{"bearerToken": []}],
                 "responses": {"200": {"description": "The comment.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ProposalComment"}}}}},
             }}),
-            &[ErrorCode::TransportOff, ErrorCode::RateLimited, ErrorCode::Forbidden, ErrorCode::CommentState],
+            &[ErrorCode::TransportOff, ErrorCode::RateLimited, ErrorCode::Forbidden, ErrorCode::CommentState, ErrorCode::PayloadTooLarge],
         ),
     );
     let mut download_params = with_id;
@@ -661,6 +661,7 @@ fn creation_paths(paths_obj: &mut serde_json::Map<String, Value>) {
         ErrorCode::NameTaken,
         ErrorCode::RepositoryQuota,
         ErrorCode::Busy,
+        ErrorCode::PayloadTooLarge,
     ];
     paths_obj.insert(
         paths::REPOS.into(),
@@ -746,6 +747,7 @@ fn creation_paths(paths_obj: &mut serde_json::Map<String, Value>) {
                 ErrorCode::AdoptionRefused,
                 ErrorCode::ArchiveRefused,
                 ErrorCode::CreationVerifyFailed,
+                ErrorCode::PayloadTooLarge,
             ],
         ),
     );

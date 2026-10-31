@@ -1505,4 +1505,37 @@ pub const CATALOG: &[Entry] = &[
         "That archive is not here any more. It may have been used already, or its day may be over.",
     ),
     msg("stage.gone.link", "Create a repository"),
+    // ---- what no route handles, and a request that is too large (japanese-final-handoff T2)
+    msg(
+        "error.payload_too_large.request_message",
+        "That request is larger than this server accepts.",
+    ),
+    msg(
+        "error.payload_too_large.request_hint",
+        "Send a smaller request, or ask the person who runs this server.",
+    ),
+    msg(
+        "page.method_not_allowed.title",
+        "That action is not available here · {product}",
+    ),
+    msg(
+        "page.method_not_allowed.heading",
+        "That action is not available here",
+    ),
+    msg(
+        "page.method_not_allowed.body",
+        "This address does not take that kind of request, so nothing was done. Go back and use the links and buttons of the page.",
+    ),
+    msg(
+        "page.payload_too_large.title",
+        "The request was too large · {product}",
+    ),
+    msg(
+        "page.payload_too_large.heading",
+        "The request was too large",
+    ),
+    msg(
+        "page.payload_too_large.body",
+        "What you sent is larger than this server accepts in one request, so nothing was done. Send less, or ask the person who runs this server.",
+    ),
 ];

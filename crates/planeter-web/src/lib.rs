@@ -17,6 +17,7 @@ pub mod catalog;
 pub mod client_ip;
 pub mod cookies;
 pub mod creation;
+pub mod edge;
 pub mod errors;
 pub mod gate;
 pub mod headers;
@@ -56,46 +57,52 @@ pub fn router(state: AppState) -> axum::Router {
     let for_fallback = state.clone();
     let for_405 = state.clone();
     let for_layer = state.clone();
+    let state_for_edge = state.clone();
     registry()
         .build(state)
-        .fallback(move |uri: axum::http::Uri| {
-            let state = for_fallback.clone();
-            async move {
-                if uri.path().starts_with("/api/") {
-                    api::code_response(&state, errors::ErrorCode::NotFound)
-                } else {
-                    axum::http::Response::builder()
-                        .status(axum::http::StatusCode::NOT_FOUND)
-                        .body(axum::body::Body::empty())
-                        .expect("empty 404")
-                }
-            }
-        })
-        .method_not_allowed_fallback(move |uri: axum::http::Uri| {
-            let state = for_405.clone();
-            async move {
-                if uri.path().starts_with("/api/") {
-                    let mut resp = api::code_response(&state, errors::ErrorCode::MethodNotAllowed);
-                    // The one write route answers POST (and nothing else); every other API route answers GET.
-                    if uri.path().ends_with("/transport/propose") {
-                        resp.headers_mut().insert(
-                            axum::http::header::ALLOW,
-                            axum::http::HeaderValue::from_static("POST"),
-                        );
-                    } else if uri.path().ends_with("/recovery") {
-                        resp.headers_mut().insert(
-                            axum::http::header::ALLOW,
-                            axum::http::HeaderValue::from_static("GET, POST"),
-                        );
+        .fallback(
+            move |uri: axum::http::Uri, headers: axum::http::HeaderMap| {
+                let state = for_fallback.clone();
+                async move {
+                    if uri.path().starts_with("/api/") {
+                        api::code_response(&state, errors::ErrorCode::NotFound)
+                    } else {
+                        ui::edge_page(&state, &headers, uri.path(), ui::EdgePage::NotFound).await
                     }
-                    return resp;
                 }
-                axum::http::Response::builder()
-                    .status(axum::http::StatusCode::METHOD_NOT_ALLOWED)
-                    .body(axum::body::Body::empty())
-                    .expect("empty 405")
-            }
-        })
+            },
+        )
+        .method_not_allowed_fallback(
+            move |uri: axum::http::Uri, headers: axum::http::HeaderMap| {
+                let state = for_405.clone();
+                async move {
+                    if uri.path().starts_with("/api/") {
+                        let mut resp =
+                            api::code_response(&state, errors::ErrorCode::MethodNotAllowed);
+                        // The one write route answers POST (and nothing else); every other API route answers GET.
+                        if uri.path().ends_with("/transport/propose") {
+                            resp.headers_mut().insert(
+                                axum::http::header::ALLOW,
+                                axum::http::HeaderValue::from_static("POST"),
+                            );
+                        } else if uri.path().ends_with("/recovery") {
+                            resp.headers_mut().insert(
+                                axum::http::header::ALLOW,
+                                axum::http::HeaderValue::from_static("GET, POST"),
+                            );
+                        }
+                        return resp;
+                    }
+                    ui::edge_page(&state, &headers, uri.path(), ui::EdgePage::MethodNotAllowed)
+                        .await
+                }
+            },
+        )
+        .layer(axum::middleware::from_fn_with_state(
+            state_for_edge,
+            edge::framework_rejections,
+        ))
+        .layer(axum::extract::DefaultBodyLimit::max(edge::BODY_LIMIT))
         .layer(axum::middleware::from_fn_with_state(
             for_layer,
             headers::response_policy,

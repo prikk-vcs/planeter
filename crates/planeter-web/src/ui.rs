@@ -353,6 +353,8 @@ enum Notice {
     SsoRefused,
     SsoUnlinked,
     ServerError,
+    MethodNotAllowed,
+    PayloadTooLarge,
 }
 
 impl Notice {
@@ -401,7 +403,54 @@ impl Notice {
                 Key::PageServerErrorHeading,
                 Key::PageServerErrorBody,
             ),
+            Notice::MethodNotAllowed => (
+                Key::PageMethodTitle,
+                Key::PageMethodHeading,
+                Key::PageMethodBody,
+            ),
+            Notice::PayloadTooLarge => (
+                Key::PagePayloadTitle,
+                Key::PagePayloadHeading,
+                Key::PagePayloadBody,
+            ),
         }
+    }
+}
+
+/// What the router answers when no route does (japanese-final-handoff T2), as pages in the caller's language: an address nobody serves
+/// (the plain not-found page, the same one a missing or private repository gets, so it says nothing about any repository), a method the
+/// route does not take, a request body over what the framework reads.
+pub(crate) enum EdgePage {
+    NotFound,
+    MethodNotAllowed,
+    PayloadTooLarge,
+}
+
+pub(crate) async fn edge_page(
+    state: &AppState,
+    headers: &HeaderMap,
+    at: &str,
+    which: EdgePage,
+) -> Response {
+    let c = ctx(headers, state).await;
+    match which {
+        EdgePage::NotFound => error_page(state, &c, at, Failure::Read(ReadError::NotFound)),
+        EdgePage::MethodNotAllowed => notice(
+            state,
+            &c,
+            StatusCode::METHOD_NOT_ALLOWED,
+            Notice::MethodNotAllowed,
+            Next::Home,
+            Vec::new(),
+        ),
+        EdgePage::PayloadTooLarge => notice(
+            state,
+            &c,
+            StatusCode::PAYLOAD_TOO_LARGE,
+            Notice::PayloadTooLarge,
+            Next::Home,
+            Vec::new(),
+        ),
     }
 }
 
