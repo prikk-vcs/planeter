@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | The Japanese review has grown into a first sheet (161 rows) plus **thirteen addenda** whose rows replace, withdraw or reword earlier rows. A reviewer who opens them in order reviews text that no longer exists, and has no single place that says "this is the whole current catalog". The owner (a reviewer, with a colleague) asked which file to review. There is none today that is safe to hand over. This handoff produces **one sheet, generated from the live catalogs**, so that what is reviewed is exactly what ships, ordered so that the words people see come first and a reviewer may stop early. |
-| Status | **Assigned** (2026-10-31). Nothing else in the Japanese track is waiting on the owner until this sheet exists. |
+| Status | **Done, reviewed Approved (2026-10-31; commit `2b59688`).** The sheet: `.git-exclude/review-requests/japanese-review-sheet.md`. (Originally: Assigned 2026-10-31.) |
 | Basis | `crates/planeter-web/src/catalog/{en,ja,mod}.rs` (544 messages), `crates/planeter-client/src/catalog/{en,ja}.rs` (109), `docs/glossary.md` §5 (the Japanese terms and their status), `tests/glossary_ja.rs`, the existing sheet and addenda in `.git-exclude/review-requests/japanese-review-sheet*.md` (their columns and their notes are the pattern; their content is superseded by the generated sheet), `JA_REVIEWED`/`JA_SIGNOFF`, RFC 012 D-3f, the pre-review `japanese-pre-review-v1.md` and `japanese-consistency-handoff-v1.md`. |
 | Audience | Dev team. Return a review-request package (`.git-exclude/review-requests/`). |
 
