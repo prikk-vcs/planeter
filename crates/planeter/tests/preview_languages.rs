@@ -1,6 +1,6 @@
-//! RFC 012 D-3f, handoff T7: `PLANETER_PREVIEW_LANGUAGES` — a draft language (Japanese, not yet signed off) is
-//! offered only when the operator asks for it. Off by default and silent; on, it is logged once at start; a
-//! value that names no draft language is refused with the names that exist.
+//! RFC 012 D-3f: `PLANETER_PREVIEW_LANGUAGES` — a draft language is offered only when the operator asks for it (none exists at
+//! present: Japanese was signed off). Empty is silent; a language that is already offered is accepted and logged as not needed;
+//! a value that names no draft language is refused with the names that exist.
 
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
@@ -109,7 +109,7 @@ fn the_preview_setting_is_silent_when_empty_accepts_a_shipped_language_and_refus
     assert_eq!(out.status.code(), Some(1), "{stderr}");
     assert!(stderr.contains("PLANETER_PREVIEW_LANGUAGES"), "{stderr}");
     assert!(
-        stderr.contains("\"jp\"") && stderr.contains("ja"),
+        stderr.contains("\"jp\"") && stderr.contains("none at present"),
         "{stderr}"
     );
     assert!(

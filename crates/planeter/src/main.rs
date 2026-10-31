@@ -181,12 +181,10 @@ async fn main() {
         &std::env::var("PLANETER_PREVIEW_LANGUAGES").unwrap_or_default(),
     ) {
         Ok(tags) => {
-            let shipped = |t: &&str| {
-                planeter_web::catalog::shipped()
-                    .iter()
-                    .any(|d| d.tag == **t)
-            };
-            let (already, drafts): (Vec<&str>, Vec<&str>) = tags.iter().partition(shipped);
+            let (already, drafts): (Vec<&str>, Vec<&str>) = tags
+                .iter()
+                .copied()
+                .partition(|t| planeter_web::catalog::shipped().iter().any(|d| d.tag == *t));
             if !already.is_empty() {
                 eprintln!(
                     "planeter: PLANETER_PREVIEW_LANGUAGES: {} already offered (signed off); the setting is not needed",
