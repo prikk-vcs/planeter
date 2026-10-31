@@ -161,7 +161,7 @@ whether a private repository exists. Messages not listed here did not change (fo
 
 1. ~~The owner's reading of sections 1 and 2~~ — done, approved (2026-10-21).
 2. ~~Confirm with prikk what `active_sessions` means~~ — answered (PK-62): it is not waiting work; the message is removed (IS-49).
-3. ~~Who reads the Japanese (RFC 012 O-2)~~ — **the owner and a colleague** (named by the owner, 2026-10-21); the Japanese draft is section 5 and the reviewers' sheet.
+3. ~~Who reads the Japanese (RFC 012 O-2)~~ — **the owner and a colleague** (named by the owner, 2026-10-21); Japanese is section 5 (signed off 2026-10-31) and the generated review sheet.
 
 ## 4. How this is used
 
@@ -182,9 +182,9 @@ says the same for every count; numbers group with commas (`1,200`).
 
 ### 5.1 Terms
 
-*Shown* says whether the interface uses the term. **Hard term** = the reviewers decide; the draft's choice is a proposal.
+*Shown* says whether the interface uses the term. **Hard term** = a term the reviewers decide (decided at the sign-off, 2026-10-31; the column keeps the classification the generated review sheet is built from).
 
-| English term | Japanese term the draft uses | Shown | Why, and alternatives | Status |
+| English term | Japanese term used | Shown | Why, and alternatives | Status |
 |---|---|---|---|---|
 | repository | リポジトリ | yes | The usual loan word; on every page (`home.*`, `layout.nav_repository`, the not-found sentences). | Hard term — reviewers decide |
 | branch | ブランチ | yes | The usual loan word (`nav.refs`, `refs.*`, `history.empty`). Alternative: 枝 is not used in software. | Hard term — reviewers decide |
@@ -212,7 +212,7 @@ says the same for every count; numbers group with commas (`1,200`).
 | verify / verification | 検証 | yes | The page and the navigation say 検証 (also "prikk の検証に通ります"; 検査 is no longer used, D-50); the checks are チェック (`verify.col.stage`, `stage.error.verify`), so a *check* and the *verification* stay two words, as in English. Alternative: 確認 (used for *could not be checked*, 現在は確認できません). | Hard term — reviewers decide |
 | Verified (badge) | 検証済み | yes | A trust label. English: prikk ran all its checks just now and found no problems. 検証済み says *has been verified*; the explanation (`explain.verified`) says *just now*. The reviewers confirm the label does not read as a lasting guarantee. | Hard term — trust label, reviewers decide |
 | Signed into the history (badge) | 署名して履歴に記録済み | yes | A trust label. English: a maintainer signed this patch into the project's history. The draft says both parts, *signed* and *recorded in the history*. Alternatives: 履歴に署名済み, 署名済み. It must not read as *verified* (it is not). | Hard term — trust label, reviewers decide |
-| Held here, not signed in (badge) | ここで保持中・未署名 | yes | A trust label. English: held on this server, not signed by a maintainer, so not part of the verified record. Draft — reworded 2026-10-29 (D-50; was 承認済み・署名待ち, which said *approved*); owner and colleague to confirm. 未署名 keeps *not signed*. | Hard term — trust label, reviewers decide |
+| Held here, not signed in (badge) | ここで保持中・未署名 | yes | A trust label. English: held on this server, not signed by a maintainer, so not part of the verified record. Reworded 2026-10-29 (D-50; was 承認済み・署名待ち, which said *approved*); approved at the sign-off, 2026-10-31. 未署名 keeps *not signed*. | Hard term — trust label, reviewers decide |
 | Verification failed (badge) | 検証に失敗 | yes | A trust label. prikk checked and found problems (not *was not checked*). | Hard term — trust label, reviewers decide |
 | Could not be checked now (badge) | 現在は確認できません | yes | A trust label. The check could not run (not *failed*). 確認 rather than 検証 so that it does not claim a verification happened. | Hard term — trust label, reviewers decide |
 | seal / sealed / unsealed | (not used) | no | The interface never says *seal* (the plain-words work retired it; the English reader sees *signed into the history*). **prikk documents no Japanese, so there is no usage to follow.** If a document ever needs the word, the draft would propose 封印 / 封印済み / 未封印 or the loan word シール; both are on the forbidden list for the messages (`tests/retired_words.rs`). | Hard term — reviewers decide (not shown to the reader) |

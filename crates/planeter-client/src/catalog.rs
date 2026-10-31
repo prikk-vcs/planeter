@@ -38,7 +38,7 @@ impl Lang {
         }
     }
 
-    /// The language a person asked for with `--lang`. Any known tag, Japanese included (the preview).
+    /// The language a person asked for with `--lang`. Any known tag (English, Japanese).
     pub fn from_flag(tag: &str) -> Option<Lang> {
         match tag.trim().to_ascii_lowercase().as_str() {
             "en" => Some(Lang::En),

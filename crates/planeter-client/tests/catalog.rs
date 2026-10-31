@@ -352,3 +352,30 @@ fn the_servers_refusal_is_reject_in_both_sentences() {
         )
     );
 }
+
+/// After the sign-off no sentence of the program calls Japanese a draft or a preview (the help line said so until 2026-10-31).
+#[test]
+fn no_message_calls_japanese_a_draft_and_the_help_still_names_the_language_option() {
+    for lang in Lang::ALL {
+        for e in lang.entries() {
+            for word in ["draft", "preview", "草案", "プレビュー", "未確認"] {
+                assert!(
+                    !e.text.to_lowercase().contains(word),
+                    "`{}` ({}) says {word:?}",
+                    e.key,
+                    lang.tag()
+                );
+            }
+        }
+    }
+    assert!(
+        raw(Lang::En, Key::HelpMain)
+            .unwrap()
+            .contains("--lang en|ja        the language of the messages\n")
+    );
+    assert!(
+        raw(Lang::Ja, Key::HelpMain)
+            .unwrap()
+            .contains("--lang en|ja        メッセージの言語\n")
+    );
+}
