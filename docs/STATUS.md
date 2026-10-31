@@ -17,7 +17,7 @@
 
 - **Make the `ghcr.io/prikk-vcs/planeter` package public** when you wish (until then the image attestation cannot be verified anonymously; the tarball attestations verify). 0.5.0 is the first release whose image the pipeline ran before shipping (0.4.0's arm64 image could not have started), so it is the first image worth making public; then `gh attestation verify oci://ghcr.io/prikk-vcs/planeter:0.5.0 --repo prikk-vcs/planeter` can be run by anyone.
 - **The Japanese sign-off** by the owner and the colleague: the sheet and its addenda (1–13 and later) in `.git-exclude/review-requests/japanese-review-sheet*.md`; nothing Japanese ships before it (`JA_REVIEWED` false).
-- Send prikk's letters as they are drafted (none pending now: the 0.55.0 letter was sent 2026-10-29).
+- **Send the reply to prikk's letter of 2026-10-31** (drafted: `.git-exclude/upstream/prikk/send/draft/2026-10-31-reply-to-what-0-56-0-changes.md`; it answers their `archive verify` question and asks three small things).
 
 ## Pending upstream (prikk's releases and plan, from its letters through 2026-10-29)
 
@@ -25,7 +25,7 @@
 |---|---|---|
 | **0.54.0 / 0.54.1** (2026-10-24) | `extract` (with `largest_file_bytes`, `claim_parent_block_id`, `refusal-v1` + `reason`), `show <block-id>` fixed (IS-46), `verify` prints `unreached objects` | done: floor 0.54.0, the extract driver, PK-70 |
 | **0.55.0** (2026-10-29, installed) | `claim-parent-not-sealed`, `destination-inside-repository`, streaming `bundle import/verify/preview`, **`sync accept` 2.6–3.8× faster (PK-75)** | done: the driver reads 15 refusal ids; accept defaults stay while the floor is 0.54.0 (object bound to 10,000 when the floor moves) |
-| **0.56.0** (planned by prikk's owner) | **chain-of-pending-claims `extract`**; a classification of a delivery against a received ref and **refusal of an older/diverged one by default**; signer of a received tip "if there is room"; `archive verify`'s "carried, not adopted" text corrected (planeter will be told the new wording first); the `sync pending` help says "this repository's own queue" | the file-by-file review view; model B of D-8 (RFC 008 revision, policy record, delivery route, selection rule); floor to 0.56.0 then; do not depend on the `archive verify` wording |
+| **0.56.0** (not released; prikk's letter of 2026-10-31 describes what is built on its `main` and what is planned, ledger PK-77) | built: the delivery classification and default refusal of rollback/diverged/does-not-connect; **chain-of-pending-claims `extract`** with `chain[]`, `chain_signature` and trust rules (a forged or unsigned claim refuses; on a keyless forge a second claim for a block in a chain always refuses); `sync-pending-v1` claim mapping. Planned: `sync pending` membership by claim, unreached `patch`/`blob` counts, `archive verify`'s key `status` (planeter does not branch on it); a `refusal-v1` field for the claim/parent not scheduled | on the release candidate: one re-baseline handoff (floor 0.56.0), then model B of D-8 and the file-by-file view; the reply to this letter is drafted (`send/draft/`) |
 | **unscheduled** | RFC 154 adoption act; RFC 158 reclamation of unreached objects; a keyless delta archive | plan as unavailable (PK-35, PK-47, PK-73) |
 
 
