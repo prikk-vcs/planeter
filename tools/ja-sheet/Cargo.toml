@@ -1,0 +1,14 @@
+[package]
+name = "planeter-ja-sheet"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Generates the one Japanese review sheet from the live message catalogs of the server and the command-line program (RFC 012 D-3f). Reads the compiled catalogs; adds no external dependency; not a product crate."
+publish = false
+
+[dependencies]
+planeter-web = { path = "../../crates/planeter-web", version = "0.5.0" }
+planeter-client = { path = "../../crates/planeter-client", version = "0.5.0" }

@@ -999,6 +999,14 @@ name = "planeter-image-identity"
 version = "0.5.0"
 
 [[package]]
+name = "planeter-ja-sheet"
+version = "0.5.0"
+dependencies = [
+ "planeter-client",
+ "planeter-web",
+]
+
+[[package]]
 name = "planeter-pin-check"
 version = "0.5.0"
 

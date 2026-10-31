@@ -1,0 +1,102 @@
+# key<TAB>note for the reviewer (migrated from the first sheet and its thirteen addenda; the later row wins)
+assurance.queued	A trust label (warning-class badge). 未署名 keeps *not signed*; nothing says *approved*. Alternatives: 保持中（未署名）, このサーバーで保持中・未署名.
+assurance.sealed	TRUST LABEL, HARD TERM. English: a maintainer signed this patch into the project's history (it is NOT a verification result, so it must not read as 検証済み). The draft says both parts: signed + recorded in the history. Alternatives: 履歴に署名済み / 署名済み / 署名して履歴に取り込み済み.
+assurance.unverified	TRUST LABEL. prikk checked and found problems (it does NOT mean "was not checked"). 検証に失敗 = the verification failed.
+assurance.verified	TRUST LABEL. Shown only where a verification ran and passed (the repository, history and verification pages): prikk ran all of its checks just now and found no problems. HARD TERM 検証. Does 検証済み read as a lasting guarantee? It must mean "verified just now".
+assurance.verify_unavailable	TRUST LABEL. The check could not run (an outage, a limit, a timeout); it did NOT fail. 確認 rather than 検証 so that nothing claims a verification happened.
+error.bundle_of_received_ref.hint	an API error text for the repository-fetch routes (added after sheet 1 was issued). `kind=archive` / `kind=bundle` are parameter spellings and stay as written.
+error.bundle_of_received_ref.message	an API error text for the repository-fetch routes (added after sheet 1 was issued).
+error.busy.hint	Retry-After is the name of an HTTP header and stays as written.
+error.declaration_misses_added.hint	REWORDED (was in addendum 3): the English now reads as given; the Japanese keeps the second clause / says the artifact is already on the server
+error.declared_not_held.hint	REWORDED (was in addendum 3): the English now reads as given; the Japanese keeps the second clause / says the artifact is already on the server
+error.export_failed.ceiling_hint	an API error text for the repository-fetch routes (added after sheet 1 was issued). Operator-facing: the person who runs the server.
+error.export_failed.deadline_hint	an API error text for the repository-fetch routes (added after sheet 1 was issued). Operator-facing: the person who runs the server.
+error.export_failed.hint	an API error text for the repository-fetch routes (added after sheet 1 was issued).
+error.export_failed.message	an API error text for the repository-fetch routes (added after sheet 1 was issued).
+error.export_failed.spool_hint	an API error text for the repository-fetch routes (added after sheet 1 was issued). Operator-facing: the person who runs the server.
+error.forbidden.message	REWORDED: the English said *change* (the Japanese 変更), now *proposal* (提案)
+error.invalid_request.hint	{document} is a link to the API description; OpenAPI is a name.
+error.invalid_request.metadata_hint	REWORDED (was in addendum 3): the English now reads as given; the Japanese keeps the second clause / says the artifact is already on the server
+error.invalid_request.ref_hint	an API error text for the repository-fetch routes (added after sheet 1 was issued). `ref=名前`: the name to type after `ref=` is a branch or tag name taken from the advertisement.
+error.method_not_allowed.hint	GET is an HTTP method name and stays.
+error.needs_recovery.hint	REWORDED (was in addendum 3): the English now reads as given; the Japanese keeps the second clause / says the artifact is already on the server
+error.no_have_list.hint	"have リスト" keeps prikk's own word *have-list* in Latin letters, as the draft keeps *ref*
+error.no_have_list.message	"have リスト" keeps prikk's own word *have-list* in Latin letters, as the draft keeps *ref*
+error.not_found.hint	For a developer using the API.
+error.not_found.message	Existence-neutral, as the page.
+error.not_verified.hint	an API error text for the repository-fetch routes (added after sheet 1 was issued). `kind=archive` / `kind=bundle` are parameter spellings and stay as written.
+error.not_verified.message	an API error text for the repository-fetch routes (added after sheet 1 was issued).
+error.quota_exceeded.hint	REWORDED: the English said *change* (the Japanese 変更), now *proposal* (提案)
+error.range_not_satisfiable.hint	an API error text for the repository-fetch routes (added after sheet 1 was issued).
+error.range_not_satisfiable.message	an API error text for the repository-fetch routes (added after sheet 1 was issued).
+error.rate_limited.hint	an API error text for the repository-fetch routes (added after sheet 1 was issued).
+error.rate_limited.message	an API error text for the repository-fetch routes (added after sheet 1 was issued).
+error.too_large.hint	"read memory budget" is an operator setting; the draft says 読み取り用メモリの予算.
+error.transport_off.hint	an API error text for the repository-fetch routes (added after sheet 1 was issued).
+error.transport_off.message	an API error text for the repository-fetch routes (added after sheet 1 was issued).
+error.unknown_kind.hint	an API error text for the repository-fetch routes (added after sheet 1 was issued). `kind=archive` / `kind=bundle` are parameter spellings and stay as written.
+error.unknown_kind.message	an API error text for the repository-fetch routes (added after sheet 1 was issued).
+error.unknown_ref.hint	an API error text for the repository-fetch routes (added after sheet 1 was issued).
+error.unknown_ref.message	an API error text for the repository-fetch routes (added after sheet 1 was issued).
+explain.failed	Explains the failed badge; points to the Verification page.
+explain.failed_here	Same, on the Verification page itself ("listed below").
+explain.patch	HARD TERM パッチ. Defines patch for a reader who does not know it.
+explain.queued	The explanation of the badge above. パッチ is the glossary word for the thing; no promise that anyone will sign it.
+explain.rollback	HARD TERM ロールバック. Defines rollback.
+explain.signed	Explains the Signed-into-the-history badge. The page it points to is the Verification page (検証).
+explain.summary	The text of a closed section; clicking it opens the explanation next to a badge.
+explain.unavailable	Explains the could-not-be-checked badge.
+explain.verified	Explains the Verified badge. 「たった今」 = just now.
+file.binary	{download} is a link to the download; the English sentence ends with it and a full stop; the draft ends with the link.
+history.empty	"signed changes" = changes a maintainer has signed into the history.
+history.patch_count	A count: Japanese has one form for 1 and for many (件).
+history.rollback	A small tag next to a change that undoes an earlier one (lower-case in English).
+home.address_example	The example address shown inside the sentence; it is a format, not a word. Left as owner/name.
+home.intro	planeter and prikk are product names and stay in Latin letters. {address} is the example owner/name shown as code.
+layout.language	Accessibility: the name of the language switcher.
+layout.skip	Accessibility: read aloud as the first thing on the page.
+listing.size_and_encoding	A size and the file's kind separated by a dot.
+login.failed	Must not blame the reader (English: "was not correct. Check both and try again.").
+login.heading	Same word as the sign-in link and button.
+login.sso	HARD TERM シングルサインオン (the English avoids the abbreviation SSO).
+nav.code	English: Files (not "code").
+nav.refs	"refs" is internal; the English says Branches and tags.
+nav.verify	HARD TERM 検証.
+not_found.body	Existence-neutral on purpose: it must not tell a stranger whether a private repository exists. Keep both possibilities ("does not exist" and "no access").
+page.csrf.body	A security check on a form failed; nothing was done. Must not blame the reader.
+page.form_incomplete.body	Some fields were empty.
+proposal.closed_line	The line shown under a closed proposal: the English now reads *Reason: …* (it said *Closed: …*, and the state is already shown above).
+quota.accepted_bytes.hint	REWORDED: the English said *change* (the Japanese 変更), now *proposal* (提案)
+quota.capacity.hint	REWORDED: the English said *change* (the Japanese 変更), now *proposal* (提案)
+quota.capacity.message	REWORDED: the English said *change* (the Japanese 変更), now *proposal* (提案)
+quota.revisions.hint	REWORDED: the English said *change* (the Japanese 変更), now *proposal* (提案)
+quota.revisions.message	REWORDED: the English said *change* (the Japanese 変更), now *proposal* (提案)
+refs.closed	A tag beside a closed branch (a branch that was closed, not deleted).
+repo.location	"Showing {point}" = which branch/tag/change the page shows.
+size.bytes	Units B, KiB, MiB, GiB are kept as in English.
+too_large.body	"raise the limit" = 上限の引き上げ.
+unavailable.body	"The person who runs this server" = このサーバーの管理者.
+verify.col.stage	Column heading: one row per check (prikk's "stage"). HARD TERM チェック (the whole page is 検証).
+verify.findings	Heading above prikk's own findings text, which stays English (prikk's words are not ours to translate).
+verify.status.evaluated	A check's status: it ran to the end. NOT "passed" (English: completed). Do not use 評価済み (forbidden, it reads as "passed").
+verify.status.failed	A check's status: it found a problem.
+verify.status.halted	The verification stopped before all checks ran.
+verify.status.halted_after	…and says after which check ({check}).
+verify.status.not_evaluated	A check that did not run because an earlier check ({check}) had a problem. 「が原因」 = because of; is there a clearer way to say "blocked by"?
+clone.key.ask	a trust or safety sentence
+clone.key.show	a trust or safety sentence
+clone.key.wrong	a trust or safety sentence
+clone.keys.header	a trust or safety sentence
+clone.no_adopt	a trust or safety sentence
+clone.no_terminal	a trust or safety sentence
+fetch.older_state	new; a trust/safety sentence
+fetch.same_number	new; a trust/safety sentence
+prikk.cannot_start	new; {reason} stays the OS's English words; the command is literal
+prikk.no_version	new; {said} is prikk's own first line
+propose.already	a trust or safety sentence
+propose.done_new	a trust or safety sentence
+propose.done_revision	a trust or safety sentence
+tls.expired	a trust or safety sentence
+tls.other	a trust or safety sentence
+tls.unknown_issuer	a trust or safety sentence
+tls.wrong_name	a trust or safety sentence

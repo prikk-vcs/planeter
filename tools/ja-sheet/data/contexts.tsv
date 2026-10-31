@@ -1,0 +1,88 @@
+# program<TAB>pattern<TAB>group<TAB>page<TAB>where it appears
+# A pattern is a key (exact) or a prefix ending in `*`; the longest pattern that matches a key decides. The order of the lines is the order of
+# the pages in the sheet (a page is placed where its first line stands). Every key of both catalogs must match one line (a test).
+# Groups: A the words that carry trust; B the pages a person reads; C the command-line program; D developer- and operator-facing texts.
+web	assurance.*	A	Trust labels and their explanations	a badge on the repository, change, history or verification page
+web	explain.*	A	Trust labels and their explanations	an explanation that opens beside a badge or a term ("What does this mean?")
+web	review.line.*	A	The review of a proposal	the one-line review state of a proposal, in the list and on the proposal page
+web	review.means.*	A	The review of a proposal	the sentence that says what the review line means
+web	review.word.*	A	The review of a proposal	the word for a reviewer's decision, inside a sentence
+web	decision.form.*	A	The review of a proposal	the form where a reviewer approves a revision or asks for changes
+web	proposal.state.*	A	What a proposal is and where it stands	the state of a proposal (a badge)
+web	proposal.what.*	A	What a proposal is and where it stands	the one sentence under a proposal's state
+web	proposal.patch.*	A	What a proposal is and where it stands	a patch of a proposal that the server cannot place in the history (not listed, or unknown)
+web	proposal.patches.pending	A	What a proposal is and where it stands	the status of a patch the server holds but a maintainer has not signed in
+web	proposal.sighting*	A	What a proposal is and where it stands	history found only as received here, not verified here
+web	stage.key.*	A	Trusting a maintainer key (creating a repository)	the screen where the person types the fingerprint of each key they trust
+web	stage.none.*	A	Trusting a maintainer key (creating a repository)	the button that creates the repository without trusting any key
+web	created.unverified	A	Trusting a maintainer key (creating a repository)	the sentence after creation when the repository does not pass prikk's checks
+web	layout.*	B	The frame of every page	the header, the footer, the skip link and the language switcher
+web	nav.*	B	The frame of every page	the repository menu
+web	title.home*	B	Home	the browser title of the home page
+web	home.*	B	Home	the home page (address field and button)
+web	repo.*	B	A repository	the repository page (location line, open proposals)
+web	title.repo	B	A repository	the browser title of the repository page
+web	tree.*	B	Files	a folder page
+web	listing.*	B	Files	the table of files and folders
+web	file.*	B	Files	a file page
+web	title.tree	B	Files	the browser title of a folder page
+web	title.file	B	Files	the browser title of a file page
+web	size.*	B	Files	a size shown on several pages
+web	history.*	B	History and a change	the history list and its columns
+web	change.*	B	History and a change	a single change and its patches
+web	title.history	B	History and a change	the browser title of the history page
+web	title.change	B	History and a change	the browser title of a change
+web	refs.*	B	Branches and tags	the page that lists branches and tags
+web	title.refs	B	Branches and tags	the browser title of the refs page
+web	verify.*	B	Verification	the verification page (stages, statuses, findings)
+web	title.verify	B	Verification	the browser title of the verification page
+web	login.*	B	Signing in	the sign-in page
+web	title.login*	B	Signing in	the browser title of the sign-in page
+web	proposals.*	B	Proposals: the list	the list of a repository's proposals
+web	title.proposals	B	Proposals: the list	the browser title of the proposals list
+web	proposal.revisions.*	B	Proposals: one proposal	the table of a proposal's revisions
+web	proposal.revision.*	B	Proposals: one proposal	a revision's line
+web	proposal.patches.*	B	Proposals: one proposal	the list of a proposal's patches
+web	proposal.retention.*	B	Proposals: one proposal	how long a proposal's files are kept
+web	proposal.close.*	B	Proposals: one proposal	the form that closes a proposal
+web	proposal.*	B	Proposals: one proposal	the proposal page
+web	title.proposal	B	Proposals: one proposal	the browser title of a proposal
+web	review.*	B	Review on a proposal	the review part of the proposal page (decisions, earlier revisions)
+web	decision.*	B	Review on a proposal	a refused decision
+web	comments.*	B	Comments	the list of comments
+web	comment.*	B	Comments	a comment, its thread and the comment form
+web	hide.*	B	Comments	hiding a comment
+web	unhide.*	B	Comments	showing a hidden comment again
+web	new.*	B	Creating a repository	the form that creates a repository (empty, or from an archive)
+web	title.new	B	Creating a repository	the browser title of the creation form
+web	stage.*	B	Creating a repository	the screen that shows what an uploaded archive holds
+web	title.stage	B	Creating a repository	the browser title of that screen
+web	created.*	B	Creating a repository	the page after a repository was created
+web	title.created	B	Creating a repository	the browser title of that page
+web	not_found.*	B	Not found, unavailable and other plain pages	the page for a missing or hidden repository
+web	no_such_path.*	B	Not found, unavailable and other plain pages	the page for a missing file or folder in a repository the person may read
+web	unavailable.*	B	Not found, unavailable and other plain pages	the page when something could not be read now
+web	busy.*	B	Not found, unavailable and other plain pages	the page when the server is busy
+web	too_large.*	B	Not found, unavailable and other plain pages	the page when something is too large to show
+web	title.not_found	B	Not found, unavailable and other plain pages	the browser title of the missing page
+web	title.unavailable	B	Not found, unavailable and other plain pages	the browser title of the unavailable page
+web	title.busy	B	Not found, unavailable and other plain pages	the browser title of the busy page
+web	title.too_large	B	Not found, unavailable and other plain pages	the browser title of the too-large page
+web	page.*	B	Not found, unavailable and other plain pages	a plain page (a rejected form, a single sign-on failure, a server error)
+web	error.*	D	API errors	the `message` or the `hint` of an API error body (developers and operators read it)
+web	quota.*	D	Quota refusals	the `message` or the `hint` of a quota refusal of a proposal
+web	recovery.*	D	Recovery	a sentence of a repository's recovery plan or record (the operator reads it)
+web	propose.*	D	API answers	a sentence in the answer to a proposal sent to the server
+client	help.*	C	Help and version	the text printed by --help
+client	version.*	C	Help and version	the text printed by --version
+client	usage.*	C	Mistakes in the command line	a refused command line
+client	clone.*	C	clone	the steps and sentences of `planeter-client clone`
+client	fetch.*	C	fetch	the steps and sentences of `planeter-client fetch`
+client	propose.*	C	propose	the steps and sentences of `planeter-client propose`
+client	token.*	C	The token	a problem with the token
+client	tls.*	C	Connecting: certificates and the network	a TLS problem, as one sentence with the next step
+client	net.*	C	Connecting: certificates and the network	a network problem
+client	server.*	C	What the server answered	a refusal or an error from the server
+client	prikk.*	C	Your own prikk	prikk is missing, too old, cannot start or says no version
+client	local.*	C	Your own prikk	a local file or the program's own record cannot be used
+client	progress.*	C	Progress lines	a progress line of a download or a send

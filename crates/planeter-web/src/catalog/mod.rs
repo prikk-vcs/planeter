@@ -141,6 +141,30 @@ pub const JA_REVIEWED: bool = false;
 /// (a test refuses one without the other). `None` while the catalog is a draft.
 pub const JA_SIGNOFF: Option<&str> = None;
 
+/// Messages that are **English in every language** (handoff `japanese-consolidated-sheet-handoff-v1`, T3): a key listed here is looked up
+/// in the English table whatever the caller's language, the other tables do not hold it, and the completeness checks ([`audit`]) expect
+/// exactly that (a listed key that English lacks, or that another table also holds, is a problem). **Empty: every message is translated.**
+/// Turning a group off (for instance the developer- and operator-facing `error.*` texts) is naming its keys here, which is the
+/// architect's one-line change once the owner has decided it; the review sheet then no longer lists them.
+pub const ENGLISH_ONLY_KEYS: &[&str] = &[];
+
+static ENGLISH_ONLY_OVERRIDE: Mutex<Option<&'static [&'static str]>> = Mutex::new(None);
+
+/// The keys that are English in every language: [`ENGLISH_ONLY_KEYS`], unless a test has planted another list.
+pub fn english_only_keys() -> &'static [&'static str] {
+    ENGLISH_ONLY_OVERRIDE
+        .lock()
+        .unwrap()
+        .unwrap_or(ENGLISH_ONLY_KEYS)
+}
+
+/// A test seam: plant another list of English-only keys for this process. Nothing in the server calls it; a test that plants a list
+/// does it first, in a test binary of its own (the list is process-wide).
+#[doc(hidden)]
+pub fn set_english_only_for_test(list: &'static [&'static str]) {
+    *ENGLISH_ONLY_OVERRIDE.lock().unwrap() = Some(list);
+}
+
 /// The languages this build ships. (Only these are checked for completeness; a language that is not signed off
 /// is not here.)
 pub fn shipped() -> &'static [&'static LangDef] {
@@ -264,8 +288,17 @@ impl Lang {
         best.map_or(EN, |(_, _, l)| l)
     }
 
+    /// The language whose table holds `key` for this caller: the caller's own, or English for a key that is English in every language.
+    fn source(self, key: Key) -> &'static LangDef {
+        if self.0.tag != EN_DEF.tag && english_only_keys().contains(&key.id()) {
+            &EN_DEF
+        } else {
+            self.0
+        }
+    }
+
     fn entry(self, key: Key) -> Option<&'static Entry> {
-        self.0.entries.iter().find(|e| e.key == key.id())
+        self.source(key).entries.iter().find(|e| e.key == key.id())
     }
 
     /// A number with the language's digit grouping.
@@ -1020,7 +1053,7 @@ impl Msg {
 
     fn template(&self) -> String {
         match self.lang.entry(self.key) {
-            Some(e) => match self.count.map(|n| (self.lang.0.plural)(n)) {
+            Some(e) => match self.count.map(|n| (self.lang.source(self.key).plural)(n)) {
                 Some(Plural::One) => e.one.to_owned(),
                 _ => e.other.to_owned(),
             },
@@ -1215,6 +1248,13 @@ pub enum Problem {
         lang: &'static str,
         key: &'static str,
     },
+    /// [`ENGLISH_ONLY_KEYS`] names a key that the English catalog (or the key enum) does not have.
+    EnglishOnlyUnknown { key: &'static str },
+    /// A key that is English in every language is also in another language's table.
+    EnglishOnlyTranslated {
+        lang: &'static str,
+        key: &'static str,
+    },
 }
 
 /// The completeness and consistency checks of RFC 012 D-5 over `langs` (English first; the other
@@ -1224,9 +1264,28 @@ pub enum Problem {
 pub fn audit(langs: &[&'static LangDef]) -> Vec<Problem> {
     let mut problems = Vec::new();
     let base = langs.first().copied();
+    let english_only = english_only_keys();
+    if let Some(b) = base {
+        for key in english_only {
+            if !Key::ALL.iter().any(|k| k.id() == *key) || !b.entries.iter().any(|e| e.key == *key)
+            {
+                problems.push(Problem::EnglishOnlyUnknown { key });
+            }
+        }
+    }
     for def in langs {
         let ids: Vec<&'static str> = def.entries.iter().map(|e| e.key).collect();
+        let is_base = base.is_none_or(|b| b.tag == def.tag);
+        for key in english_only.iter().filter(|_| !is_base) {
+            if ids.contains(key) {
+                problems.push(Problem::EnglishOnlyTranslated { lang: def.tag, key });
+            }
+        }
         for k in Key::ALL {
+            // A key that is English in every language is rightly absent from the other tables.
+            if !is_base && english_only.contains(&k.id()) {
+                continue;
+            }
             if !ids.contains(&k.id()) {
                 problems.push(Problem::Missing {
                     lang: def.tag,

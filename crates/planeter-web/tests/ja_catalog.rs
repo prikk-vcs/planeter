@@ -4,7 +4,7 @@
 
 use planeter_web::catalog::{
     Dir, EN, EN_DEF, Entry, JA_DEF, JA_REVIEWED, JA_SIGNOFF, Key, Lang, LangDef, Plural, Problem,
-    T, audit, enable_preview_languages, previewable, shipped,
+    T, audit, enable_preview_languages, english_only_keys, previewable, shipped,
 };
 
 fn leaked(entries: Vec<Entry>) -> &'static [Entry] {
@@ -43,10 +43,17 @@ fn the_japanese_draft_is_complete_consistent_and_free_of_markup() {
         "the Japanese catalog has problems"
     );
     // Every English key, in the English order: the reviewers' sheet and a correction map back mechanically.
-    let en: Vec<&str> = EN_DEF.entries.iter().map(|e| e.key).collect();
+    // ... except exactly the keys that are English in every language (`ENGLISH_ONLY_KEYS`, empty unless the owner has decided otherwise).
+    let only = english_only_keys();
+    let en: Vec<&str> = EN_DEF
+        .entries
+        .iter()
+        .map(|e| e.key)
+        .filter(|k| !only.contains(k))
+        .collect();
     let ja: Vec<&str> = JA_DEF.entries.iter().map(|e| e.key).collect();
     assert_eq!(en, ja, "the Japanese catalog follows the English key order");
-    assert_eq!(Key::ALL.len(), JA_DEF.entries.len());
+    assert_eq!(Key::ALL.len() - only.len(), JA_DEF.entries.len());
 }
 
 #[test]

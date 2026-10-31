@@ -62,9 +62,8 @@ names; the order and the words around them are the translator's.
    reached only through the operator's preview (`PLANETER_PREVIEW_LANGUAGES=<tag>`, listed in `previewable()`;
    off by default; logged at start). Steps: write the draft; add the language's section to the glossary (terms,
    hard terms flagged, a message table that `tests/glossary_ja.rs`-style tests compare with the catalog); give
-   the reviewers **the sheet** — one row per message (key | where it appears | English | draft | placeholders |
-   note | their correction), the trust labels first, then error pages, then the rest, every row `needs-review`;
-   integrate their corrections (the sheet's rows map to catalog keys one to one); then, in one commit, set
+   the reviewers **the generated sheet** (below: one row per message, the trust labels first, grouped so that they
+   may stop after any group); integrate their corrections (the rows map to catalog keys one to one); then, in one commit, set
    `JA_REVIEWED = true` **and** record the sign-off in `JA_SIGNOFF` (a test refuses one without the other, and
    refuses a language in `shipped()` that is not signed off). The accessibility statement names the reviewers.
 4. The checks cover a draft too: the catalog audit, the retired-words test (the English retired words may not
@@ -103,3 +102,42 @@ a counted message whose forms do not fit the language; markup, an entity or a UR
 uses; user-visible literal text in a template or in a source file outside the allowlist; `|safe` on anything but
 the allowlisted Markdown; a placeholder left unfilled in a rendered page; a glossary row whose *Current* text is
 not the catalog's; a retired word in a message. Each has a planted case in the tests that proves it can fail.
+
+## The Japanese review sheet (generated; there is one, and nobody writes an addendum)
+
+The reviewers (the owner and a colleague) read **one sheet, generated from the live catalogs**, so that what is reviewed is exactly what
+ships. It was a first sheet plus thirteen addenda whose rows replaced one another; those are kept, out of the reviewers' way, in
+`.git-exclude/review-requests/japanese-review-sheet-superseded/`.
+
+```sh
+cargo run -p planeter-ja-sheet -- --out .git-exclude/review-requests/japanese-review-sheet.md   # write it
+cargo run -p planeter-ja-sheet -- --check .git-exclude/review-requests/japanese-review-sheet.md # exit 1, naming each difference, if it drifted
+```
+
+* **What is in it.** Every message of the server's catalog and of `planeter-client`'s, once: key · where it appears · English · Japanese
+  draft · placeholders · a note for the reviewer · an empty "reviewer's correction". The English and Japanese cells are the catalogs' text
+  (escaped for a table cell; `tests/sheet.rs` of `tools/ja-sheet` fails if a cell differs, a message is missing, a key is not in the
+  catalogs, a row is repeated or in the wrong group). The header carries the commit, the date, the count per group and a **fingerprint**
+  of all the wording (it changes when any shown text changes; it is not a cryptographic hash).
+* **Groups** (the reviewer may stop after any): **A** the words that carry trust (badges and their explanations, the review line and
+  decisions, the states of a proposal, the key-trust screens of repository creation); **B** the pages a person reads, page by page, in the
+  order they are met; **C** the command-line program; **D** developer- and operator-facing texts (`error.*`, `quota.*`, `recovery.*`,
+  the answer to a proposal) — **optional for the sign-off**. The first page says in Japanese and in English what to do, lists the hard
+  terms of `glossary.md` section 5.1 as rows to decide first, and what happens next.
+* **Two maintained tables** live next to the tool (`tools/ja-sheet/data/`): `contexts.tsv` maps a key (or a prefix ending in `*`; the
+  longest match, an exact key first) to its group, page and "where it appears" — **a new message that matches no line makes the
+  generator fail until a line is added**; `notes.tsv` holds the notes for the reviewer (a note for a key that no catalog has fails).
+  The next feature that adds a Japanese message adds its line, regenerates the sheet and runs `--check`.
+* **Keeping group D in English.** `ENGLISH_ONLY_KEYS` in `catalog/mod.rs` is a list of keys that are English in every language: such a key
+  is looked up in the English table whatever the caller's language (and with English plural rules), the other tables do not hold it,
+  `audit` fails if the list names a key English lacks or a key another table also holds, and the tests that compare the key sets allow
+  exactly that list. **It is empty.** Turning group D off is naming its keys there (and deleting them from `ja.rs`): a one-line change
+  for the architect once the owner has said so; the generated sheet then has no group D, because it lists the Japanese catalog's messages.
+
+**From corrections to the sign-off.** (1) Each group's corrections become edits of `ja.rs` (both programs) and of the glossary's section 5,
+**one commit per group**; a term decided at the top of the sheet is applied wherever it is used, in the commit that decides it. (2) The
+sheet is regenerated and `--check`ed. (3) `JA_REVIEWED = true` (server and client) and `JA_SIGNOFF = Some("<who reviewed>, <date>, commit
+<hash>, sheet fingerprint <fingerprint>")` are set together in one commit (a test refuses one without the other, and a language in
+`shipped()` that is not signed off). (4) **Phase 2**, still open after the sign-off: hide the lone English button of the language
+switcher when only English is offered, and finalize the Japanese wording of the accessibility statement (`accessibility.md`). The first
+page of every generated sheet lists these steps.

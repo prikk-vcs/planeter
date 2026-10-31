@@ -41,6 +41,16 @@ fn rust_sources() -> Vec<PathBuf> {
 
 // ---------------------------------------------------------------- the catalogs
 
+/// Every message is translated until the owner decides otherwise (`tests/english_only.rs` shows the mechanism with a planted list).
+#[test]
+fn no_message_is_english_only_by_default() {
+    assert!(
+        catalog::ENGLISH_ONLY_KEYS.is_empty(),
+        "ENGLISH_ONLY_KEYS is empty until the owner decides that a group stays English"
+    );
+    assert_eq!(catalog::english_only_keys(), catalog::ENGLISH_ONLY_KEYS);
+}
+
 #[test]
 fn the_shipped_catalogs_are_complete_consistent_and_free_of_markup() {
     assert_eq!(

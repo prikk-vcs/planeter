@@ -16,6 +16,7 @@ members = [
     "tools/floor-check",
     "tools/glibc-check",
     "tools/image-identity",
+    "tools/ja-sheet",
     "tools/pin-check",
 ]
 
