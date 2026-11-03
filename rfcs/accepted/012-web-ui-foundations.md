@@ -83,6 +83,15 @@ every later page (the review UI first) is built on, with checks that fail the bu
   order can differ; plural forms per language rules; numbers, sizes and dates are formatted per locale (dates only
   where we show one, with an unambiguous form). (f) **Which languages ship first** is an owner decision (O-2);
   a language is shipped only when a fluent speaker has reviewed it, and the accessibility statement says which.
+  **Amendment (2026-11-04, the owner: multilingual support is not English and Japanese only).** The mechanism above is general; the first
+  implementation was shaped for two languages. A *language is a row of data in one registry* — tag (a full BCP 47 tag, matched exact → script → language),
+  endonym, direction, **CLDR plural categories** (zero, one, two, few, many, other), separators, its catalog, its rules file, its glossary file and its
+  **sign-off record as data** (reviewers, date, commit, review-sheet fingerprint) — in a crate shared by the server and the client. A sign-off covers the
+  messages that existed then; a per-language baseline flags every message written or changed since, so nothing is counted as reviewed that was not. The
+  review sheet, the consistency tests and the term rules are one tool and one test suite for all languages, with the rules as data. The language switcher
+  lists any number of languages. Adding a language is then a catalog, a rules file, a glossary file, a plural function with test vectors and a sign-off —
+  not a code change. Handoff: `rfcs/handoffs/012-web-ui-foundations/language-registry-handoff-v1.md`. A translator-friendly plain-text catalog format is recorded
+  there as a later decision.
 - **D-4 — Plain words.** A **glossary** (one page in the repository) fixes the user-facing term for every
   concept, with the reason, and the catalogs use only glossary terms. Rules: say what happened and what to do
   next; prefer the reader's word to the implementer's ("signature check", not "verify stage"; "not yet confirmed",
