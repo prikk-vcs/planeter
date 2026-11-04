@@ -152,7 +152,11 @@ fn no_argument_serves_as_before() {
     std::thread::spawn(move || {
         // Start-up lines up to and including the announcement.
         let mut seen = String::new();
-        for line in BufReader::new(stderr).lines().map_while(Result::ok).take(16) {
+        for line in BufReader::new(stderr)
+            .lines()
+            .map_while(Result::ok)
+            .take(16)
+        {
             let done = line.starts_with("planeter listening on ");
             seen.push_str(&line);
             seen.push('\n');
