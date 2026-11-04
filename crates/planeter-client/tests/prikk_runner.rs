@@ -30,7 +30,7 @@ fn the_installed_prikk_is_found_and_is_at_least_the_floor() {
         return;
     }
     let d = dir("check");
-    Prikk::new(&d, Lang::En, None)
+    Prikk::new(&d, Lang::SOURCE, None)
         .check()
         .expect("the floor or newer");
 }
@@ -42,7 +42,7 @@ fn a_repository_is_made_and_recognised_and_a_failing_call_is_one_plain_sentence(
         return;
     }
     let d = dir("init");
-    let p = Prikk::new(&d, Lang::En, None);
+    let p = Prikk::new(&d, Lang::SOURCE, None);
     assert!(!Prikk::is_repository(&d));
     p.run("make the repository", &["init", "."])
         .expect("init works");
@@ -70,7 +70,11 @@ fn a_repository_is_made_and_recognised_and_a_failing_call_is_one_plain_sentence(
 #[test]
 fn a_missing_prikk_is_a_sentence_with_the_floor_in_it() {
     let d = dir("missing");
-    let p = Prikk::new(&d, Lang::En, Some("definitely-not-a-prikk-program".into()));
+    let p = Prikk::new(
+        &d,
+        Lang::SOURCE,
+        Some("definitely-not-a-prikk-program".into()),
+    );
     let failure = p.check().unwrap_err();
     assert_eq!(failure.code, PRIKK);
     assert!(

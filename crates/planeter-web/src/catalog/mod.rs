@@ -27,74 +27,19 @@ pub mod ja;
 /// The product name: the same in every language, so it is a value, not a message.
 pub const PRODUCT: &str = "planeter";
 
-/// Text direction of a language (`dir` on `<html>`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Dir {
-    Ltr,
-    Rtl,
-}
-
-/// The plural categories this scheme knows. CLDR has more (`zero`, `two`, `few`, `many`); a language that
-/// needs them is where the question of a fluent-style library is reopened (RFC 012 D-3). Callers use
-/// [`Msg::n`] and never name a category, so adding one does not rewrite them.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Plural {
-    One,
-    Other,
-}
-
-/// One message: the key's identifier and its text for the singular and the other form. A message with no
-/// count has `one == other`.
-#[derive(Debug)]
-pub struct Entry {
-    pub key: &'static str,
-    pub one: &'static str,
-    pub other: &'static str,
-}
-
-/// A message with no plural forms.
-pub const fn msg(key: &'static str, text: &'static str) -> Entry {
-    Entry {
-        key,
-        one: text,
-        other: text,
-    }
-}
-
-/// A message with a singular and an other form (it must contain `{count}`).
-pub const fn plural_msg(key: &'static str, one: &'static str, other: &'static str) -> Entry {
-    Entry { key, one, other }
-}
-
-/// Everything that makes a language: how to name it, write it, count in it and where its messages are.
-#[derive(Debug)]
-pub struct LangDef {
-    /// The BCP 47 primary tag (`en`), also the cookie value and `<html lang>`.
-    pub tag: &'static str,
-    /// The language's name in itself (`English`), for the switcher.
-    pub endonym: &'static str,
-    pub dir: Dir,
-    pub plural: fn(u64) -> Plural,
-    pub group_separator: char,
-    pub decimal_separator: char,
-    pub entries: &'static [Entry],
-}
-
-/// English: `one` for exactly 1, `other` for everything else.
-fn plural_en(n: u64) -> Plural {
-    if n == 1 { Plural::One } else { Plural::Other }
-}
-
-/// English, the default and the fallback for negotiation.
-pub static EN_DEF: LangDef = LangDef {
-    tag: "en",
-    endonym: "English",
-    dir: Dir::Ltr,
-    plural: plural_en,
-    group_separator: ',',
-    decimal_separator: '.',
-    entries: en::CATALOG,
+pub use planeter_i18n::plural::{
+    Category, ONE_OTHER as ONE_OTHER_CATEGORIES, OTHER_ONLY as OTHER_ONLY_CATEGORIES,
 };
+pub use planeter_i18n::{
+    Dir, Entry, LangDef, Language, Problem, SignOff, Status, msg, placeholders, plural_msg,
+};
+
+/// English, the source language and the fallback of negotiation.
+pub use en::DEF as EN_DEF;
+
+/// This program's catalog of every language in the registry (`planeter_i18n::languages::LANGUAGES`), in the registry's order. A test
+/// fails if a registered language has no catalog here or the other way round.
+pub static CATALOGS: [&LangDef; 2] = [&en::DEF, &ja::DEF];
 
 /// A language handle: cheap to copy, carried by every page.
 #[derive(Clone, Copy)]
@@ -115,32 +60,26 @@ impl Eq for Lang {}
 /// English.
 pub const EN: Lang = Lang(&EN_DEF);
 
-/// Japanese has no grammatical plural: every count takes the `other` form.
-fn plural_ja(_: u64) -> Plural {
-    Plural::Other
+/// The messages of the signed-off language as they were signed (`locales/<tag>.signed`: `key<TAB>hash`), for the review baseline.
+pub fn baseline_text(tag: &str) -> Option<&'static str> {
+    match tag {
+        "ja" => Some(include_str!("../../locales/ja.signed")),
+        _ => None,
+    }
 }
 
-/// Japanese (RFC 012 D-3): signed off by its reviewers ([`JA_REVIEWED`], [`JA_SIGNOFF`]); shipped like English.
-pub static JA_DEF: LangDef = LangDef {
-    tag: "ja",
-    endonym: "日本語",
-    dir: Dir::Ltr,
-    plural: plural_ja,
-    group_separator: ',',
-    decimal_separator: '.',
-    entries: ja::CATALOG,
-};
-
-/// Whether the Japanese catalog has been **signed off** by its reviewers (the owner and a colleague; RFC 012
-/// D-3f). `true` since the sign-off recorded in [`JA_SIGNOFF`]; [`shipped`] lists Japanese exactly when this is `true`.
-/// A test pins both halves of the rule.
-pub const JA_REVIEWED: bool = true;
-
-/// The record of the sign-off: who reviewed the Japanese catalog and when, the commit and the fingerprint of the sheet
-/// (`planeter-ja-sheet`), set together with [`JA_REVIEWED`] (a test refuses one without the other).
-pub const JA_SIGNOFF: Option<&str> = Some(
-    "owner (reviewer), 2026-10-31: approved the sheet with fingerprint 6ba30960fe807d98 (653 messages), then the final corrections of commit 37a6c42aff4f3bfdd83b8dd8e45a6a4281dd24c7; regenerated sheet fingerprint 54ebae05ad914ab6 (661 messages: the eight messages of the edge answers, added in commit 47152d9 by the dev team after the review)",
-);
+/// How many messages of `tag` are changed or new since its sign-off (`None` for a language that is not signed off, or has no
+/// baseline). The server logs it once at start.
+pub fn unreviewed_count(tag: &str) -> Option<usize> {
+    let def = CATALOGS
+        .iter()
+        .find(|d| d.tag == tag && d.sign_off().is_some())?;
+    let baseline = planeter_i18n::baseline::parse(baseline_text(tag)?).ok()?;
+    Some(planeter_i18n::baseline::unreviewed_count(
+        def.entries,
+        &baseline,
+    ))
+}
 
 /// Messages that are **English in every language** (handoff `japanese-consolidated-sheet-handoff-v1`, T3): a key listed here is looked up
 /// in the English table whatever the caller's language, the other tables do not hold it, and the completeness checks ([`audit`]) expect
@@ -166,18 +105,31 @@ pub fn set_english_only_for_test(list: &'static [&'static str]) {
     *ENGLISH_ONLY_OVERRIDE.lock().unwrap() = Some(list);
 }
 
-/// The languages this build ships. (Only these are checked for completeness; a language that is not signed off
-/// is not here.)
-pub fn shipped() -> &'static [&'static LangDef] {
-    static WITH_JA: [&LangDef; 2] = [&EN_DEF, &JA_DEF];
-    static WITHOUT_JA: [&LangDef; 1] = [&EN_DEF];
-    if JA_REVIEWED { &WITH_JA } else { &WITHOUT_JA }
+/// This program's catalog of the language with this tag (exact, case-insensitive), shipped or not.
+pub fn catalog_of(tag: &str) -> Option<&'static LangDef> {
+    CATALOGS
+        .iter()
+        .copied()
+        .find(|d| d.tag.eq_ignore_ascii_case(tag))
 }
 
-/// The languages that exist as drafts and can be previewed by the operator (`PLANETER_PREVIEW_LANGUAGES`): compiled in,
-/// checked, but not signed off. **None at present** (Japanese was signed off); the mechanism stays for the next draft.
+/// The languages this build ships without any operator setting: the source language and the signed-off ones, in the registry's order.
+pub fn shipped() -> &'static [&'static LangDef] {
+    static SHIPPED: OnceLock<Vec<&'static LangDef>> = OnceLock::new();
+    SHIPPED.get_or_init(|| {
+        CATALOGS
+            .iter()
+            .copied()
+            .filter(|d| d.is_shipped())
+            .collect()
+    })
+}
+
+/// The languages that exist as drafts and can be previewed by the operator (`PLANETER_PREVIEW_LANGUAGES`): compiled in, checked,
+/// but not signed off. **None at present**; the mechanism stays for the next draft.
 pub fn previewable() -> &'static [&'static LangDef] {
-    &[]
+    static DRAFTS: OnceLock<Vec<&'static LangDef>> = OnceLock::new();
+    DRAFTS.get_or_init(|| CATALOGS.iter().copied().filter(|d| d.is_draft()).collect())
 }
 
 /// Turn on the preview of draft languages for this process: `spec` is a comma-separated list of language codes; an empty value
@@ -213,6 +165,32 @@ pub fn enable_preview_languages(spec: &str) -> Result<Vec<&'static str>, String>
         }
     }
     Ok(enabled)
+}
+
+/// A test seam: a language row with these fields and a catalog of the test's own, as a draft (never shipped). Leaks it.
+#[doc(hidden)]
+#[allow(clippy::too_many_arguments)]
+pub fn planted_language(
+    tag: &'static str,
+    endonym: &'static str,
+    dir: Dir,
+    categories: &'static [Category],
+    plural: fn(u64) -> Category,
+    group_separator: char,
+    decimal_separator: char,
+    entries: &'static [Entry],
+) -> &'static LangDef {
+    let lang: &'static Language = Box::leak(Box::new(Language {
+        tag,
+        endonym,
+        dir,
+        categories,
+        plural,
+        group_separator,
+        decimal_separator,
+        status: Status::Draft,
+    }));
+    Box::leak(Box::new(LangDef::new(lang, entries)))
 }
 
 static EXTRA: OnceLock<Mutex<Vec<&'static LangDef>>> = OnceLock::new();
@@ -262,39 +240,25 @@ impl Lang {
         Lang(def)
     }
 
-    /// The language for a language code (`ja`, `ja-JP`): the primary subtag decides.
+    /// The language for a language code (`ja`, `ja-JP`, `zh-TW`): BCP 47 matching (`planeter_i18n::tag`): exact, then the same
+    /// language and script, then the same language (the first registered).
     pub fn from_tag(tag: &str) -> Option<Lang> {
-        let primary = tag.trim().split(['-', '_']).next()?.to_ascii_lowercase();
-        available().into_iter().find(|d| d.tag == primary).map(Lang)
+        let defs = available();
+        let langs: Vec<&'static Language> = defs.iter().map(|d| d.lang).collect();
+        let found = planeter_i18n::tag::matching(tag, &langs)?;
+        defs.into_iter()
+            .find(|d| std::ptr::eq(d.lang, found))
+            .map(Lang)
     }
 
-    /// Negotiate the page language (RFC 012 D-3b): the `lang` cookie when it names an available language,
-    /// else the best `Accept-Language` entry (q-values, `q=0` refused), else English.
+    /// Negotiate the page language (RFC 012 D-3b): the `lang` cookie when it names an available language, else the best
+    /// `Accept-Language` entry (q-values, `q=0` refused), else English.
     pub fn negotiate(accept_language: Option<&str>, cookie: Option<&str>) -> Lang {
-        if let Some(l) = cookie.and_then(Lang::from_tag) {
-            return l;
-        }
-        let mut best: Option<(f32, usize, Lang)> = None;
-        for (i, part) in accept_language.unwrap_or("").split(',').enumerate() {
-            let mut it = part.trim().split(';');
-            let tag = it.next().unwrap_or("").trim();
-            let q = it
-                .find_map(|p| {
-                    p.trim()
-                        .strip_prefix("q=")
-                        .and_then(|v| v.parse::<f32>().ok())
-                })
-                .unwrap_or(1.0);
-            if q <= 0.0 || tag == "*" {
-                continue;
-            }
-            if let Some(l) = Lang::from_tag(tag)
-                && best.is_none_or(|(bq, bi, _)| q > bq || (q == bq && i < bi))
-            {
-                best = Some((q, i, l));
-            }
-        }
-        best.map_or(EN, |(_, _, l)| l)
+        let defs = available();
+        let langs: Vec<&'static Language> = defs.iter().map(|d| d.lang).collect();
+        planeter_i18n::tag::negotiate(accept_language, cookie, &langs)
+            .and_then(|found| defs.into_iter().find(|d| std::ptr::eq(d.lang, found)))
+            .map_or(EN, Lang)
     }
 
     /// The language whose table holds `key` for this caller: the caller's own, or English for a key that is English in every language.
@@ -1072,8 +1036,8 @@ impl Msg {
     fn template(&self) -> String {
         match self.lang.entry(self.key) {
             Some(e) => match self.count.map(|n| (self.lang.source(self.key).plural)(n)) {
-                Some(Plural::One) => e.one.to_owned(),
-                _ => e.other.to_owned(),
+                Some(category) => e.text_for(category).to_owned(),
+                None => e.other().to_owned(),
             },
             None => {
                 // Never a crash, never a silent fallback to another language: a visible marker, logged.
@@ -1170,6 +1134,12 @@ impl T {
     pub fn lang_tag(&self) -> &'static str {
         self.lang.tag()
     }
+    /// Whether the switcher is a menu: with four languages or more the buttons would not fit a line of the footer, so they sit in one
+    /// `<details>` "Language"; with up to three they are inline buttons.
+    pub fn language_menu(&self) -> bool {
+        self.languages().len() > 3
+    }
+
     /// The languages the switcher offers (every language this process can serve), the page's marked current.
     pub fn languages(&self) -> Vec<LangChoice> {
         available()
@@ -1221,154 +1191,17 @@ impl T {
     }
 }
 
-/// Every placeholder name in a message text, sorted and de-duplicated.
-pub fn placeholders(text: &str) -> Vec<&str> {
-    let mut v = Vec::new();
-    let mut rest = text;
-    while let Some(i) = rest.find('{') {
-        match rest[i..].find('}') {
-            Some(j) => {
-                v.push(&rest[i + 1..i + j]);
-                rest = &rest[i + j + 1..];
-            }
-            None => break,
-        }
-    }
-    v.sort_unstable();
-    v.dedup();
-    v
-}
-
-/// One thing wrong with a set of catalogs (see [`audit`]).
-#[derive(Debug, PartialEq, Eq)]
-pub enum Problem {
-    Missing {
-        lang: &'static str,
-        key: &'static str,
-    },
-    Orphan {
-        lang: &'static str,
-        key: &'static str,
-    },
-    Duplicate {
-        lang: &'static str,
-        key: &'static str,
-    },
-    PlaceholdersDiffer {
-        key: &'static str,
-        lang: &'static str,
-    },
-    PluralFormsDisagree {
-        key: &'static str,
-        lang: &'static str,
-    },
-    Markup {
-        lang: &'static str,
-        key: &'static str,
-    },
-    /// [`ENGLISH_ONLY_KEYS`] names a key that the English catalog (or the key enum) does not have.
-    EnglishOnlyUnknown { key: &'static str },
-    /// A key that is English in every language is also in another language's table.
-    EnglishOnlyTranslated {
-        lang: &'static str,
-        key: &'static str,
-    },
-}
-
-/// The completeness and consistency checks of RFC 012 D-5 over `langs` (English first; the other
-/// languages are compared with it): every key in every language, no key a catalog has and the enum does
-/// not, no duplicates, the same placeholder names everywhere, plural forms that fit the language's rule,
-/// and no markup, entity or URL in any message.
+/// The completeness and consistency checks of RFC 012 D-5 over `langs` (English first; the other languages are compared with it):
+/// every key in every language, no key a catalog has and the enum does not, no duplicates, the same placeholder names everywhere,
+/// exactly the plural forms each language declares, no markup, entity or URL in any message, and the English-only list.
 pub fn audit(langs: &[&'static LangDef]) -> Vec<Problem> {
-    let mut problems = Vec::new();
-    let base = langs.first().copied();
-    let english_only = english_only_keys();
-    if let Some(b) = base {
-        for key in english_only {
-            if !Key::ALL.iter().any(|k| k.id() == *key) || !b.entries.iter().any(|e| e.key == *key)
-            {
-                problems.push(Problem::EnglishOnlyUnknown { key });
-            }
-        }
-    }
-    for def in langs {
-        let ids: Vec<&'static str> = def.entries.iter().map(|e| e.key).collect();
-        let is_base = base.is_none_or(|b| b.tag == def.tag);
-        for key in english_only.iter().filter(|_| !is_base) {
-            if ids.contains(key) {
-                problems.push(Problem::EnglishOnlyTranslated { lang: def.tag, key });
-            }
-        }
-        for k in Key::ALL {
-            // A key that is English in every language is rightly absent from the other tables.
-            if !is_base && english_only.contains(&k.id()) {
-                continue;
-            }
-            if !ids.contains(&k.id()) {
-                problems.push(Problem::Missing {
-                    lang: def.tag,
-                    key: k.id(),
-                });
-            }
-        }
-        for (i, e) in def.entries.iter().enumerate() {
-            if !Key::ALL.iter().any(|k| k.id() == e.key) {
-                problems.push(Problem::Orphan {
-                    lang: def.tag,
-                    key: e.key,
-                });
-            }
-            if def.entries[..i].iter().any(|p| p.key == e.key) {
-                problems.push(Problem::Duplicate {
-                    lang: def.tag,
-                    key: e.key,
-                });
-            }
-            for text in [e.one, e.other] {
-                if text.contains(['<', '>', '&'])
-                    || text.contains("http://")
-                    || text.contains("https://")
-                {
-                    problems.push(Problem::Markup {
-                        lang: def.tag,
-                        key: e.key,
-                    });
-                    break;
-                }
-            }
-            // A message with a count must say both forms where the language has two; a language whose rule
-            // has only `other` must not pretend to have two.
-            let counted =
-                placeholders(e.one).contains(&"count") || placeholders(e.other).contains(&"count");
-            let has_one_form = (0..=2).any(|n| (def.plural)(n) == Plural::One);
-            if (!counted && e.one != e.other)
-                || (counted && has_one_form && e.one == e.other)
-                || (counted && !has_one_form && e.one != e.other)
-            {
-                problems.push(Problem::PluralFormsDisagree {
-                    key: e.key,
-                    lang: def.tag,
-                });
-            }
-            if let Some(b) = base.filter(|b| b.tag != def.tag)
-                && let Some(be) = b.entries.iter().find(|x| x.key == e.key)
-            {
-                let mut want = placeholders(be.one);
-                want.extend(placeholders(be.other));
-                want.sort_unstable();
-                want.dedup();
-                let mut got = placeholders(e.one);
-                got.extend(placeholders(e.other));
-                got.sort_unstable();
-                got.dedup();
-                if want != got {
-                    problems.push(Problem::PlaceholdersDiffer {
-                        key: e.key,
-                        lang: def.tag,
-                    });
-                }
-            }
-        }
-    }
-    problems
+    let catalogs: Vec<planeter_i18n::Catalog<'_>> = langs
+        .iter()
+        .map(|d| planeter_i18n::Catalog {
+            lang: d.lang,
+            entries: d.entries,
+        })
+        .collect();
+    let keys: Vec<&'static str> = Key::ALL.iter().map(|k| k.id()).collect();
+    planeter_i18n::audit(&catalogs, &keys, english_only_keys())
 }

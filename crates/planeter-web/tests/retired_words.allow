@@ -1,5 +1,5 @@
-# The allowlist of tests/retired_words.rs (RFC 012 D-4): a user-facing message may not use a word the plain-word
-# rewrite retired, except where the word is not ours to change. Reviewed like code: a line added here is a decision.
+# The allowlist of tests/language_rules.rs (RFC 012 D-4): a user-facing message may not break a rule of its language (the retired words of
+# the source language apply to every language), except where the word is not ours to change. Reviewed like code: a line added here is a decision.
 #
 # key :: term :: reason
 #   key     the message key (for example `verify.intro`)

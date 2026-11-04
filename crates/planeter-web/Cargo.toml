@@ -11,6 +11,7 @@ description = "planeter's HTTP surface: the browse UI and GET read API, sign-in 
 
 [dependencies]
 planeter-core = { path = "../planeter-core", version = "0.5.0" }
+planeter-i18n = { path = "../planeter-i18n", version = "0.5.0" }
 planeter-auth = { path = "../planeter-auth", version = "0.5.0" }
 planeter-store = { path = "../planeter-store", version = "0.5.0" }
 planeter-transport = { path = "../planeter-transport", version = "0.5.0" }

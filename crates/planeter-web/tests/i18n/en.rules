@@ -1,0 +1,40 @@
+# kind	scope	pattern	reason	bad examples (|-separated)	good examples
+# See planeter_i18n::rules for the format. Every rule carries planted examples: each bad one must break it, each good one must not.
+forbidden	*	word:unsealed	the plain-words work retired `unsealed`; say "held here, not signed in"	There are no unsealed changes.|Unsealed work	Sealing is not mentioned here.
+forbidden	*	word:forge-approved	retired: a keyless forge approves nothing about a patch it holds	forge-approved, unsealed	Held here, not signed in
+forbidden	*	word:prikk-verified	retired badge name: the badge is "Verified"	prikk-verified	Verified
+forbidden	*	word:not_evaluated	retired status word: say "not run (blocked by …)"	The stage is not_evaluated.	The checks were reevaluated by hand
+forbidden	*	word:evaluated	retired: it does not mean "passed"; the status is "completed"	evaluated	The checks were reevaluated by hand
+forbidden	*	word:refs	refs are "branches and tags"	Show refs · {repo}|Refs	Use {refs} here|Your prefs are saved.
+forbidden	*	word:SSO	the abbreviation is retired; say "single sign-on"	Sign in with SSO|sign in with sso	Sign in with single sign-on
+forbidden	*	word:session	IS-49: the sessions count was removed; a user message does not say session	1 of 1 session verified.	The sign-in is remembered.
+forbidden	*	word:sessions	IS-49: the sessions count was removed; a user message does not say sessions	3 of 4 sessions verified.	Sign in again.
+forbidden	*	phrase:open change	"change" is a recorded unit of history; what a person proposes is a proposal (D-38)	You have an open change here.	A recorded change.
+forbidden	*	phrase:open changes	"change" is a recorded unit of history; what a person proposes is a proposal (D-38)	You have an open changes here.	A recorded change.
+forbidden	*	phrase:new change	"change" is a recorded unit of history; what a person proposes is a proposal (D-38)	You have an new change here.	A recorded change.
+forbidden	*	phrase:new changes	"change" is a recorded unit of history; what a person proposes is a proposal (D-38)	You have an new changes here.	A recorded change.
+forbidden	*	phrase:proposed change	"change" is a recorded unit of history; what a person proposes is a proposal (D-38)	You have an proposed change here.	A recorded change.
+forbidden	*	phrase:proposed changes	"change" is a recorded unit of history; what a person proposes is a proposal (D-38)	You have an proposed changes here.	A recorded change.
+forbidden	*	phrase:propose changes	"change" is a recorded unit of history; what a person proposes is a proposal (D-38)	You have an propose changes here.	A recorded change.
+forbidden	*	phrase:close a change	"change" is a recorded unit of history; what a person proposes is a proposal (D-38)	You have an close a change here.	A recorded change.
+forbidden	*	phrase:finished changes	"change" is a recorded unit of history; what a person proposes is a proposal (D-38)	You have an finished changes here.	A recorded change.
+forbidden	*	phrase:change of your own	"change" is a recorded unit of history; what a person proposes is a proposal (D-38)	You have an change of your own here.	A recorded change.
+forbidden	*	phrase:change with that id	"change" is a recorded unit of history; what a person proposes is a proposal (D-38)	You have an change with that id here.	A recorded change.
+forbidden	*	phrase:your change	"change" is a recorded unit of history; what a person proposes is a proposal (D-38)	You have an your change here.	A recorded change.
+forbidden	*	phrase:your changes	"change" is a recorded unit of history; what a person proposes is a proposal (D-38)	You have an your changes here.	A recorded change.
+forbidden	*	phrase:that change has landed	"change" is a recorded unit of history; what a person proposes is a proposal (D-38)	You have an that change has landed here.	A recorded change.
+forbidden	*	phrase:an existing change	"change" is a recorded unit of history; what a person proposes is a proposal (D-38)	You have an an existing change here.	A recorded change.
+forbidden	*	phrase:Approved, awaiting signature	retired in D-50: nobody approves a patch a keyless forge holds	The text: Approved, awaiting signature.	Held here, not signed in
+forbidden	*	phrase:was approved on this server	retired in D-50: nobody approves a patch a keyless forge holds	The text: was approved on this server.	Held here, not signed in
+forbidden	*	label:code	an old navigation label may not be a whole message	code	The error code is shown.
+forbidden	*	label:history	an old navigation label may not be a whole message	history	The error history is shown.
+forbidden	*	label:verify	an old navigation label may not be a whole message	verify	The error verify is shown.
+forbidden	client:*	word:seal	the CLI says "signed into the history", never seal	It seals nothing; seal it later.	The proposal is held for review; trust a key. Use --no-adopt to trust nothing.
+forbidden	client:*	word:sealed	the plain-words rule: no seal / adopt / intent in a sentence	It sealeds nothing; sealed it later.	The proposal is held for review; trust a key. Use --no-adopt to trust nothing.
+forbidden	client:*	word:adopt!--no-adopt	the CLI says "trust a key"	It adopts nothing; adopt it later.	The proposal is held for review; trust a key. Use --no-adopt to trust nothing.
+forbidden	client:*	word:adopted	the plain-words rule: no seal / adopt / intent in a sentence	It adopteds nothing; adopted it later.	The proposal is held for review; trust a key. Use --no-adopt to trust nothing.
+forbidden	client:*	word:intent	a private word of the transport	It intents nothing; intent it later.	The proposal is held for review; trust a key. Use --no-adopt to trust nothing.
+forbidden	client:*	word:change set	say proposal	It change sets nothing; change set it later.	The proposal is held for review; trust a key. Use --no-adopt to trust nothing.
+style	*	needs-context:approve,approved,approves,approval,approvals:proposal:review.,decision.,error.self_approval,error.forbidden_decision,error.decisions_closed,error.revision_not_current,error.rate_decisions,error.invalid_request.decision_hint:proposal	"approve" belongs to a reviewer's decision about a revision; a sentence about a proposal that says it otherwise would tell a reader that someone approved the proposal when nobody did	proposal.planted::Approved, awaiting signature|other.key::This proposal was approved on this server.|other.key::Your proposal has approval.	review.line.approved::Approved by 2 people|decision.form.approve::Approve|error.self_approval.message::You cannot approve work that you sent yourself.|assurance.queued::Approved, awaiting signature
+forbidden	client:*	word:draft	after a sign-off no sentence of the program calls a language a draft (the help line said so until 2026-10-31)	Japanese is a draft	The proposal is held for review.
+forbidden	client:*	word:preview	a language is shipped or it is not; the program has no "preview" of one	a language preview	The proposal is held for review.

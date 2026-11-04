@@ -8,6 +8,10 @@ fn args(items: &[&str]) -> Vec<String> {
     items.iter().map(|s| (*s).to_owned()).collect()
 }
 
+fn japanese() -> Lang {
+    Lang::from_flag("ja").expect("a language besides the source ships")
+}
+
 #[test]
 fn propose_takes_its_options_and_defaults_to_heads_main() {
     let p = parse(
@@ -18,7 +22,7 @@ fn propose_takes_its_options_and_defaults_to_heads_main() {
             "T",
             "--dry-run",
         ]),
-        Lang::En,
+        Lang::SOURCE,
     )
     .unwrap();
     let Command::Propose(a) = p.command else {
@@ -56,7 +60,7 @@ fn propose_takes_its_options_and_defaults_to_heads_main() {
             "c.pem",
             "--verbose",
         ]),
-        Lang::En,
+        Lang::SOURCE,
     )
     .unwrap();
     let Command::Propose(a) = p.command else {
@@ -81,7 +85,7 @@ fn clone_takes_a_directory_and_any_number_of_keys() {
             "--trust-key=bb",
             "--no-adopt",
         ]),
-        Lang::En,
+        Lang::SOURCE,
     )
     .unwrap();
     let Command::Clone(a) = p.command else {
@@ -95,55 +99,55 @@ fn clone_takes_a_directory_and_any_number_of_keys() {
 #[test]
 fn fetch_takes_an_optional_directory() {
     assert!(
-        matches!(parse(&args(&["fetch"]), Lang::En).unwrap().command, Command::Fetch(a) if a.dir.is_none())
+        matches!(parse(&args(&["fetch"]), Lang::SOURCE).unwrap().command, Command::Fetch(a) if a.dir.is_none())
     );
     assert!(
-        matches!(parse(&args(&["fetch", "d"]), Lang::En).unwrap().command, Command::Fetch(a) if a.dir.is_some())
+        matches!(parse(&args(&["fetch", "d"]), Lang::SOURCE).unwrap().command, Command::Fetch(a) if a.dir.is_some())
     );
 }
 
 #[test]
 fn help_and_version_need_no_network_and_stand_anywhere() {
     assert!(matches!(
-        parse(&args(&[]), Lang::En).unwrap().command,
+        parse(&args(&[]), Lang::SOURCE).unwrap().command,
         Command::Help(Topic::Main)
     ));
     assert!(matches!(
-        parse(&args(&["--help"]), Lang::En).unwrap().command,
+        parse(&args(&["--help"]), Lang::SOURCE).unwrap().command,
         Command::Help(Topic::Main)
     ));
     assert!(matches!(
-        parse(&args(&["propose", "--help"]), Lang::En)
+        parse(&args(&["propose", "--help"]), Lang::SOURCE)
             .unwrap()
             .command,
         Command::Help(Topic::Propose)
     ));
     assert!(matches!(
-        parse(&args(&["clone", "x", "-h"]), Lang::En)
+        parse(&args(&["clone", "x", "-h"]), Lang::SOURCE)
             .unwrap()
             .command,
         Command::Help(Topic::Clone)
     ));
     assert!(matches!(
-        parse(&args(&["--version"]), Lang::En).unwrap().command,
+        parse(&args(&["--version"]), Lang::SOURCE).unwrap().command,
         Command::Version
     ));
 }
 
 #[test]
 fn the_lang_option_stands_anywhere_and_words_the_usage_errors() {
-    let p = parse(&args(&["--lang", "ja", "fetch"]), Lang::En).unwrap();
-    assert_eq!(p.lang, Some(Lang::Ja));
-    let p = parse(&args(&["fetch", "--lang=ja"]), Lang::En).unwrap();
-    assert_eq!(p.lang, Some(Lang::Ja));
-    let e = parse(&args(&["--lang", "ja", "nonsense"]), Lang::En).unwrap_err();
+    let p = parse(&args(&["--lang", "ja", "fetch"]), Lang::SOURCE).unwrap();
+    assert_eq!(p.lang, Some(japanese()));
+    let p = parse(&args(&["fetch", "--lang=ja"]), Lang::SOURCE).unwrap();
+    assert_eq!(p.lang, Some(japanese()));
+    let e = parse(&args(&["--lang", "ja", "nonsense"]), Lang::SOURCE).unwrap_err();
     assert_eq!(e.code, USAGE);
     assert!(
         e.message.contains("nonsense") && e.message.contains("コマンド"),
         "{}",
         e.message
     );
-    let e = parse(&args(&["--lang", "fr", "fetch"]), Lang::En).unwrap_err();
+    let e = parse(&args(&["--lang", "fr", "fetch"]), Lang::SOURCE).unwrap_err();
     assert_eq!(e.code, USAGE);
 }
 
@@ -161,7 +165,7 @@ fn every_wrong_command_line_is_one_sentence_and_code_2() {
         vec!["fetch", "--token", "SECRET"],
         vec!["--verbose"],
     ] {
-        let e = parse(&args(&bad), Lang::En).unwrap_err();
+        let e = parse(&args(&bad), Lang::SOURCE).unwrap_err();
         assert_eq!(e.code, USAGE, "{bad:?}");
         assert!(
             !e.message.is_empty() && !e.message.contains("SECRET") || bad.contains(&"--token"),
@@ -169,6 +173,6 @@ fn every_wrong_command_line_is_one_sentence_and_code_2() {
         );
     }
     // A token is never taken from the command line: `--token SECRET` is an unknown option, and the value is not echoed as a value.
-    let e = parse(&args(&["fetch", "--token", "SECRET"]), Lang::En).unwrap_err();
+    let e = parse(&args(&["fetch", "--token", "SECRET"]), Lang::SOURCE).unwrap_err();
     assert!(e.message.contains("--token"), "{}", e.message);
 }

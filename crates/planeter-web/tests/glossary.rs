@@ -64,7 +64,7 @@ fn catalog() -> BTreeMap<&'static str, (&'static str, &'static str)> {
     shipped()[0]
         .entries
         .iter()
-        .map(|e| (e.key, (e.one, e.other)))
+        .map(|e| (e.key, (e.one(), e.other())))
         .collect()
 }
 
@@ -192,11 +192,11 @@ fn the_sessions_message_is_removed_and_nothing_is_held() {
         "the key is gone from the English catalog"
     );
     assert!(
-        !planeter_web::catalog::JA_DEF
-            .entries
+        !planeter_web::catalog::CATALOGS
             .iter()
+            .flat_map(|d| d.entries.iter())
             .any(|e| e.key == "verify.sessions"),
-        "and from the Japanese draft"
+        "and from every other language's"
     );
     assert!(src.contains("`verify.sessions`") && src.contains("**removed** (IS-49)"));
     assert!(

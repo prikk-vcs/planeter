@@ -524,6 +524,7 @@ const TARGETS: &[&str] = &[
     "input",
     "button",
     "details.explain summary",
+    "nav.lang details summary",
 ];
 const TARGET_MIN: f64 = 24.0;
 
@@ -660,6 +661,7 @@ body{margin:0;color:var(--fg);background:var(--bg)}
 header a,nav.repo a,th a,td a,.crumbs a,main > p > a,.skip-link{display:inline-block;min-height:24px;min-width:24px}
 input,button{min-height:24px;min-width:24px;border:1px solid var(--control);background:var(--bg);color:var(--fg)}
 details.explain summary{min-height:24px;min-width:24px}
+nav.lang details summary{min-height:24px;min-width:24px}
 .skip-link{border:1px solid var(--control);background:var(--bg)}
 .muted{color:var(--muted)}
 :focus-visible{outline:2px solid var(--accent);outline-offset:2px}

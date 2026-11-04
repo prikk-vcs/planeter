@@ -61,7 +61,7 @@ fn operator_sentences() -> Vec<(&'static str, &'static str)> {
                 || e.key.starts_with("quota.")
                 || e.key.starts_with("propose.")
         })
-        .map(|e| (e.key, e.one))
+        .map(|e| (e.key, e.one()))
         .collect()
 }
 

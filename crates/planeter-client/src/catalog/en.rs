@@ -3,11 +3,14 @@
 
 use super::{Entry, msg};
 
+/// The program's messages for this language.
+pub static DEF: super::LangDef = super::LangDef::new(&planeter_i18n::languages::en::EN, CATALOG);
+
 pub static CATALOG: &[Entry] = &[
     // ---- usage and help
     msg(
         "help.main",
-        "planeter-client works with a planeter server using your own prikk and your own keys. It never holds a key and never changes a branch on the server.\n\nUsage:\n  planeter-client propose <https://host/owner/name> [--ref heads/NAME] [--proposal ID] [--title TITLE] [--description-file FILE] [--dry-run] [--retry]\n  planeter-client clone <https://host/owner/name> [DIR] [--trust-key KEY]... [--no-adopt]\n  planeter-client fetch [DIR]\n\nFor every command:\n  --token-file FILE   read the token from FILE (or set PLANETER_TOKEN); a token is never taken from the command line\n  --cacert FILE       trust only the certificate authorities in FILE; this replaces the built-in list\n  --lang en|ja        the language of the messages\n  --verbose           also show the raw reasons behind a message\n  --help, --version\n\nExit codes: 0 done, 1 the server refused, 2 wrong command line, 3 network or TLS, 4 your prikk failed, 5 local files or keys.\n\nExample:\n  planeter-client propose https://forge.example/alice/app --title \"Fix the parser\" --dry-run",
+        "planeter-client works with a planeter server using your own prikk and your own keys. It never holds a key and never changes a branch on the server.\n\nUsage:\n  planeter-client propose <https://host/owner/name> [--ref heads/NAME] [--proposal ID] [--title TITLE] [--description-file FILE] [--dry-run] [--retry]\n  planeter-client clone <https://host/owner/name> [DIR] [--trust-key KEY]... [--no-adopt]\n  planeter-client fetch [DIR]\n\nFor every command:\n  --token-file FILE   read the token from FILE (or set PLANETER_TOKEN); a token is never taken from the command line\n  --cacert FILE       trust only the certificate authorities in FILE; this replaces the built-in list\n  --lang {languages}        the language of the messages\n  --verbose           also show the raw reasons behind a message\n  --help, --version\n\nExit codes: 0 done, 1 the server refused, 2 wrong command line, 3 network or TLS, 4 your prikk failed, 5 local files or keys.\n\nExample:\n  planeter-client propose https://forge.example/alice/app --title \"Fix the parser\" --dry-run",
     ),
     msg(
         "help.propose",
@@ -47,7 +50,7 @@ pub static CATALOG: &[Entry] = &[
     ),
     msg(
         "usage.bad_lang",
-        "“{value}” is not a language this program has. Use en or ja.",
+        "“{value}” is not a language this program has. Use one of: {languages}.",
     ),
     msg(
         "usage.bad_url",

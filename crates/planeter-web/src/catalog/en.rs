@@ -4,6 +4,9 @@
 
 use super::{Entry, msg, plural_msg};
 
+/// The server's messages for this language.
+pub static DEF: super::LangDef = super::LangDef::new(&planeter_i18n::languages::en::EN, CATALOG);
+
 pub const CATALOG: &[Entry] = &[
     // layout and navigation
     msg("layout.sign_in", "Sign in"),

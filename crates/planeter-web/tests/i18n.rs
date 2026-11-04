@@ -20,15 +20,17 @@ use planeter_store::{
     InMemoryMembershipStore, InMemoryRepositoryStore, MembershipStore, RepositoryStore,
 };
 use planeter_web::catalog::{
-    Dir, EN, Entry, Key, Lang, LangDef, Plural, T, audit, register_test_language, shipped,
+    Category, Dir, EN, Entry, Key, Lang, LangDef, T, audit, register_test_language, shipped,
 };
+#[allow(unused_imports)]
+use planeter_web::catalog::{msg, planted_language};
 use planeter_web::errors::ErrorCode;
 use planeter_web::{AppState, BlockingGate, ContentOrigin, PrikkGate, TrustedProxies, router};
 
 // ---------------------------------------------------------------- the test language
 
-fn other_only(_: u64) -> Plural {
-    Plural::Other
+fn other_only(_: u64) -> Category {
+    Category::Other
 }
 
 /// English wrapped in guillemets, with two deliberate differences from English: `repo.location_branch` puts its
@@ -44,25 +46,22 @@ fn qaa() -> &'static LangDef {
                     "repo.location_branch" => "{branch} / {point} ‹branch›".to_owned(),
                     // a counted message has one form in a language with no plural
                     "history.patch_count" => "{count} ‹patch›".to_owned(),
-                    _ => format!("‹{}›", e.other),
+                    _ => format!("‹{}›", e.other()),
                 };
                 let text: &'static str = Box::leak(text.into_boxed_str());
-                Entry {
-                    key: e.key,
-                    one: text,
-                    other: text,
-                }
+                msg(e.key, text)
             })
             .collect();
-        Box::leak(Box::new(LangDef {
-            tag: "qaa",
-            endonym: "Test language",
-            dir: Dir::Rtl,
-            plural: other_only,
-            group_separator: '.',
-            decimal_separator: ',',
-            entries: Box::leak(entries.into_boxed_slice()),
-        }))
+        planted_language(
+            "qaa",
+            "Test language",
+            Dir::Rtl,
+            planeter_web::catalog::OTHER_ONLY_CATEGORIES,
+            other_only,
+            '.',
+            ',',
+            Box::leak(entries.into_boxed_slice()),
+        )
     })
 }
 
@@ -262,22 +261,16 @@ fn sizes_use_the_unit_and_the_number_format_of_the_catalog() {
 
 #[test]
 fn a_missing_key_in_a_registered_language_is_a_visible_marker_never_a_crash_or_english() {
-    let partial: &'static LangDef = Box::leak(Box::new(LangDef {
-        tag: "qab",
-        endonym: "Partial",
-        dir: Dir::Ltr,
-        plural: other_only,
-        group_separator: ',',
-        decimal_separator: '.',
-        entries: Box::leak(
-            vec![Entry {
-                key: "login.heading",
-                one: "‹Sign in›",
-                other: "‹Sign in›",
-            }]
-            .into_boxed_slice(),
-        ),
-    }));
+    let partial: &'static LangDef = planted_language(
+        "qab",
+        "Partial",
+        Dir::Ltr,
+        planeter_web::catalog::OTHER_ONLY_CATEGORIES,
+        other_only,
+        ',',
+        '.',
+        Box::leak(vec![msg("login.heading", "‹Sign in›")].into_boxed_slice()),
+    );
     let t = T::new(Lang::from_def(partial));
     assert_eq!(t.get(Key::LoginHeading), "‹Sign in›");
     assert_eq!(t.get(Key::LoginFailed), "[login.failed]");
@@ -587,29 +580,25 @@ fn a_link_href_comes_from_code_and_only_a_local_path_or_an_http_url_becomes_a_li
 
 #[test]
 fn a_catalog_entry_cannot_introduce_a_tag_an_attribute_or_a_link_by_itself() {
-    let evil: &'static LangDef = Box::leak(Box::new(LangDef {
-        tag: "qac",
-        endonym: "Evil",
-        dir: Dir::Ltr,
-        plural: other_only,
-        group_separator: ',',
-        decimal_separator: '.',
-        entries: Box::leak(
+    let evil: &'static LangDef = planted_language(
+        "qac",
+        "Evil",
+        Dir::Ltr,
+        planeter_web::catalog::OTHER_ONLY_CATEGORIES,
+        other_only,
+        ',',
+        '.',
+        Box::leak(
             vec![
-                Entry {
-                    key: "file.binary",
-                    one: "<b onclick=\"x\">{download}</b> <a href=\"/steal\">go</a>",
-                    other: "<b onclick=\"x\">{download}</b> <a href=\"/steal\">go</a>",
-                },
-                Entry {
-                    key: "login.failed",
-                    one: "<script>alert(1)</script>",
-                    other: "<script>alert(1)</script>",
-                },
+                msg(
+                    "file.binary",
+                    "<b onclick=\"x\">{download}</b> <a href=\"/steal\">go</a>",
+                ),
+                msg("login.failed", "<script>alert(1)</script>"),
             ]
             .into_boxed_slice(),
         ),
-    }));
+    );
     let t = T::new(Lang::from_def(evil));
     let html = t.msg(Key::FileBinary).link("download", "dl", "/raw").html();
     // The catalog's markup is text; only the one typed link slot is an element.

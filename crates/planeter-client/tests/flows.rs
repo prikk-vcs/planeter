@@ -307,7 +307,7 @@ fn client(
     // each call below is a different person without a wrapper program (and without writing an executable in a test process).
     let code = {
         let mut ctx = Ctx {
-            lang: Lang::En,
+            lang: Lang::SOURCE,
             verbose: false,
             out: &mut out,
             err: &mut err,

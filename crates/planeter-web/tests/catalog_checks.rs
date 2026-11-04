@@ -11,7 +11,9 @@ use std::collections::BTreeSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use planeter_web::catalog::{self, Dir, Entry, Key, LangDef, Plural, Problem, audit, shipped};
+use planeter_web::catalog::{self, Category, Dir, Entry, Key, LangDef, Problem, audit, shipped};
+#[allow(unused_imports)]
+use planeter_web::catalog::{msg, planted_language};
 
 fn root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
@@ -67,31 +69,37 @@ fn leaked(entries: Vec<Entry>) -> &'static [Entry] {
 fn derived(
     tag: &'static str,
     f: impl Fn(&Entry) -> Option<Entry>,
-    plural: fn(u64) -> Plural,
+    plural: fn(u64) -> Category,
 ) -> &'static LangDef {
+    let categories = if plural(1) == Category::One {
+        planeter_web::catalog::ONE_OTHER_CATEGORIES
+    } else {
+        planeter_web::catalog::OTHER_ONLY_CATEGORIES
+    };
     let entries: Vec<Entry> = shipped()[0].entries.iter().filter_map(f).collect();
-    Box::leak(Box::new(LangDef {
+    planted_language(
         tag,
-        endonym: tag,
-        dir: Dir::Ltr,
+        tag,
+        Dir::Ltr,
+        categories,
         plural,
-        group_separator: ',',
-        decimal_separator: '.',
-        entries: leaked(entries),
-    }))
+        ',',
+        '.',
+        leaked(entries),
+    )
 }
 fn copy(e: &Entry) -> Entry {
-    Entry {
-        key: e.key,
-        one: e.one,
-        other: e.other,
+    *e
+}
+fn en_plural(n: u64) -> Category {
+    if n == 1 {
+        Category::One
+    } else {
+        Category::Other
     }
 }
-fn en_plural(n: u64) -> Plural {
-    if n == 1 { Plural::One } else { Plural::Other }
-}
-fn only_other(_: u64) -> Plural {
-    Plural::Other
+fn only_other(_: u64) -> Category {
+    Category::Other
 }
 
 #[test]
@@ -115,15 +123,8 @@ fn a_key_missing_in_a_language_is_found() {
 fn a_key_no_enum_variant_names_is_an_orphan() {
     let l = derived("t2", |e| Some(copy(e)), en_plural);
     let mut v: Vec<Entry> = l.entries.iter().map(copy).collect();
-    v.push(Entry {
-        key: "spare.unused",
-        one: "x",
-        other: "x",
-    });
-    let l2: &'static LangDef = Box::leak(Box::new(LangDef {
-        entries: leaked(v),
-        ..clone_def(l)
-    }));
+    v.push(msg("spare.unused", "x"));
+    let l2: &'static LangDef = with_entries(l, leaked(v));
     let p = audit(&[shipped()[0], l2]);
     assert!(
         p.contains(&Problem::Orphan {
@@ -134,27 +135,34 @@ fn a_key_no_enum_variant_names_is_an_orphan() {
     );
 }
 
-fn clone_def(d: &LangDef) -> LangDef {
-    LangDef {
-        tag: d.tag,
-        endonym: d.endonym,
-        dir: d.dir,
-        plural: d.plural,
-        group_separator: d.group_separator,
-        decimal_separator: d.decimal_separator,
-        entries: d.entries,
-    }
+/// The same language row with other messages.
+fn with_entries(d: &LangDef, entries: &'static [Entry]) -> &'static LangDef {
+    planted_language(
+        d.tag,
+        d.endonym,
+        d.dir,
+        d.categories,
+        d.plural,
+        d.group_separator,
+        d.decimal_separator,
+        entries,
+    )
 }
 
 #[test]
 fn a_duplicate_key_is_found() {
     let mut v: Vec<Entry> = shipped()[0].entries.iter().map(copy).collect();
     v.push(copy(&shipped()[0].entries[0]));
-    let l: &'static LangDef = Box::leak(Box::new(LangDef {
-        tag: "t3",
-        entries: leaked(v),
-        ..clone_def(shipped()[0])
-    }));
+    let l: &'static LangDef = planted_language(
+        "t3",
+        "t3",
+        Dir::Ltr,
+        shipped()[0].categories,
+        shipped()[0].plural,
+        ',',
+        '.',
+        leaked(v),
+    );
     let p = audit(&[l]);
     assert!(
         p.iter()
@@ -168,12 +176,11 @@ fn a_placeholder_set_that_differs_from_english_is_found() {
     let l = derived(
         "t4",
         |e| {
-            let mut c = copy(e);
-            if e.key == "history.heading" {
-                c.one = "History {refs}";
-                c.other = "History {refs}";
-            }
-            Some(c)
+            Some(if e.key == "history.heading" {
+                msg(e.key, "History {refs}")
+            } else {
+                copy(e)
+            })
         },
         only_other,
     );
@@ -203,11 +210,12 @@ fn plural_forms_that_do_not_fit_the_language_are_found() {
     let forgot = derived(
         "t6",
         |e| {
-            let mut c = copy(e);
-            if e.key == "history.patch_count" {
-                c.one = c.other;
-            }
-            Some(c)
+            // a counted message with `other` only, in a language that also declares `one`
+            Some(if e.key == "history.patch_count" {
+                msg(e.key, e.other())
+            } else {
+                copy(e)
+            })
         },
         en_plural,
     );
@@ -231,12 +239,11 @@ fn markup_an_entity_or_a_url_in_a_message_is_found() {
         let l = derived(
             tag,
             |e| {
-                let mut c = copy(e);
-                if e.key == "login.failed" {
-                    c.one = text;
-                    c.other = text;
-                }
-                Some(c)
+                Some(if e.key == "login.failed" {
+                    msg(e.key, text)
+                } else {
+                    copy(e)
+                })
             },
             en_plural,
         );
@@ -694,16 +701,16 @@ fn the_scanners_can_fail() {
 }
 
 #[test]
-fn the_default_language_is_english_and_only_signed_off_languages_are_shipped() {
-    // English first; Japanese after its sign-off; nothing else (a test language registered by another test is not shipped).
+fn the_source_language_is_first_and_exactly_the_registrys_shipped_languages_are_shipped() {
+    // What a build ships is what the registry says is shipped (the source language and the signed-off ones), in the registry's
+    // order; a test language registered by another test is not shipped.
+    let want: Vec<&str> = planeter_i18n::languages::LANGUAGES
+        .iter()
+        .filter(|l| l.is_shipped())
+        .map(|l| l.tag)
+        .collect();
     let tags: Vec<&str> = shipped().iter().map(|d| d.tag).collect();
-    assert_eq!(
-        tags,
-        if catalog::JA_REVIEWED {
-            vec!["en", "ja"]
-        } else {
-            vec!["en"]
-        }
-    );
-    assert_eq!(catalog::EN.tag(), "en");
+    assert_eq!(tags, want);
+    assert!(shipped()[0].is_source());
+    assert_eq!(catalog::EN.tag(), planeter_i18n::languages::source().tag);
 }

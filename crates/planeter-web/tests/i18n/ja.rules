@@ -1,0 +1,75 @@
+# kind	scope	pattern	reason	bad examples (|-separated)	good examples
+# See planeter_i18n::rules for the format. Every rule carries planted examples: each bad one must break it, each good one must not.
+forbidden	*	シール	the loan word for seal / sealed: the glossary retired `sealed`; say "signed into the history" (署名して履歴に記録)	これはシールの例です。	ログインしてください。
+forbidden	*	封印	the literal translation of seal: same reason	これは封印の例です。	ログインしてください。
+forbidden	*	未封印	the literal translation of unsealed: same reason	これは未封印の例です。	ログインしてください。
+forbidden	*	フォージ	forge-approved is retired; say "approved on this server" (このサーバーで承認)	これはフォージの例です。	ログインしてください。
+forbidden	*	評価済み	`evaluated` is retired because it does not mean "passed"; the status is 完了 (completed)	これは評価済みの例です。	ログインしてください。
+forbidden	*	ブロック	a block is a "change" (変更) for the reader	これはブロックの例です。	ログインしてください。
+forbidden	*	サーバーの管理者	one word, two roles (D-50, consistency): the person who runs the server is このサーバーを運用している人 (運用者 in API hints); 管理者 is only the administrator of a repository, always as リポジトリの管理者	これはサーバーの管理者の例です。	ログインしてください。
+forbidden	*	検査	a fourth word for *check* (D-50, consistency): verifying is 検証, a verification stage is チェック, and what `doctor` does is 点検	これは検査の例です。	ログインしてください。
+forbidden	*	承認済み・署名待ち	retired in D-50: nobody approves a patch a keyless forge holds; the badge is ここで保持中・未署名	これは承認済み・署名待ちの例です。	ログインしてください。
+forbidden	*	リファレンス	refs are "branches and tags" (ブランチとタグ)	これはリファレンスの例です。	ログインしてください。
+forbidden	*	セッション	IS-49: the sessions count was removed; no message says session	これはセッションの例です。	ログインしてください。
+forbidden	*	あなたの間違い	blames the reader: say what happened and what to do	これはあなたの間違いの例です。	ログインしてください。
+forbidden	*	あなたが間違	blames the reader	これはあなたが間違の例です。	ログインしてください。
+forbidden	*	ユーザーの過ち	blames the reader	これはユーザーの過ちの例です。	ログインしてください。
+forbidden	*	不正な	implies wrongdoing; say "not correct" / "not recognised"	これは不正なの例です。	ログインしてください。
+forbidden	*	開いている変更	a proposal is 提案; 変更 is a recorded unit of history (D-38)	これは開いている変更の例です。	ログインしてください。
+forbidden	*	新しい変更	a proposal is 提案 (D-38)	これは新しい変更の例です。	ログインしてください。
+forbidden	*	提案された変更	say 提案 (D-38)	これは提案された変更の例です。	ログインしてください。
+forbidden	*	変更を提案	say 提案する (D-38)	これは変更を提案の例です。	ログインしてください。
+forbidden	*	変更を閉じ	a proposal is closed: 提案を閉じ (D-38)	これは変更を閉じの例です。	ログインしてください。
+forbidden	*	変更を開	a proposal is opened: 提案を開 (D-38)	これは変更を開の例です。	ログインしてください。
+forbidden	*	自分の変更	say 自分の提案 (D-38)	これは自分の変更の例です。	ログインしてください。
+forbidden	*	完了した変更	say 完了した提案 (D-38)	これは完了した変更の例です。	ログインしてください。
+forbidden	*	その変更は	a proposal is 提案 (D-38)	これはその変更はの例です。	ログインしてください。
+forbidden	*	ID の変更	a proposal is 提案 (D-38)	これはID の変更の例です。	ログインしてください。
+forbidden	*	彼女	gendered wording (D-6)	これは彼女の例です。	ログインしてください。
+forbidden	*	彼は	gendered wording (D-6)	これは彼はの例です。	ログインしてください。
+forbidden	*	男性	gendered wording (D-6)	これは男性の例です。	ログインしてください。
+forbidden	*	女性	gendered wording (D-6)	これは女性の例です。	ログインしてください。
+forbidden	client:*	管理者	the client has no administrator of a repository to name: the person who runs the server is このサーバーを運用している人	このサーバーの管理者に伝えてください。	このサーバーを運用している人に伝えてください。
+style	server:*	qualified:管理者:リポジトリの	管理者 is the administrator of a repository and never stands alone (D-50)	コメントを非表示にできるのは管理者だけです。|このサーバーの管理者に問い合わせてください。	できるのはリポジトリの管理者だけです。|このサーバーを運用している人に問い合わせてください。
+style	*	only-in:点検:recovery.blocker.doctor_problems,recovery.note.unreached_objects	点検 is only what prikk's `doctor` does (D-50)	other.key::リポジトリの点検をします。	recovery.note.unreached_objects::点検で見つかりました。
+forbidden	*	サインイン!シングルサインオン	sign in is ログイン (final check, 2026-10-31)	サインインしてください。	シングルサインオンでログイン
+forbidden	*	クローズ	closed is 閉じている	クローズ済み	閉じている
+forbidden	*	断りま	refused is 拒否	サーバーが断りました。	サーバーが拒否しました。
+forbidden	*	断られ	refused is 拒否	サーバーが断られした。	サーバーが拒否しました。
+forbidden	*	お断り	refused is 拒否	サーバーがお断りした。	サーバーが拒否しました。
+forbidden	*	変更されていません	the verb change is 変わる / 変える; 変更 is the noun	どのブランチも変更されていません。	どのブランチも変わっていません。
+forbidden	*	何も変更していません	the verb change is 変わる / 変える; 変更 is the noun	どのブランチも何も変更していません。	どのブランチも変わっていません。
+forbidden	*	確認待ち	confirm is 確定	確認待ちのアーカイブ	確定待ちのアーカイブ
+forbidden	explain.queued	まだ	the keyless forge cannot promise that anyone will sign: no まだ (D-50)	explain.queued::メンテナーがまだ署名していない	explain.queued::メンテナーが署名していない
+style	*	fullwidth-brackets	full-width brackets next to Japanese	履歴(読む範囲)	履歴（読む範囲）
+style	*	counter-space:件,時間	a space between a numeral or placeholder and its counter	上限は{limit}件です|この1時間に	上限は {limit} 件です|この 1 時間に
+style	*	no-ascii-punct-after-wide	full-width punctuation follows Japanese text	いいえ,そうです	いいえ、そうです。 yes, ok
+style	*	needs-context:承認:提案:review.,decision.,error.self_approval,error.forbidden_decision,error.decisions_closed,error.revision_not_current,error.rate_decisions,error.invalid_request.decision_hint:proposal	承認 belongs to a reviewer's decision about a revision, as "approve" does in English	proposal.planted::この提案は承認されました。	review.decision.approve::{who} さんがリビジョン {revision} を承認しました
+required-pair	server:propose.held	あなたの作業はこのサーバーでレビュー待ちとして保持されており、どのブランチも変わっていません。	the final check's correction (2026-10-31): this wording stays	x	あなたの作業はこのサーバーでレビュー待ちとして保持されており、どのブランチも変わっていません。
+required-pair	server:propose.already_recorded	このアーティファクトはすでに記録済みのため何も追加されておらず、どのブランチも変わっていません。	the final check's correction (2026-10-31): this wording stays	x	このアーティファクトはすでに記録済みのため何も追加されておらず、どのブランチも変わっていません。
+required-pair	server:recovery.blocker.output_unreadable	リポジトリのツールの出力を読み取れなかったため、何も変えていません。	the final check's correction (2026-10-31): this wording stays	x	リポジトリのツールの出力を読み取れなかったため、何も変えていません。
+required-pair	server:recovery.outcome.stopped	復旧は停止し、これ以上は何も変えていません。フラグはまだ立っています。	the final check's correction (2026-10-31): this wording stays	x	復旧は停止し、これ以上は何も変えていません。フラグはまだ立っています。
+required-pair	server:hide.refused.heading	コメントは変わりませんでした	the final check's correction (2026-10-31): this wording stays	x	コメントは変わりませんでした
+required-pair	server:decision.form.consequence	これはリビジョン {revision} だけに記録され、このリポジトリを読める全員に見えます。この判断は、提案が開いている間は変えられます。あとのリビジョンには引き継がれず、何もマージしません。	the final check's correction (2026-10-31): this wording stays	x	これはリビジョン {revision} だけに記録され、このリポジトリを読める全員に見えます。この判断は、提案が開いている間は変えられます。あとのリビジョンには引き継がれず、何もマージしません。
+required-pair	server:error.forbidden.hint	メンテナーに書き込み権限を依頼するか、ログインしている全員に提案を開放するよう依頼してください。	the final check's correction (2026-10-31): this wording stays	x	メンテナーに書き込み権限を依頼するか、ログインしている全員に提案を開放するよう依頼してください。
+required-pair	server:error.forbidden_comment.message	このリポジトリは読めますが、コメントするにはログインが必要です。	the final check's correction (2026-10-31): this wording stays	x	このリポジトリは読めますが、コメントするにはログインが必要です。
+required-pair	server:error.forbidden_comment.hint	ログインするか、アクセストークンを付けてリクエストを送ってください。	the final check's correction (2026-10-31): this wording stays	x	ログインするか、アクセストークンを付けてリクエストを送ってください。
+required-pair	server:new.visibility.public	誰でも（ログインの有無を問わない）	the final check's correction (2026-10-31): this wording stays	x	誰でも（ログインの有無を問わない）
+required-pair	server:new.visibility.internal	ログインしている人なら誰でも	the final check's correction (2026-10-31): this wording stays	x	ログインしている人なら誰でも
+required-pair	server:new.proposals.any	読めるログイン済みの人なら誰でも	the final check's correction (2026-10-31): this wording stays	x	読めるログイン済みの人なら誰でも
+required-pair	server:new.signin	リポジトリを作成するには、ログインしてください。	the final check's correction (2026-10-31): this wording stays	x	リポジトリを作成するには、ログインしてください。
+required-pair	server:error.invalid_request.name_hint	この応答の field と reason に、拒否された値と理由が示されています。API ドキュメントの項目の通りに直して、もう一度送ってください。	the final check's correction (2026-10-31): this wording stays	x	この応答の field と reason に、拒否された値と理由が示されています。API ドキュメントの項目の通りに直して、もう一度送ってください。
+required-pair	server:refs.closed	閉じている	the final check's correction (2026-10-31): this wording stays	x	閉じている
+required-pair	server:error.stage_limit.message	確定待ちのアーカイブがすでに {limit} 件あります。	the final check's correction (2026-10-31): this wording stays	x	確定待ちのアーカイブがすでに {limit} 件あります。
+required-pair	server:explain.queued	このパッチは、このサーバーで保持されています。メンテナーがプロジェクトの履歴に署名していないため、検証済みの記録には含まれていません。	the final check's correction (2026-10-31): this wording stays	x	このパッチは、このサーバーで保持されています。メンテナーがプロジェクトの履歴に署名していないため、検証済みの記録には含まれていません。
+required-pair	server:proposal.patch.unknown_explain	このサーバーは、このパッチが署名されて履歴に入ったかどうかを判断できません（履歴が、サーバーが読む範囲より長いためです）。	the final check's correction (2026-10-31): this wording stays	x	このサーバーは、このパッチが署名されて履歴に入ったかどうかを判断できません（履歴が、サーバーが読む範囲より長いためです）。
+required-pair	server:explain.patch	パッチとは、記録された編集 1 件のことです。	the final check's correction (2026-10-31): this wording stays	x	パッチとは、記録された編集 1 件のことです。
+required-pair	server:quota.open_proposals.message	このリポジトリで開いている提案がすでに {used} 件あり、上限は {limit} 件です。	the final check's correction (2026-10-31): this wording stays	x	このリポジトリで開いている提案がすでに {used} 件あり、上限は {limit} 件です。
+required-pair	server:quota.revisions.message	この提案にはすでに {used} 件のリビジョンがあり、上限は {limit} 件です。	the final check's correction (2026-10-31): this wording stays	x	この提案にはすでに {used} 件のリビジョンがあり、上限は {limit} 件です。
+required-pair	server:error.rate_comments.message	この 1 時間に、この提案へ何度もコメントしています。	the final check's correction (2026-10-31): this wording stays	x	この 1 時間に、この提案へ何度もコメントしています。
+required-pair	server:error.rate_decisions.message	この 1 時間に、この提案へ何度も判断を記録しています。	the final check's correction (2026-10-31): this wording stays	x	この 1 時間に、この提案へ何度も判断を記録しています。
+required-pair	client:server.refused	サーバーが拒否しました：{message} {hint}	the final check's correction (2026-10-31): this wording stays	x	サーバーが拒否しました：{message} {hint}
+required-pair	client:server.refused_plain	サーバーがリクエストを拒否しました（{status}）が、理由は示されませんでした。もう一度お試しください。続く場合は、このサーバーを運用している人に伝えてください。	the final check's correction (2026-10-31): this wording stays	x	サーバーがリクエストを拒否しました（{status}）が、理由は示されませんでした。もう一度お試しください。続く場合は、このサーバーを運用している人に伝えてください。
+forbidden	client:*	草案	after a sign-off no sentence of the program calls the language a draft	日本語は草案です	日本語
+forbidden	client:*	プレビュー	a language is shipped or it is not	プレビュー版	日本語
+forbidden	client:*	未確認	a language is shipped or it is not	未確認の言語	日本語

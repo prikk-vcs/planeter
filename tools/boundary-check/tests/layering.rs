@@ -123,3 +123,71 @@ fn the_client_boundary_check_finds_a_planted_edge() {
     let clean = "[dependencies]\nserde = \"1\"\n";
     assert!(!CLIENT_ONLY_DEPS.iter().any(|d| declares_dep_on(clean, d)));
 }
+
+/// The language registry (handoff `language-registry-handoff-v1` T1) is shared by the server and the command-line program, so it may
+/// depend on neither: no `planeter-*` crate and no external crate at all. The server crate that renders messages (`planeter-web`) and
+/// the client may depend on it; nothing else needs to.
+#[test]
+fn the_shared_language_crate_depends_on_nothing() {
+    let path = workspace_root().join("crates/planeter-i18n/Cargo.toml");
+    let manifest =
+        fs::read_to_string(&path).unwrap_or_else(|e| panic!("read {}: {e}", path.display()));
+    let deps: Vec<&str> = {
+        let mut on = false;
+        let mut out = Vec::new();
+        for line in manifest.lines() {
+            let t = line.trim();
+            if t.starts_with('[') {
+                on = t == "[dependencies]"
+                    || t == "[dev-dependencies]"
+                    || t == "[build-dependencies]";
+                continue;
+            }
+            if on && !t.is_empty() && !t.starts_with('#') {
+                out.push(t);
+            }
+        }
+        out
+    };
+    assert!(
+        deps.is_empty(),
+        "planeter-i18n declares dependencies: {deps:?}"
+    );
+}
+
+#[test]
+fn only_the_server_that_renders_messages_the_client_and_the_tools_depend_on_the_language_crate() {
+    let root = workspace_root();
+    let mut dependents = Vec::new();
+    for dir in ["crates", "tools"] {
+        for entry in fs::read_dir(root.join(dir)).unwrap().flatten() {
+            let manifest = entry.path().join("Cargo.toml");
+            if let Ok(text) = fs::read_to_string(&manifest)
+                && declares_dep_on(&text, "planeter-i18n")
+            {
+                dependents.push(entry.file_name().to_string_lossy().into_owned());
+            }
+        }
+    }
+    dependents.sort();
+    assert_eq!(
+        dependents,
+        ["i18n-sheet", "planeter-client", "planeter-web"],
+        "{dependents:?}"
+    );
+    // The lower and core crates never depend on it (they say nothing a person reads).
+    for name in LOWER_CORE {
+        let text = fs::read_to_string(root.join("crates").join(name).join("Cargo.toml")).unwrap();
+        assert!(!declares_dep_on(&text, "planeter-i18n"), "{name}");
+    }
+}
+
+#[test]
+fn the_language_crate_check_finds_a_planted_dependency() {
+    let planted = "[package]\nname = \"planeter-i18n\"\n[dependencies]\nserde = \"1\"\n";
+    assert!(declares_dep_on(
+        "[dependencies]\nplaneter-i18n = { path = \"../x\" }\n",
+        "planeter-i18n"
+    ));
+    assert!(!declares_dep_on(planted, "planeter-i18n"));
+}

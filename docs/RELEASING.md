@@ -1,7 +1,7 @@
 # Releasing planeter
 
 planeter releases an **application**: a bare version tag → `release.yml` → attested binaries + a
-container image → a GitHub release. The ten `planeter-*` crates (nine until 0.4.0; `planeter-client` joined in 0.5.0) are **also** published to crates.io
+container image → a GitHub release. The `planeter-*` crates (nine until 0.4.0; `planeter-client` joined in 0.5.0, ten; `planeter-i18n` joined after it, eleven) are **also** published to crates.io
 after the release run is green, as an install path (`cargo install planeter`); `planeter-runner` is not
 published until M4. **Tagging and publishing are owner-authorized.**
 
@@ -13,6 +13,9 @@ published until M4. **Tagging and publishing are owner-authorized.**
    `tools/enf2-symbol-check/check.sh`, and the two maintenance gates `cargo run --locked -p
    planeter-floor-check` and `cargo run --locked -p planeter-pin-check` (RFC 010 D-2, D-5). The
    supply-chain pair may also be run as a checkpoint with the manual `supply-chain.yml` workflow.
+1b. **Languages.** Run `cargo run -p planeter-i18n-sheet -- --status` and list its lines in the release notes: for each signed-off language, how
+   many messages are newer than its sign-off (they ship, flagged until a reviewer has read them; `docs/messages-and-languages.md`). Do not
+   write the number into other documents.
 2. `CHANGELOG.md` has a `## [X.Y.Z]` section for the release (the workflow refuses to publish
    without one).
 3. `Cargo.toml` `[workspace.package] version = "X.Y.Z"` equals the tag (the workflow's first gate).
@@ -290,7 +293,7 @@ docker run --rm ghcr.io/prikk-vcs/planeter:X.Y.Z --version
   bytes=… wall_ms=… lease_wait_ms=…`); the counters (changed vs unchanged, kind, bytes, cache, lease wait, per-repository export
   count and hit rate, refusals by reason) are kept in memory for a future metrics endpoint.
 - **Languages (RFC 012 D-3f).** English and **Japanese are on by default**: Japanese was signed off by its reviewers on 2026-10-31
-  (the record is `JA_SIGNOFF`), so a caller who asks for it — `Accept-Language: ja`, the `planeter_lang` cookie or the switcher in the
+  (the record is data on the language in `planeter-i18n`), so a caller who asks for it — `Accept-Language: ja`, the `planeter_lang` cookie or the switcher in the
   footer — gets it, and **a caller who does not ask is English** (the default is unchanged). No setting is needed. **`PLANETER_PREVIEW_LANGUAGES`**
   (comma-separated codes) is kept for the next draft language: it offers a catalog its reviewers have not signed off, and logs `PREVIEW
   languages on (…): these catalogs are drafts…` once at start. No draft language exists at present; naming `ja` (an earlier setting) is
@@ -414,15 +417,14 @@ crates.io requires every intra-workspace dependency to carry a version, and reje
 dependencies are not yet published — so publish in dependency order, each with the workspace version:
 
 ```sh
-for c in planeter-prikk planeter-store planeter-core planeter-auth planeter-ci planeter-registry \
+for c in planeter-i18n planeter-prikk planeter-store planeter-core planeter-auth planeter-ci planeter-registry \
          planeter-transport planeter-web planeter \
          planeter-client; do
   cargo publish -p "$c" --locked
 done
 ```
 
-That is the order cargo itself computes (`planeter-web` depends on `planeter-transport`, so transport comes first; `planeter-client` has no
-workspace dependency and may be published at any point; it is last here so a failure leaves the server's crates complete). **Before the first
+That is the order cargo itself computes (**`planeter-i18n`, the shared language registry, comes first: `planeter-web` and `planeter-client` depend on it** — eleven crates from the release after 0.5.0, which had ten; `planeter-web` depends on `planeter-transport`, so transport comes first; `planeter-client` depends only on `planeter-i18n`; it is last here so a failure leaves the server's crates complete). **Before the first
 real publish, dry-run the whole set at once:** `cargo publish --workspace --exclude planeter-runner --dry-run --locked` packages every crate,
 builds each from its package against the others' packages, and uploads nothing (cargo 1.90 or later; it replaces dry-running only the leaves, which
 was all that could be done when a crate's internal dependencies were unpublished). `planeter-runner` stays unpublished (`publish = false`).

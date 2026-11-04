@@ -1,13 +1,16 @@
 //! The Japanese catalog (RFC 012 D-3, handoff `japanese-and-switcher-handoff-v1`): **signed off by its reviewers** (see
-//! [`super::JA_SIGNOFF`]) and shipped like English. The sheet they reviewed is generated from this table
-//! (`cargo run -p planeter-ja-sheet`, `docs/messages-and-languages.md`); a correction is an edit here and in `docs/glossary.md`.
+//! its record in the registry, `planeter_i18n::languages::ja`) and shipped like English. The sheet they reviewed is generated from this table
+//! (`cargo run -p planeter-i18n-sheet -- --lang ja`, `docs/messages-and-languages.md`); a correction is an edit here and in `docs/glossary/ja.md`.
 //!
 //! Style: polite form (です・ます); headings, labels and badges are noun phrases; Japanese has no grammatical
 //! plural, so a message with a count says the same in both forms; the order follows [`super::Key`] and the
 //! English catalog, key for key, with the same placeholders. The terms are the Japanese column of
-//! `docs/glossary.md` (section 5); the **hard terms** are flagged there for the reviewers' decision.
+//! `docs/glossary/ja.md`; the **hard terms** are flagged there for the reviewers' decision.
 
-use super::{Entry, msg, plural_msg};
+use super::{Entry, msg};
+
+/// The server's messages for this language.
+pub static DEF: super::LangDef = super::LangDef::new(&planeter_i18n::languages::ja::JA, CATALOG);
 
 pub const CATALOG: &[Entry] = &[
     // layout and navigation
@@ -171,11 +174,7 @@ pub const CATALOG: &[Entry] = &[
     // history, change, refs, verify
     msg("history.heading", "履歴 {ref}"),
     msg("history.rollback", "ロールバック"),
-    plural_msg(
-        "history.patch_count",
-        "パッチ {count} 件",
-        "パッチ {count} 件",
-    ),
+    msg("history.patch_count", "パッチ {count} 件"),
     msg(
         "history.empty",
         "このブランチには、署名済みの変更がまだありません。",
@@ -605,9 +604,8 @@ pub const CATALOG: &[Entry] = &[
         "recovery.blocker.processes_uninspected",
         "一部のプロセスを調べられなかったため、そのどれかがリポジトリを使用している可能性を除外できません。",
     ),
-    plural_msg(
+    msg(
         "recovery.note.unreached_objects",
-        "リポジトリの点検で、どこからも使われていない保存データが {count} 件見つかりました。復旧は止まらず、対応は不要です。",
         "リポジトリの点検で、どこからも使われていない保存データが {count} 件見つかりました。復旧は止まらず、対応は不要です。",
     ),
     msg(
@@ -817,16 +815,8 @@ pub const CATALOG: &[Entry] = &[
         "proposal.what.closed",
         "閉じています：この提案がプロジェクトの履歴に含まれることはありません。",
     ),
-    plural_msg(
-        "proposal.summary",
-        "{revisions}にパッチ {count} 件",
-        "{revisions}にパッチ {count} 件",
-    ),
-    plural_msg(
-        "proposal.revisions_count",
-        "リビジョン {count} 件",
-        "リビジョン {count} 件",
-    ),
+    msg("proposal.summary", "{revisions}にパッチ {count} 件"),
+    msg("proposal.revisions_count", "リビジョン {count} 件"),
     msg("proposal.by", "提案者：{who}"),
     msg("proposal.when", "最終更新：{when}"),
     msg("proposal.closed_reason", "理由：{reason}"),
@@ -862,9 +852,8 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg("proposal.revision.removed", "削除済み"),
     msg("proposal.patches.heading", "パッチ"),
-    plural_msg(
+    msg(
         "proposal.patches.pending",
-        "{count} 件のパッチは、まだこのサーバーが保持しており、署名されていません。",
         "{count} 件のパッチは、まだこのサーバーが保持しており、署名されていません。",
     ),
     msg(
@@ -906,11 +895,7 @@ pub const CATALOG: &[Entry] = &[
         "proposal.download",
         "リビジョン {seq} のファイルをダウンロード",
     ),
-    plural_msg(
-        "repo.open_proposals",
-        "開いている提案 {count} 件",
-        "開いている提案 {count} 件",
-    ),
+    msg("repo.open_proposals", "開いている提案 {count} 件"),
     msg("proposal.back", "提案に戻る"),
     msg(
         "proposal.close.too_long",
@@ -1018,16 +1003,8 @@ pub const CATALOG: &[Entry] = &[
         "500 文字までの一、二文の理由を付けて、もう一度送信してください。",
     ),
     msg("review.line.awaiting", "レビュー待ち"),
-    plural_msg(
-        "review.line.approved",
-        "{count} 人が承認しました",
-        "{count} 人が承認しました",
-    ),
-    plural_msg(
-        "review.line.changes",
-        "{count} 人が変更を依頼しています",
-        "{count} 人が変更を依頼しています",
-    ),
+    msg("review.line.approved", "{count} 人が承認しました"),
+    msg("review.line.changes", "{count} 人が変更を依頼しています"),
     msg(
         "review.means.awaiting",
         "リビジョン {revision} に判断を出したレビュアーはまだいません。レビューは何もマージしません。",
@@ -1069,11 +1046,7 @@ pub const CATALOG: &[Entry] = &[
     msg("comments.heading", "コメント"),
     msg("comments.none", "コメントはまだありません。"),
     msg("comments.more", "さらにコメントを表示"),
-    plural_msg(
-        "comments.count",
-        "コメント {count} 件",
-        "コメント {count} 件",
-    ),
+    msg("comments.count", "コメント {count} 件"),
     msg(
         "comment.meta",
         "{who} · {when} · リビジョン {revision} の時点",
@@ -1445,11 +1418,7 @@ pub const CATALOG: &[Entry] = &[
     msg("stage.size", "サイズ：{size}"),
     msg("stage.digest", "SHA-256：{digest}"),
     msg("stage.expires", "{when} まで保管し、その後削除します。"),
-    plural_msg(
-        "stage.objects",
-        "全部で {count} 件の項目を含みます。",
-        "全部で {count} 件の項目を含みます。",
-    ),
+    msg("stage.objects", "全部で {count} 件の項目を含みます。"),
     msg("stage.refs.heading", "アーカイブ内のブランチ"),
     msg(
         "stage.ref.published",
@@ -1463,11 +1432,7 @@ pub const CATALOG: &[Entry] = &[
         "stage.ref.received",
         "{ref}：メンテナーが別の場所から受け取ったコピーで、常に受信したコピーとして保持されます",
     ),
-    plural_msg(
-        "stage.ref.more",
-        "ほか {count} 件のブランチ",
-        "ほか {count} 件のブランチ",
-    ),
+    msg("stage.ref.more", "ほか {count} 件のブランチ"),
     msg(
         "stage.verifies.yes",
         "下の鍵をすべて信頼すれば、新しいリポジトリは prikk のすべての検証に通ります。",

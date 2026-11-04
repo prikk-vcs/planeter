@@ -10,75 +10,95 @@
 pub mod en;
 pub mod ja;
 
-/// Whether the Japanese catalog has been signed off by its reviewers (the owner and a colleague; RFC 012 D-3f; the record is the
-/// server's `JA_SIGNOFF`). Japanese is chosen from `LC_ALL`, `LC_MESSAGES` or `LANG` when they say `ja`; `--lang` always wins.
-pub const JA_REVIEWED: bool = true;
+pub use planeter_i18n::{Entry, LangDef, msg};
 
-/// A language of the catalog.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum Lang {
-    En,
-    Ja,
+/// This program's catalog of every language in the registry (`planeter_i18n::languages::LANGUAGES`), in the registry's order. A test
+/// fails if a registered language has no catalog here or the other way round. Whether a language is shipped, a draft or signed off is
+/// data on the language, not a flag here.
+pub static CATALOGS: [&LangDef; 2] = [&en::DEF, &ja::DEF];
+
+/// A language of the catalog: a handle on the language and this program's messages for it.
+#[derive(Clone, Copy)]
+pub struct Lang(&'static LangDef);
+
+impl std::fmt::Debug for Lang {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "Lang({})", self.0.tag)
+    }
 }
 
+impl PartialEq for Lang {
+    fn eq(&self, other: &Self) -> bool {
+        self.0.tag == other.0.tag
+    }
+}
+
+impl Eq for Lang {}
+
 impl Lang {
-    pub const ALL: [Lang; 2] = [Lang::En, Lang::Ja];
+    /// The language the messages are written in, and the fallback.
+    pub const SOURCE: Lang = Lang(&en::DEF);
+
+    /// Every language this program has a catalog for that is shipped (the source language and the signed-off ones).
+    pub fn shipped() -> Vec<Lang> {
+        CATALOGS
+            .iter()
+            .copied()
+            .filter(|d| d.is_shipped())
+            .map(Lang)
+            .collect()
+    }
+
+    /// Every catalog, drafts included.
+    pub fn all() -> Vec<Lang> {
+        CATALOGS.iter().copied().map(Lang).collect()
+    }
 
     pub fn tag(self) -> &'static str {
-        match self {
-            Lang::En => "en",
-            Lang::Ja => "ja",
-        }
+        self.0.tag
+    }
+
+    pub fn def(self) -> &'static LangDef {
+        self.0
     }
 
     pub fn entries(self) -> &'static [Entry] {
-        match self {
-            Lang::En => en::CATALOG,
-            Lang::Ja => ja::CATALOG,
-        }
+        self.0.entries
     }
 
-    /// The language a person asked for with `--lang`. Any known tag (English, Japanese).
-    pub fn from_flag(tag: &str) -> Option<Lang> {
-        match tag.trim().to_ascii_lowercase().as_str() {
-            "en" => Some(Lang::En),
-            "ja" => Some(Lang::Ja),
-            _ => None,
-        }
-    }
-
-    /// The language to speak when no flag was given: the first of `LC_ALL`, `LC_MESSAGES`, `LANG` that is set and not empty
-    /// (the usual order), by its language part. English unless that is a *shipped* language.
-    pub fn from_environment(var: impl Fn(&str) -> Option<String>) -> Lang {
-        let value = ["LC_ALL", "LC_MESSAGES", "LANG"]
+    /// The shipped tags, `en|ja`: what `--help` names and the refusal of a wrong `--lang` lists.
+    pub fn shipped_tags(separator: &str) -> String {
+        Lang::shipped()
             .iter()
-            .filter_map(|name| var(name))
-            .find(|v| !v.trim().is_empty());
-        let Some(value) = value else {
-            return Lang::En;
-        };
-        let primary = value
-            .split(['_', '.', '@', '-'])
-            .next()
-            .unwrap_or("")
-            .to_ascii_lowercase();
-        match primary.as_str() {
-            "ja" if JA_REVIEWED => Lang::Ja,
-            _ => Lang::En,
-        }
+            .map(|l| l.tag())
+            .collect::<Vec<_>>()
+            .join(separator)
     }
-}
 
-/// One message: the key's identifier and its text.
-#[derive(Debug)]
-pub struct Entry {
-    pub key: &'static str,
-    pub text: &'static str,
-}
+    fn shipped_languages() -> Vec<&'static planeter_i18n::Language> {
+        Lang::shipped().iter().map(|l| l.0.lang).collect()
+    }
 
-/// A message.
-pub const fn msg(key: &'static str, text: &'static str) -> Entry {
-    Entry { key, text }
+    fn from_language(found: &planeter_i18n::Language) -> Option<Lang> {
+        Lang::shipped()
+            .into_iter()
+            .find(|l| std::ptr::eq(l.0.lang, found))
+    }
+
+    /// The language a person asked for with `--lang`: any shipped tag, matched as a BCP 47 tag (`ja`, `ja-JP`, `EN`).
+    pub fn from_flag(tag: &str) -> Option<Lang> {
+        let found = planeter_i18n::tag::matching(tag.trim(), &Lang::shipped_languages())?;
+        Lang::from_language(found)
+    }
+
+    /// The language to speak when no flag was given: the language the first of `LC_ALL`, `LC_MESSAGES`, `LANG` that is set and not
+    /// empty names (`de_DE.UTF-8`, `zh_TW.Big5`; `C` and `POSIX` name none), among the shipped languages; the source language
+    /// otherwise.
+    pub fn from_environment(var: impl Fn(&str) -> Option<String>) -> Lang {
+        planeter_i18n::tag::from_environment(var, &Lang::shipped_languages())
+            .and_then(Lang::from_language)
+            .unwrap_or(Lang::SOURCE)
+    }
 }
 
 macro_rules! keys {
@@ -224,12 +244,32 @@ keys! {
     ProgressSent => "progress.sent",
 }
 
+/// The messages of a signed-off language as they were signed (`locales/<tag>.signed`: `key<TAB>hash`), for the review baseline.
+pub fn baseline_text(tag: &str) -> Option<&'static str> {
+    match tag {
+        "ja" => Some(include_str!("../locales/ja.signed")),
+        _ => None,
+    }
+}
+
+/// How many messages of `tag` are changed or new since its sign-off (`None` for a language that is not signed off).
+pub fn unreviewed_count(tag: &str) -> Option<usize> {
+    let def = CATALOGS
+        .iter()
+        .find(|d| d.tag == tag && d.sign_off().is_some())?;
+    let baseline = planeter_i18n::baseline::parse(baseline_text(tag)?).ok()?;
+    Some(planeter_i18n::baseline::unreviewed_count(
+        def.entries,
+        &baseline,
+    ))
+}
+
 /// The text of `key` in `lang`, or `None` if the table lacks it.
 pub fn raw(lang: Lang, key: Key) -> Option<&'static str> {
     lang.entries()
         .iter()
         .find(|e| e.key == key.id())
-        .map(|e| e.text)
+        .map(|e| e.other())
 }
 
 /// A message being filled in.

@@ -1,0 +1,15 @@
+[package]
+name = "planeter-i18n-sheet"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "Generates the review sheet for any language from the live message catalogs of the server and the command-line program, writes and reads the baselines of what a sign-off covered (RFC 012 D-3f). Adds no external dependency; not a product crate."
+publish = false
+
+[dependencies]
+planeter-i18n = { path = "../../crates/planeter-i18n", version = "0.5.0" }
+planeter-web = { path = "../../crates/planeter-web", version = "0.5.0" }
+planeter-client = { path = "../../crates/planeter-client", version = "0.5.0" }

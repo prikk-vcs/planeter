@@ -107,6 +107,7 @@ pub fn parse(args: &[String], lang_hint: Lang) -> Result<Parsed, Failure> {
                         USAGE,
                         usage(lang_hint, Key::UsageBadLang)
                             .with("value", shown)
+                            .with("languages", Lang::shipped_tags(", "))
                             .text(),
                     ));
                 }

@@ -968,6 +968,7 @@ dependencies = [
 name = "planeter-client"
 version = "0.5.0"
 dependencies = [
+ "planeter-i18n",
  "rustls",
  "rustls-pki-types",
  "serde",
@@ -995,16 +996,21 @@ name = "planeter-glibc-check"
 version = "0.5.0"
 
 [[package]]
-name = "planeter-image-identity"
+name = "planeter-i18n"
 version = "0.5.0"
 
 [[package]]
-name = "planeter-ja-sheet"
+name = "planeter-i18n-sheet"
 version = "0.5.0"
 dependencies = [
  "planeter-client",
+ "planeter-i18n",
  "planeter-web",
 ]
+
+[[package]]
+name = "planeter-image-identity"
+version = "0.5.0"
 
 [[package]]
 name = "planeter-pin-check"
@@ -1058,6 +1064,7 @@ dependencies = [
  "jsonwebtoken",
  "planeter-auth",
  "planeter-core",
+ "planeter-i18n",
  "planeter-prikk",
  "planeter-store",
  "planeter-transport",

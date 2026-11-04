@@ -1,13 +1,16 @@
-//! Japanese, signed off by its reviewers (the owner and a colleague; RFC 012 D-3f; `JA_REVIEWED`): chosen from `LC_ALL`, `LC_MESSAGES`
-//! or `LANG` when they say `ja`, and with `--lang ja`. The words follow the server's Japanese glossary (`docs/glossary.md` §5):
+//! Japanese, signed off by its reviewers (RFC 012 D-3f; the record is data on the language, `planeter_i18n::languages::ja`): chosen from `LC_ALL`, `LC_MESSAGES`
+//! or `LANG` when they say `ja`, and with `--lang ja`. The words follow the server's Japanese glossary (`docs/glossary/ja.md`):
 //! 提案, リビジョン, 保持, 鍵を信頼する; `このサーバーを運用している人`, never `管理者` alone.
 
 use super::{Entry, msg};
 
+/// The program's messages for this language.
+pub static DEF: super::LangDef = super::LangDef::new(&planeter_i18n::languages::ja::JA, CATALOG);
+
 pub static CATALOG: &[Entry] = &[
     msg(
         "help.main",
-        "planeter-client は、あなた自身の prikk と鍵を使って planeter サーバーとやり取りします。鍵を持つことはなく、サーバー上のブランチを変えることもありません。\n\n使い方:\n  planeter-client propose <https://host/owner/name> [--ref heads/NAME] [--proposal ID] [--title TITLE] [--description-file FILE] [--dry-run] [--retry]\n  planeter-client clone <https://host/owner/name> [DIR] [--trust-key KEY]... [--no-adopt]\n  planeter-client fetch [DIR]\n\nすべてのコマンドに共通:\n  --token-file FILE   トークンを FILE から読みます（または PLANETER_TOKEN を設定）。コマンドラインからトークンを受け取ることはありません\n  --cacert FILE       FILE にある認証局だけを信頼します。内蔵の一覧は置き換えられます\n  --lang en|ja        メッセージの言語\n  --verbose           メッセージの背後にある元の理由も表示します\n  --help, --version\n\n終了コード: 0 完了、1 サーバーが断った、2 コマンドラインの誤り、3 ネットワークまたは TLS、4 prikk の失敗、5 ローカルのファイルまたは鍵。\n\n例:\n  planeter-client propose https://forge.example/alice/app --title \"パーサーを直す\" --dry-run",
+        "planeter-client は、あなた自身の prikk と鍵を使って planeter サーバーとやり取りします。鍵を持つことはなく、サーバー上のブランチを変えることもありません。\n\n使い方:\n  planeter-client propose <https://host/owner/name> [--ref heads/NAME] [--proposal ID] [--title TITLE] [--description-file FILE] [--dry-run] [--retry]\n  planeter-client clone <https://host/owner/name> [DIR] [--trust-key KEY]... [--no-adopt]\n  planeter-client fetch [DIR]\n\nすべてのコマンドに共通:\n  --token-file FILE   トークンを FILE から読みます（または PLANETER_TOKEN を設定）。コマンドラインからトークンを受け取ることはありません\n  --cacert FILE       FILE にある認証局だけを信頼します。内蔵の一覧は置き換えられます\n  --lang {languages}        メッセージの言語\n  --verbose           メッセージの背後にある元の理由も表示します\n  --help, --version\n\n終了コード: 0 完了、1 サーバーが断った、2 コマンドラインの誤り、3 ネットワークまたは TLS、4 prikk の失敗、5 ローカルのファイルまたは鍵。\n\n例:\n  planeter-client propose https://forge.example/alice/app --title \"パーサーを直す\" --dry-run",
     ),
     msg(
         "help.propose",
@@ -47,7 +50,7 @@ pub static CATALOG: &[Entry] = &[
     ),
     msg(
         "usage.bad_lang",
-        "「{value}」はこのプログラムにない言語です。en か ja を指定してください。",
+        "「{value}」はこのプログラムにない言語です。次のどれかを指定してください：{languages}",
     ),
     msg(
         "usage.bad_url",

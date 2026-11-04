@@ -31,19 +31,23 @@ fn check(lang: Lang, program: &Path, work: &Path) -> planeter_client::exit::Fail
         .expect_err("this stand-in is not a working prikk")
 }
 
+fn japanese() -> Lang {
+    Lang::from_flag("ja").expect("a language besides the source ships")
+}
+
 #[test]
 fn each_way_a_prikk_cannot_be_started_has_its_own_sentence_and_only_a_missing_one_says_not_found() {
     let d = dir("ways");
     let not_found = "prikk was not found";
 
     // Not there at all.
-    let gone = check(Lang::En, &d.join("no-such-prikk"), &d);
+    let gone = check(Lang::SOURCE, &d.join("no-such-prikk"), &d);
     assert!(gone.message.contains(not_found), "{}", gone.message);
     assert!(gone.message.contains("0.54.0"), "{}", gone.message);
 
     // There, but not executable.
     let plain = file(&d, "plain", "#!/bin/sh\necho 'prikk 0.55.0'\n", 0o644);
-    let denied = check(Lang::En, &plain, &d);
+    let denied = check(Lang::SOURCE, &plain, &d);
     assert!(
         denied
             .message
@@ -71,7 +75,7 @@ fn each_way_a_prikk_cannot_be_started_has_its_own_sentence_and_only_a_missing_on
     // A directory where the program should be.
     let a_dir = d.join("a-directory");
     std::fs::create_dir_all(&a_dir).unwrap();
-    let dirsay = check(Lang::En, &a_dir, &d);
+    let dirsay = check(Lang::SOURCE, &a_dir, &d);
     assert!(
         dirsay
             .message
@@ -83,7 +87,7 @@ fn each_way_a_prikk_cannot_be_started_has_its_own_sentence_and_only_a_missing_on
 
     // A script whose interpreter is gone: the system says "no such file", about the interpreter.
     let broken = file(&d, "broken", "#!/nonexistent/interpreter\n", 0o755);
-    let broke = check(Lang::En, &broken, &d);
+    let broke = check(Lang::SOURCE, &broken, &d);
     assert!(
         broke
             .message
@@ -103,7 +107,7 @@ fn each_way_a_prikk_cannot_be_started_has_its_own_sentence_and_only_a_missing_on
 
     // It starts and does not say a version: what it said is shown.
     let odd = file(&d, "odd", "#!/bin/sh\necho 'hello there'\n", 0o755);
-    let odd = check(Lang::En, &odd, &d);
+    let odd = check(Lang::SOURCE, &odd, &d);
     assert!(
         odd.message
             .starts_with("prikk did not say which version it is (it said: “hello there”)."),
@@ -113,7 +117,7 @@ fn each_way_a_prikk_cannot_be_started_has_its_own_sentence_and_only_a_missing_on
     assert!(!odd.message.contains(not_found));
     // ... or nothing at all, and fails.
     let mute = file(&d, "mute", "#!/bin/sh\nexit 3\n", 0o755);
-    let mute = check(Lang::En, &mute, &d);
+    let mute = check(Lang::SOURCE, &mute, &d);
     assert!(
         mute.message.contains("it said: “exit status: 3”") && !mute.message.contains(not_found),
         "{}",
@@ -121,7 +125,7 @@ fn each_way_a_prikk_cannot_be_started_has_its_own_sentence_and_only_a_missing_on
     );
 
     // `run` (the commands) tells the same truth as `check`.
-    let ran = Prikk::new(&d, Lang::En, Some(plain.clone().into()))
+    let ran = Prikk::new(&d, Lang::SOURCE, Some(plain.clone().into()))
         .run("make the repository", &["init", "."])
         .expect_err("not executable");
     assert!(
@@ -130,7 +134,7 @@ fn each_way_a_prikk_cannot_be_started_has_its_own_sentence_and_only_a_missing_on
         "{}",
         ran.message
     );
-    let ran_missing = Prikk::new(&d, Lang::En, Some(d.join("no-such-prikk").into()))
+    let ran_missing = Prikk::new(&d, Lang::SOURCE, Some(d.join("no-such-prikk").into()))
         .run("make the repository", &["init", "."])
         .expect_err("missing");
     assert!(
@@ -140,7 +144,7 @@ fn each_way_a_prikk_cannot_be_started_has_its_own_sentence_and_only_a_missing_on
     );
 
     // Japanese says the same three things, and the OS reason is kept in the detail only as the system words it.
-    let ja = check(Lang::Ja, &plain, &d);
+    let ja = check(japanese(), &plain, &d);
     assert!(
         ja.message
             .contains("見つかりましたが、起動できませんでした"),
@@ -148,13 +152,13 @@ fn each_way_a_prikk_cannot_be_started_has_its_own_sentence_and_only_a_missing_on
         ja.message
     );
     assert!(ja.message.contains("prikk --version"), "{}", ja.message);
-    let ja_gone = check(Lang::Ja, &d.join("no-such-prikk"), &d);
+    let ja_gone = check(japanese(), &d.join("no-such-prikk"), &d);
     assert!(
         ja_gone.message.contains("prikk が見つかりません"),
         "{}",
         ja_gone.message
     );
-    let ja_odd = check(Lang::Ja, &d.join("odd"), &d);
+    let ja_odd = check(japanese(), &d.join("odd"), &d);
     assert!(
         ja_odd.message.contains("バージョンを答えませんでした"),
         "{}",

@@ -19,9 +19,11 @@ use planeter_store::{
     InMemoryMembershipStore, InMemoryRepositoryStore, MembershipStore, RepositoryStore,
 };
 use planeter_web::catalog::{
-    Dir, EN, EN_DEF, Entry, JA_DEF, Key, Lang, LangDef, Plural, Problem, T, audit,
-    english_only_keys, register_test_language, set_english_only_for_test,
+    Category, Dir, EN, EN_DEF, Entry, Key, Lang, LangDef, Problem, T, audit, english_only_keys,
+    register_test_language, set_english_only_for_test,
 };
+#[allow(unused_imports)]
+use planeter_web::catalog::{catalog_of, msg, planted_language};
 use planeter_web::{AppState, BlockingGate, ContentOrigin, PrikkGate, TrustedProxies, router};
 
 /// The planted list: an API message and its hint, the heading of a plain page, a counted message, and a key English does not have.
@@ -38,8 +40,8 @@ fn plant() {
     ONCE.get_or_init(|| set_english_only_for_test(LIST));
 }
 
-fn other_only(_: u64) -> Plural {
-    Plural::Other
+fn other_only(_: u64) -> Category {
+    Category::Other
 }
 
 /// A test language: English wrapped in guillemets, without the listed keys (it does not hold them) and, if `without` names one more
@@ -51,23 +53,20 @@ fn wrapped(tag: &'static str, without: Option<&'static str>) -> &'static LangDef
         .iter()
         .filter(|e| !LIST.contains(&e.key) && Some(e.key) != without)
         .map(|e| {
-            let text: &'static str = Box::leak(format!("‹{}›", e.other).into_boxed_str());
-            Entry {
-                key: e.key,
-                one: text,
-                other: text,
-            }
+            let text: &'static str = Box::leak(format!("‹{}›", e.other()).into_boxed_str());
+            msg(e.key, text)
         })
         .collect();
-    Box::leak(Box::new(LangDef {
+    planted_language(
         tag,
-        endonym: "Test language",
-        dir: Dir::Ltr,
-        plural: other_only,
-        group_separator: ',',
-        decimal_separator: '.',
-        entries: Box::leak(entries.into_boxed_slice()),
-    }))
+        "Test language",
+        Dir::Ltr,
+        planeter_web::catalog::OTHER_ONLY_CATEGORIES,
+        other_only,
+        ',',
+        '.',
+        Box::leak(entries.into_boxed_slice()),
+    )
 }
 
 fn qaa() -> &'static LangDef {
@@ -149,7 +148,7 @@ fn the_completeness_check_expects_exactly_the_list() {
         "only the key English does not have is a problem"
     );
     // A table that holds a listed key is a problem, key by key (the Japanese draft holds them all).
-    let problems = audit(&[&EN_DEF, &JA_DEF]);
+    let problems = audit(&[&EN_DEF, catalog_of("ja").unwrap()]);
     for key in [
         "error.not_found.message",
         "error.not_found.hint",

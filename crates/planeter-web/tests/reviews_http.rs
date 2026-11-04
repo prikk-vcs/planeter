@@ -41,6 +41,8 @@ mod dom;
 #[allow(dead_code)]
 #[path = "structure/rules.rs"]
 mod rules;
+#[allow(unused_imports)]
+use planeter_web::catalog::{msg, planted_language};
 
 static NOW: AtomicU64 = AtomicU64::new(1_000_000);
 fn now() -> u64 {
@@ -2375,30 +2377,27 @@ async fn the_review_parts_of_the_pages_pass_the_checker_in_three_languages() {
 fn register_qaa() {
     static ONCE: std::sync::Once = std::sync::Once::new();
     ONCE.call_once(|| {
-        use planeter_web::catalog::{Dir, Entry, LangDef, Plural, register_test_language, shipped};
-        fn other_only(_: u64) -> Plural {
-            Plural::Other
+        use planeter_web::catalog::{Category, Dir, Entry, register_test_language, shipped};
+        fn other_only(_: u64) -> Category {
+            Category::Other
         }
         let entries: Vec<Entry> = shipped()[0]
             .entries
             .iter()
             .map(|e| {
-                let text: &'static str = Box::leak(format!("‹{}›", e.other).into_boxed_str());
-                Entry {
-                    key: e.key,
-                    one: text,
-                    other: text,
-                }
+                let text: &'static str = Box::leak(format!("‹{}›", e.other()).into_boxed_str());
+                msg(e.key, text)
             })
             .collect();
-        register_test_language(Box::leak(Box::new(LangDef {
-            tag: "qaa",
-            endonym: "Test language",
-            dir: Dir::Rtl,
-            plural: other_only,
-            group_separator: ',',
-            decimal_separator: '.',
-            entries: Box::leak(entries.into_boxed_slice()),
-        })));
+        register_test_language(planted_language(
+            "qaa",
+            "Test language",
+            Dir::Rtl,
+            planeter_web::catalog::OTHER_ONLY_CATEGORIES,
+            other_only,
+            ',',
+            '.',
+            Box::leak(entries.into_boxed_slice()),
+        ));
     });
 }

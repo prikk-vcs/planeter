@@ -5,6 +5,16 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **Languages are data: any number of languages, with a record of who signed what (RFC 012 D-3, amended 2026-11-04).** A new shared crate, `planeter-i18n`,
+  holds the only list of languages: each language's tag, name in itself, direction, plural rule, separators and **sign-off record** (who read it, when, which
+  commit and review sheet). Nothing else changes for English and Japanese. What it makes possible: plural categories beyond `one` and `other` (Russian, Polish,
+  Arabic and Welsh rules are in and tested), matching by BCP 47 (`zh-TW` gets `zh-Hant`, `pt-PT` gets `pt-BR` when only that ships), a language switcher that
+  becomes one menu from four languages on, and one review-sheet tool for any language (`planeter-i18n-sheet`, replacing the Japanese-only one). **A message
+  written or changed after a language was signed off now ships and is flagged until a reviewer has read it**: the server logs how many at start (for
+  Japanese, 10: the eight answers the framework used to write by itself, and the two lines of `planeter-client` that name the shipped languages), and the
+  release notes list the count. The `planeter-client` help line and its wrong-`--lang` refusal now name the shipped languages from the registry (the help
+  prints `--lang en|ja` exactly as before; the refusal lists them: "Use one of: en, ja."). `planeter-i18n` is published first.
+
 - **Japanese is now available (RFC 012 D-3f).** The Japanese texts of the pages, the API's error messages and `planeter-client` were reviewed by their two
   reviewers and signed off on 2026-10-31. A caller who asks for Japanese (`Accept-Language: ja`, the `planeter_lang` cookie, or the button in the footer of
   every page) gets it, with no operator setting; **a caller who does not ask is English, as before**. `PLANETER_PREVIEW_LANGUAGES=ja` (set by an operator who

@@ -205,6 +205,19 @@ async fn main() {
         }
     }
 
+    // Policy (docs/messages-and-languages.md): a message written or changed after a language was signed off ships and is flagged
+    // until a reviewer has read it. Say how many, once.
+    for def in planeter_web::catalog::shipped() {
+        if let Some(n) = planeter_web::catalog::unreviewed_count(def.tag)
+            && n > 0
+        {
+            eprintln!(
+                "planeter: language {}: {n} message(s) are newer than its sign-off and have not been read by a reviewer",
+                def.tag
+            );
+        }
+    }
+
     // One SQLite database for every store; production hashers.
     let db = match SqliteDb::open(&db_path) {
         Ok(db) => db,

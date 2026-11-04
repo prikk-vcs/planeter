@@ -71,7 +71,9 @@ pub fn run(args: &[String], ctx: &mut Ctx<'_>) -> i32 {
                 cli::Topic::Clone => Key::HelpClone,
                 cli::Topic::Fetch => Key::HelpFetch,
             };
-            let text = t(ctx.lang, key).text();
+            let text = t(ctx.lang, key)
+                .with("languages", catalog::Lang::shipped_tags("|"))
+                .text();
             ctx.say(text);
             Ok(())
         }

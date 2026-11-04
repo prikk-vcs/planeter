@@ -1,0 +1,17 @@
+# The first page of the review sheet for Japanese: an English section and a section in the language itself, written by whoever adds the
+# language. Placeholders: {tag}, {endonym}; {{A|B}} is A while the language is a draft and B once it is signed off. Sections start at a
+# line `=== english` and `=== local`.
+=== english
+1. **What this is.** Every sentence planeter shows, on its pages and on the command line, with the English (final) and the Japanese ({{a draft|the current text}}) side by side. The sheet is generated from the programs' message catalogs, so it is exactly what ships.
+2. **What to do.** Where a Japanese text should change, write the corrected Japanese in the last column, "reviewer's correction". If a row is fine, write "OK" or leave it empty (empty means: accept it as it is). Do not edit the other columns.
+3. **You may stop after any group.** The groups run A, B, C, D. A carries the words that tell a reader how far to trust what they see: read it first and in full. D is for developers and operators and may stay in English if the owner decides so (then D disappears from the sheet).
+4. **The {braces}.** Text like `{repo}` or `{count}` is filled in by the program when the sentence is shown. Keep it spelled exactly, in a place where it reads naturally in Japanese; do not translate what is inside the braces.
+5. **Terms to decide first.** The terms in the table below apply to every row that uses them; please decide them before the rows.
+6. **What happens next.** Corrections become catalog and glossary edits, one commit per group, and a record of the sign-off (who, when, which sheet) is made; then Japanese is offered to everyone.
+=== local
+1. **これは何か。** planeter が画面とコマンドラインで表示する文章のすべてを、英語（確定済み）と日本語（{{草案|現行の文}}）で並べた表です。表の内容はプログラムのメッセージカタログから自動で作られており、出荷される文章とまったく同じです。
+2. **やること。** 直したい行の最後の列「reviewer's correction」に、直した日本語の文を書いてください。問題がなければ「OK」と書くか、空欄のままにしてください（空欄は「このままでよい」という意味です）。他の列は編集しないでください。
+3. **途中でやめてよい。** グループ A、B、C、D の順に並んでいます。各グループの終わりでやめても構いません。A は信頼に関わる言葉なので、必ず最初に確認してください。D は開発者と運用者向けで、英語のままにすることもできます（その場合、D は表から消えます）。
+4. **{波括弧} の部分。** `{repo}` や `{count}` のような部分は、表示の瞬間にプログラムが値を入れます。綴りを変えず、日本語として自然な位置に入れてください。波括弧の中は翻訳しません。
+5. **最初に決めてほしい用語。** 下の表の用語は、決めた内容がすべての行に適用されます。先に決めてください。
+6. **このあと。** 修正はグループごとにカタログと用語集へ反映され（1 グループ 1 コミット）、確認の記録（誰が、いつ、どの表で）が残ります。そのあと日本語が公開されます。

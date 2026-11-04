@@ -24,7 +24,7 @@ fn http(server: &Server, cacert: bool, token: Option<&str>, timeouts: &Timeouts)
         cacert.then_some(ca_path.as_path()),
         token.and_then(Token::new),
         timeouts,
-        Lang::En,
+        Lang::SOURCE,
         false,
     )
     .inspect(|_| {
@@ -270,7 +270,7 @@ fn the_token_goes_in_the_header_and_in_no_text_the_program_can_print() {
         None,
         Token::new(token),
         &quick(),
-        Lang::En,
+        Lang::SOURCE,
         true,
     )
     .unwrap();
@@ -322,7 +322,7 @@ fn certificate_failures_are_one_plain_sentence_each_and_the_raw_reason_is_only_t
         assert_eq!(f.code, NETWORK, "{cert}: {e:?}");
         assert_eq!(
             f.message,
-            t(Lang::En, want).with("host", "127.0.0.1").text(),
+            t(Lang::SOURCE, want).with("host", "127.0.0.1").text(),
             "{cert}: {e:?}"
         );
         let detail = f.detail.clone().unwrap_or_default();
@@ -367,10 +367,10 @@ fn certificate_failures_are_one_plain_sentence_each_and_the_raw_reason_is_only_t
         matches!(e, HttpError::Net(NetProblem::Unreachable(_))),
         "{e:?}"
     );
-    let f = failure(Lang::En, "127.0.0.1", &e, false);
+    let f = failure(Lang::SOURCE, "127.0.0.1", &e, false);
     assert_eq!(
         f.message,
-        t(Lang::En, Key::NetUnreachable)
+        t(Lang::SOURCE, Key::NetUnreachable)
             .with("host", "127.0.0.1")
             .text()
     );
@@ -389,12 +389,19 @@ fn a_cacert_replaces_the_trust_anchors_and_an_unreadable_one_is_a_sentence() {
     // A file that holds no certificate.
     let junk = dir.join("junk.pem");
     std::fs::write(&junk, "not a certificate").unwrap();
-    let e = Http::new("127.0.0.1", Some(&junk), None, &quick(), Lang::En, false)
-        .err()
-        .unwrap();
+    let e = Http::new(
+        "127.0.0.1",
+        Some(&junk),
+        None,
+        &quick(),
+        Lang::SOURCE,
+        false,
+    )
+    .err()
+    .unwrap();
     assert_eq!(
         e.message,
-        t(Lang::En, Key::NetCacertUnreadable)
+        t(Lang::SOURCE, Key::NetCacertUnreadable)
             .with("path", junk.display())
             .text()
     );
@@ -406,7 +413,15 @@ fn a_cacert_replaces_the_trust_anchors_and_an_unreadable_one_is_a_sentence() {
     );
     // Another authority replaces the built-in list and the first: the same server is now unknown.
     let other = common::fixtures().join("ca2.pem");
-    let h = Http::new("127.0.0.1", Some(&other), None, &quick(), Lang::En, false).unwrap();
+    let h = Http::new(
+        "127.0.0.1",
+        Some(&other),
+        None,
+        &quick(),
+        Lang::SOURCE,
+        false,
+    )
+    .unwrap();
     assert!(matches!(
         h.get_json(&server.url("/x")).unwrap_err(),
         HttpError::Net(NetProblem::UnknownIssuer(_))

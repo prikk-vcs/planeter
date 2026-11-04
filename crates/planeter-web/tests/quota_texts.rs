@@ -2,7 +2,7 @@
 //! the person can do, and every key the core model can ask for exists in every language.
 
 use planeter_core::change::{Quota, QuotaRefusal};
-use planeter_web::catalog::{EN_DEF, JA_DEF, Key, Lang};
+use planeter_web::catalog::{EN_DEF, Key, Lang, catalog_of};
 use planeter_web::quota::{keys, texts};
 
 const MIB: u64 = 1024 * 1024;
@@ -98,7 +98,7 @@ fn each_english_refusal_names_the_limit_and_the_use_and_says_what_to_do() {
 
 #[test]
 fn the_japanese_draft_fills_the_same_placeholders() {
-    let lang = Lang::from_def(&JA_DEF);
+    let lang = Lang::from_def(catalog_of("ja").unwrap());
     for r in all() {
         let (m, h) = texts(&r, lang);
         assert!(!m.contains('{') && !h.contains('{'), "{m} / {h}");

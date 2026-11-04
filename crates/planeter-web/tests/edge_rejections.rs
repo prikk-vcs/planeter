@@ -18,6 +18,8 @@ use planeter_core::{HostingService, NullAuditSink, ReadService};
 use planeter_store::{
     InMemoryMembershipStore, InMemoryRepositoryStore, MembershipStore, RepositoryStore,
 };
+#[allow(unused_imports)]
+use planeter_web::catalog::{msg, planted_language};
 use planeter_web::{AppState, BlockingGate, ContentOrigin, PrikkGate, TrustedProxies, router};
 
 fn app() -> Router {
@@ -577,31 +579,28 @@ async fn transcript() {
 /// The pseudo-language (every message wrapped in guillemets) reaches these answers too: nothing here is written outside the catalog.
 #[tokio::test]
 async fn the_pseudo_language_wraps_every_edge_message() {
-    use planeter_web::catalog::{Dir, EN_DEF, Entry, LangDef, Plural, register_test_language};
-    fn one(_: u64) -> Plural {
-        Plural::Other
+    use planeter_web::catalog::{Category, Dir, EN_DEF, Entry, LangDef, register_test_language};
+    fn one(_: u64) -> Category {
+        Category::Other
     }
     let entries: Vec<Entry> = EN_DEF
         .entries
         .iter()
         .map(|e| {
-            let text: &'static str = Box::leak(format!("‹{}›", e.other).into_boxed_str());
-            Entry {
-                key: e.key,
-                one: text,
-                other: text,
-            }
+            let text: &'static str = Box::leak(format!("‹{}›", e.other()).into_boxed_str());
+            msg(e.key, text)
         })
         .collect();
-    let def: &'static LangDef = Box::leak(Box::new(LangDef {
-        tag: "qaa",
-        endonym: "Test language",
-        dir: Dir::Ltr,
-        plural: one,
-        group_separator: ',',
-        decimal_separator: '.',
-        entries: Box::leak(entries.into_boxed_slice()),
-    }));
+    let def: &'static LangDef = planted_language(
+        "qaa",
+        "Test language",
+        Dir::Ltr,
+        planeter_web::catalog::OTHER_ONLY_CATEGORIES,
+        one,
+        ',',
+        '.',
+        Box::leak(entries.into_boxed_slice()),
+    );
     register_test_language(def);
     let r = app();
     let by = |name: &str| probes().into_iter().find(|p| p.name == name).unwrap();

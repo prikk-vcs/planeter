@@ -12,11 +12,12 @@ members = [
     "crates/planeter",
     "crates/planeter-runner",
     "crates/planeter-client",
+    "crates/planeter-i18n",
     "tools/boundary-check",
     "tools/floor-check",
     "tools/glibc-check",
     "tools/image-identity",
-    "tools/ja-sheet",
+    "tools/i18n-sheet",
     "tools/pin-check",
 ]
 

@@ -1,161 +1,157 @@
-//! T4: the messages. Both languages hold exactly the keys the program names, with the same placeholders; no retired word is said;
-//! no markup or colour is in a sentence; the language choice follows `--lang`, then `LC_ALL`, `LC_MESSAGES`, `LANG`, and Japanese
-//! (a draft) is never chosen from the environment until its reviewers have signed it off.
+//! The messages of `planeter-client`, over **every language of the registry** (RFC 004 part 9 T4; handoff `language-registry-handoff-v1`
+//! T6, T9): each registered language has a catalog here, the catalogs hold exactly the keys the program names with the same
+//! placeholders, the language's own rules (`crates/planeter-web/tests/i18n/<tag>.rules`: the retired words, the forbidden terms, the
+//! style conventions, the wording that must stay — one set of rules for both programs) hold for the program's sentences, no markup or
+//! colour is in a sentence, and the language choice follows `--lang`, then `LC_ALL`, `LC_MESSAGES`, `LANG`.
 
 use std::collections::BTreeSet;
+use std::path::PathBuf;
 
-use planeter_client::catalog::{JA_REVIEWED, Key, Lang, placeholders, raw, size, t};
+use planeter_client::catalog::{
+    CATALOGS, Key, Lang, baseline_text, placeholders, raw, size, t, unreviewed_count,
+};
+use planeter_i18n::languages::{LANGUAGES, check_registry};
+use planeter_i18n::rules::{self, Program};
+
+fn rules_text(tag: &str) -> String {
+    let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../planeter-web/tests/i18n")
+        .join(format!("{tag}.rules"));
+    std::fs::read_to_string(&path).unwrap_or_else(|_| {
+        panic!("the language `{tag}` has no rules file: add {} — docs/messages-and-languages.md, \"Adding a language\"", path.display())
+    })
+}
+
+fn rules_for(tag: &str) -> Vec<rules::Rule> {
+    let source = planeter_i18n::languages::source().tag;
+    let mut all = Vec::new();
+    for t in if tag == source {
+        vec![tag]
+    } else {
+        vec![source, tag]
+    } {
+        all.extend(rules::parse(&rules_text(t)).unwrap_or_else(|e| panic!("{t}.rules: {e}")));
+    }
+    all
+}
+
+fn other() -> Lang {
+    Lang::shipped()
+        .into_iter()
+        .find(|l| *l != Lang::SOURCE)
+        .expect("a language besides the source ships")
+}
 
 #[test]
-fn every_key_has_a_message_in_every_language_and_no_language_has_a_stray_one() {
-    for lang in Lang::ALL {
+fn the_registry_and_this_programs_catalogs_are_the_same_list() {
+    let registry: Vec<&str> = LANGUAGES.iter().map(|l| l.tag).collect();
+    let catalogs: Vec<&str> = CATALOGS.iter().map(|d| d.tag).collect();
+    assert_eq!(catalogs, registry);
+    for (def, lang) in CATALOGS.iter().zip(LANGUAGES) {
+        assert!(std::ptr::eq(def.lang, *lang), "{}", def.tag);
+    }
+    assert_eq!(check_registry(LANGUAGES), Vec::<String>::new());
+}
+
+#[test]
+fn every_key_has_a_message_in_every_language_with_the_same_placeholders_and_no_stray_one() {
+    let want: Vec<&'static str> = Key::ALL.iter().map(|k| k.id()).collect();
+    let catalogs: Vec<planeter_i18n::Catalog<'_>> = CATALOGS.iter().map(|d| d.catalog()).collect();
+    assert_eq!(
+        planeter_i18n::audit_with(&catalogs, &want, &[], planeter_i18n::Options::PLAIN),
+        vec![]
+    );
+    let set: BTreeSet<&str> = want.iter().copied().collect();
+    for lang in Lang::all() {
         let ids: Vec<&str> = lang.entries().iter().map(|e| e.key).collect();
-        let unique: BTreeSet<&str> = ids.iter().copied().collect();
         assert_eq!(
             ids.len(),
-            unique.len(),
+            ids.iter().copied().collect::<BTreeSet<_>>().len(),
             "{}: a key is listed twice",
             lang.tag()
         );
-        let want: BTreeSet<&str> = Key::ALL.iter().map(|k| k.id()).collect();
         assert_eq!(
-            unique,
-            want,
+            ids.iter().copied().collect::<BTreeSet<_>>(),
+            set,
             "{}: the table and the keys differ",
             lang.tag()
         );
     }
-}
-
-#[test]
-fn a_message_uses_the_same_placeholders_in_every_language() {
     for key in Key::ALL {
-        let en = raw(Lang::En, *key).unwrap();
-        let ja = raw(Lang::Ja, *key).unwrap();
-        let (mut a, mut b) = (placeholders(en), placeholders(ja));
-        a.sort_unstable();
-        a.dedup();
-        b.sort_unstable();
-        b.dedup();
-        assert_eq!(a, b, "`{}`: English {a:?}, Japanese {b:?}", key.id());
+        let mut a = placeholders(raw(Lang::SOURCE, *key).unwrap());
+        for lang in Lang::all() {
+            let mut b = placeholders(raw(lang, *key).unwrap());
+            let mut a2 = a.clone();
+            a2.sort_unstable();
+            a2.dedup();
+            b.sort_unstable();
+            b.dedup();
+            assert_eq!(a2, b, "`{}` in {}", key.id(), lang.tag());
+        }
+        a.clear();
     }
 }
 
-/// Whole-word, case-insensitive match; `-` and `_` are not word characters.
-fn has_word(text: &str, word: &str) -> bool {
-    let (text, word) = (text.to_lowercase(), word.to_lowercase());
-    text.match_indices(&word).any(|(at, _)| {
-        let before = text[..at].chars().next_back();
-        let after = text[at + word.len()..].chars().next();
-        !before.is_some_and(|c| c.is_alphanumeric()) && !after.is_some_and(|c| c.is_alphanumeric())
-    })
-}
-
-/// The words the project retired (docs/glossary.md): the CLI says *proposal*, *revision*, *held*, *trust a key* — never these.
-/// The option `--no-adopt` is named by decision (RFC 004 Q-2) and is taken out before the scan: it is a flag, not a sentence.
-const RETIRED: &[&str] = &[
-    "seal",
-    "sealed",
-    "unsealed",
-    "adopt",
-    "adopted",
-    "intent",
-    "forge-approved",
-    "evaluated",
-    "session",
-    "sessions",
-    "change set",
-];
-
-fn retired_found(text: &str) -> Vec<&'static str> {
-    let text = text.replace("--no-adopt", "");
-    RETIRED
-        .iter()
-        .copied()
-        .filter(|w| has_word(&text, w))
-        .collect()
-}
-
 #[test]
-fn no_message_says_a_retired_word() {
-    for lang in [Lang::En] {
-        let mut problems = Vec::new();
-        for e in lang.entries() {
-            for w in retired_found(e.text) {
-                problems.push(format!("{} `{}` says {w:?}", lang.tag(), e.key));
+fn the_rules_of_each_language_hold_for_the_programs_sentences_and_are_shown_able_to_fail() {
+    for def in CATALOGS.iter().copied() {
+        let rules = rules_for(def.tag);
+        let report = rules::check(&rules, Program::Client, def.tag, def.entries, &[]);
+        assert_eq!(report.problems, Vec::<String>::new(), "{}", def.tag);
+        // The wording that must stay names keys that exist in this program.
+        if !def.is_source() {
+            for key in rules::required_keys(&rules, Program::Client) {
+                assert!(
+                    def.entries.iter().any(|e| e.key == key),
+                    "{}: the rules name `{key}`, which the catalog lacks",
+                    def.tag
+                );
             }
         }
-        assert_eq!(problems, Vec::<String>::new());
     }
-}
-
-#[test]
-fn the_retired_word_check_finds_a_planted_word_and_lets_the_flag_through() {
+    // A planted retired word is found in the source language and in another one.
+    for def in CATALOGS.iter().copied() {
+        let mut entries = def.entries.to_vec();
+        entries.push(planeter_i18n::msg(
+            "planted.key",
+            "The work was sealed in the history.",
+        ));
+        let report = rules::check(&rules_for(def.tag), Program::Client, def.tag, &entries, &[]);
+        assert!(
+            report
+                .problems
+                .iter()
+                .any(|p| p.contains("`planted.key`") && p.contains("sealed")),
+            "{}: {:?}",
+            def.tag,
+            report.problems
+        );
+    }
+    // ... and the flag `--no-adopt` is let through.
+    let mut entries = Lang::SOURCE.entries().to_vec();
+    entries.push(planeter_i18n::msg(
+        "planted.key",
+        "Use --no-adopt to trust nothing.",
+    ));
     assert_eq!(
-        retired_found("The work was sealed in the history."),
-        ["sealed"]
+        rules::check(&rules_for("en"), Program::Client, "en", &entries, &[]).problems,
+        Vec::<String>::new()
     );
-    assert_eq!(
-        retired_found("It adopts nothing; adopt it later."),
-        ["adopt"]
-    );
-    assert_eq!(retired_found("An intent is open."), ["intent"]);
-    assert!(retired_found("Use --no-adopt to trust nothing.").is_empty());
-    assert!(retired_found("The proposal is held for review; trust a key.").is_empty());
-}
-
-/// Japanese terms the draft must not use (the server's glossary, §5): a word with two roles, the retired private words.
-const JA_FORBIDDEN: &[&str] = &[
-    "管理者",
-    "シール",
-    "封印",
-    "未封印",
-    "フォージ",
-    "評価済み",
-    "ブロック",
-    "セッション",
-    "検査",
-];
-
-#[test]
-fn the_japanese_draft_uses_none_of_the_terms_the_glossary_forbids() {
-    let mut problems = Vec::new();
-    for e in Lang::Ja.entries() {
-        for w in JA_FORBIDDEN {
-            if e.text.contains(w) {
-                problems.push(format!("`{}` uses {w}", e.key));
-            }
-        }
-        // Full-width punctuation follows Japanese text.
-        for (i, c) in e.text.char_indices() {
-            if matches!(c, ',' | '?' | '!')
-                && e.text[..i]
-                    .chars()
-                    .next_back()
-                    .is_some_and(|p| !p.is_ascii())
-            {
-                problems.push(format!(
-                    "`{}` has a half-width {c:?} after Japanese text",
-                    e.key
-                ));
-            }
-        }
-    }
-    assert_eq!(problems, Vec::<String>::new());
 }
 
 #[test]
 fn no_message_carries_markup_or_colour() {
-    for lang in Lang::ALL {
+    for lang in Lang::all() {
         for e in lang.entries() {
+            let text = e.other();
             assert!(
-                !e.text.contains('\u{1b}'),
+                !text.contains('\u{1b}'),
                 "{} `{}`: an escape sequence",
                 lang.tag(),
                 e.key
             );
             assert!(
-                !e.text.contains("<b>") && !e.text.contains("</") && !e.text.contains("<a "),
+                !text.contains("<b>") && !text.contains("</") && !text.contains("<a "),
                 "{} `{}`: markup",
                 lang.tag(),
                 e.key
@@ -170,20 +166,20 @@ fn a_sentence_the_person_reads_ends_like_a_sentence() {
     // a question mark, a colon or an ellipsis.
     let exempt =
         |id: &str| id.starts_with("help.") || id.starts_with("progress.") || id == "version.line";
-    for e in Lang::En.entries().iter().filter(|e| !exempt(e.key)) {
-        let last = e.text.trim_end().chars().last().unwrap();
+    for e in Lang::SOURCE.entries().iter().filter(|e| !exempt(e.key)) {
+        let last = e.other().trim_end().chars().last().unwrap();
         assert!(
             matches!(last, '.' | '…' | ':' | '?' | '}'),
             "`{}` ends with {last:?}: {}",
             e.key,
-            e.text
+            e.other()
         );
     }
 }
 
 #[test]
 fn a_filled_message_has_no_placeholder_left_and_a_missing_key_is_a_visible_marker() {
-    let line = t(Lang::En, Key::ProposeDoneNew)
+    let line = t(Lang::SOURCE, Key::ProposeDoneNew)
         .with("id", "c-123")
         .with("revision", 1)
         .with("url", "https://forge.example/alice/app/proposals/c-123")
@@ -194,11 +190,12 @@ fn a_filled_message_has_no_placeholder_left_and_a_missing_key_is_a_visible_marke
         "{line}"
     );
     // An unfilled placeholder stays visible (it is the caller's bug, not a silent blank).
-    assert!(t(Lang::En, Key::ProposeDoneNew).text().contains("{id}"));
+    assert!(t(Lang::SOURCE, Key::ProposeDoneNew).text().contains("{id}"));
 }
 
 #[test]
-fn the_language_is_the_flag_then_the_environment_and_english_when_neither_says_japanese() {
+fn the_language_is_the_flag_then_the_environment_and_the_source_language_when_neither_names_a_shipped_one()
+ {
     let env = |pairs: &'static [(&'static str, &'static str)]| {
         move |name: &str| {
             pairs
@@ -207,42 +204,78 @@ fn the_language_is_the_flag_then_the_environment_and_english_when_neither_says_j
                 .map(|(_, v)| (*v).to_owned())
         }
     };
-    // Japanese is signed off (RFC 012 D-3f): the environment can choose it.
-    const { assert!(JA_REVIEWED) };
-    assert_eq!(Lang::from_environment(env(&[])), Lang::En);
-    assert_eq!(
-        Lang::from_environment(env(&[("LANG", "ja_JP.UTF-8")])),
-        Lang::Ja
+    let other = other();
+    let tag: &'static str = other.tag();
+    let locale =
+        |name: &'static str, region: &'static str| -> &'static [(&'static str, &'static str)] {
+            Box::leak(
+                vec![(
+                    name,
+                    Box::leak(format!("{tag}_{region}.UTF-8").into_boxed_str()) as &'static str,
+                )]
+                .into_boxed_slice(),
+            )
+        };
+    assert_eq!(Lang::from_environment(env(&[])), Lang::SOURCE);
+    // A shipped language is chosen from any of the three variables, the first one set deciding.
+    for name in ["LANG", "LC_MESSAGES", "LC_ALL"] {
+        assert_eq!(
+            Lang::from_environment(env(locale(name, "XX"))),
+            other,
+            "{name}"
+        );
+    }
+    let both: &'static [(&'static str, &'static str)] = Box::leak(
+        vec![
+            (
+                "LC_ALL",
+                Box::leak(format!("{tag}_XX").into_boxed_str()) as &'static str,
+            ),
+            ("LANG", "en_US.UTF-8"),
+        ]
+        .into_boxed_slice(),
+    );
+    assert_eq!(Lang::from_environment(env(both)), other);
+    let swapped: &'static [(&'static str, &'static str)] = Box::leak(
+        vec![
+            ("LC_ALL", "en_US.UTF-8"),
+            (
+                "LANG",
+                Box::leak(format!("{tag}_XX").into_boxed_str()) as &'static str,
+            ),
+        ]
+        .into_boxed_slice(),
+    );
+    assert_eq!(Lang::from_environment(env(swapped)), Lang::SOURCE);
+    let skipped: &'static [(&'static str, &'static str)] = Box::leak(
+        vec![
+            ("LC_ALL", ""),
+            (
+                "LANG",
+                Box::leak(format!("{tag}_XX").into_boxed_str()) as &'static str,
+            ),
+        ]
+        .into_boxed_slice(),
     );
     assert_eq!(
-        Lang::from_environment(env(&[("LC_MESSAGES", "ja_JP.UTF-8")])),
-        Lang::Ja
-    );
-    assert_eq!(Lang::from_environment(env(&[("LC_ALL", "ja")])), Lang::Ja);
-    // The first of LC_ALL, LC_MESSAGES, LANG that is set and not empty decides.
-    assert_eq!(
-        Lang::from_environment(env(&[("LC_ALL", "ja_JP.UTF-8"), ("LANG", "en_US.UTF-8")])),
-        Lang::Ja
-    );
-    assert_eq!(
-        Lang::from_environment(env(&[("LC_ALL", "en_US.UTF-8"), ("LANG", "ja_JP.UTF-8")])),
-        Lang::En
-    );
-    assert_eq!(
-        Lang::from_environment(env(&[("LC_ALL", ""), ("LANG", "ja_JP.UTF-8")])),
-        Lang::Ja,
+        Lang::from_environment(env(skipped)),
+        other,
         "an empty variable is skipped"
     );
-    // Anything else is English: another language, the C locale, a name that only starts like ja.
-    for other in ["C", "POSIX", "fr_FR.UTF-8", "jam_XX", "de"] {
+    // Anything else is the source language: another language, the C locale, a name that only starts like a tag.
+    for none in ["C", "POSIX", "fr_FR.UTF-8", "jam_XX", "de"] {
         let pairs: &'static [(&'static str, &'static str)] =
-            Box::leak(vec![("LANG", other)].into_boxed_slice());
-        assert_eq!(Lang::from_environment(env(pairs)), Lang::En, "{other}");
+            Box::leak(vec![("LANG", none)].into_boxed_slice());
+        assert_eq!(Lang::from_environment(env(pairs)), Lang::SOURCE, "{none}");
     }
-    // --lang is the flag's own function; it always wins over the environment (the command line applies it first).
-    assert_eq!(Lang::from_flag("ja"), Some(Lang::Ja));
-    assert_eq!(Lang::from_flag("EN"), Some(Lang::En));
-    assert_eq!(Lang::from_flag("fr"), None);
+    // --lang is the flag's own function; it matches a shipped tag as a BCP 47 tag and always wins over the environment.
+    assert_eq!(Lang::from_flag(tag), Some(other));
+    assert_eq!(Lang::from_flag(&format!("{tag}-XX")), Some(other));
+    assert_eq!(
+        Lang::from_flag(&Lang::SOURCE.tag().to_uppercase()),
+        Some(Lang::SOURCE)
+    );
+    assert_eq!(Lang::from_flag("zz"), None);
 }
 
 #[test]
@@ -253,129 +286,47 @@ fn sizes_are_written_for_a_person() {
     assert_eq!(size(3 << 30), "3.0 GiB");
 }
 
-// ---------------------------------------------------------------- the final check (2026-10-31): one wording, one standard
-
-/// The rules of the server's `glossary.md` section 5.3 that apply to the program's sentences.
-fn standard_findings(text: &str) -> Vec<&'static str> {
-    let mut found = Vec::new();
-    if text
-        .replace("シングルサインオン", "")
-        .contains("サインイン")
-    {
-        found.push("サインイン (sign in is ログイン)");
-    }
-    if text.contains("クローズ") {
-        found.push("クローズ (closed is 閉じている)");
-    }
-    if text.contains("断りま") || text.contains("断られ") || text.contains("お断り") {
-        found.push("断る (refused is 拒否)");
-    }
-    if text.contains("変更されていません") || text.contains("何も変更していません")
-    {
-        found.push("変更 as the verb change (変わる / 変える)");
-    }
-    if text.contains("確認待ち") {
-        found.push("確認待ち (confirm is 確定)");
-    }
-    let chars: Vec<char> = text.chars().collect();
-    for (i, c) in chars.iter().enumerate() {
-        if matches!(c, '(' | ')')
-            && [i.checked_sub(1), Some(i + 1)]
-                .into_iter()
-                .flatten()
-                .filter_map(|j| chars.get(j))
-                .any(|n| !n.is_ascii())
-        {
-            found.push("a half-width bracket next to Japanese");
-            break;
-        }
-    }
-    for (i, c) in chars.iter().enumerate() {
-        let counter = *c == '件' || (*c == '時' && chars.get(i + 1) == Some(&'間'));
-        if counter && i > 0 && (chars[i - 1].is_ascii_digit() || chars[i - 1] == '}') {
-            found.push("no space between a numeral or placeholder and its counter");
-            break;
-        }
-    }
-    found
-}
-
 #[test]
-fn the_japanese_catalog_keeps_the_final_standards() {
-    let mut broken = Vec::new();
-    for e in Lang::Ja.entries() {
-        for rule in standard_findings(e.text) {
-            broken.push(format!("`{}`: {rule}", e.key));
-        }
-    }
-    assert_eq!(broken, Vec::<String>::new());
-}
-
-#[test]
-fn each_standard_finds_a_planted_breach_and_lets_the_right_form_through() {
-    for (bad, rule) in [
-        ("サインインしてください。", "サインイン"),
-        ("サーバーが断りました：{message}", "断る"),
-        ("断られた値です。", "断る"),
-        ("ブランチは変更されていません。", "変更 as the verb"),
-        ("履歴(読む範囲)", "half-width bracket"),
-        ("{count}件", "counter"),
-    ] {
-        let found = standard_findings(bad);
+fn the_help_and_the_refusal_of_a_wrong_language_name_the_shipped_languages_from_the_registry() {
+    let tags = Lang::shipped_tags("|");
+    assert!(
+        tags.split('|').count() >= 2 && tags.split('|').next() == Some(Lang::SOURCE.tag()),
+        "{tags}"
+    );
+    for lang in Lang::shipped() {
+        let help = t(lang, Key::HelpMain).with("languages", &tags).text();
         assert!(
-            found.iter().any(|f| f.contains(rule)),
-            "{bad:?} should break {rule}: {found:?}"
+            help.contains(&format!("--lang {tags}")),
+            "{}: {help}",
+            lang.tag()
+        );
+        assert!(!help.contains('{'), "{}: {help}", lang.tag());
+        let bad = t(lang, Key::UsageBadLang)
+            .with("value", "zz")
+            .with("languages", Lang::shipped_tags(", "))
+            .text();
+        for tag in Lang::shipped().iter().map(|l| l.tag()) {
+            assert!(bad.contains(tag), "{}: {bad}", lang.tag());
+        }
+    }
+}
+
+#[test]
+fn a_signed_off_language_has_the_messages_as_signed_and_the_program_counts_what_is_newer() {
+    for def in CATALOGS.iter().copied().filter(|d| d.sign_off().is_some()) {
+        let text = baseline_text(def.tag).unwrap_or_else(|| {
+            panic!(
+                "{}: signed off without a baseline file (locales/{}.signed)",
+                def.tag, def.tag
+            )
+        });
+        let baseline = planeter_i18n::baseline::parse(text).unwrap();
+        assert!(!baseline.is_empty());
+        let n = unreviewed_count(def.tag).expect("a count");
+        assert_eq!(
+            n,
+            planeter_i18n::baseline::unreviewed_count(def.entries, &baseline)
         );
     }
-    for ok in [
-        "ログイン",
-        "サーバーが拒否しました：{message}",
-        "ブランチは変わっていません。",
-        "{count} 件",
-        "履歴（読む範囲）",
-    ] {
-        assert_eq!(standard_findings(ok), Vec::<&str>::new(), "{ok:?}");
-    }
-}
-
-/// Two of the final handoff's corrections are the program's own: the server's refusal is 拒否, in both of its sentences.
-#[test]
-fn the_servers_refusal_is_reject_in_both_sentences() {
-    assert_eq!(
-        raw(Lang::Ja, Key::ServerRefused),
-        Some("サーバーが拒否しました：{message} {hint}")
-    );
-    assert_eq!(
-        raw(Lang::Ja, Key::ServerRefusedPlain),
-        Some(
-            "サーバーがリクエストを拒否しました（{status}）が、理由は示されませんでした。もう一度お試しください。続く場合は、このサーバーを運用している人に伝えてください。"
-        )
-    );
-}
-
-/// After the sign-off no sentence of the program calls Japanese a draft or a preview (the help line said so until 2026-10-31).
-#[test]
-fn no_message_calls_japanese_a_draft_and_the_help_still_names_the_language_option() {
-    for lang in Lang::ALL {
-        for e in lang.entries() {
-            for word in ["draft", "preview", "草案", "プレビュー", "未確認"] {
-                assert!(
-                    !e.text.to_lowercase().contains(word),
-                    "`{}` ({}) says {word:?}",
-                    e.key,
-                    lang.tag()
-                );
-            }
-        }
-    }
-    assert!(
-        raw(Lang::En, Key::HelpMain)
-            .unwrap()
-            .contains("--lang en|ja        the language of the messages\n")
-    );
-    assert!(
-        raw(Lang::Ja, Key::HelpMain)
-            .unwrap()
-            .contains("--lang en|ja        メッセージの言語\n")
-    );
+    assert!(unreviewed_count("en").is_none());
 }

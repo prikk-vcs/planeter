@@ -1,0 +1,12 @@
+[package]
+name = "planeter-i18n"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+readme.workspace = true
+description = "planeter's languages as data: the registry, sign-off records, CLDR plural categories, BCP 47 negotiation, catalog audits, review baselines and language rules. Shared by the server and the command-line program; no external dependency."
+
+[dependencies]
