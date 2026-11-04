@@ -9,7 +9,7 @@
 //! * [`plural`] — the CLDR categories and the rule functions (English, Japanese, and Russian, Polish, Arabic and Welsh as tested
 //!   functions with no catalogs, to prove the machinery before the first real language that needs it);
 //! * [`tag`] — BCP 47 negotiation: exact, then same language and script, then same language, else the source language;
-//! * [`audit`] — completeness and consistency of a set of catalogs (the same keys, the same placeholders, exactly the forms a language
+//! * [`mod@audit`] — completeness and consistency of a set of catalogs (the same keys, the same placeholders, exactly the forms a language
 //!   declares, no markup);
 //! * [`baseline`] — what a sign-off covered: a hash of every message as signed, and the count of messages newer than it;
 //! * [`rules`] — a language's own rules as data (`<tag>.rules`), each shown to fail by its own planted examples.

@@ -10,7 +10,7 @@
 //!   supplies (never the catalog), and the result ([`Rich`]) is a type askama renders without a second
 //!   escape. A catalog entry cannot introduce a tag, an attribute or a URL by itself: its own text is
 //!   escaped like any other, and the tests refuse markup in it.
-//! * **Plurals** follow the language's rule ([`Plural`]); a message with a count has a singular and an
+//! * **Plurals** follow the language's rule ([`planeter_i18n::Category`], chosen by the rule of the registry row); a message with a count has a singular and an
 //!   other form and takes `{count}`.
 //! * **No concatenation**: a sentence is one message. Two sentences next to each other are two messages.
 //! * A missing key is never a crash and never a silent English fallback: at run time it renders as a
