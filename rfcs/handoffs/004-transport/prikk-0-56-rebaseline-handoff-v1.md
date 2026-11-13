@@ -1,0 +1,34 @@
+# RFC 004 / 005 — Re-baseline on prikk 0.56.0 — Implementation Handoff (v1)
+
+| | |
+|---|---|
+| Document | `prikk-0-56-measure-handoff-v1` was reviewed Approved (ledger PK-78): the five failing tests are intended 0.56.0 changes and nothing is unexplained. **The floor moves to 0.56.0.** This handoff measures three things that the report showed can matter for safety, then re-baselines the driver and its tests. Part A first; **part B starts only after part A's findings are written down**, and any finding marked STOP below ends the work with a report. |
+| Status | Assigned 2026-11-14. |
+| Basis | Ledger PK-77, PK-78 and the report `prikk-0-56-measure-review-request.md`; `crates/planeter-transport/src/{propose,recovery,proposals}.rs`; `crates/planeter-core/src/change.rs` (`patch_assurance`); `crates/planeter-prikk/src/cli.rs` (floor, `sync_pending_patches`); `docs/STATUS.md` (floor 0.54.0). |
+| Audience | Dev team. Return a review-request package. Use a privately installed prikk **0.55.0** only for comparison; the gate runs of this handoff use the host's **0.56.0**. |
+
+## Part A — measure (no repository change)
+**A1. A late refusal.** `propose.rs` (`Failure::Refused`, the branch for prikk exit 1 without "lock conflict") decides "nothing was left" from one fact: the pending set equals `pending_before`. On 0.56.0 claims are written last, so a partly done accept shows no pending prefix. List every refusal id `sync accept` can return on 0.56.0 (prikk's documentation and source in `~/.cargo/registry/src/*/prikk-*-0.56.0/`). For each that you can provoke, compare the **whole `.prikk` tree** (file list and hashes) and `sync pending` before and after. **STOP** if any refusal changes the tree while `sync pending` stays the same (then "Refused: nothing left" is false): report the refusal id, the command, the tree difference and what `doctor` and `verify` say afterwards; change nothing. If none changes the tree, say so with the list.
+**A2. A kill in the middle of an accept, as recovery sees it.** On 0.56.0, kill an accept (SIGKILL) at several points of a 300-patch accept (signal: the growth of the bytes under `.prikk`, as the measurement found). Report, per kill point: `sync pending`, `doctor`, `unlock` listing, the lock files, `verify`, and whether the planeter recovery procedure converges (the existing recovery test world) and whether a resend records exactly one revision. **STOP** if any kill point leaves the repository in a state that recovery does not converge from, or that `doctor` reports as an error.
+**A3. What an open proposal shows after its patches arrive as received sealed history** (PK-78 item 2). Build the world: accept a proposal; import the sealed history as a received ref (not published). Report the proposal's detail JSON and page: the patch assurance (`None`), `still_pending`, the sighting line, the state (it must stay open: only a published ref lands a proposal, D-40), and what the badge text for "no assurance" says in English and Japanese. **Do not change any text.** Say whether the page is truthful and not confusing; the architect decides.
+
+## Part B — change (only if Part A did not STOP)
+B1. **Floor to 0.56.0**: `MIN_PRIKK_VERSION` and every place `floor-check` compares (all four), the docs that name the floor, `MEASURED_ON` (record what 0.56.0 was measured on, if that constant names the measuring version), the container/release docs. The server must still refuse to start on a prikk below the floor (existing test, re-pointed to 0.55.0 as the "too old" example) and accept 0.56.0 and later. The accept defaults (5,000 objects, 600 s) do **not** change.
+B2. **The five tests get new expectations, not weaker ones:**
+ - `extract::real_prikk_0_55_names_a_claim_whose_parent_is_pending` → renamed for 0.56.0: both claims of the chain extract; assert `chain[]`, `chain_signature`, and the ids.
+ - `verify_unreached::real_prikk_after_received_remove_…` → the 8 entries with their types; the driver's `UnreachedKind` gets `patch` and `blob` as known kinds (today they fall into `Other(String)`), and the recovery/doctor counting is checked by code, as the report found.
+ - `transport_propose::history_received_by_import_…` → after the archive import `sync pending` is empty; assert what A3 found about the proposal view (sighting, still open, not landed).
+ - `propose_kill` (two tests) → wait for the in-flight signal that moves on 0.56.0 (bytes under `.prikk`), not for `sync pending`. Keep every post-condition of the old tests (recovery converges, exactly one revision). Add a guard that makes the test **fail** if the kill lands before the accept has written anything or after it has finished (show both with a mutation), so a missed window can never pass silently again.
+B3. **Words that became untrue:** the recovery module's "a prefix of its patches pending" and any comment, doc or message that says a killed accept leaves a pending prefix; correct them to what A2 found. Catalog texts: change none; list any you find.
+B4. **A reader for `sync pending --format json`** (`sync-pending-v1`): typed, strict, with a fixture test of the shape in PK-78/the report (patch id, claims with `claim_id`, `target_block_id`, `parent_block_ids`, `signature`). Do **not** use it anywhere yet; it is the base for the file-by-file review view. Unknown fields: follow the existing strict-reader convention of the crate and say which.
+B5. **The delivery classification:** a typed reader for `refusal-v1` with `refusal` ∈ {`rollback`, `diverged`, `does-not-connect`} for `archive import` (the only production caller), a test with a real 0.56.0 refusal, and the user-visible text for the repository-creation flow if it meets one (it cannot today: report what the flow shows if it did). The driver never passes `--allow-non-fast-forward`.
+B6. **Not in this handoff:** model B of D-8, the review view, any page change, any catalog change, any release or version change.
+
+## Non-change scope
+No weakening of an assertion; no test deleted; no `ignore`/`#[ignore]` added; `planeter-i18n`, catalogs, pages, versions untouched.
+
+## Acceptance criteria
+Part A's three reports with commands and outputs; if a STOP applies, the report and no Part B commit. Otherwise: floor 0.56.0 in every place (`floor-check` 0); the five tests re-baselined with the guard shown failing on both mutations; all gates green with prikk **0.56.0** on PATH, with prikk **0.55.0** (only the tests that name a version-specific behaviour may differ, and the report lists each), and without prikk; deny/audit per the state of the advisory handoffs (list what is still red and why).
+
+## Required evidence and review-request format
+Part A tables (A1: refusal id → tree changed? → pending changed?; A2: kill point → states → converges?; A3: JSON and page text); Part B commits (hash → what); the mutation evidence; every gate with command, exit code, prikk version and advisory-database HEAD; deviations and open questions.
