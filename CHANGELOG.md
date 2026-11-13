@@ -27,6 +27,7 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
   read (12 in all).
 
 - **Security-relevant dependency update: `ammonia` 4.2.4 → 4.2.5 (RUSTSEC-2026-0533, mutation XSS through embedded MathML and SVG).** `ammonia` cleans every README, description and comment the server shows. planeter's configuration enables none of the tags the advisory needs (no `math`, no `svg`, none of the raw-text tags), so it was not exposed; it is updated anyway, and a regression test keeps the advisory's shape inert and the sanitizer's output a fixed point.
+- **Security-relevant dependency update: `rusqlite` 0.32 → 0.41.1 (RUSTSEC-2026-0459).** The bundled SQLite was older than 3.54.0 and could return uninitialised page-cache memory when a process opens a database together with a `-wal` file of a different page size; the bundled SQLite is now 3.54.1. planeter opens only the database file the operator names (`PLANETER_DB`), so it was not reachable from a request; it is updated anyway. **The declared minimum compiler rises from 1.88.0 to 1.89.0** (`rusqlite` needs it).
 
 - **Languages are data: any number of languages, with a record of who signed what (RFC 012 D-3, amended 2026-11-04).** A new shared crate, `planeter-i18n`,
   holds the only list of languages: each language's tag, name in itself, direction, plural rule, separators and **sign-off record** (who read it, when, which

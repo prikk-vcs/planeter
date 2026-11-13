@@ -32,7 +32,7 @@ jsonwebtoken = { version = "11", default-features = false, features = ["aws_lc_r
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # SQLite account/credential stores over planeter-store's shared SqliteDb (same crate, no new tree).
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
 
 [dev-dependencies]
 # Tests sign ES256 tokens from a PEM fixture; production verifies with JWKs only, so PEM parsing is test-only.

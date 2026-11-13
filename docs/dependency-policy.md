@@ -14,7 +14,7 @@
    new licenses: …". A scratch measurement never rides inside a larger command.
 2. **Licenses are an allow-list** (`deny.toml`): Apache-2.0, MIT, Apache-2.0 WITH LLVM-exception,
    Unicode-3.0, MPL-2.0 (file-level copyleft; enters via ammonia's CSS parser), BSD-3-Clause (axum's
-   `matchit`), ISC (`aws-lc-rs`, `aws-lc-sys`, `untrusted`, `simple_asn1`). Adding one is a decision request to the owner with the
+   `matchit`), ISC (`aws-lc-rs`, `aws-lc-sys`, `untrusted`, `simple_asn1`); Zlib for the crate `foldhash` only (`rusqlite` → `hashlink` → `hashbrown`; permissive, OSI-approved, compatible with Apache-2.0; an exception, D-74). Adding one is a decision request to the owner with the
    crate, the path by which it enters, and why the license is compatible with Apache-2.0.
 3. **Advisories are not ignored, except scoped and justified in both files** (`deny.toml` with a
    `reason`, `.cargo/audit.toml`). **There is no standing ignore** (since 2026-10-29): the one that
@@ -54,10 +54,9 @@ is not a 40-hex commit SHA, any `image:` or Dockerfile `FROM` without a digest, 
 channel. It also fails when the `toolchain:` inputs across the workflows are not one and the same version
 (CI, the manual checkpoint and the release build with **one compiler**, `1.99.1`), and when a `runs-on` or
 matrix `os` names a moving label (`*-latest`): runners are named (`ubuntu-24.04`,
-`ubuntu-24.04-arm`). **The declared minimum compiler** (`rust-version` in the root `Cargo.toml`, `1.88.0`,
-IS-32) means: the lowest stable compiler that builds the whole workspace with `--locked`, which is the
-one that stabilized let-chains (measured: 1.85 and 1.87 fail on them, 1.88 builds and passes every test;
-no dependency raises it). It is proved by the `msrv` job of `ci.yml`, which runs `cargo check --workspace
+`ubuntu-24.04-arm`). **The declared minimum compiler** (`rust-version` in the root `Cargo.toml`, `1.89.0`,
+IS-32) means: the lowest stable compiler that builds the whole workspace with `--locked`. The language needs 1.88 (let-chains; measured: 1.85 and 1.87
+fail on them); since 2026-11-13 a dependency sets the floor: `rusqlite` 0.41 declares 1.89.0 (measured: `cargo +1.89.0 check --workspace --locked` passes, 1.88.0 is refused up front). It is proved by the `msrv` job of `ci.yml`, which runs `cargo check --workspace
 --locked` on exactly that compiler. That job is the one named exception to "one compiler": `pin-check`
 fails unless its `toolchain:` equals `rust-version`, and fails if a declared minimum has no `msrv` job.
 Raising the minimum is a reviewed change to `rust-version` and the job together; nothing is rewritten to
@@ -120,6 +119,7 @@ labelled `rehearsal` in their subject name. Its run id is recorded with any chan
 | RUSTSEC-2023-0071 (`rsa`, Marvin timing side channel on private-key operations) | `jsonwebtoken` `rust_crypto` → `rsa` | Not by planeter's code: verification only; no RSA private key exists in the process (pinned by `crates/planeter-auth/tests/no_signing_in_production.rs`) | Was ignored (owner, 2026-09-24); **retired 2026-10-29 (D-50)** by removing the crate | `Cargo.lock` has no `rsa`; `cargo deny` and `cargo audit` exit 0 with no ignore |
 | RUSTSEC-2026-0387 (`crypto-bigint` 0.5.5, timing variability on secret integers) | `jsonwebtoken` `rust_crypto` → `p256`/`p384` → `elliptic-curve` → `crypto-bigint` | Only on ES256/ES384 *verification* with public keys; no private key in the process | **Backend switched**, not ignored (D-50): the crate leaves the tree | `Cargo.lock` has no `crypto-bigint`; `cargo deny` and `cargo audit` exit 0; the 30-row algorithm matrix (`crates/planeter-auth/tests/oidc_algorithms.rs`) behaves the same on both backends |
 | RUSTSEC-2026-0533 (`ammonia` 4.2.4, mutation XSS: MathML text integration points and SVG `foreignObject` handled wrongly) | `planeter-web` → `ammonia` (`sanitize.rs`: `ammonia::clean`, the library's default configuration) | **Not exposed:** the advisory needs a raw-text tag (`title`, `textarea`, `xmp`, `iframe`, `noembed`, `noframes`, `plaintext`, `noscript`, `style`, `script`) allowed together with `math`/`svg`; the 75 default tags contain none of them (`style` and `script` are clean-content tags, removed with their content). The regression test `sanitize_advisories.rs` passes on 4.2.4 as well | **Updated, not ignored** (2026-11-14): `ammonia` 4.2.5 (lock only; 214 → 214 crates; no new licence) | `.git-exclude/review-requests/advisory-ammonia-review-request.md` |
+| RUSTSEC-2026-0459 (`libsqlite3-sys` 0.30.1, bundled SQLite < 3.54.0 can return uninitialised page-cache memory when a database is opened together with a `-wal` sibling of a different page size) | `planeter-auth`, `planeter-store` → `rusqlite` 0.32 (`bundled`) | Not from a request: the only open of a path in production is `crates/planeter/src/main.rs` → `SqliteDb::open(PLANETER_DB)`, a file the operator names in a directory the server owns; an attacker would already need write access there (all other opens are `:memory:` or tests) | **Upgraded, not ignored** (2026-11-13, by the owner's standing rule 3): `rusqlite` 0.41.1 → `libsqlite3-sys` 0.39.1, bundled SQLite **3.54.1**; lock 214 → 214 crates (+`foldhash`, `rsqlite-vfs`, `sqlite-wasm-rs`; −`ahash`, `zerocopy`, `zerocopy-derive`); the declared minimum compiler rises 1.88.0 → 1.89.0; no source line changed; **new license Zlib** (`foldhash` 0.2.0 ← `hashbrown` 0.17 ← `hashlink` 0.12 ← `rusqlite`): allowed for that one crate only, by the owner's decision (D-74, 2026-11-14), as a `[[licenses.exceptions]]` entry in `deny.toml`; 0.41.1 rather than 0.42.0 (17 days and about 1.9 million downloads against 3 days and about 98 thousand; the same bundled SQLite and the same lock delta); an upgrade rehearsal (a database written by the released 0.5.0 server opened by the new build, and back) is in the review request | `.git-exclude/review-requests/advisory-rusqlite-review-request.md` |
 
 ## Ledger — rejected (do not re-propose without new facts)
 

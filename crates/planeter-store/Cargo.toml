@@ -12,4 +12,4 @@ description = "planeter's persistence: repository/identity records, roles and me
 [dependencies]
 # M1 pre-tag item 2: the persistent backend behind the *Store traits. Bundled SQLite (compiled from the
 # vendored amalgamation; public-domain SQLite, MIT bindings) so a deployment needs no system library.
-rusqlite = { version = "0.32", features = ["bundled"] }
+rusqlite = { version = "0.41", features = ["bundled"] }

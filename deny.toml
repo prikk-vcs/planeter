@@ -33,6 +33,14 @@ allow = [
 crate = "webpki-roots"
 allow = ["CDLA-Permissive-2.0"]
 
+# D-74 (2026-11-14): `foldhash` (a small hash function) is published under Zlib, a permissive, OSI-approved licence (it asks to keep
+# the notice and not to misrepresent the origin; nothing of the code around it), compatible with Apache-2.0. It enters through
+# `rusqlite` -> `hashlink` -> `hashbrown` and cannot be avoided from our manifests. Allowed for that one crate only, not as a
+# licence in general.
+[[licenses.exceptions]]
+crate = "foldhash"
+allow = ["Zlib"]
+
 [bans]
 multiple-versions = "warn"
 wildcards = "deny"
