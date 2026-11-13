@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | While checking the ten messages that are newer than the Japanese sign-off against the owner's philosophy (2026-11-13), the architect found one inconsistency. The signed-off pages say "nothing was done" in the passive and without a subject: `page.csrf.body` «…何も行われていません。», `page.empty_field.body` (same). The two new pages say it with the address or the content as the subject: «このアドレスは、…何も行いませんでした。» and «送られた内容が、…何も行いませんでした。» — an address or a piece of content does not "do" anything, and one fact is now said in two voices. This handoff aligns the two new pages with the signed-off ones. |
-| Status | Assigned 2026-11-13. |
+| Status | **Done, reviewed Approved (2026-11-13; commit `03fca11`).** (Originally: Assigned 2026-11-13.) |
 | Basis | `crates/planeter-web/src/catalog/ja.rs` (`page.method_not_allowed.body`, `page.payload_too_large.body`); the signed-off pages `page.csrf.body` and the empty-field page (grep `何も行われていません`); `docs/glossary.md` §5.3. |
 | Audience | Dev team. Return a short review-request package (`.git-exclude/review-requests/`). |
 
