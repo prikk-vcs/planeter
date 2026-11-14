@@ -30,7 +30,13 @@ published until M4. **Tagging and publishing are owner-authorized.**
    pinned tag with the upstream's latest and read the advisories; an update is a reviewed change that names
    the upstream diff, and `pin-check` must stay green. If the release chain (an action, the `Dockerfile`)
    changed since the last one, run a **rehearsal** on the candidate commit and record its run id (RFC 010
-   D-10; "Rehearsal" below).
+   D-10; "Rehearsal" below). **The pins table has these rows, each with the pin, the latest, the advisories read and a decision:** the four
+   actions (`checkout`, `download-artifact`, `upload-artifact`, `attest`), the base-image digest, the BuildKit digest, the compiler pin, and
+   **the two gate tools, `cargo-deny` and `cargo-audit`** (IS-58: pinned in `ci.yml`, `release.yml` and `supply-chain.yml` as `cargo install
+   <tool> --version X.Y.Z --locked`, one version each across the three, enforced by `pin-check`). For a tool, a move needs: the release notes
+   from the pinned version to the newest, the advisories on the tool and its dependencies (RustSec, GitHub), the tool's license, and a run of
+   **both** versions against a fresh clone of the advisory database and the repository's `Cargo.lock` with the same verdict and advisory count.
+   The pin may stay for a release cycle: an old tool that cannot read a new database fails loudly, it does not pass.
 
 ## The tag (owner)
 

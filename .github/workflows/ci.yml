@@ -115,8 +115,14 @@ jobs:
           rustc --version
           cargo --version
 
-      - name: Install cargo-deny and cargo-audit
-        run: cargo install cargo-deny cargo-audit --locked
+      - name: Install cargo-deny and cargo-audit (pinned)
+        # IS-58 (2026-11-14): the gate tools are pinned, the versions that produced the green runs of 0.6.0 (CI 43585198476, the
+        # rehearsal 43575291310 and the release 43579591208 all built cargo-deny 0.20.2 and cargo-audit 0.23.0). Moved at the pins
+        # review of each release (docs/RELEASING.md, step 5); planeter-pin-check requires the exact version, `--locked`, and the same
+        # version in the three workflows.
+        run: |
+          cargo install cargo-deny --version 0.20.2 --locked
+          cargo install cargo-audit --version 0.23.0 --locked
 
       - name: cargo-deny
         run: cargo deny check

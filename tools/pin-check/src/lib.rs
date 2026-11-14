@@ -41,10 +41,17 @@
 //!   `@sha256:` in its line;
 //! - a pushed image that was not checked to be the image that was run (D-51, identity): in a job that pushes an image **by digest**
 //!   (`push-by-digest` to `ghcr.io`), a step that runs `planeter-image-identity … same` must come after each such push and before the
-//!   next push or the upload of the digest (`actions/upload-artifact`), so the digest is not handed on unchecked.
+//!   next push or the upload of the digest (`actions/upload-artifact`), so the digest is not handed on unchecked;
+//! - a gate tool that is not pinned (IS-58): the tools that gate every push and every release are installed with a **closed** form,
+//!   `cargo install cargo-deny --version X.Y.Z --locked` and `cargo install cargo-audit --version A.B.C --locked` (one crate per
+//!   command; an exact `X.Y.Z`, no range, `^`, `~`, `*`, `=` or `latest`; `--locked`; no other flag). Any other `cargo install` in a workflow
+//!   fails (there is none: the list is closed, as the others are), and the three workflows must name **the same** version of each tool. A
+//!   tool update is a reviewed change at the pins review of each release (`docs/RELEASING.md`, step 5), because an update that is
+//!   loud (a gate goes red) is safe and one that is silent (a changed verdict) is exactly what the gate exists to prevent.
 //!
 //! It has no allow-list. It reads text only, so it understands the shapes this repository uses, and
-//! says so: `cargo install` of tools is deliberately current and is out of scope.
+//! says so: `cargo install` is read only in the closed form above, and the tools' own dependencies are
+//! covered by `--locked` (the tool's own `Cargo.lock`), not by this check.
 
 use std::fmt;
 use std::fs;
@@ -132,6 +139,11 @@ pub fn check(root: &Path) -> io::Result<Report> {
             hits.extend(scan_release_paths(&text));
             hits.extend(scan_image_gate(&text));
             hits.extend(scan_image_identity(&text));
+            hits.extend(
+                parse_tool_installs(&text)
+                    .into_iter()
+                    .filter_map(|(n, r)| r.err().map(|m| (n, m))),
+            );
             hits
         } else if is_docker {
             scan_dockerfile(&text)
@@ -149,6 +161,9 @@ pub fn check(root: &Path) -> io::Result<Report> {
     report
         .findings
         .extend(toolchain_disagreements(root, &workflows)?);
+    report
+        .findings
+        .extend(tool_version_disagreements(root, &workflows)?);
     report.findings.sort();
     Ok(report)
 }
@@ -292,6 +307,146 @@ fn walk(root: &Path, dir: &Path, out: &mut Vec<PathBuf>) -> io::Result<()> {
 
 /// `(line number, message)` pairs.
 type Hits = Vec<(usize, String)>;
+
+/// The gate tools (IS-58): the only crates a workflow may `cargo install`.
+const GATE_TOOLS: [&str; 2] = ["cargo-deny", "cargo-audit"];
+
+/// Every `cargo install` command of a workflow, by line: `Ok((crate, version))` for the one closed, pinned form, or the reason it is not.
+///
+/// The closed form is `cargo install <crate> --version X.Y.Z --locked` (or `--version=X.Y.Z`; flags in any order), with `<crate>` one of
+/// [`GATE_TOOLS`], one crate per command, and no other flag. Comments are ignored; a command is a segment between `;`, `&` and `|`.
+/// A pinned install: the crate and its exact version, or the reason the command is not the closed form.
+type Install = Result<(String, String), String>;
+
+fn parse_tool_installs(text: &str) -> Vec<(usize, Install)> {
+    let mut out = Vec::new();
+    for (i, line) in text.lines().enumerate() {
+        for segment in strip_comment(line).split([';', '&', '|']) {
+            let words: Vec<&str> = segment
+                .split_whitespace()
+                .map(|w| w.trim_matches(['"', '\'']))
+                .collect();
+            let Some(at) = words.iter().position(|w| *w == "cargo") else {
+                continue;
+            };
+            let mut rest = &words[at + 1..];
+            if rest.first().is_some_and(|w| w.starts_with('+')) {
+                rest = &rest[1..];
+            }
+            if rest.first() != Some(&"install") {
+                continue;
+            }
+            out.push((i + 1, classify_install(&rest[1..])));
+        }
+    }
+    out
+}
+
+fn classify_install(args: &[&str]) -> Install {
+    let mut crates: Vec<&str> = Vec::new();
+    let mut version: Option<&str> = None;
+    let mut locked = false;
+    let mut it = args.iter();
+    while let Some(a) = it.next() {
+        if *a == "--locked" {
+            locked = true;
+        } else if *a == "--version" {
+            match it.next() {
+                Some(v) => version = Some(v),
+                None => return Err("`cargo install --version` has no version after it".into()),
+            }
+        } else if let Some(v) = a.strip_prefix("--version=") {
+            version = Some(v);
+        } else if a.starts_with('-') {
+            return Err(format!(
+                "`cargo install` flag {a:?} is not part of the closed form (`cargo install <tool> --version X.Y.Z --locked`; IS-58)"
+            ));
+        } else {
+            crates.push(a);
+        }
+    }
+    let name = match crates.as_slice() {
+        [] => return Err("`cargo install` names no crate".into()),
+        [one] => *one,
+        many => {
+            return Err(format!(
+                "`cargo install` of several crates in one command ({}): one command per tool, each with its own `--version X.Y.Z` (IS-58)",
+                many.join(", ")
+            ));
+        }
+    };
+    if !GATE_TOOLS.contains(&name) {
+        return Err(format!(
+            "`cargo install {name}`: the only crates a workflow may install are {} (IS-58, a closed list)",
+            GATE_TOOLS.join(" and ")
+        ));
+    }
+    let Some(v) = version else {
+        return Err(format!(
+            "`cargo install {name}` is not pinned: add `--version X.Y.Z` (an update of a gate tool is a reviewed change; IS-58)"
+        ));
+    };
+    if !is_semver(v) {
+        return Err(format!(
+            "`cargo install {name} --version {v}` is not an exact version: write `X.Y.Z`, not a range, `^`, `~`, `*`, `=` or `latest` (IS-58)"
+        ));
+    }
+    if !locked {
+        return Err(format!(
+            "`cargo install {name} --version {v}` lacks `--locked`: without it the tool's own dependencies float (IS-58)"
+        ));
+    }
+    Ok((name.to_owned(), v.to_owned()))
+}
+
+/// The three workflows name one version of each gate tool.
+fn tool_version_disagreements(root: &Path, workflows: &[PathBuf]) -> io::Result<Vec<Finding>> {
+    let mut seen: Vec<(String, usize, String, String)> = Vec::new();
+    for rel in workflows {
+        let text = fs::read_to_string(root.join(rel))?;
+        let file = rel
+            .components()
+            .map(|c| c.as_os_str().to_string_lossy())
+            .collect::<Vec<_>>()
+            .join("/");
+        for (line, r) in parse_tool_installs(&text) {
+            if let Ok((name, version)) = r {
+                seen.push((file.clone(), line, name, version));
+            }
+        }
+    }
+    let mut findings = Vec::new();
+    for tool in GATE_TOOLS {
+        let mut versions: Vec<&str> = seen
+            .iter()
+            .filter(|(_, _, n, _)| n == tool)
+            .map(|(_, _, _, v)| v.as_str())
+            .collect();
+        versions.sort_unstable();
+        versions.dedup();
+        if versions.len() < 2 {
+            continue;
+        }
+        let summary = seen
+            .iter()
+            .filter(|(_, _, n, _)| n == tool)
+            .map(|(f, l, _, v)| format!("{v} in {f}:{l}"))
+            .collect::<Vec<_>>()
+            .join("; ");
+        findings.extend(
+            seen.iter()
+                .filter(|(_, _, n, _)| n == tool)
+                .map(|(file, line, _, v)| Finding {
+                    file: file.clone(),
+                    line: *line,
+                    message: format!(
+                        "{tool} {v:?} disagrees with the other workflows; CI, release and the supply-chain check must install one version ({summary})"
+                    ),
+                }),
+        );
+    }
+    Ok(findings)
+}
 
 fn strip_comment(line: &str) -> &str {
     // A `#` starts a comment at line start or after whitespace (YAML); `#` inside a value is rare

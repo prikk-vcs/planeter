@@ -62,9 +62,14 @@ fails unless its `toolchain:` equals `rust-version`, and fails if a declared min
 Raising the minimum is a reviewed change to `rust-version` and the job together; nothing is rewritten to
 make an older compiler work. Both gates run in `ci.yml` and in the release `gates` job. **A pin is changed only by
 a reviewed change that names the upstream diff**; `docs/RELEASING.md` has the pre-tag review step and the
-release dry run and the rehearsal. Deliberately out of the gate's scope: the version of `cargo-deny`/`cargo-audit` installed
-by the workflows (current on purpose, so they can read the advisory database) and the content of a named
-runner image, which GitHub updates in place.
+release dry run and the rehearsal. **The gate tools are pinned too (IS-58, 2026-11-14):** `cargo-deny` and `cargo-audit` are installed
+by the three workflows as `cargo install <tool> --version X.Y.Z --locked`, one command each, the same versions everywhere, and `pin-check`
+fails on any other `cargo install` in a workflow. They used to be "current on purpose, so they can read the advisory database"; the cost of
+that was a tool update that could change a gate's verdict silently, whereas an old tool that cannot read a new database fails **loudly**
+(the gate goes red; `.git-exclude/review-requests/gate-tools-pin-review-request.md` shows it on `cargo-audit` 0.21.2: "unsupported CVSS version: 4.0", exit 1). A pin moves at the
+pins review of each release, with the tool's release notes read, its advisories read, and both versions run against a fresh database. Deliberately
+out of the gate's scope: the content of a named runner image, which GitHub updates in place, and the tools' own dependencies (covered by `--locked`,
+the tool's own lock).
 
 ### The release chain trusts GitHub-owned actions only (RFC 010 D-11)
 

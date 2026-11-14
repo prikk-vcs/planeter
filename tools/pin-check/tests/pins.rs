@@ -1034,3 +1034,180 @@ fn a_step_that_only_names_the_tool_is_not_the_check() {
         &["pushes an image by digest without a step after it"],
     );
 }
+
+// ------------------------------------------------------------------------------------------------ the gate tools (IS-58)
+
+const TOOLS_OK: &str = "      - run: |\n          cargo install cargo-deny --version 0.20.2 --locked\n          cargo install cargo-audit --version 0.23.0 --locked\n";
+
+#[test]
+fn the_gate_tools_pinned_exactly_with_locked_pass_in_every_accepted_spelling() {
+    // two commands, `--version=`, flags in any order, a `+toolchain`, a comment that would be a violation, and a chain with `&&`.
+    let body = format!(
+        "{TOOLS_OK}      - run: cargo install --locked --version=0.20.2 cargo-deny\n      - run: cargo +1.99.1 install cargo-audit --locked --version 0.23.0\n      - run: cargo --version && cargo install cargo-audit --version 0.23.0 --locked\n      # cargo install cargo-deny --locked  (a comment is not a command)\n"
+    );
+    let (code, text) = run(&fixture(
+        "tools-ok",
+        &[(".github/workflows/ci.yml", &workflow(&body))],
+    ));
+    assert_eq!(code, 0, "{text}");
+}
+
+#[test]
+fn the_old_current_form_with_two_crates_and_no_version_fails() {
+    expect_fail(
+        "tools-old-form",
+        &[(
+            ".github/workflows/ci.yml",
+            &workflow("      - run: cargo install cargo-deny cargo-audit --locked\n"),
+        )],
+        &[
+            ".github/workflows/ci.yml:7",
+            "several crates in one command (cargo-deny, cargo-audit)",
+        ],
+    );
+}
+
+#[test]
+fn a_gate_tool_without_a_version_fails() {
+    expect_fail(
+        "tools-no-version",
+        &[(
+            ".github/workflows/ci.yml",
+            &workflow("      - run: cargo install cargo-deny --locked\n"),
+        )],
+        &["cargo install cargo-deny` is not pinned"],
+    );
+}
+
+#[test]
+fn a_gate_tool_with_a_range_a_partial_version_or_latest_fails_in_every_form() {
+    for (i, v) in [
+        "^0.20.2",
+        "~0.20.2",
+        "=0.20.2",
+        "0.20",
+        "0",
+        "*",
+        ">=0.20",
+        "latest",
+        "0.20.2-rc.1",
+        "v0.20.2",
+    ]
+    .iter()
+    .enumerate()
+    {
+        expect_fail(
+            &format!("tools-range-{i}"),
+            &[(
+                ".github/workflows/ci.yml",
+                &workflow(&format!(
+                    "      - run: cargo install cargo-audit --version {v} --locked\n"
+                )),
+            )],
+            &["is not an exact version"],
+        );
+    }
+}
+
+#[test]
+fn a_gate_tool_without_locked_fails() {
+    expect_fail(
+        "tools-no-locked",
+        &[(
+            ".github/workflows/ci.yml",
+            &workflow("      - run: cargo install cargo-deny --version 0.20.2\n"),
+        )],
+        &["lacks `--locked`"],
+    );
+}
+
+#[test]
+fn any_other_crate_and_any_other_flag_fail_the_list_is_closed() {
+    expect_fail(
+        "tools-other-crate",
+        &[(
+            ".github/workflows/ci.yml",
+            &workflow("      - run: cargo install ripgrep --version 14.1.1 --locked\n"),
+        )],
+        &["the only crates a workflow may install are cargo-deny and cargo-audit"],
+    );
+    for (i, flag) in [
+        "--git https://example.invalid/x",
+        "--path .",
+        "--force",
+        "--root /tmp/x",
+        "--features foo",
+    ]
+    .iter()
+    .enumerate()
+    {
+        expect_fail(
+            &format!("tools-flag-{i}"),
+            &[(
+                ".github/workflows/ci.yml",
+                &workflow(&format!(
+                    "      - run: cargo install cargo-deny --version 0.20.2 --locked {flag}\n"
+                )),
+            )],
+            &["is not part of the closed form"],
+        );
+    }
+    expect_fail(
+        "tools-no-crate",
+        &[(
+            ".github/workflows/ci.yml",
+            &workflow("      - run: cargo install --locked\n"),
+        )],
+        &["names no crate"],
+    );
+}
+
+#[test]
+fn the_workflows_must_name_the_same_version_of_each_tool_and_the_message_names_the_files() {
+    let a = workflow(TOOLS_OK);
+    let b = workflow(&TOOLS_OK.replace("0.20.2", "0.20.1"));
+    expect_fail(
+        "tools-disagree",
+        &[
+            (".github/workflows/ci.yml", &a),
+            (".github/workflows/release.yml", &b),
+        ],
+        &[
+            "cargo-deny \"0.20.1\" disagrees with the other workflows",
+            "0.20.2 in .github/workflows/ci.yml:",
+            "0.20.1 in .github/workflows/release.yml:",
+        ],
+    );
+    // the other tool alone disagreeing is caught too
+    let c = workflow(&TOOLS_OK.replace("0.23.0", "0.22.2"));
+    expect_fail(
+        "tools-disagree-audit",
+        &[
+            (".github/workflows/ci.yml", &a),
+            (".github/workflows/supply-chain.yml", &c),
+        ],
+        &["cargo-audit \"0.22.2\" disagrees"],
+    );
+    let (code, text) = run(&fixture(
+        "tools-agree",
+        &[
+            (".github/workflows/ci.yml", &a),
+            (".github/workflows/release.yml", &a),
+            (".github/workflows/supply-chain.yml", &a),
+        ],
+    ));
+    assert_eq!(code, 0, "{text}");
+}
+
+#[test]
+fn a_cargo_install_outside_a_workflow_is_prose_and_is_not_scanned() {
+    let (code, text) = run(&fixture(
+        "tools-prose",
+        &[
+            (".github/workflows/ci.yml", &workflow(TOOLS_OK)),
+            ("README.md", "cargo install planeter --locked\n"),
+            ("docs/x.md", "cargo install cargo-deny cargo-audit\n"),
+        ],
+    ));
+    assert_eq!(code, 0, "{text}");
+}
