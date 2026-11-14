@@ -10,4 +10,4 @@ readme.workspace = true
 description = "planeter's CI pipelines and isolated ephemeral runners (RFC 006; lands at M4)."
 
 [dependencies]
-planeter-core = { path = "../planeter-core", version = "0.5.0" }
+planeter-core = { path = "../planeter-core", version = "0.6.0" }

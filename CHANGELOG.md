@@ -3,9 +3,20 @@
 Releases are bare version tags; each section is the release's notes (assembled into the GitHub
 release by `release.yml`). Kept by hand, per release, so nothing here goes stale by templating.
 
-## [Unreleased]
+## [0.6.0] — unreleased until tagged — prikk 0.57.0, Japanese signed off, languages as data, two advisories closed
 
-- **The prikk floor moves to 0.57.0 (the 0.56/0.57 re-baseline).** planeter now requires prikk **0.57.0 or later**, for the server and for `planeter-client`
+0.6.0 moves the prikk floor to **0.57.0**, makes the Japanese pages, API messages and `planeter-client` available by default (signed off by the owner, twice), turns "a language" into a row of data in a shared crate, makes a failed upload judged by evidence instead of by one fact, and updates two dependencies for advisories (`ammonia` 4.2.5, `rusqlite` 0.41.1 with SQLite 3.54.1). It adds no feature to proposals, review or repository creation, and changes no default.
+
+### Upgrading from 0.5.0
+
+- **Install prikk 0.57.0 or later** before you start the new server (the container image carries it). The server refuses to start on an older prikk with the pin's own sentence; `planeter-client` stops at its own floor message. Existing hosted repositories keep their format (the driver never runs `format upgrade`); new ones are format 8.
+- **Building from source needs Rust 1.89.0** (it was 1.88.0); the binaries and the image are unaffected.
+- **Databases need no migration.** The tables are created idempotently at start and none changed. The bundled SQLite moves from 3.46.0 to 3.54.1, and this was rehearsed rather than assumed: a database written by the released 0.5.0 server (a real proposal with a comment and a decision, accounts, tokens, sessions, a repository flagged for recovery) opened and was served identically by the new build after a clean stop **and** after a SIGKILL that left a `-wal` file (every comment the killed server had acknowledged was there); a database the new build had written was then opened, read and written by 0.5.0 again, so a rollback to 0.5.0 works. `PRAGMA integrity_check` was `ok` and the journal mode `wal` in every direction. Not covered by the rehearsal: large databases, a `-wal` of a different page size, a power loss, other platforms.
+- Nothing else has to change: no default setting moved in this release.
+
+### For people who run a server
+
+- **Breaking: the prikk floor moves to 0.57.0 (the 0.56/0.57 re-baseline).** planeter now requires prikk **0.57.0 or later**, for the server and for `planeter-client`
   (the container image carries it; `MIN_PRIKK_VERSION`, `planeter-client`'s floor, the release workflow, CI and the Dockerfile agree). Why: from 0.57.0 every new
   repository is **format 8**, which 0.56.0 and earlier refuse, so a server on 0.57.0 and a client on 0.56.0 could not work together; one floor for both. Existing
   hosted repositories keep their format (the driver never runs `format upgrade`). What 0.56.0/0.57.0 changed that planeter now reads: `sync pending` lists a patch
@@ -14,6 +25,40 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
   diverged histories and histories that do not connect are refused by default on import (the driver never passes `--allow-non-fast-forward`; planeter's creation flow meets
   only a first import); `unlock` records when the holder started (read, never trusted). Typed readers for `sync pending --format json` and for an import's refusal are in
   place and not used yet.
+- **Building from source needs Rust 1.89.0.** The declared minimum compiler rises from 1.88.0 to 1.89.0 (`rusqlite` needs it); the `msrv` job of CI proves it.
+- **`PLANETER_PREVIEW_LANGUAGES` now means "draft languages", and none exists today.** A code that is already offered (Japanese) is accepted, needs no setting, and the server logs that it
+  is not needed; a draft language named there is offered only on the operator's request and logged once as a preview.
+- **The server answers in its own words when the framework would not (RFC 012).** A request body over 2 MiB, an address the server cannot decode, an address
+  nobody serves and a method a page does not take used to get the framework's plain-text reply or an empty page. Under `/api/` they are now the API's one JSON
+  shape (`invalid_request` 400, `payload_too_large` **413**, `not_found`, `method_not_allowed`, each with `code`, `message` and `hint`), in the caller's language; elsewhere they are a page with a heading,
+  one sentence and a link, with the same status. The proposal upload and the archive staging keep their own bounds. The OpenAPI document lists the 413 where a body
+  is read.
+- **The language is negotiated by BCP 47, and the switcher becomes a menu from four languages on.** A caller's request is matched exactly, then by script, then by language (`zh-TW` gets `zh-Hant`, `pt-PT` gets `pt-BR` when only that ships); the footer
+  shows a button per language and, from four languages on, one menu.
+- **Start-up lines.** The server logs, once, a language count only when a signed-off language has messages newer than its sign-off (for Japanese there are none: the line is gone); it logs the
+  `PLANETER_PREVIEW_LANGUAGES` lines described above.
+- **Memory cost of an `extract` read: 9.5 × the extraction byte bound + 8 MiB (was 9.0 ×).** On prikk 0.57.0 a file edited 128 times reached 9.16 × its size, above the old multiple; at the default bound (64 MiB) the cost is 616 MiB of the heavy pool (584 MiB before). No page or API of this release calls `extract`.
+
+### For people who use it
+
+- **Japanese is now available (RFC 012 D-3f).** The Japanese texts of the pages, the API's error messages and `planeter-client` were reviewed by their reviewers and signed off by the owner on 2026-10-31; the owner read the later messages and the Japanese accessibility statement again on 2026-11-14, wrote the final wording of one sentence (the legend of the badge 「一覧にありません」) and accepted all the others. A caller who asks for Japanese (`Accept-Language: ja`, the `planeter_lang` cookie, or the button in the footer of
+  every page) gets it, with no operator setting; **a caller who does not ask is English, as before**. `planeter-client` speaks Japanese when `LC_ALL`, `LC_MESSAGES`
+  or `LANG` says `ja` (and with `--lang ja`; `--lang` wins). The first review found and fixed 25 inconsistencies of wording before the sign-off (one word for one thing:
+  the verb *change* is 変わる, *sign in* is ログイン, *refused* is 拒否), and one sentence that promised a signature the keyless forge cannot promise. The `planeter-client` help line and its wrong-`--lang` refusal now name the shipped languages from the registry (the help
+  prints `--lang en|ja` exactly as before; the refusal lists them: "Use one of: en, ja.").
+- **"Not listed here" no longer says something untrue.** After a patch arrives only as received sealed history (prikk 0.56.0 and later: it is then not pending), the page said "neither held
+  by this server nor in the history it holds" one line above "found in history received here". The legend now says "not one of the unsigned patches this server holds, and not in the
+  project's history" (English), and the Japanese badge and legend follow (一覧にありません; the explanation likewise, in the owner's own words).
+- **A failed upload is judged by evidence.** When a proposal's upload fails after the server began storing it (a write error: disk full, permissions, a failing disk), the server no longer answers "refused, nothing was left" unless it can show that nothing changed; otherwise it flags the repository for recovery, keeps the upload, and a resend finishes. Nothing about a person's data changes; the technical account is below.
+
+### Under the hood
+
+- **Languages are data: any number of languages, with a record of who signed what (RFC 012 D-3, amended 2026-11-04).** A new shared crate, `planeter-i18n` (the eleventh published crate, published first),
+  holds the only list of languages: each language's tag, name in itself, direction, plural rule, separators and **sign-off record** (who read it, when, which
+  commit and review sheet). Nothing else changes for English and Japanese. What it makes possible: plural categories beyond `one` and `other` (Russian, Polish,
+  Arabic and Welsh rules are in and tested), matching by BCP 47, and one review-sheet tool for any language (`planeter-i18n-sheet`, replacing the Japanese-only one). **A message
+  written or changed after a language was signed off ships and is flagged until a reviewer has read it**: the server logs how many at start, the sheet marks every row, and the
+  release notes list the count. For Japanese the count is **0** (`planeter-i18n-sheet --status`: 661 messages unchanged since the 2026-11-14 sign-off).
 - **A failed accept is called "refused" only on positive evidence that it changed nothing (found by the 0.56 re-baseline).** Since prikk 0.56.0 the claims are written
   last, so an accept that fails after it has stored the patches and blobs (a write error: disk full, permissions, a failing disk) leaves `sync pending` as it was while the
   store changed. planeter used to read that as "prikk refused it and nothing was left": the proposal was answered *refused*, the intent closed and the artifact discarded,
@@ -21,35 +66,8 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
   lock files) taken before the accept and after the failure, besides the pending set: only when both are as they were is the answer *refused*; anything else, or a signature
   that cannot be read, is *incomplete* (the repository is flagged, the intent and the artifact are kept, recovery runs, and a resend finishes). Refusals that change nothing
   (a bad signature, a truncated artifact, an over-limit object) are answered as before.
-- **"Not listed here" no longer says something untrue.** After a patch arrives only as received sealed history (prikk 0.56.0 and later: it is then not pending), the page said "neither held
-  by this server nor in the history it holds" one line above "found in history received here". The legend now says "not one of the unsigned patches this server holds, and not in the
-  project's history" (English), and the Japanese badge and legend follow (一覧にありません; the explanation likewise). The two Japanese messages are newer than the sign-off and are flagged until
-  read (12 in all).
-
 - **Security-relevant dependency update: `ammonia` 4.2.4 → 4.2.5 (RUSTSEC-2026-0533, mutation XSS through embedded MathML and SVG).** `ammonia` cleans every README, description and comment the server shows. planeter's configuration enables none of the tags the advisory needs (no `math`, no `svg`, none of the raw-text tags), so it was not exposed; it is updated anyway, and a regression test keeps the advisory's shape inert and the sanitizer's output a fixed point.
-- **Security-relevant dependency update: `rusqlite` 0.32 → 0.41.1 (RUSTSEC-2026-0459).** The bundled SQLite was older than 3.54.0 and could return uninitialised page-cache memory when a process opens a database together with a `-wal` file of a different page size; the bundled SQLite is now 3.54.1. planeter opens only the database file the operator names (`PLANETER_DB`), so it was not reachable from a request; it is updated anyway. **The declared minimum compiler rises from 1.88.0 to 1.89.0** (`rusqlite` needs it).
-
-- **Languages are data: any number of languages, with a record of who signed what (RFC 012 D-3, amended 2026-11-04).** A new shared crate, `planeter-i18n`,
-  holds the only list of languages: each language's tag, name in itself, direction, plural rule, separators and **sign-off record** (who read it, when, which
-  commit and review sheet). Nothing else changes for English and Japanese. What it makes possible: plural categories beyond `one` and `other` (Russian, Polish,
-  Arabic and Welsh rules are in and tested), matching by BCP 47 (`zh-TW` gets `zh-Hant`, `pt-PT` gets `pt-BR` when only that ships), a language switcher that
-  becomes one menu from four languages on, and one review-sheet tool for any language (`planeter-i18n-sheet`, replacing the Japanese-only one). **A message
-  written or changed after a language was signed off now ships and is flagged until a reviewer has read it**: the server logs how many at start (for
-  Japanese, 10: the eight answers the framework used to write by itself, and the two lines of `planeter-client` that name the shipped languages), and the
-  release notes list the count. The `planeter-client` help line and its wrong-`--lang` refusal now name the shipped languages from the registry (the help
-  prints `--lang en|ja` exactly as before; the refusal lists them: "Use one of: en, ja."). `planeter-i18n` is published first.
-
-- **Japanese is now available (RFC 012 D-3f).** The Japanese texts of the pages, the API's error messages and `planeter-client` were reviewed by their two
-  reviewers and signed off on 2026-10-31. A caller who asks for Japanese (`Accept-Language: ja`, the `planeter_lang` cookie, or the button in the footer of
-  every page) gets it, with no operator setting; **a caller who does not ask is English, as before**. `PLANETER_PREVIEW_LANGUAGES=ja` (set by an operator who
-  previewed the draft) is still accepted and is no longer needed; the server logs that it is not. `planeter-client` speaks Japanese when `LC_ALL`, `LC_MESSAGES`
-  or `LANG` says `ja` (and with `--lang ja`; `--lang` wins). The review found and fixed 25 inconsistencies of wording before the sign-off (one word for one thing:
-  the verb *change* is 変わる, *sign in* is ログイン, *refused* is 拒否), and one sentence that promised a signature the keyless forge cannot promise.
-- **The server answers in its own words when the framework would not (RFC 012).** A request body over 2 MiB, an address the server cannot decode, an address
-  nobody serves and a method a page does not take used to get the framework's plain-text reply or an empty page. Under `/api/` they are now the API's one JSON
-  shape (`invalid_request` 400, `payload_too_large` **413**, `not_found`, `method_not_allowed`), in the caller's language; elsewhere they are a page with a heading,
-  one sentence and a link, with the same status. The proposal upload and the archive staging keep their own bounds. The OpenAPI document lists the 413 where a body
-  is read.
+- **Security-relevant dependency update: `rusqlite` 0.32 → 0.41.1 (RUSTSEC-2026-0459).** The bundled SQLite was older than 3.54.0 and could return uninitialised page-cache memory when a process opens a database together with a `-wal` file of a different page size; the bundled SQLite is now 3.54.1. planeter opens only the database file the operator names (`PLANETER_DB`), so it was not reachable from a request; it is updated anyway. **The declared minimum compiler rises from 1.88.0 to 1.89.0** (`rusqlite` needs it). The new dependency `foldhash` (through `rusqlite` → `hashlink` → `hashbrown`) is licensed Zlib, a permissive licence; it is allowed for that one crate only, by an exception in `deny.toml`. `cargo deny` and `cargo audit` report nothing, and no advisory is ignored.
 
 ## [0.5.0] — 2026-10-31 — propose, review, create: the first release in which a person can put work to the forge, and the forge still holds no key
 

@@ -10,6 +10,6 @@ description = "Generates the review sheet for any language from the live message
 publish = false
 
 [dependencies]
-planeter-i18n = { path = "../../crates/planeter-i18n", version = "0.5.0" }
-planeter-web = { path = "../../crates/planeter-web", version = "0.5.0" }
-planeter-client = { path = "../../crates/planeter-client", version = "0.5.0" }
+planeter-i18n = { path = "../../crates/planeter-i18n", version = "0.6.0" }
+planeter-web = { path = "../../crates/planeter-web", version = "0.6.0" }
+planeter-client = { path = "../../crates/planeter-client", version = "0.6.0" }
