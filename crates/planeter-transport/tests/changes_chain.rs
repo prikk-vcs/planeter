@@ -136,6 +136,14 @@ fn two_heads_an_unconnected_set_a_merge_and_two_claims_for_one_block_are_not_one
         build_chain(&ids(&[1, 2, 3]), &merge).unwrap_err(),
         ChainError::NotOneChange
     );
+    // a merge whose first-parent line is a clean chain: the second parent must still make it not one change
+    let mut m2 = claim(2, 12, Some(11));
+    m2.parent_block_ids.push(id(99));
+    let merge2 = pending(vec![claim(1, 11, Some(10)), m2]);
+    assert_eq!(
+        build_chain(&ids(&[1, 2]), &merge2).unwrap_err(),
+        ChainError::NotOneChange
+    );
     // two claims for one block
     let dup = pending(vec![claim(1, 11, Some(10)), claim(2, 11, Some(10))]);
     assert_eq!(
