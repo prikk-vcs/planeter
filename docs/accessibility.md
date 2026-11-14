@@ -96,7 +96,7 @@ These are known and planned, not fixed yet:
   says "no signed changes"). prikk's `branch --format json` has a data field for it (`unpublished_current_branch`);
   the display waits for the queued-state design (IS-45, noted by the architect, not decided).
 - **Languages.** English and **Japanese** are shipped. Japanese was reviewed by the owner (a fluent reader of Japanese; the colleague named in the
-  plan did not take part) and signed off on 2026-10-31 (the language's record in `crates/planeter-i18n/src/languages/ja.rs` says who, when, the commit and the
+  plan did not take part) and signed off on 2026-10-31; the owner read the later messages and the Japanese version of this statement again and signed them off on 2026-11-14 (the language's record in `crates/planeter-i18n/src/languages/ja.rs` says who, when, the commit and the
   sheet); it is offered without any operator setting, chosen by `Accept-Language`, by the `planeter_lang` cookie, or by the switcher.
   The language switcher (a button per language in the footer of every page, no script) shows the languages (a menu from four on). A message written or changed **after** a sign-off ships and is flagged until a reviewer has read it: the number of such messages is printed by the server at start, shown on the review sheet and listed in each release's notes (`planeter-i18n-sheet --status`); this statement does not repeat a number that changes. What the checks cover for
   Japanese: every message exists with the same placeholders as English, no retired or forbidden term, the glossary's Japanese column

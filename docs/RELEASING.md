@@ -397,6 +397,13 @@ docker run --rm ghcr.io/prikk-vcs/planeter:X.Y.Z --version
   bite); `cargo install planeter --version 0.5.0 --locked` and `cargo install planeter-client --version 0.5.0 --locked` build and run
   (`planeter 0.5.0`, `planeter-client 0.5.0`).
 
+- **0.6.0 (unreleased until tagged — the architect fills this row at the tag).** Release candidate commit `<hash>`; prikk floor **0.57.0**; declared minimum compiler **1.89.0**; the compiler
+  pin `<1.99.1 or the reviewed successor>`; **eleven crates** (`planeter-i18n` is new and goes first: the registry answers 404 for it, so the new-crate rate limit applies to it);
+  rehearsal run `<id>` (both architectures: build, image run with prikk 0.57.0, glibc check, push, identity, manifest list, attestation; the rehearsal package); the architect's gates immediately before the tag on
+  advisory-database HEAD `<hash>`: `cargo deny` and `cargo audit` exit 0 with no ignore, `<n>` tests with prikk and `<n>` without, CI green on the tag commit; tag `<hash>` (signed, bare `0.6.0`);
+  Release run `<id>`, every job green; verified after the fact: both tarballs' checksums and build-provenance attestations, `planeter --version` of the x86_64 binary (`planeter 0.6.0`, commit, `prikk-floor 0.57.0`, rustc),
+  the image's attestation and its `prikk --version` (0.57.0); crates.io: eleven crates in the order above, then `cargo install planeter --version 0.6.0 --locked` and `cargo install planeter-client --version 0.6.0 --locked`.
+
 ## If a job fails
 
 The workflow is idempotent up to `publish`: re-run the failed job with `gh run rerun <run-id> --failed`
@@ -428,7 +435,15 @@ That is the order cargo itself computes (**`planeter-i18n`, the shared language 
 real publish, dry-run the whole set at once:** `cargo publish --workspace --exclude planeter-runner --dry-run --locked` packages every crate,
 builds each from its package against the others' packages, and uploads nothing (cargo 1.90 or later; it replaces dry-running only the leaves, which
 was all that could be done when a crate's internal dependencies were unpublished). `planeter-runner` stays unpublished (`publish = false`).
-`planeter-client` is a **new crate name** on crates.io: it is not reserved (checked 2026-10-30: the registry answers 404), so publish it promptly
-after the tag; the new-crate rate limit (a burst of five, then about one per ten minutes) applies to it only. `cargo package --list -p <crate>` shows
+**What the dry run proves, and what it does not** (investigated for 0.6.0). It proves that every crate's package contains what its manifest needs, that its metadata is accepted, and
+that each crate **builds from its own package** against the *other packages of the same run* (cargo puts them in a temporary registry, `target/package/tmp-registry`, that it prefers to
+crates.io for the workspace's own crates). It does **not** prove: that crates.io accepts the upload (the owner's token and ownership, the rate limit for a **new crate name**, the size limits), that the
+crates resolve against each other *as published* (before the first crate of a version is on the registry, there is nothing published to resolve against), or that `cargo install <crate> --locked` works
+from the registry; those can only be shown by the real publication, in the order above, followed by installing each crate from the registry. **Run it on a clean `target/package`.** A
+dry run leaves the unpacked packages under `target/package/<crate>-<version>/`, and a later run **at the same version number but at another commit** in the same `target/` can compile against the old
+unpacked sources: on 2026-11-14 a dry run at `70dff57` failed (`unresolved imports planeter_core::admission::store_signature` in `planeter-transport`) only because it reused the `target/` of an earlier run at an
+older commit that also said 0.5.0, and passed on a fresh worktree (the failure was reproduced on purpose: a dry run at `79adef0`, then the same worktree switched to `70dff57`, exit 101; fresh worktrees of `70dff57`,
+`4c53f2a` and the 0.6.0 candidate, exit 0, with cargo 1.100.0 and, for the first two, 1.99.1). Delete `target/package` (or use a fresh worktree) before the dry run that counts; a version bump also ends it.
+`planeter-client` was a **new crate name** in 0.5.0 (published then). In 0.6.0 **`planeter-i18n` is the new crate name** (checked 2026-11-14: the registry answers 404 for it, so it is not taken or reserved): it is published **first**, so publish the set promptly after the tag; the new-crate rate limit (a burst of five, then about one per ten minutes) applies to it only. `cargo package --list -p <crate>` shows
 what each package contains; the client's package leaves out `tests/fixtures/` (the tests' TLS certificates and private keys). The crate name
 `planeter` is reserved by the owner (a `0.0.0` placeholder, 2026-09-16).

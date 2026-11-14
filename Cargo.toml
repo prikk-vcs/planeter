@@ -21,7 +21,7 @@ members = [
     "tools/pin-check",
 ]
 
-# Shared metadata every crate inherits (RFC 001; ROADMAP: v0.x, MSRV 1.85, Rust 2024).
+# Shared metadata every crate inherits (RFC 001; ROADMAP: v0.x, MSRV 1.89.0, proved by the `msrv` job, Rust 2024).
 [workspace.package]
 version = "0.6.0"
 edition = "2024"
