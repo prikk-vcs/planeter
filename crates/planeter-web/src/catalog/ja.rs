@@ -870,7 +870,7 @@ pub const CATALOG: &[Entry] = &[
     msg("proposal.patch.not_listed", "一覧にありません"),
     msg(
         "proposal.patch.not_listed_explain",
-        "このパッチは、このサーバーが保持している未署名のパッチにも、プロジェクトの履歴にもないため、何も言えません。",
+        "このパッチに該当するものは、このサーバーの、未署名のパッチにもプロジェクトの履歴にも見つかりません。そのためパッチの状態を表示できません。",
     ),
     msg(
         "proposal.retention.kept",
