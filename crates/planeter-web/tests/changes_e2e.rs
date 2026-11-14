@@ -1531,3 +1531,67 @@ async fn a_thousand_file_repository_view_cold_and_cached_timings() {
     );
     assert!(cold_t < Duration::from_secs(30));
 }
+
+#[tokio::test]
+async fn a_proposal_built_after_another_carries_the_earlier_claims_again_and_its_view_shows_the_whole_chain_against_the_sealed_base()
+ {
+    if skip() {
+        return;
+    }
+    let mut w = world("stacked", Opts::default());
+    w.client.write("first.txt", b"first\n");
+    w.client.seal("first");
+    let (_id1, _) = propose(&w, title(), &w.client.artifact(&w.forge, "s1")).await;
+    // the have-list the forge SERVES does not list what it holds pending, so the next artifact carries the earlier block again
+    let served = get(
+        &w,
+        "/api/v1/repos/alice/forge/transport/have?ref=heads/main",
+        None,
+    )
+    .await;
+    assert_eq!(served.status, StatusCode::OK);
+    let have = w.base.join("served.have");
+    std::fs::write(&have, &served.body).unwrap();
+    w.client.write("second.txt", b"second\n");
+    w.client.seal("second");
+    let out = w.base.join("artifacts-out").join("s2.art");
+    std::fs::create_dir_all(out.parent().unwrap()).unwrap();
+    prikk(
+        &w.client.repo,
+        &w.client.keys,
+        &[
+            "sync",
+            "build",
+            "heads/main",
+            "--have",
+            have.to_str().unwrap(),
+            "--output",
+            out.to_str().unwrap(),
+        ],
+    );
+    let (id2, p2) = propose(&w, title(), &std::fs::read(&out).unwrap()).await;
+    assert_eq!(
+        p2.json()["claims"].as_array().unwrap().len(),
+        2,
+        "both blocks travel again"
+    );
+    let r = list(&w, &id2).await;
+    assert_eq!(
+        r.status,
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&r.body)
+    );
+    let l = r.json();
+    let paths: Vec<&str> = l["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|f| f["path"].as_str().unwrap())
+        .collect();
+    assert_eq!(
+        paths,
+        vec!["first.txt", "second.txt"],
+        "the revision's own chain against its sealed base: the earlier work is part of this revision's claims"
+    );
+}
