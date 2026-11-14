@@ -14,7 +14,7 @@
 FROM debian:trixie-slim@sha256:f6b08b09a05725f9431502d3b5714f5c4576e82c1a84fa1debe0c24a7e0c3ec4
 
 ARG TARGETARCH
-ARG PRIKK_VERSION=0.54.0
+ARG PRIKK_VERSION=0.57.0
 
 RUN apt-get update \
  && apt-get install -y --no-install-recommends bubblewrap ca-certificates curl \

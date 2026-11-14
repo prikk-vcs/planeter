@@ -25,7 +25,7 @@ fn a_read_whose_prikk_call_prints_too_much_is_unavailable_never_empty() {
     let script = base.join("prikk");
     std::fs::write(
         &script,
-        "#!/bin/sh\ncase \"$1\" in\n  --version) echo 'prikk 0.54.1' ;;\n  *) head -c 40000000 /dev/zero | tr '\\0' ' ' ;;\nesac\n",
+        "#!/bin/sh\ncase \"$1\" in\n  --version) echo 'prikk 0.57.0' ;;\n  *) head -c 40000000 /dev/zero | tr '\\0' ' ' ;;\nesac\n",
     )
     .unwrap();
     {

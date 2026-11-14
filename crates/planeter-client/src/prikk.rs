@@ -12,7 +12,7 @@ use crate::catalog::{Key, Lang, t};
 use crate::exit::{Failure, PRIKK};
 
 /// The oldest prikk this program works with (the server's own floor; `tests/floor.rs` keeps the two equal).
-pub const PRIKK_FLOOR: (u64, u64, u64) = (0, 54, 0);
+pub const PRIKK_FLOOR: (u64, u64, u64) = (0, 57, 0);
 
 pub fn floor_text() -> String {
     format!("{}.{}.{}", PRIKK_FLOOR.0, PRIKK_FLOOR.1, PRIKK_FLOOR.2)

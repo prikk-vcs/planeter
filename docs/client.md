@@ -4,7 +4,7 @@
 |---|---|
 | Document | What `planeter-client` does, what it never does, how it trusts, its exit codes and how to read its TLS errors (RFC 004 part 9, D-10, D-50). |
 | Where | `crates/planeter-client` (the program), `crates/planeter-client/tests/` (its tests: the HTTP core, the command line, the messages, the commands against a stub server, and `crates/planeter/tests/client_e2e.rs` against the real server behind a TLS terminator). |
-| Needs | prikk 0.54.0 or later on your `PATH` (your own prikk and your own keys); a planeter server reachable over **https**. |
+| Needs | prikk 0.57.0 or later on your `PATH` (your own prikk and your own keys); a planeter server reachable over **https**. |
 
 `planeter-client` does three things with a repository on a planeter server, and nothing else:
 
@@ -137,7 +137,7 @@ and `go` are not needed. The runners carry them anyway; a clean checkout on a ma
 HTTP and TLS stack (a test in `tools/boundary-check` keeps it so).
 
 **What CI covers.** The `client` job builds the program and runs `cargo test -p planeter-client` on `ubuntu-24.04`, `macos-15` and
-`windows-2025`, after installing prikk 0.54.0 (the floor) from the project's release assets, pinned by version and checked against the release's
+`windows-2025`, after installing prikk 0.57.0 (the floor) from the project's release assets, pinned by version and checked against the release's
 own `.sha256` (prikk publishes Linux, macOS arm64 and Windows x86_64 builds). Which tests run where:
 
 | Tests | Linux | macOS | Windows |

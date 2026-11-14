@@ -24,7 +24,7 @@ fn version_names_the_program_the_build_and_the_prikk_floor() {
         )),
         "{text}"
     );
-    assert!(text.contains("prikk 0.54.0 or later"), "{text}");
+    assert!(text.contains("prikk 0.57.0 or later"), "{text}");
 }
 
 #[test]

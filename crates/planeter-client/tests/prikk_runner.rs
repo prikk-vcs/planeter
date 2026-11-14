@@ -78,7 +78,7 @@ fn a_missing_prikk_is_a_sentence_with_the_floor_in_it() {
     let failure = p.check().unwrap_err();
     assert_eq!(failure.code, PRIKK);
     assert!(
-        failure.message.contains("prikk was not found") && failure.message.contains("0.54.0"),
+        failure.message.contains("prikk was not found") && failure.message.contains("0.57.0"),
         "{}",
         failure.message
     );

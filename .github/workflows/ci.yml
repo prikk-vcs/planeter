@@ -16,7 +16,7 @@ env:
   CARGO_TERM_COLOR: always
   # The prikk release the `client` job installs to run the client's commands on every system (RFC 004 part 10 T3): the floor, so that the
   # commands are tested against the oldest prikk planeter promises to work with. `planeter-floor-check` keeps it equal to the other floors.
-  PRIKK_VERSION: "0.54.0"
+  PRIKK_VERSION: "0.57.0"
 
 jobs:
   build:

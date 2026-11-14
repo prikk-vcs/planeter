@@ -43,10 +43,10 @@ fn each_way_a_prikk_cannot_be_started_has_its_own_sentence_and_only_a_missing_on
     // Not there at all.
     let gone = check(Lang::SOURCE, &d.join("no-such-prikk"), &d);
     assert!(gone.message.contains(not_found), "{}", gone.message);
-    assert!(gone.message.contains("0.54.0"), "{}", gone.message);
+    assert!(gone.message.contains("0.57.0"), "{}", gone.message);
 
     // There, but not executable.
-    let plain = file(&d, "plain", "#!/bin/sh\necho 'prikk 0.55.0'\n", 0o644);
+    let plain = file(&d, "plain", "#!/bin/sh\necho 'prikk 0.57.0'\n", 0o644);
     let denied = check(Lang::SOURCE, &plain, &d);
     assert!(
         denied

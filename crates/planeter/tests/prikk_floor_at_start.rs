@@ -113,7 +113,7 @@ fn a_prikk_below_the_floor_refuses_to_start_with_the_pins_sentence() {
         eprintln!("skipping: needs prlimit");
         return;
     }
-    for version in ["0.53.0", "0.52.0", "0.46.0"] {
+    for version in ["0.56.0", "0.55.0", "0.54.0", "0.46.0"] {
         let dir = scratch(&format!("below-{version}"));
         let bin = stand_in_bin(&dir, &format!("prikk {version}"));
         let (lines, code) = start(&dir, &format!("{}:/usr/bin:/bin", bin.display()));
@@ -121,7 +121,7 @@ fn a_prikk_below_the_floor_refuses_to_start_with_the_pins_sentence() {
         assert_eq!(
             lines,
             vec![format!(
-                "planeter: refusing to start: unsupported prikk version {version}; planeter requires >= 0.54.0"
+                "planeter: refusing to start: unsupported prikk version {version}; planeter requires >= 0.57.0"
             )],
             "one plain sentence, nothing else, no 'listening'"
         );
@@ -134,7 +134,7 @@ fn the_floor_itself_and_a_newer_prikk_start() {
         eprintln!("skipping: needs prlimit");
         return;
     }
-    for version in ["0.54.0", "0.54.1", "0.60.3", "1.0.0"] {
+    for version in ["0.57.0", "0.57.1", "0.60.3", "1.0.0"] {
         let dir = scratch(&format!("ok-{version}"));
         let bin = stand_in_bin(&dir, &format!("prikk {version}"));
         let (lines, code) = start(&dir, &format!("{}:/usr/bin:/bin", bin.display()));

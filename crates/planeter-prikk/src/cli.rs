@@ -3,7 +3,7 @@
 //! It shells out to the prikk binary against one repository directory (the one holding `.prikk`),
 //! parses `--format json` output into the [`crate::model`] types after checking the `schema_version`,
 //! and maps a non-zero exit to a typed [`PrikkError`] (never a panic). The version pin (D-3) refuses a
-//! prikk older than planeter's floor (PK-26/PK-42: planeter requires prikk ≥ 0.54.0). Confinement of the
+//! prikk older than planeter's floor (PK-26/PK-42: planeter requires prikk ≥ 0.57.0). Confinement of the
 //! subprocess (sandbox) is layered on in T4 — this module invokes prikk directly.
 
 use std::ffi::OsString;
@@ -31,14 +31,19 @@ use crate::sandbox::{CallLimits, Run, Sandbox, TIMEOUT_EXIT_CODE};
 /// file three or more times (PK-57, planeter IS-46), ships `extract` with `largest_file_bytes`, `claim_parent_block_id` and
 /// the `refusal-v1` document (the three things planeter asked for, PK-56/PK-66), and adds the `unreached objects` line to
 /// `verify`. 0.54.1 is an installer fix; prikk's code is 0.54.0's.
-pub const MIN_PRIKK_VERSION: (u64, u64, u64) = (0, 54, 0);
+/// Raised to 0.57.0 (2026-11-14, the 0.56/0.57 re-baseline, decision D-72, ledger PK-78 to PK-80): from 0.57.0 every new repository is
+/// **format 8**, which 0.56.0 and earlier refuse (as they refuse a format-8 archive), so a server on 0.57.0 and a client on 0.56.0 could
+/// not work together; one floor for the server and `planeter-client`. 0.57.0 also carries what 0.56.0 changed for the driver: the delivery
+/// classification with default refusal of rollback, diverged and does-not-connect, `extract --claim` over chains of pending claims,
+/// `sync pending` by claim, unreached patches and blobs, and the four fixed `archive verify` key statuses.
+pub const MIN_PRIKK_VERSION: (u64, u64, u64) = (0, 57, 0);
 
 /// What the start-up probe of the prikk binary found ([`probe_binary`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BinaryProbe {
     /// This version, at or above [`MIN_PRIKK_VERSION`].
     Supported(String),
-    /// Below the floor: the pin's own sentence (`unsupported prikk version X; planeter requires >= 0.54.0`).
+    /// Below the floor: the pin's own sentence (`unsupported prikk version X; planeter requires >= 0.57.0`).
     Unsupported(String),
     /// There is no such program. Reported as it always was: when a repository is first opened.
     Missing,
@@ -826,11 +831,11 @@ mod tests {
 
     #[test]
     fn version_ordering_meets_the_floor() {
-        assert!((0, 54, 0) >= MIN_PRIKK_VERSION);
-        assert!((0, 54, 1) >= MIN_PRIKK_VERSION);
+        assert!((0, 57, 0) >= MIN_PRIKK_VERSION);
+        assert!((0, 57, 1) >= MIN_PRIKK_VERSION);
         assert!((1, 0, 0) >= MIN_PRIKK_VERSION);
-        assert!((0, 53, 9) < MIN_PRIKK_VERSION);
-        assert!((0, 53, 0) < MIN_PRIKK_VERSION);
-        assert!((0, 52, 0) < MIN_PRIKK_VERSION);
+        assert!((0, 56, 9) < MIN_PRIKK_VERSION);
+        assert!((0, 56, 0) < MIN_PRIKK_VERSION);
+        assert!((0, 54, 0) < MIN_PRIKK_VERSION);
     }
 }

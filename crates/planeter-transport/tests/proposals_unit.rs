@@ -63,7 +63,7 @@ fn script(dir: &Path) -> PathBuf {
 D="$PWD/.standin"
 echo "$*" >> "$D/calls"
 case "$1" in
-  --version) echo "prikk 0.54.1" ;;
+  --version) echo "prikk 0.57.0" ;;
   sync) [ -e "$D/flood-pending" ] && { head -c 20000000 /dev/zero | tr '\0' ' '; exit 0; }
         cat "$D/pending" ;;
   branch) cat "$D/branches.json" ;;

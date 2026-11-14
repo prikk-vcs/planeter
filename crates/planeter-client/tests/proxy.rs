@@ -33,7 +33,7 @@ fn proxy() -> (u16, Arc<Mutex<Vec<String>>>) {
 
 fn stand_in_prikk(dir: &std::path::Path) -> std::path::PathBuf {
     let p = dir.join("prikk");
-    std::fs::write(&p, "#!/bin/sh\necho 'prikk 0.55.0'\n").unwrap();
+    std::fs::write(&p, "#!/bin/sh\necho 'prikk 0.57.0'\n").unwrap();
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
     p
