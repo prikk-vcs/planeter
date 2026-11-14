@@ -408,6 +408,14 @@ fn the_real_sandbox_serves_the_view_and_the_log_holds_no_file_name_and_no_conten
 
     let log = server.stop();
     assert!(!log.is_empty());
+    let counters = log
+        .iter()
+        .find(|l| l.starts_with("planeter: the file-by-file view: "))
+        .expect("the counters are printed at stop");
+    assert!(
+        counters.contains("ok=") && counters.contains("cache_hit="),
+        "{counters}"
+    );
     for line in &log {
         assert!(
             !line.contains(NAME_CANARY),

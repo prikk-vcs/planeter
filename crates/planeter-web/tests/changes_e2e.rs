@@ -96,13 +96,22 @@ impl Client {
         std::fs::create_dir_all(&keys).unwrap();
         prikk(&repo, &keys, &["setup"]);
         std::fs::write(repo.join("README.md"), b"# Hello\n\nA readme.\n").unwrap();
+        prikk(&repo, &keys, &["commit", "--from-worktree", "-m", "init"]);
+        prikk(&repo, &keys, &["seal", "--allow-no-audit"]);
+        // the initial files are a second sealed block, so that "the block before the real parent" exists
         for (rel, body) in initial {
             let p = repo.join(rel);
             std::fs::create_dir_all(p.parent().unwrap()).unwrap();
             std::fs::write(p, body).unwrap();
         }
-        prikk(&repo, &keys, &["commit", "--from-worktree", "-m", "init"]);
-        prikk(&repo, &keys, &["seal", "--allow-no-audit"]);
+        if !initial.is_empty() {
+            prikk(
+                &repo,
+                &keys,
+                &["commit", "--from-worktree", "-m", "base files"],
+            );
+            prikk(&repo, &keys, &["seal", "--allow-no-audit"]);
+        }
         let archive = base.join("client.archive");
         prikk(
             &repo,
@@ -928,30 +937,58 @@ async fn a_proposal_with_no_base_and_a_revision_whose_declared_base_is_not_the_r
     if skip() {
         return;
     }
-    let mut w = world("base", Opts::default());
+    let mut w = world_with("base", Opts::default(), &[("base.txt", b"base\n")]);
+    // the client's history: init, base files, then the work. The forge holds the first two.
+    let blocks = w.client.block_ids(2); // [base files, init]
+    let (real_parent, older) = (blocks[0].clone(), blocks[1].clone());
     w.client.write("a.txt", b"a\n");
     w.client.seal("one");
-    let first_block = w.client.block_ids(2)[1].clone(); // the client's init block: the forge holds it
     let art = w.client.artifact(&w.forge, "base");
+    // no base declared: nothing to differ from
     let (none_id, _) = propose(&w, title(), &art).await;
     let l = list(&w, &none_id).await.json();
     assert_eq!(l["compared"]["base_differs"], false);
     assert!(l["compared"]["declared_base"].is_null());
-    // a second proposal declaring a base that the forge holds but that is not the real parent of the work
+    assert_eq!(l["compared"]["before_block"], real_parent);
+    // the declared base is the real parent: no difference
     w.client.write("b.txt", b"b\n");
     w.client.seal("two");
     let art2 = w.client.artifact(&w.forge, "base2");
     let (id2, _) = propose(
         &w,
-        serde_json::json!({"title": "declared", "client": "tests/1", "base": first_block}),
+        serde_json::json!({"title": "declared right", "client": "tests/1", "base": real_parent}),
         &art2,
     )
     .await;
     let l2 = list(&w, &id2).await.json();
-    assert_eq!(l2["compared"]["declared_base"], first_block);
+    assert_eq!(l2["compared"]["declared_base"], real_parent);
+    assert_eq!(l2["compared"]["base_differs"], false);
+    // a base the forge holds but that is not the real parent: compared with the real parent, and said so
+    w.client.write("c.txt", b"c\n");
+    w.client.seal("three");
+    let art3 = w.client.artifact(&w.forge, "base3");
+    let (id3, _) = propose(
+        &w,
+        serde_json::json!({"title": "declared older", "client": "tests/1", "base": older}),
+        &art3,
+    )
+    .await;
+    let l3 = list(&w, &id3).await;
     assert_eq!(
-        l2["compared"]["base_differs"], false,
-        "the declared base is the real parent here"
+        l3.status,
+        StatusCode::OK,
+        "{}",
+        String::from_utf8_lossy(&l3.body)
+    );
+    let l3 = l3.json();
+    assert_eq!(l3["compared"]["declared_base"], older);
+    assert_eq!(
+        l3["compared"]["base_differs"], true,
+        "never silently reconciled"
+    );
+    assert_eq!(
+        l3["compared"]["before_block"], real_parent,
+        "the real parent is what is compared"
     );
 }
 

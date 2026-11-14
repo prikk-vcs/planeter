@@ -894,10 +894,15 @@ async fn main() {
         eprintln!("planeter: server error: {e}");
         release_and_exit(&leases, 1);
     }
-    let counters = shutdown_metrics
+    let snapshot = shutdown_metrics
         .unwrap_or_else(|| Arc::new(planeter_transport::Metrics::new()))
-        .snapshot()
-        .over_cap_summary();
+        .snapshot();
+    let counters = snapshot.over_cap_summary();
+    // The review view's counters (RFC 005 part 6): only when it was used; never a file name, path or content.
+    let changes = snapshot.changes_summary();
+    if !changes.is_empty() {
+        eprintln!("planeter: the file-by-file view: {changes}");
+    }
     eprintln!("planeter: stopped ({counters})");
     release_and_exit(&leases, 0);
 }

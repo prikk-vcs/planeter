@@ -141,6 +141,18 @@ impl Snapshot {
     }
 }
 
+impl Snapshot {
+    /// The review view's counters as one fragment for the log (`ok=3 cache_hit=2 …`, only the non-zero ones; empty when the view was not used).
+    pub fn changes_summary(&self) -> String {
+        self.changes
+            .iter()
+            .filter(|(_, n)| **n > 0)
+            .map(|(k, n)| format!("{k}={n}"))
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+}
+
 /// The counters. Cheap to share (`Arc`); every method takes `&self`.
 #[derive(Default)]
 pub struct Metrics {
