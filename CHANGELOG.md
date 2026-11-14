@@ -5,6 +5,27 @@ release by `release.yml`). Kept by hand, per release, so nothing here goes stale
 
 ## [Unreleased]
 
+- **The prikk floor moves to 0.57.0 (the 0.56/0.57 re-baseline).** planeter now requires prikk **0.57.0 or later**, for the server and for `planeter-client`
+  (the container image carries it; `MIN_PRIKK_VERSION`, `planeter-client`'s floor, the release workflow, CI and the Dockerfile agree). Why: from 0.57.0 every new
+  repository is **format 8**, which 0.56.0 and earlier refuse, so a server on 0.57.0 and a client on 0.56.0 could not work together; one floor for both. Existing
+  hosted repositories keep their format (the driver never runs `format upgrade`). What 0.56.0/0.57.0 changed that planeter now reads: `sync pending` lists a patch
+  only once a claim names it (so a killed or failed accept leaves **no pending prefix**, only unreached patch and blob objects, which `doctor` reports as one
+  information finding, `PRIKK-DOCTOR-UNREACHED-CONTENT`, and recovery counts as clean); `extract --claim` works over a chain of pending claims and reports the chain; rollbacks,
+  diverged histories and histories that do not connect are refused by default on import (the driver never passes `--allow-non-fast-forward`; planeter's creation flow meets
+  only a first import); `unlock` records when the holder started (read, never trusted). Typed readers for `sync pending --format json` and for an import's refusal are in
+  place and not used yet.
+- **A failed accept is called "refused" only on positive evidence that it changed nothing (found by the 0.56 re-baseline).** Since prikk 0.56.0 the claims are written
+  last, so an accept that fails after it has stored the patches and blobs (a write error: disk full, permissions, a failing disk) leaves `sync pending` as it was while the
+  store changed. planeter used to read that as "prikk refused it and nothing was left": the proposal was answered *refused*, the intent closed and the artifact discarded,
+  with orphaned objects in the store and no recovery flag. It now compares a **store signature** (the size and modification time of every file under `.prikk`, leaving out
+  lock files) taken before the accept and after the failure, besides the pending set: only when both are as they were is the answer *refused*; anything else, or a signature
+  that cannot be read, is *incomplete* (the repository is flagged, the intent and the artifact are kept, recovery runs, and a resend finishes). Refusals that change nothing
+  (a bad signature, a truncated artifact, an over-limit object) are answered as before.
+- **"Not listed here" no longer says something untrue.** After a patch arrives only as received sealed history (prikk 0.56.0 and later: it is then not pending), the page said "neither held
+  by this server nor in the history it holds" one line above "found in history received here". The legend now says "not one of the unsigned patches this server holds, and not in the
+  project's history" (English), and the Japanese badge and legend follow (一覧にありません; the explanation likewise). The two Japanese messages are newer than the sign-off and are flagged until
+  read (12 in all).
+
 - **Security-relevant dependency update: `ammonia` 4.2.4 → 4.2.5 (RUSTSEC-2026-0533, mutation XSS through embedded MathML and SVG).** `ammonia` cleans every README, description and comment the server shows. planeter's configuration enables none of the tags the advisory needs (no `math`, no `svg`, none of the raw-text tags), so it was not exposed; it is updated anyway, and a regression test keeps the advisory's shape inert and the sanitizer's output a fixed point.
 
 - **Languages are data: any number of languages, with a record of who signed what (RFC 012 D-3, amended 2026-11-04).** A new shared crate, `planeter-i18n`,
