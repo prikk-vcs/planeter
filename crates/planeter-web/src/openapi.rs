@@ -301,7 +301,65 @@ fn schemas() -> Value {
     if let (Some(all), Some(more)) = (all.as_object_mut(), proposal_schemas().as_object()) {
         all.extend(more.clone());
     }
+    if let (Some(all), Some(more)) = (all.as_object_mut(), change_schemas().as_object()) {
+        all.extend(more.clone());
+    }
     all
+}
+
+/// The schemas of the file-by-file view of a revision (RFC 005 part 6).
+fn change_schemas() -> Value {
+    json!({
+        "ChangeFile": obj(&["file_id", "path", "path_escaped", "status", "kind", "size_before", "size_after", "lines_added", "lines_removed", "shown", "not_shown_because"], json!({
+            "file_id": {"type": "string", "description": "The SHA-256 (hex) of the exact path bytes: this, never the path, goes into URLs."},
+            "path": {"type": "string", "description": "Display-safe: valid UTF-8 kept; other bytes as `\\xNN`; controls, line and paragraph separators, bidirectional controls and zero-width characters as `\\u{…}`; a name over 1,024 bytes cut with `…(N more bytes)`."},
+            "path_escaped": {"type": "boolean", "description": "The display differs from the bytes."},
+            "status": {"type": "string", "enum": ["added", "deleted", "modified", "type_changed"], "description": "A file moved to a new name is a deletion plus an addition: no rename is guessed."},
+            "kind": {"type": "string", "enum": ["text", "binary", "symlink", "directory"]},
+            "size_before": {"type": "integer", "nullable": true, "minimum": 0}, "size_after": {"type": "integer", "nullable": true, "minimum": 0},
+            "lines_added": {"type": "integer", "nullable": true, "minimum": 0}, "lines_removed": {"type": "integer", "nullable": true, "minimum": 0},
+            "shown": {"type": "boolean", "description": "A diff is available for this file."},
+            "not_shown_because": {"type": "string", "nullable": true, "enum": ["too_large", "not_utf8", "binary", "symlink", "directory", "unreadable", null]}
+        })),
+        "ChangeCompared": obj(&["before_block", "after_block", "base_differs", "declared_base"], json!({
+            "before_block": {"type": "string", "nullable": true, "description": "The block whose files are the earlier side; null when the proposal starts a history (there are no earlier files)."},
+            "after_block": string_prop(),
+            "base_differs": {"type": "boolean", "description": "The revision's declared base is not the real parent; the real parent is what was compared."},
+            "declared_base": {"type": "string", "nullable": true}
+        })),
+        "ChangeTotals": obj(&["files_changed", "lines_added", "lines_removed", "unshown"], json!({
+            "files_changed": {"type": "integer"}, "lines_added": {"type": "integer", "description": "Over the text files that are shown."},
+            "lines_removed": {"type": "integer"}, "unshown": {"type": "integer", "description": "Files with a reason instead of a diff."}
+        })),
+        "ChangeLimits": obj(&["text_bytes", "diff_lines", "context_lines", "edit_distance", "files", "page_default", "page_max", "tree_bytes", "wall_seconds"], json!({
+            "text_bytes": {"type": "integer", "description": "A side of a text diff is read up to this many bytes."},
+            "diff_lines": {"type": "integer", "description": "Diff lines returned per file, context included."},
+            "context_lines": {"type": "integer"}, "edit_distance": {"type": "integer", "description": "Edits explored before a file is shown as a whole replacement (`approximate`)."},
+            "files": {"type": "integer"}, "page_default": {"type": "integer"}, "page_max": {"type": "integer"},
+            "tree_bytes": {"type": "integer"}, "wall_seconds": {"type": "integer"}
+        })),
+        "ChangeList": obj(&["revision", "compared", "rebuilt", "provisional", "chain_signature", "totals", "limits", "files", "next"], json!({
+            "revision": obj(&["seq", "id"], json!({"seq": {"type": "integer"}, "id": string_prop()})),
+            "compared": {"$ref": "#/components/schemas/ChangeCompared"},
+            "rebuilt": {"type": "boolean", "description": "Always true: the files are rebuilt by prikk from the proposal's patches. Nothing here is signed."},
+            "provisional": {"type": "boolean", "description": "No checkpoint verified by the repository itself was in reach (copied from prikk's report)."},
+            "chain_signature": {"type": "string", "nullable": true, "description": "The weakest signature outcome over the chain, as prikk said it. Copied, not displayed."},
+            "totals": {"$ref": "#/components/schemas/ChangeTotals"}, "limits": {"$ref": "#/components/schemas/ChangeLimits"},
+            "files": array_of("ChangeFile"),
+            "next": {"type": "string", "nullable": true, "description": "The `after` cursor (a `file_id`) of the next page; null on the last page."}
+        })),
+        "ChangeHunk": obj(&["old_start", "old_lines", "new_start", "new_lines", "lines"], json!({
+            "old_start": {"type": "integer"}, "old_lines": {"type": "integer"}, "new_start": {"type": "integer"}, "new_lines": {"type": "integer"},
+            "lines": {"type": "array", "items": obj(&["op", "text"], json!({"op": {"type": "string", "enum": ["context", "add", "remove"]}, "text": {"type": "string", "description": "Display-safe, never HTML: escape it before showing it in a page."}}))}
+        })),
+        "ChangeFileDiff": json!({
+            "allOf": [{"$ref": "#/components/schemas/ChangeFile"}, obj(&["hunks", "truncated", "approximate"], json!({
+                "hunks": array_of("ChangeHunk"),
+                "truncated": {"type": "object", "nullable": true, "properties": {"lines_not_shown": {"type": "integer"}}},
+                "approximate": {"type": "boolean", "description": "More edits than the cap: the diff is the whole-file replacement."}
+            }))]
+        }),
+    })
 }
 
 /// The schemas of the proposals (RFC 005 part 5): a *proposal* is what the code calls a *change*.
@@ -560,6 +618,63 @@ fn proposal_paths(paths_obj: &mut serde_json::Map<String, Value>) {
             &[ErrorCode::TransportOff, ErrorCode::RateLimited, ErrorCode::Forbidden, ErrorCode::CommentState, ErrorCode::PayloadTooLarge],
         ),
     );
+    let mut changes_params = with_id.clone();
+    changes_params.push(param(
+        "seq",
+        "path",
+        true,
+        "The revision's number (1, 2, …).",
+        json!({"type": "integer", "minimum": 1}),
+    ));
+    let unavailable_note = "`changes_unavailable` with a closed `reason`: `claim_not_held` (409: the revision's work is no longer waiting here for review, for example because it arrived in a received history), `not_one_change` (422: the revision's claims are not one chain), `tree_too_large` (422: over 64 MiB or 10,000 files), `busy` (503, `Retry-After`), `timed_out` (503), `failed` (503).";
+    let mut changes_list = with_errors(
+        json!({"get": {
+            "operationId": "getProposalRevisionChanges",
+            "summary": "What a revision changes, file by file",
+            "description": "The files the revision changes **compared with its own base** (the real parent of its oldest claim; none when the proposal starts a history), rebuilt by prikk from the proposal's patches and compared by planeter. **Nothing here is signed**, and the trees are never trusted. Authorization is that of the proposal (`Authorized(Read)`): a hidden repository, an unknown proposal and an unknown revision are the same `404`. A view takes the heavy pool like any `extract` (no new setting); a cached answer needs none. The list is ordered by display path; `after` is a `file_id`. Exactly one chain of claims is supported. ".to_owned() + unavailable_note,
+            "parameters": changes_params.clone().into_iter().chain([
+                param("limit", "query", false, "Files per page, at most 200; 100 when omitted.", json!({"type": "integer", "minimum": 1, "maximum": 200})),
+                param("after", "query", false, "The `next` cursor of the previous page.", json!({"type": "string"})),
+            ]).collect::<Vec<_>>(),
+            "security": read_security.clone(),
+            "responses": {"200": {"description": "A page of the change set.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ChangeList"}}}}},
+        }}),
+        &[
+            ErrorCode::TransportOff,
+            ErrorCode::RateLimited,
+            ErrorCode::ChangesUnavailable,
+        ],
+    );
+    let mut changes_file = with_errors(
+        json!({"get": {
+            "operationId": "getProposalRevisionChange",
+            "summary": "One changed file of a revision, as a diff",
+            "description": "The entry of one file and its hunks (3 lines of context, at most 5,000 diff lines, a bounded edit distance). A file moved to a new name is a deletion plus an addition. A symbolic link shows its target as text and is never followed. ".to_owned() + unavailable_note,
+            "parameters": changes_params.into_iter().chain([param("file_id", "path", true, "The `file_id` of an entry of the list.", json!({"type": "string"}))]).collect::<Vec<_>>(),
+            "security": read_security.clone(),
+            "responses": {"200": {"description": "The file and its diff.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ChangeFileDiff"}}}}},
+        }}),
+        &[
+            ErrorCode::TransportOff,
+            ErrorCode::RateLimited,
+            ErrorCode::ChangesUnavailable,
+        ],
+    );
+    for op in [&mut changes_list, &mut changes_file] {
+        if let Some(r) = op["get"]["responses"].as_object_mut() {
+            for (status, what) in [
+                ("409", "`changes_unavailable` / `claim_not_held`"),
+                (
+                    "422",
+                    "`changes_unavailable` / `not_one_change` or `tree_too_large`",
+                ),
+            ] {
+                r.insert(status.to_owned(), json!({"description": what, "content": {"application/json": {"schema": error_ref()}}}));
+            }
+        }
+    }
+    paths_obj.insert(paths::PROPOSAL_CHANGES.into(), changes_list);
+    paths_obj.insert(paths::PROPOSAL_CHANGE_FILE.into(), changes_file);
     let mut download_params = with_id;
     download_params.push(param(
         "seq",

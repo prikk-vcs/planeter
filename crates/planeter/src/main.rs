@@ -382,6 +382,7 @@ async fn main() {
     let mut recovery_service: Option<Arc<planeter_transport::RecoveryService>> = None;
     let mut proposals_service: Option<Arc<planeter_transport::ProposalService>> = None;
     let mut reviews_service: Option<Arc<planeter_transport::ReviewService>> = None;
+    let mut changes_service: Option<Arc<planeter_transport::ChangesService>> = None;
     // The counters of IS-55 (a prikk call over its output limit, a hidden failure to read sightings) are printed at shutdown.
     let mut shutdown_metrics: Option<Arc<planeter_transport::Metrics>> = None;
     // RFC 004 part 2: advertise and fetch need the export spool; without it the routes answer `transport_off`
@@ -560,6 +561,23 @@ async fn main() {
                     if let Err(e) = spawned {
                         eprintln!("planeter: cannot start the retention sweep: {e}");
                     }
+                    // RFC 005 part 6: the file-by-file view's engine. Its answers are kept in the spool (disposable, least recently used out
+                    // past 64 MiB); no new setting.
+                    let changes_cfg = planeter_transport::ChangesConfig {
+                        spool: Some(spool.root().to_path_buf()),
+                        ..planeter_transport::ChangesConfig::default()
+                    };
+                    eprintln!(
+                        "planeter: the file-by-file view of a revision: at most {} s and {} MiB of files per view, answers kept in the spool (up to {} MiB)",
+                        changes_cfg.wall.as_secs(),
+                        changes_cfg.max_bytes >> 20,
+                        changes_cfg.cache_budget >> 20
+                    );
+                    changes_service = Some(Arc::new(planeter_transport::ChangesService::new(
+                        hosting.clone(),
+                        metrics.clone(),
+                        changes_cfg,
+                    )));
                     proposals_service = Some(proposals);
                     // RFC 005 part 6: comments and decisions, over the same database. The limits are per principal
                     // per proposal per hour and are computed from the records.
@@ -634,6 +652,7 @@ async fn main() {
                 recovery: recovery_service,
                 proposals: proposals_service,
                 reviews: reviews_service,
+                changes: changes_service,
                 ip_limit: planeter_web::RateLimiter::new(rate, std::time::Duration::from_secs(60)),
                 principal_limit: planeter_web::RateLimiter::new(
                     rate,

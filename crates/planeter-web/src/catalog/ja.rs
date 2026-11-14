@@ -764,6 +764,54 @@ pub const CATALOG: &[Entry] = &[
         "まだ必要な場合は、提案した人にもう一度送ってもらうよう依頼してください。",
     ),
     msg(
+        "error.changes_unavailable.claim_not_held.message",
+        "このリビジョンの変更点は、もうここでは表示できません。",
+    ),
+    msg(
+        "error.changes_unavailable.claim_not_held.hint",
+        "このリビジョンの作業はもうレビュー待ちとしてここに残っていないため、プロジェクトの履歴を見るか、リビジョンのファイルをダウンロードして、自分のコンピューターで確認してください。",
+    ),
+    msg(
+        "error.changes_unavailable.not_one_change.message",
+        "このリビジョンは 1 本の変更の連なりではないため、ファイルごとの表示は作られません。",
+    ),
+    msg(
+        "error.changes_unavailable.not_one_change.hint",
+        "表示には、終わりが 1 つだけの一連の作業が必要なため、リビジョンのファイルをダウンロードして、自分のコンピューターで確認してください。",
+    ),
+    msg(
+        "error.changes_unavailable.tree_too_large.message",
+        "このリビジョンはファイルが多すぎるか大きすぎるため、ファイルごとの表示は作られません。",
+    ),
+    msg(
+        "error.changes_unavailable.tree_too_large.hint",
+        "リビジョンのファイルをダウンロードして、自分のコンピューターで確認してください。",
+    ),
+    msg(
+        "error.changes_unavailable.busy.message",
+        "現在、サーバーはファイルごとの表示を作る処理で混み合っています。",
+    ),
+    msg(
+        "error.changes_unavailable.busy.hint",
+        "しばらくしてからもう一度お試しください。",
+    ),
+    msg(
+        "error.changes_unavailable.timed_out.message",
+        "ファイルごとの表示を作るのに時間がかかりすぎたため、中止しました。",
+    ),
+    msg(
+        "error.changes_unavailable.timed_out.hint",
+        "あとでもう一度お試しいただき、何度も起きる場合は、リビジョンのファイルをダウンロードして、自分のコンピューターで確認してください。",
+    ),
+    msg(
+        "error.changes_unavailable.failed.message",
+        "ファイルごとの表示を作れませんでした。",
+    ),
+    msg(
+        "error.changes_unavailable.failed.hint",
+        "何も変わっていないので、あとでもう一度お試しください（原因は、サーバーを運用している人がサーバーのログで確認できます）。",
+    ),
+    msg(
         "error.forbidden_review.message",
         "このリポジトリは読めますが、提案された内容をダウンロードできるのは、ここでレビューまたはマージを行う人だけです。",
     ),

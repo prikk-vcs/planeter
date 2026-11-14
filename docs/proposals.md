@@ -245,3 +245,36 @@ The proposals list shows the review word of each open proposal. An anonymous rea
 |---|---|---|
 | `PLANETER_COMMENTS_PER_HOUR` | 20 | most comments one person may add to one proposal in an hour |
 | `PLANETER_DECISIONS_PER_HOUR` | 10 | most review decisions one person may record on one proposal in an hour |
+
+## The file-by-file view of a revision (the engine and the JSON; RFC 005 part 6, 0.7.0)
+
+`GET /api/v1/repos/{owner}/{name}/proposals/{id}/revisions/{seq}/changes[?after=&limit=]` lists the files one revision changes, and
+`GET …/changes/{file_id}` gives one file's diff. The pages come in the next handoff; nothing here signs, selects, merges or changes a repository.
+
+* **What is compared.** The revision's own claims (`sync pending --format json`) are put in order: the **foot** is the claim no other claim of the
+  revision builds on, the **root** the one whose parent is not another's block. Exactly **one chain** is supported; several heads, a merge, two
+  claims for one block or an unconnected set is `not_one_change`. The *after* tree is `extract --claim <foot>`; the *before* tree is
+  `extract --ref <the root's real parent>`, or **empty** when the root has no parent (the proposal starts a history). A declared base that is not
+  the real parent is reported (`compared.base_differs`, with `declared_base`) and the real parent is what is compared.
+* **How.** Two extractions, one after the other, under one admission: the existing `extract` cost (9.5 × the 64 MiB bound + 8 MiB) from the
+  **heavy** pool, no new setting; both trees are then walked and compared by planeter, which trusts neither. Nothing is followed (a symbolic link's
+  target is shown as text and never opened), only a regular file is ever opened, depth is at most 64, a tree has at most 10,000 leaves, a file is
+  read only up to 256 KiB (a larger one is compared by a streamed hash), and a pipe, device, socket or unreadable directory is listed as
+  `unreadable` and never opened. A file moved to a new name is a deletion plus an addition. The comparison has a 30 s wall; the answer is `timed_out`
+  after it and nothing is kept.
+* **Paths and text are display-safe.** The URL carries `file_id` (the SHA-256 of the exact path bytes), never the path. Invalid UTF-8 is shown as
+  `\xNN`; controls, line and paragraph separators, **bidirectional controls** and zero-width characters as `\u{…}`; a stray CR in text as `␍`; a name
+  over 1,024 bytes and a line over 2,000 characters are cut with an explicit count. (prikk 0.57 itself refuses most of these in a name, so such a tree
+  cannot be authored today; the escaping is the second line.) `text` is never HTML: the page escapes it.
+* **A text diff** exists for UTF-8 text without NUL, each side ≤ 256 KiB; otherwise `not_shown_because` is one of `too_large`, `not_utf8`,
+  `binary`, `symlink`, `directory`, `unreadable`. Three lines of context; at most 5,000 diff lines per file (`truncated.lines_not_shown` says how
+  many are left); the line diff is a Myers diff with a **deterministic cap of 2,000 edits** (after the common beginning and end are set aside): past
+  it the diff is the whole-file replacement with `approximate: true`, never an unbounded computation.
+* **Cache.** A change set is a pure function of the foot claim and the root's parent block, both content-addressed, so a stored answer is correct for
+  ever; it is kept in the spool (`changes-cache/`, disposable, least recently used out past 64 MiB) and a cached answer needs no admission. Concurrent
+  requests for one revision take turns *before* asking for memory, so the second finds the first's answer. A busy, timed-out or failed run is never
+  kept; `not_one_change` and `tree_too_large` are. Without a spool nothing is kept.
+* **Errors** are the project's one shape with `code: changes_unavailable` and a closed `reason`: `claim_not_held` (409), `not_one_change` (422),
+  `tree_too_large` (422), `busy` (503, `Retry-After`), `timed_out` (503), `failed` (503). A hidden repository, an unknown proposal, revision or file
+  are the same `404`.
+* **Counters** (one per outcome, `cache_hit`, `extractions`) are in the metrics; no file name, path or content is ever logged or counted.

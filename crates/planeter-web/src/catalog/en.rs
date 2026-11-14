@@ -731,6 +731,54 @@ pub const CATALOG: &[Entry] = &[
         "If they are still needed, ask the person who proposed them to send them again.",
     ),
     msg(
+        "error.changes_unavailable.claim_not_held.message",
+        "The changes of this revision cannot be shown here any more.",
+    ),
+    msg(
+        "error.changes_unavailable.claim_not_held.hint",
+        "Its work is no longer waiting here for review, so look at the project's history or download the revision's files and read them on your own computer.",
+    ),
+    msg(
+        "error.changes_unavailable.not_one_change.message",
+        "This revision is not one chain of changes, so no file-by-file view is made.",
+    ),
+    msg(
+        "error.changes_unavailable.not_one_change.hint",
+        "The view needs one line of work with a single end, so download the revision's files and read them on your own computer.",
+    ),
+    msg(
+        "error.changes_unavailable.tree_too_large.message",
+        "This revision has too many files, or files too large, for a file-by-file view.",
+    ),
+    msg(
+        "error.changes_unavailable.tree_too_large.hint",
+        "Download the revision's files and read them on your own computer.",
+    ),
+    msg(
+        "error.changes_unavailable.busy.message",
+        "The server is busy building file-by-file views right now.",
+    ),
+    msg(
+        "error.changes_unavailable.busy.hint",
+        "Try again in a moment.",
+    ),
+    msg(
+        "error.changes_unavailable.timed_out.message",
+        "Building the file-by-file view took too long and was stopped.",
+    ),
+    msg(
+        "error.changes_unavailable.timed_out.hint",
+        "Try again later, and if it keeps happening, download the revision's files and read them on your own computer.",
+    ),
+    msg(
+        "error.changes_unavailable.failed.message",
+        "The file-by-file view could not be built.",
+    ),
+    msg(
+        "error.changes_unavailable.failed.hint",
+        "Try again later; nothing was changed, and the person who runs this server can see why in the server log.",
+    ),
+    msg(
         "error.forbidden_review.message",
         "You can read this repository, but only people who review or merge here can download what was proposed.",
     ),

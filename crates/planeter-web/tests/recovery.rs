@@ -342,6 +342,7 @@ fn world(name: &str, o: Opts) -> W {
             recovery: Some(svc.clone()),
             proposals: None,
             reviews: None,
+            changes: None,
             ip_limit: RateLimiter::new(10_000, Duration::from_secs(60)),
             principal_limit: RateLimiter::new(10_000, Duration::from_secs(60)),
         })),

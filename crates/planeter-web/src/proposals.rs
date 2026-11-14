@@ -273,7 +273,7 @@ pub(crate) fn detail_view(
 
 /// What every handler of this module starts with, in the same order: the principal, the edge limits, the one read gate.
 /// A cookie is looked at only when `cookie_ok`.
-async fn start(
+pub(crate) async fn start(
     state: &AppState,
     peer: crate::client_ip::PeerAddr,
     headers: &HeaderMap,
@@ -324,7 +324,7 @@ fn proposals_of(rt: &Arc<TransportRuntime>) -> Option<Arc<ProposalService>> {
     rt.proposals.clone()
 }
 
-fn failure(state: &AppState, e: &ProposalError) -> Response {
+pub(crate) fn failure(state: &AppState, e: &ProposalError) -> Response {
     match e {
         ProposalError::NotFound => {
             error_response(state, Failure::Read(planeter_core::ReadError::NotFound))
@@ -345,7 +345,7 @@ fn failure(state: &AppState, e: &ProposalError) -> Response {
     }
 }
 
-fn invalid_with_reason(state: &AppState, reason: &'static str) -> Response {
+pub(crate) fn invalid_with_reason(state: &AppState, reason: &'static str) -> Response {
     code_response_detailed(
         state,
         ErrorCode::InvalidRequest,

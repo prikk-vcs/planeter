@@ -206,6 +206,7 @@ fn world(name: &str, cfg: ReviewConfig) -> World {
             recovery: None,
             proposals: Some(proposals),
             reviews: Some(review_svc),
+            changes: None,
             ip_limit: RateLimiter::new(100_000, Duration::from_secs(60)),
             principal_limit: RateLimiter::new(100_000, Duration::from_secs(60)),
         })),

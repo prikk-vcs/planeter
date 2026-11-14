@@ -96,6 +96,10 @@ pub mod paths {
     pub const PROPOSAL_CLOSE: &str = "/api/v1/repos/{owner}/{name}/proposals/{id}/close";
     pub const PROPOSAL_ARTIFACT: &str =
         "/api/v1/repos/{owner}/{name}/proposals/{id}/revisions/{seq}/artifact";
+    pub const PROPOSAL_CHANGES: &str =
+        "/api/v1/repos/{owner}/{name}/proposals/{id}/revisions/{seq}/changes";
+    pub const PROPOSAL_CHANGE_FILE: &str =
+        "/api/v1/repos/{owner}/{name}/proposals/{id}/revisions/{seq}/changes/{file_id}";
     pub const PROPOSAL_COMMENTS: &str = "/api/v1/repos/{owner}/{name}/proposals/{id}/comments";
     pub const PROPOSAL_DECISIONS: &str = "/api/v1/repos/{owner}/{name}/proposals/{id}/decisions";
     pub const COMMENT_HIDE: &str =
@@ -112,7 +116,7 @@ pub mod paths {
     pub const REPOS_IMPORT_CONFIRM: &str = "/api/v1/repos/import/{stage}/confirm";
     pub const OPENAPI: &str = "/api/v1/openapi.json";
     /// Every route, in document order.
-    pub const ALL: [&str; 25] = [
+    pub const ALL: [&str; 27] = [
         HISTORY,
         CHANGE,
         FILE,
@@ -129,6 +133,8 @@ pub mod paths {
         PROPOSAL,
         PROPOSAL_CLOSE,
         PROPOSAL_ARTIFACT,
+        PROPOSAL_CHANGES,
+        PROPOSAL_CHANGE_FILE,
         PROPOSAL_COMMENTS,
         PROPOSAL_DECISIONS,
         COMMENT_HIDE,
@@ -166,6 +172,11 @@ pub fn routes() -> Routes {
     let close_class = Class::Authorized(Action::Close);
     let download_class = Class::AuthorizedAny(&[Action::Review, Action::MergeSeal]);
     let (close, download) = (axum::routing::post(close_handler), get(artifact_handler));
+    // The file-by-file view of a revision (RFC 005 part 6): reads, with the proposal's own authorization.
+    let (changes, change_file) = (
+        get(crate::changes::list_handler),
+        get(crate::changes::file_handler),
+    );
     // Review (RFC 005 part 6): a comment (any signed-in reader, a read-only token included), a decision (whoever may
     // `Review`), hiding and showing a comment (whoever may `RepoAdmin`). All bearer only; each handler reads the repository
     // through the one read gate first.
@@ -204,6 +215,8 @@ pub fn routes() -> Routes {
         .route(paths::PROPOSAL, read, &["GET"], get(detail_handler))
         .route(paths::PROPOSAL_CLOSE, close_class, &["POST"], close)
         .route(paths::PROPOSAL_ARTIFACT, download_class, &["GET"], download)
+        .route(paths::PROPOSAL_CHANGES, read, &["GET"], changes)
+        .route(paths::PROPOSAL_CHANGE_FILE, read, &["GET"], change_file)
         .route(paths::PROPOSAL_COMMENTS, comment_class, &["POST"], comment)
         .route(paths::PROPOSAL_DECISIONS, review_class, &["POST"], decision)
         .route(paths::COMMENT_HIDE, admin_class, &["POST"], hide)

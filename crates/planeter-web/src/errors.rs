@@ -139,11 +139,15 @@ pub enum ErrorCode {
     AdoptionRefused,
     /// 422: the repository the archive makes does not pass prikk's checks; nothing was kept (`conditions`).
     CreationVerifyFailed,
+    /// The file-by-file view of a revision cannot be shown (`reason`: `claim_not_held`, `not_one_change`, `tree_too_large`, `busy`, `timed_out`, `failed`).
+    /// 409 for `claim_not_held`, 422 for `not_one_change` and `tree_too_large`, 503 (with `Retry-After` for `busy`) for the others; the message and the
+    /// hint are the reason's own.
+    ChangesUnavailable,
 }
 
 impl ErrorCode {
     /// Every code, in a fixed order (the OpenAPI enum).
-    pub const ALL: [ErrorCode; 49] = [
+    pub const ALL: [ErrorCode; 50] = [
         ErrorCode::NotFound,
         ErrorCode::Unavailable,
         ErrorCode::Busy,
@@ -193,6 +197,7 @@ impl ErrorCode {
         ErrorCode::StageInUse,
         ErrorCode::AdoptionRefused,
         ErrorCode::CreationVerifyFailed,
+        ErrorCode::ChangesUnavailable,
     ];
 
     /// The stable snake_case code.
@@ -247,6 +252,7 @@ impl ErrorCode {
             ErrorCode::StageInUse => "stage_in_use",
             ErrorCode::AdoptionRefused => "adoption_refused",
             ErrorCode::CreationVerifyFailed => "creation_verify_failed",
+            ErrorCode::ChangesUnavailable => "changes_unavailable",
         }
     }
 
@@ -297,6 +303,8 @@ impl ErrorCode {
             | ErrorCode::ArchiveRefused
             | ErrorCode::AdoptionRefused
             | ErrorCode::CreationVerifyFailed => StatusCode::UNPROCESSABLE_ENTITY,
+            // the default; the handler sets the status of the reason (409, 422 or 503)
+            ErrorCode::ChangesUnavailable => StatusCode::SERVICE_UNAVAILABLE,
             ErrorCode::NameTaken | ErrorCode::StageInUse => StatusCode::CONFLICT,
             ErrorCode::StageExpired => StatusCode::GONE,
             ErrorCode::InvalidRequest => StatusCode::BAD_REQUEST,
@@ -395,6 +403,9 @@ impl ErrorCode {
             ErrorCode::AdoptionRefused => (Key::ErrAdoptOtherMessage, Key::ErrAdoptOtherHint),
             ErrorCode::CreationVerifyFailed => {
                 (Key::ErrCreationVerifyMessage, Key::ErrCreationVerifyHint)
+            }
+            ErrorCode::ChangesUnavailable => {
+                (Key::ErrChangesFailedMessage, Key::ErrChangesFailedHint)
             }
         };
         ErrorKeys { message, hint }
@@ -750,6 +761,9 @@ impl ErrorCode {
             }
             ErrorCode::CreationVerifyFailed => {
                 "the repository the archive makes does not pass prikk's checks and nothing was kept (the body's `conditions` lists what failed)"
+            }
+            ErrorCode::ChangesUnavailable => {
+                "the file-by-file view of a revision cannot be shown (the body's `reason` says why: claim_not_held, not_one_change, tree_too_large, busy, timed_out or failed)"
             }
         }
     }

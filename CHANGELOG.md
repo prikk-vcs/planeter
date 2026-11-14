@@ -3,6 +3,11 @@
 Releases are bare version tags; each section is the release's notes (assembled into the GitHub
 release by `release.yml`). Kept by hand, per release, so nothing here goes stale by templating.
 
+## [Unreleased]
+
+- **The tools that gate every push and every release are pinned (IS-58).** `ci.yml`, `release.yml` and `supply-chain.yml` install `cargo-deny` 0.20.2 and `cargo-audit` 0.23.0 by exact version with `--locked` (they used to install the newest); `planeter-pin-check` now fails on a gate tool without an exact version or `--locked`, on any other `cargo install` in a workflow, and on a workflow that names another version. A pin moves at the pins review of each release.
+- **The engine of the file-by-file review view (RFC 005 part 6, first of two parts; no page yet).** `GET …/proposals/{id}/revisions/{seq}/changes` lists the files a revision changes and `…/changes/{file_id}` gives one file's diff, compared with the revision's own base and rebuilt by prikk from the proposal's patches (nothing is signed). Paths and text are shown display-safe; a diff is bounded; answers are cached in the spool. New error `changes_unavailable` with a `reason`. Twelve new messages in each language (a message and a hint for each of six reasons); the Japanese ones are newer than the sign-off and are flagged until read.
+
 ## [0.6.0] — 2026-11-14 — prikk 0.57.0, Japanese signed off, languages as data, two advisories closed
 
 0.6.0 moves the prikk floor to **0.57.0**, makes the Japanese pages, API messages and `planeter-client` available by default (signed off by the owner, twice), turns "a language" into a row of data in a shared crate, makes a failed upload judged by evidence instead of by one fact, and updates two dependencies for advisories (`ammonia` 4.2.5, `rusqlite` 0.41.1 with SQLite 3.54.1). It adds no feature to proposals, review or repository creation, and changes no default.
