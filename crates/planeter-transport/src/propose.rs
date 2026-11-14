@@ -14,7 +14,10 @@
 //! **Every path out of the accept ends in a state the next start can read.** A run that is killed, times out,
 //! crashes or whose output cannot be read is *incomplete*: the intent stays open, the repository is flagged
 //! `needs-recovery`, the uploaded artifact is kept, and nothing is derived. A run prikk **refused** and that changed
-//! nothing (it exits 1 and `sync pending` is as it was) leaves nothing: the intent is abandoned and no flag is set.
+//! nothing leaves nothing: the intent is abandoned and no flag is set. "Changed nothing" is **positive evidence**, not an absence of signs: the
+//! pending set is as it was **and** the store signature is as it was ([`refused_on_evidence`]); since prikk 0.56.0 a write error after the
+//! patches and blobs are in changes the store while `sync pending` does not move (the claims are written last). A killed or failed accept
+//! leaves unreached patch and blob objects and no pending prefix.
 //! Recovery itself is part 4; [`ProposeService::reconcile_at_start`] only makes sure a server that was killed in the
 //! middle of a write comes back with the flag set.
 
@@ -22,6 +25,7 @@ use std::collections::BTreeSet;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
 
+use planeter_core::admission::{StoreFile, StoreSizeError, store_signature};
 use planeter_core::change::{
     BaseCheck, DeriveError, PatchFacts, QuotaPolicy, QuotaRefusal, QuotaRequest, QuotaTarget,
     QuotaUsage, check_base, check_quota, derive_revision, patch_assurance,
@@ -898,6 +902,9 @@ impl ProposeService {
         let pending_before = reader
             .sync_pending_patches()
             .map_err(|e| Self::unavailable("cannot read the pending patches", e))?;
+        // The store signature of this attempt, under the same lease (D1 of the 0.56 re-baseline): what a failed run is compared with.
+        // A signature that cannot be read is kept as an error: the run is then never called "refused".
+        let signature_before = store_signature(&record.path);
         let intent = self
             .changes
             .open_or_resume_intent(
@@ -918,7 +925,8 @@ impl ProposeService {
         let report = match run {
             Ok(r) => r,
             Err(e) => {
-                let outcome = self.classify_failure(&reader, &intent, &e);
+                let outcome =
+                    self.classify_failure(&reader, &intent, &record.path, &signature_before, &e);
                 if matches!(outcome, Failure::Incomplete(_)) {
                     // The repository may have changed: its fingerprint moves, whatever the run left behind.
                     let _ = self.export.write_completed(&lease);
@@ -1181,6 +1189,8 @@ impl ProposeService {
         &self,
         reader: &planeter_prikk::CliPrikkRepo,
         intent: &IntentRecord,
+        repo_root: &std::path::Path,
+        signature_before: &Result<Vec<StoreFile>, StoreSizeError>,
         e: &PrikkError,
     ) -> Failure {
         match e {
@@ -1192,13 +1202,18 @@ impl ProposeService {
                 code: Some(1),
                 stderr,
             } if !stderr.contains("lock conflict") => {
-                // Exit 1 is how prikk refuses. It "leaves nothing" only if the pending set is as it was.
-                let before: BTreeSet<&String> = intent.pending_before.iter().collect();
-                match reader.sync_pending_patches() {
-                    Ok(now) if now.iter().collect::<BTreeSet<_>>() == before => {
-                        Failure::Refused(stderr.clone())
-                    }
-                    _ => Failure::Incomplete(IncompleteCause::Failed),
+                // Exit 1 is how prikk refuses, and also how a write error after the first write ends. It "leaves nothing" only on
+                // positive evidence: the pending set AND the store signature are both as they were (D1).
+                let pending_now = reader.sync_pending_patches().ok();
+                let signature_now = store_signature(repo_root);
+                match refused_on_evidence(
+                    &intent.pending_before,
+                    pending_now.as_deref(),
+                    signature_before.as_deref().ok(),
+                    signature_now.as_deref().ok(),
+                ) {
+                    true => Failure::Refused(stderr.clone()),
+                    false => Failure::Incomplete(IncompleteCause::Failed),
                 }
             }
             // The accept printed more than it may (IS-55) and was killed: its output is unreadable, and the repository may have
@@ -1326,6 +1341,27 @@ impl ProposeService {
         }
         flagged
     }
+}
+
+/// The decision of a run that ended with prikk's exit 1 (not a lock conflict): was anything left behind? **Yes unless there is positive
+/// evidence of nothing.** Since prikk 0.56.0 the claims are written last and `sync pending` lists a patch only once a claim names it, so a
+/// write error after the patches and blobs are in leaves the pending set as it was while the store changed. The evidence is therefore both:
+/// the pending set equals the first attempt's, and the store signature ([`planeter_core::admission::store_signature`]) equals the one taken
+/// before this run. Either one missing (`None`: it could not be read; the bound was hit) or different is "not refused".
+pub fn refused_on_evidence(
+    pending_before: &[String],
+    pending_now: Option<&[String]>,
+    signature_before: Option<&[StoreFile]>,
+    signature_now: Option<&[StoreFile]>,
+) -> bool {
+    let (Some(pending_now), Some(before), Some(now)) =
+        (pending_now, signature_before, signature_now)
+    else {
+        return false;
+    };
+    let was: BTreeSet<&String> = pending_before.iter().collect();
+    let is: BTreeSet<&String> = pending_now.iter().collect();
+    was == is && before == now
 }
 
 enum Failure {

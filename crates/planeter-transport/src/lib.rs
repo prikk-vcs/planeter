@@ -37,7 +37,7 @@ pub use proposals::{
 };
 pub use propose::{
     IncompleteCause, MetaError, Plan, ProposeConfig, ProposeError, ProposeMeta, ProposeService,
-    Proposed, Submitter, Upload, Uploaded,
+    Proposed, Submitter, Upload, Uploaded, refused_on_evidence,
 };
 pub use recovery::{
     Blocker, Cause, Inspection, Note as RecoveryNote, Outcome as RecoveryOutcome,

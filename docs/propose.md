@@ -116,6 +116,8 @@ request that breaks the base and the quota gets the base's.
   (an accepted patch cannot be removed), leaves the intent **open** and the repository **not** flagged: a corrected re-send derives
   from the first attempt's list and records one revision.
 * An accept that **added nothing** (`no_new_content`) closes the intent and records nothing.
+* **A killed or failed accept leaves unreached patch and blob objects, no pending prefix.** Since prikk 0.56.0 the claims are written last and `sync pending` lists a patch only once a claim names it, so a partly done accept shows nothing there. What it leaves is content nothing reaches (`PRIKK-DOCTOR-UNREACHED-CONTENT`, an `info` finding; `verify`'s `unreached_objects`): harmless, `doctor` reports no error, recovery counts it as clean, and a resend completes and records exactly one revision.
+* **Refused or incomplete?** An accept that exits 1 (not a lock conflict) is *refused* only on positive evidence that it changed nothing: the pending set is as it was **and** the *store signature* (the sorted `(path, size, mtime in ns)` of every regular file under `.prikk`, leaving out `*.lock`, taken under the same lease before the accept) is as it was. Anything else, or a signature that cannot be read, is *incomplete* (flag set, intent kept, artifact kept, recovery applies).
 * The flag `needs_recovery` is set by anything that may have changed the repository without a record: killed, past its deadline,
   past its memory ceiling, a crash or lock left behind, output that could not be read, a record that could not be saved. A server
   killed in the middle of a write could not set it, so **at the next start** every repository with a write-lease record left by
@@ -127,10 +129,10 @@ request that breaks the base and the quota gets the base's.
 
 | Cause | Client | Operator (log, counters) |
 |---|---|---|
-| prikk refused the artifact and changed nothing (over its bounds, damaged, base unknown to prikk) | `422 accept_refused`, prikk's text verbatim in `detail` | `refusals{accept_refused}`; intent abandoned; **no flag** |
+| prikk refused the artifact and changed nothing (over its bounds, damaged, base unknown to prikk; "changed nothing" = the pending set **and** the store signature are as they were) | `422 accept_refused`, prikk's text verbatim in `detail` | `refusals{accept_refused}`; intent abandoned; **no flag** |
 | the accept hit its deadline (`PLANETER_ACCEPT_DEADLINE_SECS`) and was killed | `503 incomplete`, `cause: accept_deadline`, `intent` | flag set; intent open; `proposals_incomplete`; a log line with the intent id |
 | the accept hit its memory ceiling | `503 incomplete`, `accept_ceiling` | the same |
-| the accept crashed, was killed, left a lock, or failed after changing the repository | `503 incomplete`, `accept_failed` | the same |
+| the accept crashed, was killed, left a lock, or failed after changing the repository (a write error after the patches and blobs were stored changes the store but not `sync pending`: the store signature tells) | `503 incomplete`, `accept_failed` | the same |
 | the accept exited 0 but its output could not be read | `503 incomplete`, `accept_unreadable` | the same |
 | the accept finished but its record could not be saved | `503 incomplete`, `accept_not_recorded` | the same; the retry resumes the intent |
 | the server was killed during the accept | the connection drops | the next start flags the repository; the intent is open with the first attempt's list |
@@ -157,7 +159,7 @@ uploaded artifact is kept in the store; the retry sends it again and resumes the
 | `PLANETER_DECISIONS_PER_HOUR` | 10 | most review decisions one person may record on one proposal in an hour |
 | `PLANETER_PRIKK_MEMORY_BUDGET_MB` | see `--help` | the budget an accept draws from, like a read, always from the **heavy** pool |
 
-**At start** the server asks the `prikk` on its `PATH` for its version once and applies the floor: a prikk below 0.54.0 refuses to start with `unsupported prikk version X; planeter requires >= 0.54.0` (it used to start and answer every read "temporarily unavailable"). A missing prikk is reported when a repository is first opened, as before; one that runs but prints something unreadable is warned of once and left to the same pin at each open.
+**At start** the server asks the `prikk` on its `PATH` for its version once and applies the floor: a prikk below 0.57.0 refuses to start with `unsupported prikk version X; planeter requires >= 0.57.0` (it used to start and answer every read "temporarily unavailable"). A missing prikk is reported when a repository is first opened, as before; one that runs but prints something unreadable is warned of once and left to the same pin at each open.
 
 An accept of an artifact of *A* bytes under an object bound of *N* is admitted at **10 MiB + 7.0 × *A* + 2 KiB × *N*** and given a
 data-segment ceiling (`RLIMIT_DATA`) of 1.5 times that. The constants are in one place, `cost_model` in

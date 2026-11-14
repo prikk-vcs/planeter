@@ -54,12 +54,18 @@ pub const CONTENT_MAX_BYTES: u64 = 4 * MIB;
 
 /// The prikk version the cost table was measured on (`MIN_PRIKK_VERSION` when the floor was last raised).
 ///
-/// The floor is 0.54.0; the table was re-measured on **0.54.1** (the same code, an installer fix) at the 0.54 re-baseline:
-/// the seven read verbs on the eleven fixtures of the investigation (nothing tripped its 1.5 × ceiling), and `extract` anew.
+/// The floor is 0.57.0 (2026-11-14, the 0.56/0.57 re-baseline). The table was first measured on **0.54.1** (the same code as 0.54.0, an installer fix)
+/// at the 0.54 re-baseline: the seven read verbs on the eleven fixtures of the investigation (nothing tripped its 1.5 × ceiling), and `extract` anew;
+/// re-validated on **0.55.0** (2026-10-29) with the same script (nothing tripped; `extract` moved by at most 1 MiB).
 ///
-/// Re-validated on **0.55.0** (2026-10-29) with the same script: nothing tripped its ceiling and `extract`'s figures moved by at most 1 MiB; the
-/// table test requires the floor's own minor version, so this stays 0.54.1 until the floor moves.
-pub const MEASURED_ON: (u64, u64, u64) = (0, 54, 1);
+/// **Re-validated on 0.57.0** (2026-11-14) with the same scripts, the eleven fixtures rebuilt by 0.57.0 (so format 8): all 77 rows (seven verbs
+/// × eleven fixtures) fit their cost and none tripped its ceiling; the highest peak RSS / ceiling is 0.686 (0.55.0: 0.665) and the highest smallest
+/// working `RLIMIT_DATA` / ceiling 0.815 (the same row, `bin64one`/`verify`). `extract`, 42 shapes: all extract with the same file counts and bytes;
+/// 26 figures moved by more than 5 %, all upwards, none by more than 7 MiB; the worst `VmData` / largest-file ratio is **9.16** (`deepedit8x128`: 8 MiB
+/// edited 128 times, plan: 73.3 MiB against 66.8 on 0.55.0), above the 9.0 × of the rule alone but inside the rule's cost with its 8 MiB base
+/// (80 MiB) and far inside the ceiling (120 MiB). Logs: `prikk-0-57-rebaseline-logs/` of the review request. The table test requires the floor's own
+/// minor version, so this is the version the table was last measured on.
+pub const MEASURED_ON: (u64, u64, u64) = (0, 57, 0);
 
 /// The most entries a store walk will visit before giving up (a sane store has about forty files).
 pub const MAX_STORE_ENTRIES: usize = 100_000;
@@ -139,7 +145,7 @@ impl ReadVerb {
             // `extract` (prikk 0.54.1, part 5b T4): `VmData` = 0.26 MiB + 2.00 × the largest file (+ 0.7 MiB per 1,000
             // pending patches) for a tree, one big file, a claim, a plan or a write alike; a file **edited many times**,
             // replayed from the start, reaches 7.0 to 8.6 × its size (8 MiB × 8 edits: 7.0; × 63: 7.9; 1 MiB × 63: 8.6;
-            // 16 MiB × 63: 8.6; 8 MiB × 128: 8.35). 9.0 × covers the worst measured with 5 %; the ceiling (1.5 ×) is 13.5 ×.
+            // 16 MiB × 63: 8.6; 8 MiB × 128: 8.35, and 9.16 on 0.57.0, see `MEASURED_ON`). 9.0 × covers the worst measured on 0.54.1 with 5 %; the ceiling (1.5 ×) is 13.5 ×.
             // The store size does not enter. 8 MiB is prikk's floor plus the pending set (5,000 pending: +4 MiB).
             ReadVerb::Extract => (0, 0, 90, 8 * MIB, COST_FLOOR),
             // `sync have` (prikk 0.55.0 and 0.54.1 alike, RFC 004 part 8 T0): the file is 32 bytes a patch plus 60 (92 B for 1, 32,060 B for
@@ -207,6 +213,63 @@ pub fn ceiling_for(cost: u64, budget: Option<u64>) -> u64 {
         Some(b) => ceiling.min(b).max(cost.min(b)),
         None => ceiling,
     }
+}
+
+/// One regular file of the store as [`store_signature`] sees it: its path relative to `.prikk`, its size and its modification
+/// time in nanoseconds since the epoch.
+pub type StoreFile = (String, u64, u128);
+
+/// The **store signature** (re-baseline handoff v2, D1): the sorted list of `(path relative to .prikk, size, mtime in ns)` of every regular
+/// file under `<repo_root>/.prikk`, **leaving out `*.lock` files** (prikk creates and removes those even when it refuses cleanly).
+/// Two equal signatures taken around a failed accept are positive evidence that the store did not change; anything else, or a signature
+/// that could not be read, is not. The same bounded walk as [`store_size`]: `lstat` only, symlinks never followed, at most
+/// [`MAX_STORE_ENTRIES`] entries, any failure is an error and never a guess.
+pub fn store_signature(repo_root: &Path) -> Result<Vec<StoreFile>, StoreSizeError> {
+    store_signature_limited(repo_root, MAX_STORE_ENTRIES)
+}
+
+/// [`store_signature`] with an explicit entry bound (so the bound itself can be tested cheaply).
+pub fn store_signature_limited(
+    repo_root: &Path,
+    max_entries: usize,
+) -> Result<Vec<StoreFile>, StoreSizeError> {
+    let root = repo_root.join(".prikk");
+    let mut files: Vec<StoreFile> = Vec::new();
+    let mut seen: usize = 0;
+    let mut stack = vec![root.clone()];
+    while let Some(dir) = stack.pop() {
+        for entry in std::fs::read_dir(&dir).map_err(StoreSizeError::Io)? {
+            let entry = entry.map_err(StoreSizeError::Io)?;
+            seen += 1;
+            if seen > max_entries {
+                return Err(StoreSizeError::TooManyEntries);
+            }
+            let path = entry.path();
+            let md = std::fs::symlink_metadata(&path).map_err(StoreSizeError::Io)?;
+            let kind = md.file_type();
+            if kind.is_dir() {
+                stack.push(path);
+            } else if kind.is_file() {
+                let rel = path
+                    .strip_prefix(&root)
+                    .map_err(|e| StoreSizeError::Io(std::io::Error::other(e)))?
+                    .to_string_lossy()
+                    .into_owned();
+                if rel.ends_with(".lock") {
+                    continue;
+                }
+                let mtime = md
+                    .modified()
+                    .map_err(StoreSizeError::Io)?
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map_err(|e| StoreSizeError::Io(std::io::Error::other(e)))?
+                    .as_nanos();
+                files.push((rel, md.len(), mtime));
+            }
+        }
+    }
+    files.sort();
+    Ok(files)
 }
 
 /// Why the store could not be sized.

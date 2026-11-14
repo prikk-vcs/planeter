@@ -11,8 +11,12 @@
 //!   the first attempt's list, though by then a prefix of the patches was already pending.
 //!
 //! Two tests: one over a 1,000-patch artifact killed once (as part 3b), one over a 300-patch artifact killed at roughly
-//! 15, 40, 70 and 90 % of the accept (found by watching `sync pending` grow). Self-skip (printing why) without prikk,
-//! prlimit or bubblewrap.
+//! 15, 40, 70 and 90 % of the accept. **Where the accept is, is read from the bytes under the forge's `.prikk`** (prikk 0.56.0 and later
+//! write the claims last and `sync pending` lists a patch only once a claim names it, so the pending count no longer moves while an
+//! accept runs; the bytes do, steadily). A **guard** makes a kill that lands outside the accept fail the test instead of passing: before
+//! it wrote anything, or after it finished. Also here (re-baseline v2, B7): a write error after the patches and blobs are stored is
+//! *incomplete* (flag, intent and artifact kept, recovery converges, a resend records one revision), and the refusals that change nothing
+//! are still *refused* with no flag. Self-skip (printing why) without prikk, prlimit or bubblewrap.
 
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
@@ -93,6 +97,21 @@ fn pending_count(forge: &Path, keys: &Path) -> usize {
             t.len() == 64 && t.bytes().all(|b| b.is_ascii_hexdigit())
         })
         .count()
+}
+
+/// The apparent bytes of every regular file under `<forge>/.prikk` (the in-flight signal of an accept).
+fn prikk_bytes(forge: &Path) -> u64 {
+    fn walk(p: &Path) -> u64 {
+        let mut n = 0;
+        if let Ok(rd) = std::fs::read_dir(p) {
+            for e in rd.flatten() {
+                let Ok(m) = e.metadata() else { continue };
+                n += if m.is_dir() { walk(&e.path()) } else { m.len() };
+            }
+        }
+        n
+    }
+    walk(&forge.join(".prikk"))
 }
 
 struct Server {
@@ -216,6 +235,8 @@ struct Fixture {
     forge_keys: PathBuf,
     art: Vec<u8>,
     patches: u32,
+    /// How many bytes the whole accept adds under `.prikk` (measured once, by accepting the artifact into a copy of the pristine forge).
+    full_growth: u64,
 }
 
 fn build_fixture(name: &str, patches: u32) -> Fixture {
@@ -324,12 +345,30 @@ fn build_fixture(name: &str, patches: u32) -> Fixture {
         art.len(),
         built.elapsed()
     );
+    // The probe: the same accept, run by prikk itself on a copy, to learn how much it adds.
+    let probe = dir.join("growth-probe");
+    let st = Command::new("cp")
+        .arg("-a")
+        .arg(&forge)
+        .arg(&probe)
+        .status()
+        .unwrap();
+    assert!(st.success());
+    let before = prikk_bytes(&probe);
+    prikk(
+        &probe,
+        &forge_keys,
+        &["sync", "accept", art_path.to_str().unwrap()],
+    );
+    let full_growth = prikk_bytes(&probe).saturating_sub(before);
+    assert!(full_growth > 0);
     Fixture {
         dir,
         forge_pristine: forge,
         forge_keys,
         art,
         patches,
+        full_growth,
     }
 }
 
@@ -403,6 +442,19 @@ fn flagged(inst: &Instance) -> bool {
         .needs_recovery
 }
 
+/// A kill is *in the window* when the accept had written something and had not finished: bytes added, 0 < grown < the whole accept's growth,
+/// and no claim written (nothing pending). Panics otherwise, naming which side was missed.
+fn assert_kill_in_window(tag: &str, grown: u64, pending: usize, full_growth: u64) {
+    assert!(
+        grown > 0,
+        "[{tag}] the kill landed before the accept wrote anything (0 of {full_growth} bytes): the window was missed"
+    );
+    assert!(
+        pending == 0 && grown < full_growth,
+        "[{tag}] the accept had already finished ({grown} of {full_growth} bytes, {pending} pending): the window was missed"
+    );
+}
+
 /// What one kill showed.
 struct Report {
     pending_at_kill: usize,
@@ -410,10 +462,10 @@ struct Report {
     resumed: Duration,
 }
 
-/// Send the fixture's artifact to a server, SIGKILL the server once `kill_at` patches are pending, and walk the whole
+/// Send the fixture's artifact to a server, SIGKILL the server once `kill_at_bytes` bytes have been added under the forge's `.prikk`, and walk the whole
 /// recovery: restart with automatic recovery off (the state a person would find), then on (the server recovers by
 /// itself), then send the same artifact again.
-fn kill_and_recover(fx: &Fixture, tag: &str, kill_at: usize) -> Report {
+fn kill_and_recover(fx: &Fixture, tag: &str, kill_at_bytes: u64) -> Report {
     let inst = instance(fx, tag);
     let repo = RepoId::new("r1");
     let n = fx.patches as usize;
@@ -424,26 +476,32 @@ fn kill_and_recover(fx: &Fixture, tag: &str, kill_at: usize) -> Report {
     let body = frame(r#"{"title":"killed","client":"propose-kill/1"}"#, &fx.art);
     let sender = std::thread::spawn(move || http(port, "POST", PROPOSE, &propose_headers(), &body));
     let watch = Instant::now();
+    let base_bytes = prikk_bytes(&inst.forge);
     loop {
-        let pending = pending_count(&inst.forge, &fx.forge_keys);
-        if pending >= kill_at {
+        let grown = prikk_bytes(&inst.forge).saturating_sub(base_bytes);
+        if grown >= kill_at_bytes {
             break;
         }
         assert!(
             watch.elapsed() < Duration::from_secs(300),
-            "the accept never got going (pending {pending})"
+            "the accept never got going (grown {grown} bytes)"
         );
-        std::thread::sleep(Duration::from_millis(15));
+        std::thread::sleep(Duration::from_millis(2));
     }
     server.child.kill().unwrap(); // SIGKILL
     let _ = server.child.wait();
     let _ = sender.join();
     let pending_at_kill = pending_count(&inst.forge, &fx.forge_keys);
-    assert!(
-        pending_at_kill < n,
-        "the accept had already finished ({pending_at_kill} pending): the kill window was missed"
+    let grown_at_kill = prikk_bytes(&inst.forge).saturating_sub(base_bytes);
+    // The guard: the kill must have landed *inside* the accept. It wrote something (bytes grew) and it had not finished (no claim written,
+    // so nothing is pending: prikk 0.56.0 and later write the claims last). A kill before the accept wrote anything, or after it ended,
+    // is a missed window, and a missed window fails the test; it never passes silently.
+    assert_kill_in_window(tag, grown_at_kill, pending_at_kill, fx.full_growth);
+    eprintln!(
+        "[{tag}] killed with {grown_at_kill} of {} bytes written ({} %), {pending_at_kill} of {n} patches pending",
+        fx.full_growth,
+        grown_at_kill * 100 / fx.full_growth
     );
-    eprintln!("[{tag}] killed with {pending_at_kill} of {n} patches pending");
 
     // What the killed process left: an open intent with the first attempt's (empty) list, no revision, no flag.
     {
@@ -512,6 +570,23 @@ fn kill_and_recover(fx: &Fixture, tag: &str, kill_at: usize) -> Report {
         plan.contains("\"cause\":{\"code\":\"server_stopped\""),
         "[{tag}] {plan}"
     );
+    {
+        // What a person would find (printed for the record of the re-baseline: the A2 table).
+        let verify = prikk(&inst.forge, &fx.forge_keys, &["verify", "--format", "json"]);
+        let doctor = prikk(&inst.forge, &fx.forge_keys, &["doctor"]);
+        let unlock = prikk(&inst.forge, &fx.forge_keys, &["unlock"]);
+        let summary = doctor
+            .lines()
+            .find(|l| l.starts_with("issue summary"))
+            .unwrap_or("");
+        eprintln!(
+            "[{tag}] found: sync pending {}; verify ok={} unreached={}; doctor {summary}; locks {}",
+            pending_count(&inst.forge, &fx.forge_keys),
+            verify.contains("\"ok\": true"),
+            verify.matches("object_type").count(),
+            unlock.lines().filter(|l| l.ends_with(".lock")).count()
+        );
+    }
     prikk(&inst.forge, &fx.forge_keys, &["verify"]);
     prikk(&inst.forge, &fx.forge_keys, &["doctor"]);
     assert!(
@@ -564,6 +639,22 @@ fn kill_and_recover(fx: &Fixture, tag: &str, kill_at: usize) -> Report {
             .iter()
             .all(|s| s.outcome.as_deref() == Some("ok")),
         "[{tag}] {recovery_steps:?}"
+    );
+    // prikk 0.57.0 reports what the killed accept left (patches and blobs nothing reaches) as ONE `info` finding of its own code. The
+    // strict reader of `doctor` knows it: the run reads it, notes it in its record and goes on. A reader that did not know the code
+    // would stop here with the output unreadable, and the flag would not have been cleared.
+    let doctor_step = runs[0]
+        .steps
+        .iter()
+        .find(|s| s.name == "doctor")
+        .expect("a doctor step");
+    assert!(
+        doctor_step
+            .detail
+            .contains("PRIKK-DOCTOR-UNREACHED-CONTENT")
+            && doctor_step.detail.contains("unreached content"),
+        "[{tag}] the record shows the unreached content: {}",
+        doctor_step.detail
     );
     assert!(
         prikk(&inst.forge, &fx.forge_keys, &["unlock"]).contains("no locks currently held"),
@@ -627,9 +718,9 @@ fn a_server_killed_in_the_middle_of_a_1000_patch_accept_recovers_by_itself_and_a
         return;
     }
     let fx = build_fixture("sigkill-1000", 1000);
-    let r = kill_and_recover(&fx, "1000", 100);
+    let r = kill_and_recover(&fx, "1000", fx.full_growth / 10);
     eprintln!(
-        "1000 patches: killed at {} pending; recovery steps {:?}; the resumed accept took {:?}",
+        "1000 patches: killed with {} pending; recovery steps {:?}; the resumed accept took {:?}",
         r.pending_at_kill, r.recovery_steps, r.resumed
     );
 }
@@ -642,10 +733,249 @@ fn recovery_converges_wherever_a_300_patch_accept_is_killed() {
     let fx = build_fixture("sigkill-300", 300);
     let n = fx.patches as usize;
     for pct in [15usize, 40, 70, 90] {
-        let r = kill_and_recover(&fx, &format!("{pct}pct"), n * pct / 100);
+        let r = kill_and_recover(&fx, &format!("{pct}pct"), fx.full_growth * pct as u64 / 100);
         eprintln!(
-            "{pct}% point: killed at {} of {n} pending; recovery steps {:?}; the resumed accept took {:?}",
+            "{pct}% point: killed with {} of {n} pending; recovery steps {:?}; the resumed accept took {:?}",
             r.pending_at_kill, r.recovery_steps, r.resumed
         );
+    }
+}
+
+// ================================================================================================ a failed accept: refused or incomplete? (D1)
+
+fn running_as_root() -> bool {
+    Command::new("id")
+        .arg("-u")
+        .output()
+        .map(|o| String::from_utf8_lossy(&o.stdout).trim() == "0")
+        .unwrap_or(false)
+}
+
+/// The regular files under `dir` (the upload area keeps the artifact of an unfinished accept and nothing of a refused one).
+fn files_under(dir: &Path) -> usize {
+    let mut n = 0;
+    if let Ok(rd) = std::fs::read_dir(dir) {
+        for e in rd.flatten() {
+            let p = e.path();
+            n += if p.is_dir() {
+                files_under(&p)
+            } else {
+                usize::from(!p.to_string_lossy().ends_with(".partial"))
+            };
+        }
+    }
+    n
+}
+
+fn propose_artifact(port: u16, art: &[u8]) -> (u16, String) {
+    let (status, reply) = http(
+        port,
+        "POST",
+        PROPOSE,
+        &propose_headers(),
+        &frame(r#"{"title":"failed","client":"failed-accept/1"}"#, art),
+    );
+    (status, String::from_utf8_lossy(&reply).into_owned())
+}
+
+fn set_mode(dir: &Path, mode: u32) {
+    use std::os::unix::fs::PermissionsExt;
+    for e in std::fs::read_dir(dir).unwrap().flatten() {
+        std::fs::set_permissions(e.path(), std::fs::Permissions::from_mode(mode)).unwrap();
+    }
+}
+
+/// An accept that fails **after** it has stored the patches and blobs and **before** it has written the claims (here: the claim
+/// container cannot be written) exits 1, changes the store, and leaves `sync pending` as it was. The old rule (pending-only) called that
+/// *refused*: "nothing was left". The answer must be *incomplete*: the flag is set, the intent is kept, the artifact is kept; recovery
+/// converges; a resend records exactly one revision.
+#[test]
+fn a_write_error_after_the_patches_are_stored_is_incomplete_and_recovery_and_a_resend_finish_it() {
+    if needs_tools() {
+        return;
+    }
+    if running_as_root() {
+        eprintln!("skipping: a read-only file is writable by root");
+        return;
+    }
+    let fx = build_fixture("write-error", 3);
+    let n = fx.patches as usize;
+    let inst = instance(&fx, "ro");
+    let repo = RepoId::new("r1");
+    let claims = inst.forge.join(".prikk/containers/recognition-claim");
+    set_mode(&claims, 0o444);
+
+    let mut server = start(&inst.dir, false);
+    let bytes_before = prikk_bytes(&inst.forge);
+    let (status, reply) = propose_artifact(server.port, &fx.art);
+    assert_eq!(status, 503, "{reply}");
+    assert!(reply.contains("incomplete"), "{reply}");
+    // The point of the case: the store changed and `sync pending` did not.
+    assert!(
+        prikk_bytes(&inst.forge) > bytes_before,
+        "the patches and blobs were stored"
+    );
+    assert_eq!(
+        pending_count(&inst.forge, &fx.forge_keys),
+        0,
+        "no claim was written, so nothing is pending"
+    );
+    // Incomplete: the flag, the open intent, the kept artifact; no revision.
+    let changes = change_store(&inst);
+    let flags = changes.repo_flags(&repo).unwrap();
+    assert!(flags.needs_recovery, "the repository is flagged");
+    assert!(
+        flags
+            .reason
+            .clone()
+            .unwrap_or_default()
+            .contains("did not finish"),
+        "{flags:?}"
+    );
+    assert_eq!(
+        changes.open_intents(&repo).unwrap().len(),
+        1,
+        "the intent is kept"
+    );
+    assert!(changes.list_changes(&repo, None).unwrap().is_empty());
+    assert!(
+        files_under(&inst.dir.join("artifacts")) > 0,
+        "the artifact of an unfinished accept is kept"
+    );
+    // verify and doctor: no error (the orphans are information).
+    prikk(&inst.forge, &fx.forge_keys, &["verify"]);
+    prikk(&inst.forge, &fx.forge_keys, &["doctor"]);
+    let _ = server.child.kill();
+    let _ = server.child.wait();
+
+    // The cause is repaired; the next start recovers by itself.
+    set_mode(&claims, 0o644);
+    let mut server = start(&inst.dir, true);
+    let end = Instant::now() + Duration::from_secs(120);
+    while flagged(&inst) {
+        assert!(
+            Instant::now() < end,
+            "automatic recovery did not clear the flag"
+        );
+        std::thread::sleep(Duration::from_millis(100));
+    }
+    let recoveries =
+        SqliteRecoveries::new(SqliteDb::open(inst.dir.join("db.sqlite")).unwrap()).unwrap();
+    let closed = Instant::now() + Duration::from_secs(20);
+    let runs = loop {
+        let runs = recoveries.recent(&repo, 5).unwrap();
+        if runs.first().is_some_and(|r| r.outcome.is_some()) || Instant::now() > closed {
+            break runs;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    };
+    assert_eq!(
+        runs[0].outcome.as_deref(),
+        Some("recovered"),
+        "{:?}",
+        runs[0]
+            .steps
+            .iter()
+            .map(|s| (&s.name, &s.outcome))
+            .collect::<Vec<_>>()
+    );
+    // A resend records exactly one revision, from the first attempt's (empty) list: all the patches are new.
+    let (status, reply) = propose_artifact(server.port, &fx.art);
+    assert_eq!(status, 201, "{reply}");
+    assert_eq!(json_num(&reply, "added_count"), Some(u64::from(fx.patches)));
+    let change_id = json_str(&reply, "proposal_id").expect("proposal_id");
+    let changes = change_store(&inst);
+    assert_eq!(changes.revisions_of(&change_id).unwrap().len(), 1);
+    assert!(changes.open_intents(&repo).unwrap().is_empty());
+    assert_eq!(pending_count(&inst.forge, &fx.forge_keys), n);
+    let _ = server.child.kill();
+    let _ = server.child.wait();
+}
+
+/// The artifact with one flipped byte whose refusal is "AUTHOR signature does not verify" (found by trying positions against prikk
+/// itself on a copy of the forge: a refusal changes nothing).
+fn artifact_with_a_bad_author_signature(fx: &Fixture) -> Vec<u8> {
+    let probe = fx.dir.join("flip-probe");
+    if !probe.exists() {
+        let st = Command::new("cp")
+            .arg("-a")
+            .arg(&fx.forge_pristine)
+            .arg(&probe)
+            .status()
+            .unwrap();
+        assert!(st.success());
+    }
+    let candidate = fx.dir.join("flip-candidate.art");
+    for at in (fx.art.len() / 8..fx.art.len()).step_by(3) {
+        let mut flipped = fx.art.clone();
+        flipped[at] ^= 0x5a;
+        std::fs::write(&candidate, &flipped).unwrap();
+        let out = Command::new("prikk")
+            .args(["sync", "accept", candidate.to_str().unwrap()])
+            .current_dir(&probe)
+            .env("HOME", &fx.forge_keys)
+            .env("XDG_CONFIG_HOME", &fx.forge_keys)
+            .output()
+            .unwrap();
+        if !out.status.success()
+            && String::from_utf8_lossy(&out.stderr).contains("AUTHOR signature does not verify")
+        {
+            return flipped;
+        }
+    }
+    panic!("no flipped byte gave an AUTHOR signature refusal");
+}
+
+/// The refusals that leave the store as it was are still *refused*: `422 accept_refused`, no flag, the intent abandoned, nothing kept.
+#[test]
+fn refusals_that_change_nothing_are_still_refused_with_no_flag() {
+    if needs_tools() {
+        return;
+    }
+    let fx = build_fixture("refusals", 3);
+    let repo = RepoId::new("r1");
+    let truncated = fx.art[..fx.art.len() / 2].to_vec();
+    let bad_signature = artifact_with_a_bad_author_signature(&fx);
+    for (case, art, over_limit) in [
+        ("truncated", truncated, false),
+        ("author-signature", bad_signature, false),
+        ("over-limit-object", fx.art.clone(), true),
+    ] {
+        let inst = instance(&fx, case);
+        if over_limit {
+            // prikk's own bound on one incoming object, set on this copy of the forge.
+            prikk(
+                &inst.forge,
+                &fx.forge_keys,
+                &["config", "set", "incoming.max-object-bytes", "100"],
+            );
+        }
+        let before = prikk_bytes(&inst.forge);
+        let mut server = start(&inst.dir, false);
+        let (status, reply) = propose_artifact(server.port, &art);
+        assert_eq!(status, 422, "[{case}] {reply}");
+        assert!(reply.contains("accept_refused"), "[{case}] {reply}");
+        let changes = change_store(&inst);
+        assert!(
+            !changes.repo_flags(&repo).unwrap().needs_recovery,
+            "[{case}] a refusal sets no flag"
+        );
+        assert!(
+            changes.open_intents(&repo).unwrap().is_empty(),
+            "[{case}] the intent is abandoned"
+        );
+        assert!(changes.list_changes(&repo, None).unwrap().is_empty());
+        assert_eq!(
+            files_under(&inst.dir.join("artifacts")),
+            0,
+            "[{case}] the uploaded bytes of a refusal are not kept"
+        );
+        assert_eq!(
+            prikk_bytes(&inst.forge),
+            before,
+            "[{case}] the store is as it was"
+        );
+        let _ = server.child.kill();
+        let _ = server.child.wait();
     }
 }
