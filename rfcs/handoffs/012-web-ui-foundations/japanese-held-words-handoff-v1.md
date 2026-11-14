@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | While reading the 12 flagged messages the owner found the word 保持 strange in the sentences that use it (2026-11-14), and accepted all the others. 保持 ("to hold, to retain") is a formal, technical word; it appears in 19 messages for two different ideas. This handoff replaces it with the plain words that say each idea, in every message that uses it (including messages signed off on 2026-10-31: the owner's new ruling supersedes their earlier approval of that word, and the two `required-pair` pins that said "this wording stays" are updated by this handoff). |
-| Status | Assigned 2026-11-14. |
+| Status | **WITHDRAWN the same day (2026-11-14), before any work: do not apply it.** The owner ruled that 保持 "is not necessarily bad" and 預かる "is sometimes unnatural": it depends on the context. Of the 12 messages the owner had read, only one contains 保持 (`proposal.patch.not_listed_explain`, written in `prikk-0-56-rebaseline-handoff-v2` D3); the other 18 uses are signed-off text the owner accepted. The architect had over-reached by retiring the word everywhere. Replaced by `japanese-legend-sentence-handoff-v1.md` (one sentence). |
 | Basis | `crates/planeter-web/src/catalog/ja.rs`, `crates/planeter-client/src/catalog/ja.rs`; `crates/planeter-web/tests/i18n/ja.rules` (lines 11, 48, 64); `docs/glossary/ja.md` (rows at lines 28, 45, 79, 85 and the word list at line 122); `grep -n 保持` over the repository. |
 | Audience | Dev team. Return a short review-request package. |
 
