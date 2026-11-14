@@ -397,12 +397,12 @@ docker run --rm ghcr.io/prikk-vcs/planeter:X.Y.Z --version
   bite); `cargo install planeter --version 0.5.0 --locked` and `cargo install planeter-client --version 0.5.0 --locked` build and run
   (`planeter 0.5.0`, `planeter-client 0.5.0`).
 
-- **0.6.0 (unreleased until tagged — the architect fills this row at the tag).** Release candidate commit `<hash>`; prikk floor **0.57.0**; declared minimum compiler **1.89.0**; the compiler
-  pin `<1.99.1 or the reviewed successor>`; **eleven crates** (`planeter-i18n` is new and goes first: the registry answers 404 for it, so the new-crate rate limit applies to it);
-  rehearsal run `<id>` (both architectures: build, image run with prikk 0.57.0, glibc check, push, identity, manifest list, attestation; the rehearsal package); the architect's gates immediately before the tag on
-  advisory-database HEAD `<hash>`: `cargo deny` and `cargo audit` exit 0 with no ignore, `<n>` tests with prikk and `<n>` without, CI green on the tag commit; tag `<hash>` (signed, bare `0.6.0`);
-  Release run `<id>`, every job green; verified after the fact: both tarballs' checksums and build-provenance attestations, `planeter --version` of the x86_64 binary (`planeter 0.6.0`, commit, `prikk-floor 0.57.0`, rustc),
-  the image's attestation and its `prikk --version` (0.57.0); crates.io: eleven crates in the order above, then `cargo install planeter --version 0.6.0 --locked` and `cargo install planeter-client --version 0.6.0 --locked`.
+- **0.6.0 (2026-11-14).** Release candidate commit `9bef01f` (reviewed Approved, D-76), then one docs-only commit that dated the CHANGELOG heading (`51dcc9e`, the tag commit); prikk floor **0.57.0**; declared minimum compiler **1.89.0**; the compiler
+  pin **1.99.1** (reviewed again on 2026-11-14: 1.100.0 existed, two days old, and was not adopted); **eleven crates** (`planeter-i18n` is new and went first); rehearsal run `43575291310` (both architectures: build, image run with prikk 0.57.0, glibc check, push, identity,
+  manifest list, attestation; the rehearsal package); the architect's gates immediately before the tag on advisory-database HEAD `4ef2df8e806a65e2f1ecc14f56f51249062b23d6`: `cargo deny` and `cargo audit` exit 0 with no ignore, 1,233 tests with prikk and 1,233 without, CI green on the tag commit;
+  tag `51dcc9e` (signed, bare `0.6.0`); Release run `43579591208`, every job green (the rehearsal-only manifest job skipped as designed); verified after the fact: both tarballs' checksums (`sha256sum -c`) and build-provenance attestations (`gh attestation verify`, source ref `refs/tags/0.6.0`, commit `51dcc9e`),
+  `planeter --version` of the x86_64 binary (`planeter 0.6.0`, commit `51dcc9e`, `prikk-floor 0.57.0`; `build-info.txt`: requires prikk >= 0.57.0), the image's attestation (`gh attestation verify oci://ghcr.io/prikk-vcs/planeter:0.6.0`, source ref `refs/tags/0.6.0`) and, from the workflow log, the image run on both architectures (`planeter 0.6.0`, `prikk 0.57.0`, glibc check OK against Debian 13's 2.41);
+  crates.io: eleven crates in the order above, all exit 0 (no rate-limit delay for the new name `planeter-i18n`), then `cargo install planeter --version 0.6.0 --locked` and `cargo install planeter-client --version 0.6.0 --locked` build and run (`planeter 0.6.0`, `planeter-client 0.6.0`; the client's refusal of an unknown language names `en, ja`). The `commit unknown` of the crates.io installs is expected (no git checkout). Not verified by the architect: the image run on this host (no docker here; the workflow's own run is the evidence).
 
 ## If a job fails
 
