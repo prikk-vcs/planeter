@@ -1,4 +1,4 @@
-# The messages of `ja` (the server) as signed off: key<TAB>hash (planeter_i18n::baseline::message_hash). The sign-off covered the sheet of commit f54ae38 (fingerprint 54ebae05ad914ab6) minus the eight messages of the edge answers, which the owner had not read. Written once; regenerated only by a new sign-off.
+# The messages of `ja` as signed off: key<TAB>hash (planeter-i18n baseline::message_hash). Regenerated only by a new sign-off.
 layout.sign_in	439f9d68ee7d3937
 layout.sign_out	521bdc9d49e4ddf7
 layout.skip	5a520c1d3ff2f4ae
@@ -311,8 +311,8 @@ proposal.patches.col.patch	cf9405f202c810a0
 proposal.patches.col.status	33a83b74ddd7922e
 proposal.patch.unknown	f714874d5e71ad7c
 proposal.patch.unknown_explain	cd57763a624d3912
-proposal.patch.not_listed	3ae94acc81b18178
-proposal.patch.not_listed_explain	22ea51cccf43aa24
+proposal.patch.not_listed	ac0d637360ddaf23
+proposal.patch.not_listed_explain	b9299afe7b6d77d2
 proposal.retention.kept	e48e4be20e7ebba3
 proposal.retention.partly	676a1bd35c3c4810
 proposal.retention.removed	efabcc47d4e2a2a3
@@ -543,3 +543,11 @@ stage.error.both	1724a73ef371a3a5
 stage.error.verify	108fdad1340db757
 stage.gone	d74e2feff6221d92
 stage.gone.link	dd7b2116995922ba
+error.payload_too_large.request_message	e79edc2f58e5709d
+error.payload_too_large.request_hint	20bc347fc780d651
+page.method_not_allowed.title	d2a311f9870c9171
+page.method_not_allowed.heading	13426e4c52fe62e3
+page.method_not_allowed.body	3b7f5ad02b2ba9fe
+page.payload_too_large.title	83da2b108f581f0d
+page.payload_too_large.heading	6e95ba9cb2f117e7
+page.payload_too_large.body	ae12fd7f5fb16326

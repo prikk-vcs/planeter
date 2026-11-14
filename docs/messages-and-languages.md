@@ -110,6 +110,15 @@ header counts them; the server logs the count once at start ("language ja: 10 me
 `planeter-i18n-sheet --status` prints one line per signed-off language for the **release notes** (RELEASING says to list it). When the
 reviewers have read the flagged rows, the baselines are regenerated and the record gets a new line.
 
+**The record of Japanese.** (1) **2026-10-31**, the first sign-off (commit `37a6c42`, sheet fingerprint `54ebae05ad914ab6`): the owner approved the
+generated sheet of 653 messages and its final corrections. Eight messages (the answers the framework used to write by itself) and the Japanese
+accessibility statement were added afterwards and not read then, and later changes (`help.main` and `usage.bad_lang`, which now name the registry's languages, and the two messages of the "not listed" badge and
+its legend, D3 of the prikk 0.57.0 re-baseline) joined them: twelve messages shipped flagged as newer than the sign-off. (2) **2026-11-14**, the second reading (commit
+`4c53f2a`, sheet fingerprint `a917d86974a31464`, 661 messages): the owner read those twelve messages and the accessibility section, wrote the final wording
+of one of them (the legend of the badge 「一覧にありません」, `proposal.patch.not_listed_explain`) and accepted the rest. The record in
+`crates/planeter-i18n/src/languages/ja.rs` and both `locales/ja.signed` baselines (written by `planeter-i18n-sheet --baseline ja web|client`) are those of
+this second reading; the sheet reads "0 changed, 0 new — 0 message(s) to read" and the server no longer logs a count of messages newer than the sign-off.
+
 ## What is deliberately not in the catalog (`tests/literals.allow`)
 
 * **Developer-facing text:** the OpenAPI document (English by decision; it says so), log lines, `expect()`

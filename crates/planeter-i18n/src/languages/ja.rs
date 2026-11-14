@@ -13,12 +13,14 @@ pub static JA: Language = Language {
     decimal_separator: '.',
     status: Status::SignedOff(SignOff {
         reviewers: &["the owner"],
-        date: "2026-10-31",
-        commit: "37a6c42aff4f3bfdd83b8dd8e45a6a4281dd24c7",
-        sheet_fingerprint: "54ebae05ad914ab6",
-        note: "The owner (a fluent reader; the colleague named in the plan did not take part) approved the generated sheet with fingerprint \
-               6ba30960fe807d98 (653 messages), then the final corrections of the commit above. The sheet regenerated at that commit has \
-               661 messages: the eight messages of the answers the framework used to write by itself (added by the dev team after the \
-               review) and the Japanese version of the accessibility statement had not been read by the owner.",
+        date: "2026-11-14",
+        commit: "4c53f2ab6d796400245bd8f69eeedf150324dcb3",
+        sheet_fingerprint: "a917d86974a31464",
+        note: "The owner (a fluent reader) read the twelve messages that were newer than the first sign-off and the Japanese accessibility \
+               statement, wrote the final wording of one of them (the legend of the badge \"not listed here\") and accepted all the \
+               others. This record replaces the first one, of 2026-10-31 (commit 37a6c42aff4f3bfdd83b8dd8e45a6a4281dd24c7, sheet \
+               fingerprint 54ebae05ad914ab6: the owner approved the generated sheet 6ba30960fe807d98, 653 messages, then the final \
+               corrections), whose baselines left out eight messages the owner had not yet read. The sheet of the commit above has 661 \
+               messages, none newer than this sign-off.",
     }),
 };

@@ -1,5 +1,5 @@
-# The messages of `ja` (planeter-client) as signed off: key<TAB>hash (planeter_i18n::baseline::message_hash), as of commit f54ae38 (sheet fingerprint 54ebae05ad914ab6), before the help line and the wrong-language refusal named the registry's languages. Written once; regenerated only by a new sign-off.
-help.main	7058eb80610fc23b
+# The messages of `ja` as signed off: key<TAB>hash (planeter-i18n baseline::message_hash). Regenerated only by a new sign-off.
+help.main	6df761a66cb37705
 help.propose	abef867626e7d56a
 help.clone	d5dc68f16f4839e0
 help.fetch	2396eef92f106058
@@ -9,7 +9,7 @@ usage.unknown_option	38fd9e96f163d4ae
 usage.missing_value	9b1357f42c6b56a9
 usage.missing_argument	1795604e1c805964
 usage.too_many	dc60b3cbd75f7804
-usage.bad_lang	7b0f82e1bde31c01
+usage.bad_lang	0222ce9819340715
 usage.bad_url	e442598f00f140a5
 usage.plain_http	fdeabf399e6ceeb4
 usage.no_repository	4ba2c4a59987de7e
