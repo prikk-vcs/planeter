@@ -461,13 +461,41 @@ impl Reply {
     }
 }
 
+/// `CHANGES_TRANSCRIPT=<file>` appends every GET of these tests and its answer (the review request quotes real examples from it).
+fn transcript(uri: &str, status: StatusCode, headers: &HeaderMap, body: &[u8]) {
+    let Ok(path) = std::env::var("CHANGES_TRANSCRIPT") else {
+        return;
+    };
+    use std::io::Write;
+    if let Ok(mut f) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(path)
+    {
+        let retry = headers
+            .get("retry-after")
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("-");
+        let _ = writeln!(
+            f,
+            "### GET {uri} -> {status} (retry-after: {retry})\n{}\n",
+            String::from_utf8_lossy(body)
+        );
+    }
+}
+
 async fn call(r: &Router, req: Request<Body>) -> Reply {
+    let uri = req.uri().to_string();
+    let is_get = req.method() == "GET";
     let resp = r.clone().oneshot(req).await.unwrap();
     let (status, headers) = (resp.status(), resp.headers().clone());
     let body = axum::body::to_bytes(resp.into_body(), 1 << 30)
         .await
         .unwrap()
         .to_vec();
+    if is_get {
+        transcript(&uri, status, &headers, &body);
+    }
     Reply {
         status,
         headers,
