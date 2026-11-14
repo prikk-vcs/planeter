@@ -2203,7 +2203,7 @@ fn sandbox_standin(base: &Path, accept_body: &str) -> PathBuf {
         &script,
         format!(
             r#"#!/bin/sh
-if [ "$1" = --version ]; then echo "prikk 0.54.1"; exit 0; fi
+if [ "$1" = --version ]; then echo "prikk 0.57.0"; exit 0; fi
 if [ "$1" = sync ] && [ "$2" = pending ]; then echo "pending (accepted, unsealed) patches: 0"; exit 0; fi
 if [ "$1" = sync ] && [ "$2" = accept ]; then
 {accept_body}
@@ -4183,10 +4183,11 @@ async fn history_received_by_import_is_a_sighting_and_never_lands_the_proposal()
         &["archive", "import", archive.to_str().unwrap()],
     );
     assert!(out.contains("landed as remotes/heads/main"), "{out}");
+    // prikk 0.56.0 and later: a patch that a received history already seals is not pending (it was, on 0.54 and 0.55).
     assert_eq!(
         pending(&w.forge).len(),
-        1,
-        "the import did not take the patch out of sync pending (prikk 0.54.1)"
+        0,
+        "the import takes the patch out of sync pending (prikk 0.56.0 and later)"
     );
 
     let v = detail_of(&w, &id).await;
@@ -4195,8 +4196,9 @@ async fn history_received_by_import_is_a_sighting_and_never_lands_the_proposal()
         v["received_sightings"],
         serde_json::json!([{"ref": "remotes/heads/main"}])
     );
-    assert_eq!(v["patches"][0]["assurance"], "forge-approved-unsealed");
-    assert_eq!(v["still_pending"], 1);
+    // Held (in the store and in the received history) but neither pending nor in a published ref: no assurance, nothing pending, still open.
+    assert_eq!(v["patches"][0]["assurance"], serde_json::Value::Null, "{v}");
+    assert_eq!(v["still_pending"], 0, "{v}");
     let landed = get_as(
         &w,
         "/api/v1/repos/alice/forge/proposals?state=landed",

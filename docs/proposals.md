@@ -55,7 +55,8 @@ about 50 ms (one short transaction on the shared connection).
    limit, the current use and what to do. The per-push bounds belong to the transport edge (part 3b).
 8. **A patch is "signed into the history" only if a block of a published ref, read from `log`, contains it** — and that wins over
    `sync pending`, which an import can leave listing the patch (D-40 reversed part 3a's "pending wins"). Otherwise it is "held" if
-   `sync pending` lists it, and "not listed" if neither does. `queued` is never read: a pending patch reports `queued: false`.
+   `sync pending` lists it, and "not listed" if neither does (on prikk 0.56.0 and later `sync pending` lists a patch only if a held claim
+   names it and no held block seals it, so a patch that a *received* sealed history already seals is "not listed" too). `queued` is never read: a pending patch reports `queued: false`.
 
 ## What part 3a did not do
 
@@ -81,7 +82,12 @@ that merely left the queue (discarded, or the repository was restored) is not in
 (which D-8 will define), so until then **a proposal usually stays open**, and the page says only what is true.
 
 A patch in a block of a published ref is shown as signed in (*Sealed*), even if `sync pending` still lists it; a patch that
-is listed there and in no published block is shown as held; a patch in neither shows no badge ("Not listed here"). A **received**
+is listed there and in no published block is shown as held; a patch in neither shows no badge ("Not listed here"; ja 一覧にありません).
+**That is true in every case that shows no badge**, and the legend says exactly that: "This patch is not one of the unsigned patches this server
+holds, and it is not in the project's history, so nothing is said about it." The cases: a patch that arrived only as received sealed history
+(prikk 0.56.0 and later: a patch a received block already seals is *not* pending, so the forge holds it in its store and in that history, and
+the page shows the sighting line under it), a patch discarded, and a repository restored. The legend does not say the server does not hold the
+patch, because in the first case it does. A **received**
 ref that holds any patch of an *open* proposal is shown under *Details* as a **sighting** ("Also found in history received here (not
 verified here): `remotes/…`", and that a received history can be replaced); the JSON has `received_sightings: [{ref}]`. Nothing is
 derived from a sighting, and failing to read the received logs means no sightings, never an error (the failure is counted: see

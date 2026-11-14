@@ -843,7 +843,7 @@ pub const CATALOG: &[Entry] = &[
     msg("proposal.patch.not_listed", "Not listed here"),
     msg(
         "proposal.patch.not_listed_explain",
-        "This patch is neither held by this server nor in the history it holds, so nothing is said about it.",
+        "This patch is not one of the unsigned patches this server holds, and it is not in the project's history, so nothing is said about it.",
     ),
     msg(
         "proposal.retention.kept",

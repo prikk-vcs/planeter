@@ -867,10 +867,10 @@ pub const CATALOG: &[Entry] = &[
         "proposal.patch.unknown_explain",
         "このサーバーは、このパッチが署名されて履歴に入ったかどうかを判断できません（履歴が、サーバーが読む範囲より長いためです）。",
     ),
-    msg("proposal.patch.not_listed", "この場所には記録なし"),
+    msg("proposal.patch.not_listed", "一覧にありません"),
     msg(
         "proposal.patch.not_listed_explain",
-        "このパッチは、このサーバーが保持しているものにも、保持している履歴にもないため、何も言えません。",
+        "このパッチは、このサーバーが保持している未署名のパッチにも、プロジェクトの履歴にもないため、何も言えません。",
     ),
     msg(
         "proposal.retention.kept",
