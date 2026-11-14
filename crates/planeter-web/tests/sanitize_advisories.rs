@@ -147,3 +147,62 @@ fn the_mixed_case_url_shapes_are_inert_through_markdown() {
     assert_inert(&out);
     assert!(!out.to_ascii_lowercase().contains("evil.example"), "{out}");
 }
+
+// ---- RUSTSEC-2026-0533: MathML integration points and SVG `foreignObject` (mutation XSS) ------------
+
+/// A sanitized document must parse the same way the second time: the output is a fixed point of the sanitizer.
+fn assert_fixed_point(out: &str) {
+    assert_eq!(sanitize_html(out), out, "sanitizing the output changed it");
+}
+
+const RAW_TEXT_GADGETS: [&str; 10] = [
+    "title",
+    "textarea",
+    "xmp",
+    "iframe",
+    "noembed",
+    "noframes",
+    "plaintext",
+    "noscript",
+    "style",
+    "script",
+];
+
+#[test]
+fn a_raw_text_gadget_in_svg_inside_a_mathml_integration_point_leaves_nothing_and_is_a_fixed_point()
+{
+    // The advisory's shape: `<math><mi><svg><gadget>…</svg></mi></math>`, with every raw-text tag as the gadget and
+    // every MathML text integration point, plus the mirror image (MathML inside SVG `foreignObject`).
+    for gadget in RAW_TEXT_GADGETS {
+        for point in ["mi", "mo", "mn", "ms", "mtext"] {
+            let dirty = format!(
+                "<p>kept</p><math><{point}><svg><{gadget}><img src=x onerror=alert(1)></{gadget}></svg></{point}></math>"
+            );
+            let out = sanitize_html(&dirty);
+            assert!(out.contains("kept"), "text must survive: {out}");
+            assert_inert(&out);
+            assert_fixed_point(&out);
+        }
+        let mirrored = format!(
+            "<p>kept</p><svg><foreignObject><math><mi><{gadget}><img src=x onerror=alert(1)></{gadget}></mi></math></foreignObject></svg>"
+        );
+        let out = sanitize_html(&mirrored);
+        assert!(out.contains("kept"), "text must survive: {out}");
+        assert_inert(&out);
+        assert_fixed_point(&out);
+    }
+}
+
+#[test]
+fn the_mathml_svg_gadget_shape_is_inert_and_a_fixed_point_through_markdown() {
+    for gadget in RAW_TEXT_GADGETS {
+        let md = format!(
+            "para\n\n<math><mi><svg><{gadget}><img src=x onerror=alert(1)></{gadget}></svg></mi></math>\n\nafter\n"
+        );
+        let out = render_markdown(&md);
+        assert!(out.contains("para") && out.contains("after"), "{out}");
+        assert_inert(&out);
+        // The Markdown path demotes headings after sanitizing; with no heading in the input the output is the sanitizer's own.
+        assert_fixed_point(&out);
+    }
+}
