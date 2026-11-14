@@ -12,11 +12,9 @@ Exactly one Japanese message (English does not change):
 
 | Key | Now | New |
 |---|---|---|
-| `proposal.patch.not_listed_explain` | このパッチは、このサーバーが**保持している**未署名のパッチにも、プロジェクトの履歴にも**ない**ため、何も言えません。 | このパッチは、このサーバーが**持っている**未署名のパッチにも、プロジェクトの履歴にも**見当たらない**ため、**状態は示していません**。 |
+| `proposal.patch.not_listed_explain` | このパッチは、このサーバーが**保持している**未署名のパッチにも、プロジェクトの履歴にも**ない**ため、何も言えません。 | **このパッチに該当するものは、このサーバーの、未署名のパッチにもプロジェクトの履歴にも見つかりません。そのためパッチの状態を表示できません。** |
 
-Why this wording (first part): 持っている is the everyday verb for "has" (nothing to be held in custody); 見当たらない ("cannot be found") is also the honest tense of the claim: the server looked and did not find the patch there, which is true in the received-history case too, where the patch exists but not as one of these two things. The badge beside it (「一覧にありません」) is unchanged.
-
-**The ending (owner's second remark, 2026-11-14):** 「何も言えません」 ("I cannot say anything") is not natural Japanese here; the page does not fail to speak, it deliberately gives no status for this patch. 「状態は示していません」 says that plainly, and 状態 is the name of the table column the badge sits in (`proposal.patches.col.status`), so the reader can link the two. The phrase 何も言えません is used nowhere else in the catalogs (checked).
+**The owner dictated this text (2026-11-14); use it exactly as written, including the two sentences and the final 。.** It replaces both the 保持 (not natural here) and 「何も言えません」 ("I cannot say anything": not natural; the page does not fail to speak). The phrase 何も言えません is used nowhere else in the catalogs (checked). The badge beside it (「一覧にありません」) is unchanged.
 
 - Update `docs/glossary/ja.md` for this row, if it quotes the sentence (the "not listed" legend row), with the date and "the owner found 保持 strange in this sentence, 2026-11-14; 保持 stays elsewhere".
 - Regenerate the sheet with `planeter-i18n-sheet --lang ja` and run `--check`. The key was already among the 12 to read, so the count stays **12**; report the new fingerprint and the old → new row.
