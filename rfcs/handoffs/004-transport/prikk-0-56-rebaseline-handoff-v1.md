@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | `prikk-0-56-measure-handoff-v1` was reviewed Approved (ledger PK-78): the five failing tests are intended 0.56.0 changes and nothing is unexplained. **The floor moves to 0.56.0.** This handoff measures three things that the report showed can matter for safety, then re-baselines the driver and its tests. Part A first; **part B starts only after part A's findings are written down**, and any finding marked STOP below ends the work with a report. |
-| Status | Assigned 2026-11-14. |
+| Status | **Part A done (stopped at A1 by its STOP rule, A2 and A3 measured), reviewed 2026-11-14; part B continues in `prikk-0-56-rebaseline-handoff-v2.md`.** (Originally: Assigned 2026-11-14.) |
 | Basis | Ledger PK-77, PK-78 and the report `prikk-0-56-measure-review-request.md`; `crates/planeter-transport/src/{propose,recovery,proposals}.rs`; `crates/planeter-core/src/change.rs` (`patch_assurance`); `crates/planeter-prikk/src/cli.rs` (floor, `sync_pending_patches`); `docs/STATUS.md` (floor 0.54.0). |
 | Audience | Dev team. Return a review-request package. Use a privately installed prikk **0.55.0** only for comparison; the gate runs of this handoff use the host's **0.56.0**. |
 
