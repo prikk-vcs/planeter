@@ -3,7 +3,7 @@
 Releases are bare version tags; each section is the release's notes (assembled into the GitHub
 release by `release.yml`). Kept by hand, per release, so nothing here goes stale by templating.
 
-## [0.6.0] — unreleased until tagged — prikk 0.57.0, Japanese signed off, languages as data, two advisories closed
+## [0.6.0] — 2026-11-14 — prikk 0.57.0, Japanese signed off, languages as data, two advisories closed
 
 0.6.0 moves the prikk floor to **0.57.0**, makes the Japanese pages, API messages and `planeter-client` available by default (signed off by the owner, twice), turns "a language" into a row of data in a shared crate, makes a failed upload judged by evidence instead of by one fact, and updates two dependencies for advisories (`ammonia` 4.2.5, `rusqlite` 0.41.1 with SQLite 3.54.1). It adds no feature to proposals, review or repository creation, and changes no default.
 
