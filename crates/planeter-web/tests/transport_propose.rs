@@ -3117,6 +3117,24 @@ fn seal_claim(w: &World, repo: &str, claim: &str) {
     );
 }
 
+/// Seal several accepted claims in one call: `sync seal --claims FILE` orders them by parent block first. (prikk 0.57.0 refuses to seal a
+/// claim whose parent block the ref does not reach; sealing one by one in claim-id order, which is random, is no longer possible.)
+fn seal_claims(w: &World, repo: &str, claims: &[String]) {
+    let file = w.base.join("claims-to-seal");
+    std::fs::write(&file, claims.join("\n") + "\n").unwrap();
+    prikk(
+        &repo_dir(w, repo),
+        &w.client.keys,
+        &[
+            "sync",
+            "seal",
+            "heads/main",
+            "--claims",
+            file.to_str().unwrap(),
+        ],
+    );
+}
+
 #[tokio::test]
 async fn the_list_and_the_detail_show_what_is_held_for_review_and_say_nothing_more() {
     if skip() {
@@ -4028,9 +4046,7 @@ async fn a_patch_sealed_more_than_twenty_blocks_ago_still_counts_as_in_the_histo
             .cloned(),
     );
     assert_eq!(claims.len(), 26);
-    for c in &claims {
-        seal_claim(&w, "forge", c);
-    }
+    seal_claims(&w, "forge", &claims);
     let v = detail_of(&w, &early).await;
     assert_eq!(v["state"], "landed", "{v}");
     assert_eq!(v["patches"][0]["assurance"], "sealed");

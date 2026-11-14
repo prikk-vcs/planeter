@@ -100,7 +100,7 @@ fn stale_locks(repo: &Path) {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(
             path,
-            format!("pid={pid}\nkind={kind}\nnote=PR-07 lock has no stale-lock stealing yet\n"),
+            format!("pid={pid}\nkind={kind}\nnote=PR-007 lock has no stale-lock stealing yet\n"),
         )
         .unwrap();
     }
@@ -903,7 +903,11 @@ fn a_lock_of_an_unknown_kind_or_outside_the_repository_is_evidence_we_do_not_hav
     // An extra lock of a kind an accept never leaves.
     let odd = w.repo_path.join(".prikk/active/other/active.lock");
     std::fs::create_dir_all(odd.parent().unwrap()).unwrap();
-    std::fs::write(&odd, "pid=4000000\nkind=something-new\nnote=x\n").unwrap();
+    std::fs::write(
+        &odd,
+        "pid=4000000\nkind=something-new\nnote=PR-007 lock has no stale-lock stealing yet\n",
+    )
+    .unwrap();
     let plan = w.svc.plan(&w.record).unwrap();
     let blockers: Vec<(&str, bool)> = plan
         .blockers
@@ -1831,7 +1835,11 @@ async fn a_run_that_stops_answers_200_with_the_plan_and_the_commands() {
     w.killed_accept();
     let odd = w.repo_path.join(".prikk/active/other/active.lock");
     std::fs::create_dir_all(odd.parent().unwrap()).unwrap();
-    std::fs::write(odd, "pid=4000000\nkind=something-new\n").unwrap();
+    std::fs::write(
+        odd,
+        "pid=4000000\nkind=something-new\nnote=PR-007 lock has no stale-lock stealing yet\n",
+    )
+    .unwrap();
     let (status, v) = call(&w.router, "POST", RECOVERY, Some("tok-alice"), "", &[]).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(v["outcome"], "stopped");
