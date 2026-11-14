@@ -1,0 +1,11 @@
+{
+  "schema_version": "sync-pending-v1",
+  "patches": [
+    {"patch_id": "49da391d41864addd8c637022dc6d418ba493a66030e1bac4d41f2338e044275", "claims": [
+      {"claim_id": "149d1cdeb8f32823bed6e8f3044c2b4df6dc052164a07a103bf35636f63a9631", "target_block_id": "fe88d1172016fb626c9955980e7bd09c41c9a6e08d141cb7c5a102502a9733b4", "parent_block_ids": ["747cd1a6a49a4d78f66e377b8357a6efc5120752cad3c2c0d8ce14c99ce58a3b"], "signature": {"outcome": "unverifiable", "key_id": "ed25519-70e92a6c88e0ba26"}}
+    ]},
+    {"patch_id": "cdc718a6e47bf1ce85cbeb40b2e454021d85dfdf7df61d6ae0bb3f44ac7eb695", "claims": [
+      {"claim_id": "58ce0c27c578ad7b6a4bbfac196ccc9445f6cd5565a9ca763ddfabe7fc21e9d4", "target_block_id": "747cd1a6a49a4d78f66e377b8357a6efc5120752cad3c2c0d8ce14c99ce58a3b", "parent_block_ids": ["c0eda5b913d668962de3cdc3e7f8a24a89142c91f6261298076884bf86f88376"], "signature": {"outcome": "unverifiable", "key_id": "ed25519-70e92a6c88e0ba26"}}
+    ]}
+  ]
+}

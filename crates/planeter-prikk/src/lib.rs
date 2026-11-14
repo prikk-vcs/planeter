@@ -10,6 +10,7 @@
 //! (T3), the version pin (T3), and the sandbox (T4) follow.
 
 pub mod cli;
+pub mod delivery;
 pub mod error;
 pub mod exchange;
 pub mod extract;

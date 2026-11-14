@@ -9,6 +9,7 @@ use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use planeter_prikk::exchange::SignatureOutcome;
 use planeter_prikk::extract::{
     DEFAULT_MAX_BYTES, DEFAULT_MAX_FILES, ExtractError, ExtractOptions, ExtractPoint,
     ExtractWorkdir, NoCheckpointReason, PointKind, RefusalId, parse_refusal, parse_report,
@@ -52,7 +53,7 @@ fn stand_in(base: &Path, body: &str) -> PathBuf {
     std::fs::write(
         &bin,
         format!(
-            "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'prikk 0.54.1'; exit 0; fi\necho \"$*\" >> {log}\n{body}\n",
+            "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'prikk 0.57.0'; exit 0; fi\necho \"$*\" >> {log}\n{body}\n",
             log = base.join("argv.log").display()
         ),
     )
@@ -661,6 +662,21 @@ fn have_prikk() -> bool {
         .unwrap_or(false)
 }
 
+/// The installed prikk is 0.57.0 or later (the floor).
+fn prikk_is_0_57_or_later() -> bool {
+    let Ok(out) = Command::new("prikk").arg("--version").output() else {
+        return false;
+    };
+    let text = String::from_utf8_lossy(&out.stdout).into_owned();
+    let mut parts = text
+        .trim()
+        .trim_start_matches("prikk ")
+        .split('.')
+        .map(|p| p.parse::<u32>().unwrap_or(0));
+    let (major, minor) = (parts.next().unwrap_or(0), parts.next().unwrap_or(0));
+    (major, minor) >= (0, 57)
+}
+
 /// The installed prikk is 0.55.0 or later (the two ids of 0.55.0 exist only there).
 fn prikk_is_0_55_or_later() -> bool {
     let Ok(out) = Command::new("prikk").arg("--version").output() else {
@@ -1009,7 +1025,7 @@ fn real_prikk_a_claim_whose_parent_is_pending_is_not_called_damage() {
     }
     if prikk_is_0_55_or_later() {
         eprintln!(
-            "skipping: prikk 0.55.0 and later give this case its own id (see real_prikk_0_55_names_a_claim_whose_parent_is_pending)"
+            "skipping: prikk 0.55.0 and later give this case its own id (see real_prikk_extracts_a_chain_of_pending_claims_and_reports_the_chain)"
         );
         return;
     }
@@ -1028,36 +1044,72 @@ fn real_prikk_a_claim_whose_parent_is_pending_is_not_called_damage() {
     );
 }
 
-/// The same accepted artifact on prikk 0.55.0: the second claim refuses with `claim-parent-not-sealed`, naming the claim and its
-/// parent in its text; the repository is not called damaged. (Skips below 0.55.0.)
+/// The same accepted artifact on prikk 0.56.0 and later (the floor is 0.57.0): **both claims extract**, the second through its pending
+/// parent. The report of the second carries the **chain** of pending claims it walked back through, root to foot, and the weakest
+/// signature outcome over it; the first carries a chain of one. (Until 0.55.0 the second claim refused `claim-parent-not-sealed`; the id is
+/// still known to the driver, see `all_fifteen_refusal_ids_read_to_their_own_value_and_never_to_another`.)
 #[test]
-fn real_prikk_0_55_names_a_claim_whose_parent_is_pending() {
-    if !have_prikk() || !prikk_is_0_55_or_later() {
-        eprintln!("skipping: needs prikk >= 0.55.0 (claim-parent-not-sealed)");
+fn real_prikk_extracts_a_chain_of_pending_claims_and_reports_the_chain() {
+    if !have_prikk() || !prikk_is_0_57_or_later() {
+        eprintln!(
+            "skipping: needs prikk >= 0.57.0 (the floor; extract --claim over a chain of pending claims)"
+        );
         return;
     }
-    let outcomes = accepted_artifact_of_two_claims("real-claims-055");
-    let ok = outcomes.iter().filter(|o| o.is_ok()).count();
-    let refused: Vec<_> = outcomes
+    let outcomes = accepted_artifact_of_two_claims("real-claims-chain");
+    assert_eq!(outcomes.len(), 2, "{outcomes:?}");
+    let reports: Vec<_> = outcomes
         .iter()
-        .filter_map(|o| match o {
-            Err(ExtractError::ClaimParentNotSealed(r)) => Some(r),
-            _ => None,
+        .map(|o| match o {
+            Ok(x) => &x.report,
+            Err(e) => panic!("a claim of the chain did not extract: {e:?}"),
         })
         .collect();
-    assert_eq!((ok, refused.len()), (1, 1), "{outcomes:?}");
-    let r = refused[0];
-    assert_eq!(r.refusal, RefusalId::ClaimParentNotSealed);
+    // The root claim (its parent is sealed here) and the foot (its parent is the root's block).
+    let root = reports
+        .iter()
+        .find(|r| r.chain.len() == 1)
+        .expect("a chain of one");
+    let foot = reports
+        .iter()
+        .find(|r| r.chain.len() == 2)
+        .expect("a chain of two");
+    assert_eq!(root.point_kind, PointKind::Claim);
+    assert_eq!(foot.point_kind, PointKind::Claim);
+    // Root to foot: the point's own claim is last, and each claim's parent is the previous claim's block.
+    assert_eq!(root.chain[0].claim_id, root.point);
+    assert_eq!(foot.chain[1].claim_id, foot.point);
+    assert_eq!(foot.chain[0].claim_id, root.point);
+    assert_eq!(foot.chain[1].target_block_id, foot.target_block_id);
+    assert_eq!(
+        foot.chain[1].parent_block_ids,
+        vec![foot.chain[0].target_block_id.clone()]
+    );
+    assert_eq!(
+        foot.claim_parent_block_id.as_deref(),
+        Some(foot.chain[0].target_block_id.as_str())
+    );
+    // The forge adopted the maintainer key, so every claim is `sound` and so is the chain; no other claim recognizes the same block.
+    for r in [root, foot] {
+        assert_eq!(r.chain_signature, Some(SignatureOutcome::Sound));
+        for c in &r.chain {
+            assert_eq!(c.signature.outcome, SignatureOutcome::Sound);
+            assert!(c.signature.key_id.is_some());
+            assert!(c.other_candidates.is_empty());
+        }
+        assert!(r.provisional && r.written);
+    }
     assert!(
-        r.message.contains("parent") && !r.message.contains("damaged"),
-        "{}",
-        r.message
+        foot.file_count > root.file_count,
+        "the foot has one more file"
     );
     assert!(
-        !outcomes
-            .iter()
-            .any(|o| matches!(o, Err(ExtractError::ClaimParentNotSealedOrDamaged(_)))),
-        "0.55.0 does not say damaged-repository for it"
+        !outcomes.iter().any(|o| matches!(
+            o,
+            Err(ExtractError::ClaimParentNotSealed(_)
+                | ExtractError::ClaimParentNotSealedOrDamaged(_))
+        )),
+        "no refusal for a pending parent any more"
     );
 }
 

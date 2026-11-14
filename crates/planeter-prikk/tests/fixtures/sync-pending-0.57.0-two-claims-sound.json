@@ -1,0 +1,11 @@
+{
+  "schema_version": "sync-pending-v1",
+  "patches": [
+    {"patch_id": "9e1d4a80adc1257589c08541961bd7b833f4464e438c76c836907612bc80fc13", "claims": [
+      {"claim_id": "388854e8cf61020f82d675eaba1137cc6bc8533f91de7e3d002f8d81ebec8296", "target_block_id": "f8b2014ec4b150dd3a9872314385bc82c3fc87d0f1b1df573cf841fb3f4a3b34", "parent_block_ids": ["9afd0da59ad8169ceef417d230fdb06c7f8fd801853ad2c6495031c46b5a62cd"], "signature": {"outcome": "sound", "key_id": "ed25519-68034a45f764e16f"}}
+    ]},
+    {"patch_id": "f3163eb5db493233c8f2f180f715482fd3f02b10cc2623c9d8fff6f5caa52ffb", "claims": [
+      {"claim_id": "7fa4f52c1bb2546e5278ba9a207143d4f2a1cccfcf210bf28c9040c490130d2b", "target_block_id": "9afd0da59ad8169ceef417d230fdb06c7f8fd801853ad2c6495031c46b5a62cd", "parent_block_ids": ["6d9832d0aee2d93ee364043992ee1dd5cc75740f8328798600614eaab3114df4"], "signature": {"outcome": "sound", "key_id": "ed25519-68034a45f764e16f"}}
+    ]}
+  ]
+}

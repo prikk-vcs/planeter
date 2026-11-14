@@ -1,0 +1,12 @@
+/srv/planeter/repos/r1/.prikk/active/default/active.lock
+  kind: active
+  recorded pid: 2
+  recorded start: 1123856
+  liveness: unknown: taken in another pid or time namespace, where this pid number or start time means something else; not proof it is safe to clear
+/srv/planeter/repos/r1/.prikk/containers/objects.lock
+  kind: container:object-store
+  recorded pid: 2
+  recorded start: 1123856
+  liveness: unknown: taken in another pid or time namespace, where this pid number or start time means something else; not proof it is safe to clear
+
+liveness is advisory only: "does not appear to be running" and "unknown" are NOT proof it is safe to clear. What each word means, and what each platform records to decide it, is defined in one place (https://prikk.org/docs/reference/concurrency-locking.html#what-the-three-liveness-words-mean). Clear a lock only if you have independently confirmed the process that created it is gone.

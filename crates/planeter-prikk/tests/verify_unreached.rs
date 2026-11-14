@@ -79,7 +79,7 @@ fn the_driver_reads_a_stand_in_verify_that_carries_the_new_array() {
     let bin = dir.join("prikk");
     std::fs::write(
         &bin,
-        format!("#!/bin/sh\ncase \"$1\" in --version) echo 'prikk 0.54.1';; verify) cat {}; exit 0;; esac\n", new.display()),
+        format!("#!/bin/sh\ncase \"$1\" in --version) echo 'prikk 0.57.0';; verify) cat {}; exit 0;; esac\n", new.display()),
     )
     .unwrap();
     std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();
@@ -144,9 +144,15 @@ fn the_unreached_note_is_exactly_a_warning_of_that_code_with_no_named_repair() {
         ),
     ];
     for (i, text) in variants.iter().enumerate() {
-        let r = parse_doctor_output(text).unwrap();
-        assert!(!r.is_clean_for_recovery(), "variant {i}");
-        assert!(r.unreached_notes() < 2, "variant {i}");
+        match parse_doctor_output(text) {
+            Ok(r) => {
+                assert!(!r.is_clean_for_recovery(), "variant {i}");
+                assert!(r.unreached_notes() < 2, "variant {i}");
+            }
+            // Since the reader of 0.57.0 knows the unreached family as a closed list, a code of it that is not on the list is not read at
+            // all (recovery stops and keeps the text): stricter than "read, and not clean", never looser. Only the renamed code is such.
+            Err(_) => assert_eq!(i, 1, "only the renamed code may be unreadable"),
+        }
     }
     // One note beside an unrelated warning is not clean either.
     let beside = base
@@ -270,17 +276,49 @@ fn real_prikk_after_received_remove_reports_unreached_objects_and_verify_still_p
     );
     let after = before.verify().unwrap();
     assert!(after.verdict.ok, "{after:?}");
-    assert_eq!(after.unreached_count(), 2);
-    assert!(
+    // prikk 0.56.0 and later count the patches and blobs of the removed history too: one commit's patch and its blobs here, 5 objects in all.
+    let count = |k: UnreachedKind| {
         after
             .unreached_objects
             .iter()
-            .any(|u| u.object_type == UnreachedKind::Block)
+            .filter(|u| u.object_type == k)
+            .count()
+    };
+    assert_eq!(after.unreached_count(), 5, "{after:?}");
+    assert_eq!(
+        (
+            count(UnreachedKind::Block),
+            count(UnreachedKind::RefState),
+            count(UnreachedKind::Patch),
+            count(UnreachedKind::Blob)
+        ),
+        (1, 1, 1, 2)
     );
+    // Every entry is a kind the driver knows: nothing falls into `Other`.
     assert!(
-        after
+        !after
             .unreached_objects
             .iter()
-            .any(|u| u.object_type == UnreachedKind::RefState)
+            .any(|u| matches!(u.object_type, UnreachedKind::Other(_))),
+        "{after:?}"
     );
+    // The recovery view counts by doctor's code: the same repository, read by `doctor`, has the content as one info finding.
+    let doctor = Command::new("prikk")
+        .arg("doctor")
+        .current_dir(&forge)
+        .env("HOME", &fkeys)
+        .env("XDG_CONFIG_HOME", &fkeys)
+        .output()
+        .unwrap();
+    let report = parse_doctor_output(&String::from_utf8_lossy(&doctor.stdout)).unwrap();
+    let content = report
+        .unreached_content()
+        .expect("one unreached-content finding");
+    assert_eq!((content.objects, content.patches, content.blobs), (3, 1, 2));
+    assert_eq!(
+        report.unreached_notes(),
+        2,
+        "one warning each for the block and the ref-state"
+    );
+    assert!(report.is_clean_for_recovery());
 }

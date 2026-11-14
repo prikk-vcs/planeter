@@ -161,13 +161,16 @@ pub struct UnreachedObject {
     pub object_type: UnreachedKind,
 }
 
-/// The type of an unreached object: prikk documents `Block` or `RefState` (the two types publication trust applies to). Any
+/// The type of an unreached object: `block` and `ref-state` (the two types publication trust applies to) and, since prikk 0.56.0,
+/// `patch` and `blob` (content left behind by a received ref removed, a killed or failed accept, a refused import). Any
 /// other value is kept as it came, never mapped to one of these.
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(from = "String")]
 pub enum UnreachedKind {
     Block,
     RefState,
+    Patch,
+    Blob,
     Other(String),
 }
 
@@ -176,6 +179,8 @@ impl From<String> for UnreachedKind {
         match s.as_str() {
             "block" => UnreachedKind::Block,
             "ref-state" => UnreachedKind::RefState,
+            "patch" => UnreachedKind::Patch,
+            "blob" => UnreachedKind::Blob,
             _ => UnreachedKind::Other(s),
         }
     }

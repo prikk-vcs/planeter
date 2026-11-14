@@ -127,6 +127,26 @@ pub struct ExtractReport {
     pub total_bytes: u64,
     /// The largest single file: prikk's memory follows it (about twice, PK-56), so it is what admission needs.
     pub largest_file_bytes: u64,
+    /// prikk 0.56.0: for a claim point, the chain of pending claims it walked back through, **root to foot** (the point's own claim last);
+    /// empty for a ref or a block, and for a report of an older prikk (absent: `default`).
+    #[serde(default)]
+    pub chain: Vec<ChainClaim>,
+    /// prikk 0.56.0: the weakest signature outcome over the chain (`sound`, `unverifiable` or `invalid`); `None` when there is no chain.
+    #[serde(default)]
+    pub chain_signature: Option<crate::exchange::SignatureOutcome>,
+}
+
+/// One claim of an [`ExtractReport::chain`].
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct ChainClaim {
+    pub claim_id: String,
+    pub target_block_id: String,
+    pub parent_block_ids: Vec<String>,
+    pub signature: crate::exchange::ClaimSignature,
+    /// Other claims recognizing the same block; empty on a keyless forge (where a second claim for a block refuses
+    /// `claim-chain-shared-block`).
+    #[serde(default)]
+    pub other_candidates: Vec<String>,
 }
 
 /// `refusal-v1`'s fifteen ids (prikk 0.55.0, `extract.rs` `ExtractRefusalId`: the thirteen of 0.54.1 and the two 0.55.0 added), and

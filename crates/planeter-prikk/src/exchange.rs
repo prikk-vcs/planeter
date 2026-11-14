@@ -181,3 +181,90 @@ pub fn parse_pending_output(stdout: &str) -> Result<Vec<String>> {
     }
     Ok(ids)
 }
+
+// ------------------------------------------------------------------------------------------------ `sync pending --format json`
+
+/// `sync-pending-v1` (prikk 0.56.0): the held patches that a held recognition claim names and no held Block seals, each with the claims
+/// naming it. **Typed and strict, and not used anywhere yet**: it is the base of the file-by-file review view. Convention of this crate
+/// for its JSON readers: `schema_version` must be exactly `sync-pending-v1`; every field named here is required and of its type; **unknown
+/// fields are tolerated** (a later prikk may add some), and an unknown signature outcome is kept as it came ([`SignatureOutcome::Other`]).
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+pub struct SyncPending {
+    pub schema_version: String,
+    pub patches: Vec<PendingPatch>,
+}
+
+/// One pending patch and the claims that name it.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+pub struct PendingPatch {
+    pub patch_id: String,
+    pub claims: Vec<PendingClaim>,
+}
+
+/// One recognition claim naming a pending patch: the block it would seal and that block's parents.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+pub struct PendingClaim {
+    pub claim_id: String,
+    pub target_block_id: String,
+    pub parent_block_ids: Vec<String>,
+    pub signature: ClaimSignature,
+}
+
+/// The outcome of checking a claim's own MAINTAINER signature, with the key it names.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+pub struct ClaimSignature {
+    pub outcome: SignatureOutcome,
+    /// The key id the outcome names (absent when prikk names none).
+    #[serde(default)]
+    pub key_id: Option<String>,
+}
+
+/// `sound`, `unverifiable` (a key the repository has not adopted: every claim on a keyless forge) or `invalid` (an alarm). Anything else
+/// is kept as it came.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(from = "String")]
+pub enum SignatureOutcome {
+    Sound,
+    Unverifiable,
+    Invalid,
+    Other(String),
+}
+
+impl From<String> for SignatureOutcome {
+    fn from(s: String) -> Self {
+        match s.as_str() {
+            "sound" => SignatureOutcome::Sound,
+            "unverifiable" => SignatureOutcome::Unverifiable,
+            "invalid" => SignatureOutcome::Invalid,
+            _ => SignatureOutcome::Other(s),
+        }
+    }
+}
+
+/// Read the stdout of `prikk sync pending --format json`. Every id must be 64 lowercase hexadecimal characters; an id of another shape is
+/// an unreadable output, not a value.
+pub fn parse_pending_json(stdout: &str) -> Result<SyncPending> {
+    let report: SyncPending = crate::cli::parse_schema_json(stdout, "sync-pending-v1")?;
+    let bad = |what: &str, id: &str| {
+        PrikkError::Parse(format!("sync-pending-v1: {what} {id:?} is not a 64-hex id"))
+    };
+    for p in &report.patches {
+        if !is_hex64(&p.patch_id) {
+            return Err(bad("patch id", &p.patch_id));
+        }
+        for c in &p.claims {
+            for (what, id) in [
+                ("claim id", &c.claim_id),
+                ("target block id", &c.target_block_id),
+            ] {
+                if !is_hex64(id) {
+                    return Err(bad(what, id));
+                }
+            }
+            if let Some(id) = c.parent_block_ids.iter().find(|i| !is_hex64(i)) {
+                return Err(bad("parent block id", id));
+            }
+        }
+    }
+    Ok(report)
+}

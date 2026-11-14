@@ -2,8 +2,10 @@
 //! procedure (RFC 004 D-6, part 4).
 //!
 //! **What the procedure removes, and on whose evidence.** An accept that did not finish leaves locks of prikk's
-//! storage engine behind (`active.lock`, `objects.lock`) and a prefix of its patches pending. Clearing those locks is
-//! the one place planeter deliberately removes files of the storage engine, so every removal rests on **witnesses**
+//! storage engine behind (`active.lock`, `objects.lock`). **It leaves no pending prefix** (since prikk 0.56.0 the claims are written last and
+//! `sync pending` lists a patch only once a claim names it): a killed or failed accept leaves *unreached patch and blob objects*
+//! (`PRIKK-DOCTOR-UNREACHED-CONTENT` at `info` level, `verify`'s `unreached_objects`; the bytes stay, `doctor` reports no error, a resend
+//! completes), and `sync pending` is as it was. Clearing those locks is the one place planeter deliberately removes files of the storage engine, so every removal rests on **witnesses**
 //! that must all agree, and every step is written to a **recovery record** before it is taken:
 //!
 //! 1. the flag is set, and its cause is one of ours (an unfinished accept, or a server that stopped during a write);
@@ -1104,13 +1106,23 @@ impl RecoveryService {
         let s = rec.begin("doctor")?;
         let mut doctor = match &g.doctor {
             Ok((r, text)) => {
-                let note = match r.unreached_notes() {
+                let mut note = match r.unreached_notes() {
                     0 => String::new(),
                     n => format!(
                         "\nnote: {n} warning(s) of {} (an object nothing refers to; the bytes stay, no command removes them yet) do not keep recovery from running",
                         planeter_prikk::maintenance::UNREACHED_OBJECT_CODE
                     ),
                 };
+                // prikk 0.57.0: the patches and blobs a killed or failed accept left are one `info` finding with their counts.
+                if let Some(c) = r.unreached_content() {
+                    note.push_str(&format!(
+                        "\nnote: {} object(s) of unreached content ({} patch(es), {} blob(s); {}): left behind by an accept that did not finish, or a removed history; the bytes stay and this does not keep recovery from running",
+                        c.objects,
+                        c.patches,
+                        c.blobs,
+                        planeter_prikk::maintenance::UNREACHED_CONTENT_CODE
+                    ));
+                }
                 rec.end(s, "ok", &format!("{text}{note}"));
                 r.clone()
             }

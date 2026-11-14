@@ -45,8 +45,40 @@ pub struct DoctorReport {
     pub diagnostics: Vec<Diagnostic>,
 }
 
-/// The code prikk 0.54 gives to an object that nothing refers to (`verify` reports the same as `unreached objects`).
+/// The code prikk 0.54 gives to an object that nothing refers to (`verify` reports the same as `unreached objects`). Since prikk 0.57.0
+/// it is given only to a **Block or RefState**; unreached patches and blobs are one [`UNREACHED_CONTENT_CODE`] finding.
 pub const UNREACHED_OBJECT_CODE: &str = "PRIKK-DOCTOR-UNREACHED-OBJECT";
+
+/// The code prikk 0.57.0 gives to **all** unreached patches and blobs together: one finding at `info` level, "unreached content: N
+/// object(s) (P patch(es), B blob(s)) that nothing reaches …", with the recommendation "nothing to do; the bytes stay until a command that
+/// reclaims them exists". (Content left behind by a killed or failed accept, a received ref removed, a refused import.)
+pub const UNREACHED_CONTENT_CODE: &str = "PRIKK-DOCTOR-UNREACHED-CONTENT";
+
+/// Every `PRIKK-DOCTOR-UNREACHED-…` code this reader knows. **A code of that family that is not in this list makes the output unreadable**
+/// (recovery stops and keeps the text), so a renamed or split finding is never silently counted as something else.
+pub const KNOWN_UNREACHED_CODES: [&str; 2] = [UNREACHED_OBJECT_CODE, UNREACHED_CONTENT_CODE];
+
+/// The counts in an [`UNREACHED_CONTENT_CODE`] finding.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct UnreachedContent {
+    pub objects: u32,
+    pub patches: u32,
+    pub blobs: u32,
+}
+
+/// Read `unreached content: N object(s) (P patch(es), B blob(s)) …`; `None` unless it has exactly that start and `N = P + B`.
+pub fn parse_unreached_content(message: &str) -> Option<UnreachedContent> {
+    let rest = message.strip_prefix("unreached content: ")?;
+    let (n, rest) = rest.split_once(" object(s) (")?;
+    let (p, rest) = rest.split_once(" patch(es), ")?;
+    let (b, _) = rest.split_once(" blob(s))")?;
+    let (objects, patches, blobs) = (n.parse().ok()?, p.parse().ok()?, b.parse().ok()?);
+    (objects == patches + blobs).then_some(UnreachedContent {
+        objects,
+        patches,
+        blobs,
+    })
+}
 
 impl Diagnostic {
     /// A **warning of exactly [`UNREACHED_OBJECT_CODE`] that names no repair** ("the bytes stay; no command removes them
@@ -60,6 +92,14 @@ impl Diagnostic {
 }
 
 impl DoctorReport {
+    /// The unreached content prikk 0.57.0 reports (patches and blobs that nothing reaches), if it does.
+    pub fn unreached_content(&self) -> Option<UnreachedContent> {
+        self.diagnostics
+            .iter()
+            .filter(|d| d.code == UNREACHED_CONTENT_CODE)
+            .find_map(|d| parse_unreached_content(&d.message))
+    }
+
     /// How many diagnostics are [`Diagnostic::is_unreached_note`]s.
     pub fn unreached_notes(&self) -> u32 {
         self.diagnostics
@@ -94,7 +134,12 @@ impl DoctorReport {
     /// **text for the plan**: what may be *run* is decided by [`DoctorReport::repair_plan`].
     pub fn named_repairs(&self) -> Vec<String> {
         let mut out: Vec<String> = Vec::new();
-        for d in &self.diagnostics {
+        // Information names no repair: its text may mention a flag of another command (`verify --format json`).
+        for d in self
+            .diagnostics
+            .iter()
+            .filter(|d| d.severity != Severity::Info)
+        {
             for f in d.named_flags() {
                 if !out.contains(&f) {
                     out.push(f);
@@ -240,6 +285,23 @@ pub fn parse_doctor_output(stdout: &str) -> Result<DoctorReport> {
                 let (code, message) = rest
                     .split_once("]: ")
                     .ok_or_else(|| unreadable("a diagnostic has no `]: `"))?;
+                // The unreached family is closed: a code of it that this reader does not know, or the content finding in another
+                // shape than prikk 0.57.0 gives it (one finding, `info`, with the counts), is not guessed at.
+                if code.starts_with("PRIKK-DOCTOR-UNREACHED-") {
+                    if !KNOWN_UNREACHED_CODES.contains(&code) {
+                        return Err(unreadable(
+                            "an unreached-object code this reader does not know",
+                        ));
+                    }
+                    if code == UNREACHED_CONTENT_CODE
+                        && (severity != Severity::Info
+                            || parse_unreached_content(message.trim()).is_none())
+                    {
+                        return Err(unreadable(
+                            "the unreached-content finding is not an info line with its counts",
+                        ));
+                    }
+                }
                 diagnostics.push(Diagnostic {
                     severity,
                     code: code.to_owned(),
@@ -277,8 +339,26 @@ pub struct LockInfo {
     /// `active`, `container:object-store`, …
     pub kind: String,
     pub recorded_pid: u32,
+    /// prikk 0.57.0: when the holder started, as the platform counts it (kept as text, never used); `None` before 0.57.0.
+    pub recorded_start: Option<String>,
     /// prikk's own words about whether the process is running: kept for the record, **never trusted**.
     pub liveness: String,
+}
+
+/// One detail line of a lock (`  name: value`), exactly the one named.
+fn detail(lines: &mut std::iter::Peekable<std::str::Lines<'_>>, name: &str) -> Result<String> {
+    let next = lines
+        .next()
+        .ok_or_else(|| unreadable("a lock without its detail lines"))?;
+    next.strip_prefix("  ")
+        .and_then(|l| l.strip_prefix(name))
+        .and_then(|l| l.strip_prefix(": "))
+        .map(|v| v.trim().to_owned())
+        .ok_or_else(|| {
+            unreadable(
+                "a lock's detail lines are not kind, recorded pid, [recorded start,] liveness",
+            )
+        })
 }
 
 /// Read the stdout of `prikk unlock` (the listing; it clears nothing).
@@ -309,27 +389,34 @@ pub fn parse_unlock_output(stdout: &str) -> Result<Vec<LockInfo>> {
                 "a line that is neither a lock path nor the known text",
             ));
         }
-        let mut field = |name: &str| -> Result<String> {
-            let next = lines
-                .next()
-                .ok_or_else(|| unreadable("a lock without its detail lines"))?;
-            next.strip_prefix("  ")
-                .and_then(|l| l.strip_prefix(name))
-                .and_then(|l| l.strip_prefix(": "))
-                .map(|v| v.trim().to_owned())
-                .ok_or_else(|| {
-                    unreadable("a lock's detail lines are not kind, recorded pid, liveness")
-                })
+        let kind = detail(&mut lines, "kind")?;
+        let pid = detail(&mut lines, "recorded pid")?;
+        // prikk 0.57.0 records when the holder started (`recorded start: <number>`, in the platform's own unit) beside its pid, and
+        // judges `running`, `gone` or `unknown` by it. Optional (0.54 to 0.56 print none); no other detail line is known.
+        let start = match lines.peek() {
+            Some(next) if next.starts_with("  recorded start: ") => {
+                let value = lines
+                    .next()
+                    .and_then(|l| {
+                        l.strip_prefix("  recorded start: ")
+                            .map(|v| v.trim().to_owned())
+                    })
+                    .unwrap_or_default();
+                if value.is_empty() || !value.bytes().all(|b| b.is_ascii_digit()) {
+                    return Err(unreadable("a recorded start is not a number"));
+                }
+                Some(value)
+            }
+            _ => None,
         };
-        let kind = field("kind")?;
-        let pid = field("recorded pid")?;
-        let liveness = field("liveness")?;
+        let liveness = detail(&mut lines, "liveness")?;
         out.push(LockInfo {
             path: line.to_owned(),
             kind,
             recorded_pid: pid
                 .parse()
                 .map_err(|_| unreadable("a recorded pid is not a number"))?,
+            recorded_start: start,
             liveness,
         });
     }
