@@ -3096,13 +3096,57 @@ fn text(r: &Reply) -> String {
     String::from_utf8_lossy(&r.body).into_owned()
 }
 
+/// The claims of a proposal, **in the order they can be sealed**: parent block first. (prikk 0.57.0 refuses to seal a claim whose parent block
+/// the ref does not reach, so sealing in claim-id order, which is random, fails by chance. The order is read from `sync pending --format json`:
+/// a claim whose parent is another claim's target block comes after it. Claims the forge no longer lists keep their place at the end.)
 fn claims_of(w: &World, id: &str) -> Vec<String> {
-    w.changes
+    let claims: Vec<String> = w
+        .changes
         .revisions_of(id)
         .unwrap()
         .iter()
         .flat_map(|r| r.claim_ids.clone())
-        .collect()
+        .collect();
+    let forge_keys = w.base.join("forge-keys");
+    let listing = prikk(
+        &repo_dir(w, "forge"),
+        &forge_keys,
+        &["sync", "pending", "--format", "json"],
+    );
+    let doc: serde_json::Value = serde_json::from_str(&listing).unwrap();
+    // claim id -> (target block, parent blocks)
+    let mut info: std::collections::BTreeMap<String, (String, Vec<String>)> = Default::default();
+    for p in doc["patches"].as_array().unwrap() {
+        for c in p["claims"].as_array().unwrap() {
+            let parents = c["parent_block_ids"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|x| x.as_str().unwrap().to_owned())
+                .collect();
+            info.insert(
+                c["claim_id"].as_str().unwrap().to_owned(),
+                (c["target_block_id"].as_str().unwrap().to_owned(), parents),
+            );
+        }
+    }
+    let mut ordered: Vec<String> = Vec::new();
+    let mut rest: Vec<String> = claims.clone();
+    while !rest.is_empty() {
+        let ready = rest.iter().position(|c| match info.get(c) {
+            // Ready when none of its parent blocks is the target of a claim still waiting.
+            Some((_, parents)) => !rest.iter().any(|o| {
+                o != c
+                    && info
+                        .get(o)
+                        .is_some_and(|(target, _)| parents.contains(target))
+            }),
+            None => true,
+        });
+        ordered.push(rest.remove(ready.expect("the claims of a proposal form no cycle")));
+    }
+    assert_eq!(ordered.len(), claims.len());
+    ordered
 }
 
 /// Seal one accepted claim into `heads/main` of the forge, with the client's key. This models **"a key-holding action published
