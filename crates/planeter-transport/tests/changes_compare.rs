@@ -510,3 +510,29 @@ fn the_empty_tree_is_a_valid_before_side() {
     assert_eq!((entries.len(), totals.lines_added), (1, 1));
     assert_eq!(entries[0].status, Status::Added);
 }
+
+#[test]
+fn two_trees_that_are_each_within_the_bound_can_still_change_more_files_than_the_bound() {
+    let s = scratch("manychanges");
+    let (b, a) = (s.join("b"), s.join("a"));
+    fs::create_dir_all(&b).unwrap();
+    fs::create_dir_all(&a).unwrap();
+    for i in 0..MAX_ENTRIES {
+        fs::write(b.join(format!("gone{i}")), "").unwrap();
+        fs::write(a.join(format!("new{i}")), "").unwrap();
+    }
+    let (bt, at) = (Tree::walk(&b).unwrap(), Tree::walk(&a).unwrap());
+    assert_eq!((bt.nodes.len(), at.nodes.len()), (MAX_ENTRIES, MAX_ENTRIES));
+    let r = compare(
+        &bt,
+        &at,
+        &Want::All,
+        Instant::now() + Duration::from_secs(120),
+        &mut |_| {},
+    );
+    assert_eq!(
+        r.unwrap_err(),
+        CompareError::TooMany,
+        "20,000 changed files: past the bound"
+    );
+}
