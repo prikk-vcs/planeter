@@ -91,8 +91,8 @@ Memory (prikk 0.54.1, measured 2026-10-25, the data segment the memory ceiling l
 (8 MiB edited 8 times: 7.0 ×; 63 times: 7.9 ×; 1 MiB or 16 MiB edited 63 times: 8.6 ×). `--plan-only` costs the **same memory** as
 a write (0.015 s against 1.5 s for 1,000 files, but the same peak), so a plan does not make admission cheaper.
 
-So the cost rule (`ReadVerb::Extract`) is **9.0 × the configured `--max-bytes` + 8 MiB** (floor 16 MiB), under the usual 1.5 ×
-ceiling; the store size does not enter. At the default bound that is **584 MiB** of the heavy pool: a host with about 3 GiB of
+So the cost rule (`ReadVerb::Extract`) is **9.5 × the configured `--max-bytes` + 8 MiB** (9.0 × until 0.6.0; on prikk 0.57.0 a file edited 128 times reached 9.16 ×) (floor 16 MiB), under the usual 1.5 ×
+ceiling; the store size does not enter. At the default bound that is **616 MiB** (584 MiB until 0.6.0) of the heavy pool: a host with a little over 3 GiB of
 usable memory or more admits it at the default budget; a smaller host lowers the bound. It over-reserves for the usual point
 (a tree costs about 2 MiB) and cannot under-reserve for the worst measured.
 

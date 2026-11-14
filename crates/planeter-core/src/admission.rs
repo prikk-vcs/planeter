@@ -62,8 +62,8 @@ pub const CONTENT_MAX_BYTES: u64 = 4 * MIB;
 /// × eleven fixtures) fit their cost and none tripped its ceiling; the highest peak RSS / ceiling is 0.686 (0.55.0: 0.665) and the highest smallest
 /// working `RLIMIT_DATA` / ceiling 0.815 (the same row, `bin64one`/`verify`). `extract`, 42 shapes: all extract with the same file counts and bytes;
 /// 26 figures moved by more than 5 %, all upwards, none by more than 7 MiB; the worst `VmData` / largest-file ratio is **9.16** (`deepedit8x128`: 8 MiB
-/// edited 128 times, plan: 73.3 MiB against 66.8 on 0.55.0), above the 9.0 × of the rule alone but inside the rule's cost with its 8 MiB base
-/// (80 MiB) and far inside the ceiling (120 MiB). Logs: `prikk-0-57-rebaseline-logs/` of the review request. The table test requires the floor's own
+/// edited 128 times, plan: 73.3 MiB against 66.8 on 0.55.0), above the 9.0 × that the rule had until 0.6.0 (now 9.5 ×, which covers it with 3.7 %, and
+/// with the 8 MiB base the rule's cost is 84 MiB against the 73.3 held) and far inside the ceiling (126 MiB). Logs: `prikk-0-57-rebaseline-logs/` of the review request. The table test requires the floor's own
 /// minor version, so this is the version the table was last measured on.
 pub const MEASURED_ON: (u64, u64, u64) = (0, 57, 0);
 
@@ -106,7 +106,7 @@ pub struct CostRule {
     pub store_tenths: u64,
     /// The multiple of [`CONTENT_MAX_BYTES`], in tenths (31 = 3.1 ×): the bounded content a read holds.
     pub content_tenths: u64,
-    /// The multiple of the **extraction byte bound** (`--max-bytes`), in tenths (90 = 9.0 ×). Zero for every verb but `extract`.
+    /// The multiple of the **extraction byte bound** (`--max-bytes`), in tenths (95 = 9.5 ×). Zero for every verb but `extract`.
     pub bound_tenths: u64,
     /// A fixed addition, for `extract` (prikk's own working set and the pending set it reads). Zero for the others.
     pub base: u64,
@@ -145,9 +145,9 @@ impl ReadVerb {
             // `extract` (prikk 0.54.1, part 5b T4): `VmData` = 0.26 MiB + 2.00 × the largest file (+ 0.7 MiB per 1,000
             // pending patches) for a tree, one big file, a claim, a plan or a write alike; a file **edited many times**,
             // replayed from the start, reaches 7.0 to 8.6 × its size (8 MiB × 8 edits: 7.0; × 63: 7.9; 1 MiB × 63: 8.6;
-            // 16 MiB × 63: 8.6; 8 MiB × 128: 8.35, and 9.16 on 0.57.0, see `MEASURED_ON`). 9.0 × covers the worst measured on 0.54.1 with 5 %; the ceiling (1.5 ×) is 13.5 ×.
+            // 16 MiB × 63: 8.6; 8 MiB × 128: 8.35, and 9.16 on 0.57.0, see `MEASURED_ON`). 9.0 × covered the worst measured on 0.54.1 with 5 %; the worst on 0.57.0 (9.16) is above it by itself, so the multiple is **9.5 ×** (covers 9.16 with 3.7 %, the worst of 0.54.1 with 10 %); the ceiling (1.5 ×) is 14.25 ×.
             // The store size does not enter. 8 MiB is prikk's floor plus the pending set (5,000 pending: +4 MiB).
-            ReadVerb::Extract => (0, 0, 90, 8 * MIB, COST_FLOOR),
+            ReadVerb::Extract => (0, 0, 95, 8 * MIB, COST_FLOOR),
             // `sync have` (prikk 0.55.0 and 0.54.1 alike, RFC 004 part 8 T0): the file is 32 bytes a patch plus 60 (92 B for 1, 32,060 B for
             // 1,000, 160,060 B for 5,000); VmPeak 8.4, 8.9 and 10.0 MiB at those sizes, in one to four milliseconds; the least RLIMIT_DATA
             // under which it still runs is 1 MiB (1 and 1,000 patches) and 2 MiB (5,000); after the forge has accepted 5,000 unsealed

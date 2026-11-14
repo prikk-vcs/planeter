@@ -498,6 +498,15 @@ const EXTRACT_MEASURED: &[(&str, u64, u64, u64, u64)] = &[
         1,
         668,
     ),
+    // prikk 0.57.0 (2026-11-14, `deepedit8x128`): the same shape held 73.3 MiB, the worst figure measured (VmData / largest file 9.16), above
+    // the 9.0 x that this rule had until 0.6.0.
+    (
+        "8 MiB text edited 128 times, replayed (prikk 0.57.0)",
+        8390607,
+        8390607,
+        1,
+        733,
+    ),
     ("one file of 16 MiB", 16777216, 16777216, 1, 322),
     (
         "16 MiB text edited 63 times, replayed",
@@ -538,14 +547,16 @@ fn extract_never_costs_less_than_a_measured_shape_held_whatever_the_bound_is_set
 }
 
 #[test]
-fn extract_costs_nine_times_the_bound_plus_eight_mib_with_a_floor_and_does_not_look_at_the_store() {
+fn extract_costs_nine_and_a_half_times_the_bound_plus_eight_mib_with_a_floor_and_does_not_look_at_the_store()
+ {
     assert_eq!(
         ReadVerb::Extract.cost_with_bound(0, 64 * MIB),
-        9 * 64 * MIB + 8 * MIB
+        608 * MIB + 8 * MIB,
+        "9.5 x 64 MiB + 8 MiB"
     );
     assert_eq!(
         ReadVerb::Extract.cost_with_bound(1 << 40, 64 * MIB),
-        9 * 64 * MIB + 8 * MIB,
+        608 * MIB + 8 * MIB,
         "the store does not enter"
     );
     assert_eq!(ReadVerb::Extract.cost_with_bound(0, 0), COST_FLOOR);
@@ -556,7 +567,7 @@ fn extract_costs_nine_times_the_bound_plus_eight_mib_with_a_floor_and_does_not_l
     );
     // `cost` is the cost under the default bound (64 MiB), which is a heavy-pool cost.
     assert_eq!(planeter_prikk::extract::DEFAULT_MAX_BYTES, 64 * MIB);
-    assert_eq!(ReadVerb::Extract.cost(123), 584 * MIB);
+    assert_eq!(ReadVerb::Extract.cost(123), 616 * MIB);
     assert!(ReadVerb::Extract.cost(0) > LIGHT_CLASS_MAX_COST);
     assert_eq!(ReadVerb::Extract.name(), "extract");
     // No overflow at the extremes.
