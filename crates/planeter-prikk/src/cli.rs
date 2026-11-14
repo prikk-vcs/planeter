@@ -325,6 +325,13 @@ impl CliPrikkRepo {
         }
     }
 
+    /// `sync pending --format json` (prikk 0.56.0 and later), read by the strict `sync-pending-v1` reader: the held patches that a held
+    /// claim names, each with its claims. The review view reads the chain of a revision's claims from it.
+    pub fn sync_pending_json(&self) -> Result<crate::exchange::SyncPending> {
+        let stdout = self.run(&["sync", "pending", "--format", "json"])?;
+        crate::exchange::parse_pending_json(&stdout)
+    }
+
     /// Run a prikk subcommand, returning its stdout. A non-zero exit is a typed [`PrikkError::Command`]
     /// (or [`PrikkError::CeilingExceeded`]).
     fn run(&self, args: &[&str]) -> Result<String> {

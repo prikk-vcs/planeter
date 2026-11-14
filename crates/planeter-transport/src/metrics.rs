@@ -116,6 +116,9 @@ pub struct Snapshot {
     pub prikk_output_too_large: BTreeMap<String, u64>,
     /// Reads of the received refs' logs (sightings, display only) that failed and were shown as "no sightings" (IS-55).
     pub sightings_unavailable: u64,
+    /// The review view (RFC 005 part 6): one count per outcome (`ok`, `not_one_change`, `tree_too_large`, `busy`, `timeout`, `claim_not_held`,
+    /// `failed`), `cache_hit` and `extractions` (the pairs of extractions made). No file name, path or content is ever counted or logged.
+    pub changes: BTreeMap<String, u64>,
 }
 
 impl Snapshot {
@@ -255,6 +258,11 @@ impl Metrics {
     /// One request refused, by the stable reason code (`busy`, `rate_limited`, `not_verified`, …).
     pub fn refusal(&self, reason: &str) {
         self.with(|m| *m.refusals.entry(reason.to_owned()).or_insert(0) += 1);
+    }
+
+    /// One answer of the review view, by outcome (or `cache_hit`, `extractions`).
+    pub fn changes(&self, outcome: &str) {
+        self.with(|m| *m.changes.entry(outcome.to_owned()).or_insert(0) += 1);
     }
 
     /// One failed read of the received logs; returns the count since start.
