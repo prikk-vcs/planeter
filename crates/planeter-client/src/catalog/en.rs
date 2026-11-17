@@ -14,7 +14,7 @@ pub static CATALOG: &[Entry] = &[
     ),
     msg(
         "help.propose",
-        "planeter-client propose <https://host/owner/name> [options]\n\nBuilds your work against what the server already holds, with your own prikk, and sends it as a proposal. Nothing on the server is signed or merged: the work is held for review.\n\n  --ref heads/NAME          the branch of your repository to send (default heads/main)\n  --proposal ID             add a revision to this proposal instead of opening a new one\n  --title TITLE             the title of a new proposal (required for a new one)\n  --description-file FILE   the description, from FILE\n  --dry-run                 build and say what would be sent; send nothing\n  --retry                   send the same work again after the server said it did not finish\n  --token-file FILE, --cacert FILE, --lang, --verbose\n\nRun it inside your prikk repository.\n\nExample:\n  planeter-client propose https://forge.example/alice/app --title \"Fix the parser\"",
+        "planeter-client propose <https://host/owner/name> [options]\n\nBuilds your work against what the server already holds, with your own prikk, and sends it as a proposal. Nothing on the server is signed or merged: the work is held for review.\n\n  --ref heads/NAME          the branch of your repository to send (default heads/main)\n  --proposal ID             add a revision to this proposal instead of opening a new one; it keeps the proposal's own title, description and target branch\n  --title TITLE             the title of a new proposal (required for a new one)\n  --description-file FILE   the description, from FILE\n  --dry-run                 build and say what would be sent; send nothing\n  --retry                   send the same work again after the server said it did not finish\n  --token-file FILE, --cacert FILE, --lang, --verbose\n\nRun it inside your prikk repository.\n\nExample:\n  planeter-client propose https://forge.example/alice/app --title \"Fix the parser\"",
     ),
     msg(
         "help.clone",
@@ -234,6 +234,10 @@ pub static CATALOG: &[Entry] = &[
     msg(
         "propose.title_needed",
         "A new proposal needs a title. Add --title \"…\", or add --proposal ID to extend one that exists.",
+    ),
+    msg(
+        "propose.revision_keeps",
+        "A revision keeps the title and the description of the proposal it is added to, so --title and --description-file cannot be used with --proposal. Leave them out, or leave --proposal out to open a new proposal.",
     ),
     msg(
         "propose.incomplete",

@@ -110,6 +110,30 @@ fn spawn_ready(mut cmd: Command, ready: &str) -> Child {
     child
 }
 
+/// A plain `GET` to the server's own port: the status and the whole raw answer (the pages carry their length, so a phrase is not split).
+fn http_get(port: u16, path: &str, token: Option<&str>) -> (u16, String) {
+    use std::io::{Read, Write};
+    let mut s = TcpStream::connect(("127.0.0.1", port)).unwrap();
+    s.set_read_timeout(Some(Duration::from_secs(60))).unwrap();
+    let auth = token
+        .map(|t| format!("Authorization: Bearer {t}\r\n"))
+        .unwrap_or_default();
+    write!(
+        s,
+        "GET {path} HTTP/1.1\r\nHost: 127.0.0.1:{port}\r\nAccept-Language: en\r\n{auth}Connection: close\r\n\r\n"
+    )
+    .unwrap();
+    let mut raw = Vec::new();
+    s.read_to_end(&mut raw).unwrap();
+    let text = String::from_utf8_lossy(&raw).into_owned();
+    let status = text
+        .split_whitespace()
+        .nth(1)
+        .and_then(|c| c.parse().ok())
+        .unwrap_or(0);
+    (status, text)
+}
+
 struct Stack {
     server: Child,
     terminator: Child,
@@ -453,6 +477,103 @@ fn the_client_clones_fetches_and_proposes_against_a_real_server_behind_tls() {
             .len(),
         1
     );
+
+    // ---- a second revision of the same proposal, with the real client: `--proposal ID` after more work (IS-59). The real server refuses
+    // a `target_ref`, a `title` or a `description` beside a proposal id, so a client that sends one cannot add a revision at all.
+    let proposal_id = changes()
+        .list_changes(&RepoId::new("r1"), None)
+        .unwrap()
+        .remove(0)
+        .change_id;
+    std::fs::write(client_repo.join("file-2.txt"), "content 2\n".repeat(10)).unwrap();
+    prikk(
+        &client_repo,
+        &client_keys,
+        &["commit", "--from-worktree", "-m", "change 2"],
+    );
+    prikk(&client_repo, &client_keys, &["seal", "--allow-no-audit"]);
+    // A title (or a description) with a proposal id is refused by the client itself: the address below has no server, so a single
+    // connection attempt would be a network failure (exit 3), not this usage refusal (exit 2).
+    let r = run(
+        &[
+            "propose",
+            "https://127.0.0.1:1/alice/app",
+            "--proposal",
+            &proposal_id,
+            "--title",
+            "Another title",
+        ],
+        &client_repo,
+        &client_keys,
+    );
+    assert_eq!(r.code, Some(2), "{}{}", r.stdout, r.stderr);
+    assert!(
+        r.stderr.contains(
+            "A revision keeps the title and the description of the proposal it is added to"
+        ),
+        "{}",
+        r.stderr
+    );
+    assert!(
+        !r.stdout.contains("Asking"),
+        "nothing was asked of any server: {}",
+        r.stdout
+    );
+    let r = run(
+        &["propose", &url, "--proposal", &proposal_id],
+        &client_repo,
+        &client_keys,
+    );
+    assert_eq!(r.code, Some(0), "{}{}", r.stdout, r.stderr);
+    assert!(
+        r.stdout
+            .contains(&format!("Added as revision 2 of proposal #{proposal_id}")),
+        "{}",
+        r.stdout
+    );
+    assert_eq!(
+        changes()
+            .list_changes(&RepoId::new("r1"), None)
+            .unwrap()
+            .len(),
+        1,
+        "the same proposal, not a new one"
+    );
+    let revisions = changes().revisions_of(&proposal_id).unwrap();
+    assert_eq!(
+        revisions.iter().map(|r| r.seq).collect::<Vec<_>>(),
+        vec![1, 2],
+        "the proposal has two revisions"
+    );
+    assert_eq!(
+        revisions[0].added_patch_ids.len(),
+        2,
+        "the first revision added its two patches"
+    );
+    assert_eq!(
+        revisions[1].added_patch_ids.len(),
+        1,
+        "the second revision added only the new patch: {:?}",
+        revisions[1].added_patch_ids
+    );
+    // The review view of revision 2 answers (the page and the JSON), and names the file the second revision brought.
+    let (status, page) = http_get(
+        port,
+        &format!("/alice/app/proposals/{proposal_id}/revisions/2/changes"),
+        None,
+    );
+    assert_eq!(status, 200, "{page}");
+    assert!(
+        page.contains("Changes in revision 2 of proposal") && page.contains("file-2.txt"),
+        "{page}"
+    );
+    let (status, json) = http_get(
+        port,
+        &format!("/api/v1/repos/alice/app/proposals/{proposal_id}/revisions/2/changes"),
+        Some("tok-alice"),
+    );
+    assert_eq!(status, 200, "{json}");
+    assert!(json.contains("\"path\":\"file-2.txt\""), "{json}");
 
     // ---- fetch again: the server's state moved with the accept, so the new state comes as received copies.
     let r = run(&["fetch"], &target_dir, &reader_home);

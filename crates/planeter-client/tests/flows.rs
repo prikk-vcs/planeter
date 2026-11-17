@@ -1189,3 +1189,190 @@ fn a_token_file_other_users_can_read_is_not_used_and_without_a_token_a_send_is_n
     assert_eq!(r.code, 0, "{}{}", r.out, r.err);
     assert!(r.out.contains("Dry run: nothing was sent"), "{}", r.out);
 }
+
+/// The metadata of the one propose request a stub saw (the JSON between the framing's length and the artifact).
+fn sent_meta(seen: &Arc<Mutex<Vec<Req>>>) -> serde_json::Value {
+    let sent = seen.lock().unwrap().clone();
+    let sent: Vec<&Req> = sent
+        .iter()
+        .filter(|r| r.path.ends_with("/transport/propose"))
+        .collect();
+    assert_eq!(sent.len(), 1, "one propose request");
+    let body = &sent[0].body;
+    assert!(body.starts_with(b"PLANETER-PROPOSE-1\n"));
+    let m = u64::from_be_bytes(body[19..27].try_into().unwrap()) as usize;
+    serde_json::from_slice(&body[27..27 + m]).unwrap()
+}
+
+#[test]
+fn a_revision_of_an_existing_proposal_sends_the_proposal_and_never_a_target_a_title_or_a_description()
+ {
+    if !have_prikk() {
+        eprintln!("skipping: needs prikk on PATH");
+        return;
+    }
+    let seen: Arc<Mutex<Vec<Req>>> = Arc::new(Mutex::new(Vec::new()));
+    let s2 = seen.clone();
+    let (w, server, _, _) = setup_propose(
+        "revision-meta",
+        Box::new(move |r| {
+            s2.lock().unwrap().push(r.clone());
+            full(
+                200,
+                &[("Content-Type", "application/json")],
+                br#"{"proposal_id":"c-42","revision":{"id":"r-2","seq":2},"created_proposal":false,"already_recorded":false,"added_count":1,"message":"held."}"#,
+            )
+        }),
+    );
+    w.commit(1, "more work");
+    let (state, tok) = (w.dir.join("state"), token_file(&w.dir));
+    let r = client(
+        &[
+            "propose",
+            &url(&server),
+            "--proposal",
+            "c-42",
+            "--token-file",
+            tok.to_str().unwrap(),
+        ],
+        &w.maintainer,
+        &w.keys,
+        &state,
+        "",
+        false,
+        &[],
+    );
+    assert_eq!(r.code, 0, "{}{}", r.out, r.err);
+    assert!(
+        r.out.contains("Added as revision 2 of proposal #c-42"),
+        "{}",
+        r.out
+    );
+    let meta = sent_meta(&seen);
+    assert_eq!(meta["proposal"], "c-42");
+    for field in ["target_ref", "title", "description"] {
+        assert!(
+            meta.get(field).is_none(),
+            "{field} is the proposal's own and is not sent with a proposal id: {meta}"
+        );
+    }
+    assert!(meta["base"].is_string() && meta["declared_patches"].is_array());
+    assert!(
+        meta["client"]
+            .as_str()
+            .unwrap()
+            .starts_with("planeter-client/")
+    );
+}
+
+#[test]
+fn a_title_or_a_description_with_a_proposal_id_is_refused_here_before_any_request_in_both_languages()
+ {
+    if !have_prikk() {
+        eprintln!("skipping: needs prikk on PATH");
+        return;
+    }
+    let (w, server, _, _) = setup_propose("revision-keeps", Box::new(|_| full(500, &[], b"{}")));
+    w.commit(1, "more work");
+    let (state, tok) = (w.dir.join("state"), token_file(&w.dir));
+    let description = w.dir.join("description.txt");
+    std::fs::write(&description, "a description\n").unwrap();
+    let missing = w.dir.join("no-such-description.txt");
+    let address = url(&server);
+    for (extra, lang, phrase) in [
+        (
+            vec!["--title", "A new title"],
+            "en",
+            "A revision keeps the title and the description of the proposal it is added to",
+        ),
+        (
+            vec!["--description-file", description.to_str().unwrap()],
+            "en",
+            "cannot be used with --proposal",
+        ),
+        // the description file is not even read: its being missing is not what is said
+        (
+            vec!["--description-file", missing.to_str().unwrap()],
+            "en",
+            "cannot be used with --proposal",
+        ),
+        (
+            vec!["--title", "新しいタイトル"],
+            "ja",
+            "追加先の提案のタイトルと説明がそのまま使われます",
+        ),
+    ] {
+        let mut args = vec![
+            "propose",
+            &address,
+            "--proposal",
+            "c-42",
+            "--token-file",
+            tok.to_str().unwrap(),
+            "--lang",
+            lang,
+        ];
+        args.extend(extra);
+        let r = client(&args, &w.maintainer, &w.keys, &state, "", false, &[]);
+        assert_eq!(r.code, 2, "a usage refusal: {}{}", r.out, r.err);
+        assert!(r.err.contains(phrase), "{phrase:?} not in {}", r.err);
+        assert!(!r.err.contains("tok-secret"));
+    }
+    assert!(
+        server.seen().is_empty(),
+        "refused before any request: the server saw {:?}",
+        server.seen().iter().map(|r| &r.path).collect::<Vec<_>>()
+    );
+}
+
+#[test]
+fn the_reason_of_a_refused_request_reaches_the_verbose_detail_and_only_there() {
+    if !have_prikk() {
+        eprintln!("skipping: needs prikk on PATH");
+        return;
+    }
+    let (w, server, _, _) = setup_propose(
+        "reason-detail",
+        Box::new(|_| {
+            json_error(
+                400,
+                "invalid_request",
+                "The request is malformed.",
+                "Fix the field named in the reason and send the proposal again.",
+                serde_json::json!({"reason": "fields_for_existing_proposal"}),
+            )
+        }),
+    );
+    w.commit(1, "work");
+    let (state, tok) = (w.dir.join("state"), token_file(&w.dir));
+    let run = |verbose: bool| {
+        let mut a = vec![
+            "propose",
+            "X",
+            "--title",
+            "T",
+            "--token-file",
+            tok.to_str().unwrap(),
+        ];
+        let u = url(&server);
+        a[1] = &u;
+        if verbose {
+            a.push("--verbose");
+        }
+        client(&a, &w.maintainer, &w.keys, &state, "", false, &[])
+    };
+    let quiet = run(false);
+    assert_eq!(quiet.code, 1, "{}{}", quiet.out, quiet.err);
+    assert!(
+        !quiet.err.contains("fields_for_existing_proposal"),
+        "the reason is for --verbose: {}",
+        quiet.err
+    );
+    let loud = run(true);
+    assert!(
+        loud.err.contains("(detail)")
+            && loud.err.contains("[reason: fields_for_existing_proposal]"),
+        "{}",
+        loud.err
+    );
+}

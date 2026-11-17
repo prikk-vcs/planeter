@@ -59,6 +59,18 @@ pub struct ApiError {
     pub raw: serde_json::Value,
 }
 
+impl ApiError {
+    /// The raw cause for `--verbose`: the code, the status, the server's message and hint, and the `reason` field when the body has one (a
+    /// refused request's metadata says which rule it broke there, and the hint points to it).
+    pub fn verbatim(&self, status: u16) -> String {
+        let mut s = format!("{} ({}): {} {}", self.code, status, self.message, self.hint);
+        if let Some(r) = self.raw.get("reason").and_then(|r| r.as_str()) {
+            s.push_str(&format!(" [reason: {r}]"));
+        }
+        s
+    }
+}
+
 /// What a server answered when it did not say yes.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Answer {
@@ -554,10 +566,7 @@ pub fn failure(lang: Lang, host: &str, e: &HttpError, verbose: bool) -> Failure 
 
 fn server_failure(lang: Lang, a: &Answer) -> Failure {
     let wait = a.retry_after.unwrap_or(30);
-    let verbatim = a
-        .error
-        .as_ref()
-        .map(|e| format!("{} ({}): {} {}", e.code, a.status, e.message, e.hint));
+    let verbatim = a.error.as_ref().map(|e| e.verbatim(a.status));
     let message = match (a.status, a.error.as_ref().map(|e| e.code.as_str())) {
         (404, _) => t(lang, Key::ServerNotFound).text(),
         (401, _) => t(lang, Key::ServerSignIn).text(),

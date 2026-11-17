@@ -158,10 +158,7 @@ fn refusal(ctx: &Ctx<'_>, http: &crate::http::Http, a: &Answer, retry_hint: bool
         Some(m) => {
             let mut f = Failure::new(REFUSED, m);
             if let Some(e) = &a.error {
-                f = f.with_detail(format!(
-                    "{} ({}): {} {}",
-                    e.code, a.status, e.message, e.hint
-                ));
+                f = f.with_detail(e.verbatim(a.status));
             }
             f
         }
@@ -170,6 +167,14 @@ fn refusal(ctx: &Ctx<'_>, http: &crate::http::Http, a: &Answer, retry_hint: bool
 }
 
 pub fn run(ctx: &mut Ctx<'_>, args: &ProposeArgs) -> Result<(), Failure> {
+    // A revision keeps the title, the description and the target of the proposal it is added to (the server refuses them with a proposal
+    // id): said here, before anything is read, asked or sent.
+    if args.proposal.is_some() && (args.title.is_some() || args.description_file.is_some()) {
+        return Err(Failure::new(
+            USAGE,
+            t(ctx.lang, Key::ProposeRevisionKeeps).text(),
+        ));
+    }
     let url = parse_url(ctx, &args.url)?;
     if args.proposal.is_none() && args.title.is_none() && !args.dry_run {
         return Err(Failure::new(
@@ -343,14 +348,16 @@ pub fn run(ctx: &mut Ctx<'_>, args: &ProposeArgs) -> Result<(), Failure> {
     }
 
     let mut meta = serde_json::json!({
-        "target_ref": git_ref,
         "base": base,
         "declared_patches": new_patches,
         "client": format!("planeter-client/{}", env!("CARGO_PKG_VERSION")),
     });
     if let Some(p) = &args.proposal {
+        // A revision of an existing proposal: the proposal's own title, description and target stay; the server refuses `target_ref`,
+        // `title` and `description` beside a proposal id (`--ref` only names the branch of yours that is built and sent).
         meta["proposal"] = serde_json::json!(p);
     } else {
+        meta["target_ref"] = serde_json::json!(git_ref);
         meta["title"] = serde_json::json!(args.title);
         if let Some(d) = &description {
             meta["description"] = serde_json::json!(d);

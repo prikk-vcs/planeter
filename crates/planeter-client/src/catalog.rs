@@ -187,6 +187,7 @@ keys! {
     ProposeOverBound => "propose.over_bound",
     ProposeTooManyObjects => "propose.too_many_objects",
     ProposeTitleNeeded => "propose.title_needed",
+    ProposeRevisionKeeps => "propose.revision_keeps",
     ProposeIncomplete => "propose.incomplete",
     ProposeIncompleteRetry => "propose.incomplete_retry",
     ProposeQuota => "propose.quota",

@@ -14,7 +14,7 @@ pub static CATALOG: &[Entry] = &[
     ),
     msg(
         "help.propose",
-        "planeter-client propose <https://host/owner/name> [オプション]\n\nサーバーがすでに持っているものを土台に、あなたの prikk であなたの作業を組み立て、提案として送ります。サーバー側で署名やマージは行われません。作業はレビュー待ちとして保持されます。\n\n  --ref heads/NAME          送る自分のブランチ（既定は heads/main）\n  --proposal ID             新しい提案を開く代わりに、この提案へリビジョンを追加します\n  --title TITLE             新しい提案のタイトル（新規の場合は必須）\n  --description-file FILE   説明を FILE から読みます\n  --dry-run                 組み立てて、送る内容を表示するだけで、何も送りません\n  --retry                   サーバーが取り込みを終えられなかったとき、同じ作業をもう一度送ります\n  --token-file FILE, --cacert FILE, --lang, --verbose\n\n自分の prikk リポジトリの中で実行してください。\n\n例:\n  planeter-client propose https://forge.example/alice/app --title \"パーサーを直す\"",
+        "planeter-client propose <https://host/owner/name> [オプション]\n\nサーバーがすでに持っているものを土台に、あなたの prikk であなたの作業を組み立て、提案として送ります。サーバー側で署名やマージは行われません。作業はレビュー待ちとして保持されます。\n\n  --ref heads/NAME          送る自分のブランチ（既定は heads/main）\n  --proposal ID             新しい提案を開く代わりに、この提案へリビジョンを追加します。タイトル、説明、対象のブランチは、その提案のものがそのまま使われます\n  --title TITLE             新しい提案のタイトル（新規の場合は必須）\n  --description-file FILE   説明を FILE から読みます\n  --dry-run                 組み立てて、送る内容を表示するだけで、何も送りません\n  --retry                   サーバーが取り込みを終えられなかったとき、同じ作業をもう一度送ります\n  --token-file FILE, --cacert FILE, --lang, --verbose\n\n自分の prikk リポジトリの中で実行してください。\n\n例:\n  planeter-client propose https://forge.example/alice/app --title \"パーサーを直す\"",
     ),
     msg(
         "help.clone",
@@ -230,6 +230,10 @@ pub static CATALOG: &[Entry] = &[
     msg(
         "propose.title_needed",
         "新しい提案にはタイトルが必要です。--title \"…\" を付けるか、既存の提案に追加する場合は --proposal ID を付けてください。",
+    ),
+    msg(
+        "propose.revision_keeps",
+        "リビジョンを追加するときは、追加先の提案のタイトルと説明がそのまま使われます。--proposal と --title や --description-file はいっしょに使えません。それらを外すか、新しい提案を開く場合は --proposal を外してください。",
     ),
     msg(
         "propose.incomplete",
