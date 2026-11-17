@@ -422,6 +422,8 @@ async fn the_document_describes_parameters_responses_security_and_the_error_sche
             ("ConfirmRequest", "adopt"),
             ("ConfirmRequest", "leave_out"),
             ("ConfirmRequest", "no_adopt"),
+            // Omitted when 0: how much of a cut name was left out (RFC 005 part 6, polish).
+            ("ChangeFile", "path_cut_bytes"),
         ];
         props.retain(|p| !additive.contains(&(name.as_str(), *p)));
         props.sort_unstable();
