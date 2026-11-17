@@ -11,7 +11,7 @@ CI, and packages.
 > **review** it (comments and decisions), and **create** a repository (empty, or from a maintainer's archive, trusting
 > only the keys the person types). `planeter-client` is the separate program for a person's own computer.
 > 0.7.0 still requires **prikk 0.57.0** and adds the **file-by-file view** of a proposal's revision (the files a revision changes and how, rebuilt from its patches;
-> nothing in it is signed), in English and in Japanese (the Japanese of the new view has not yet been read by a reviewer).
+> nothing in it is signed), in English and in Japanese (both read and accepted by the owner).
 > Merging into a branch is next and builds on prikk 0.57.0; **1.0 is an explicit owner gate.**
 > Releases: [`CHANGELOG.md`](CHANGELOG.md) · plan: [`ROADMAP.md`](ROADMAP.md).
 
@@ -97,7 +97,7 @@ deployment notes are in [`docs/RELEASING.md`](docs/RELEASING.md).
 - **Clone, fetch, propose from your computer** (RFC 004): `planeter-client` ([`docs/client.md`](docs/client.md)) — separate from the
   server, holds no key and signs nothing, https only; **only the maintainer keys you type are trusted**.
 - **The file-by-file view** (RFC 005 part 6): each revision of a proposal links to a page of the files it changes and a page of each file's diff (and the same as JSON under `…/revisions/{seq}/changes`), compared with the revision's own base and rebuilt by prikk from the patches; names and text are shown display-safe, a view is bounded in time, memory and size, and nothing in it is signed ([`docs/proposals.md`](docs/proposals.md)).
-- **Languages** (RFC 012): English and Japanese (signed off by the owner on 2026-10-31 and read again on 2026-11-14; the messages of the file-by-file view are shown flagged until they are read) — the pages, the API's error messages and `planeter-client`; a caller who does not ask is English.
+- **Languages** (RFC 012): English and Japanese (signed off by the owner on 2026-10-31, and read again on 2026-11-14 and on 2026-11-17, the last time with the messages of the file-by-file view) — the pages, the API's error messages and `planeter-client`; a caller who does not ask is English.
 - **Not yet:** merging a proposal into a branch (the maintainer seals with their own prikk and the forge adopts the result: **model B of RFC 004 D-8**,
   now buildable on prikk 0.57.0's guard against older or diverged deliveries, which the driver already reads), issues, checks and CI, packages. prikk 0.58.0 is planned to work on `accept`'s writes and to fix the
   cost of `sync seal` (ledger PK-82). SSH is not planned: transport is https behind your

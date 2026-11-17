@@ -115,9 +115,12 @@ generated sheet of 653 messages and its final corrections. Eight messages (the a
 accessibility statement were added afterwards and not read then, and later changes (`help.main` and `usage.bad_lang`, which now name the registry's languages, and the two messages of the "not listed" badge and
 its legend, D3 of the prikk 0.57.0 re-baseline) joined them: twelve messages shipped flagged as newer than the sign-off. (2) **2026-11-14**, the second reading (commit
 `4c53f2a`, sheet fingerprint `a917d86974a31464`, 661 messages): the owner read those twelve messages and the accessibility section, wrote the final wording
-of one of them (the legend of the badge 「一覧にありません」, `proposal.patch.not_listed_explain`) and accepted the rest. The record in
-`crates/planeter-i18n/src/languages/ja.rs` and both `locales/ja.signed` baselines (written by `planeter-i18n-sheet --baseline ja web|client`) are those of
-this second reading; the sheet reads "0 changed, 0 new — 0 message(s) to read" and the server no longer logs a count of messages newer than the sign-off.
+of one of them (the legend of the badge 「一覧にありません」, `proposal.patch.not_listed_explain`) and accepted the rest. (3) **2026-11-17**, the third reading
+(commit `c5dd85c`, sheet fingerprint `57d77f1fb0d3689e`, 754 messages): the owner read the 95 messages that were newer than the second sign-off — the file-by-file
+view (79 page messages and 12 API messages), its two cut-marker messages, and the client's `help.propose` (changed) and `propose.revision_keeps` (new) — and
+accepted them all as the sheet had them. The record in `crates/planeter-i18n/src/languages/ja.rs` and both `locales/ja.signed` baselines (written by
+`planeter-i18n-sheet --baseline ja web|client`) are those of this third reading; the sheet reads "754 unchanged, 0 changed, 0 new — 0 message(s) to read" and the
+server logs no count of messages newer than the sign-off.
 
 ## What is deliberately not in the catalog (`tests/literals.allow`)
 

@@ -1,6 +1,6 @@
 # The messages of `ja` as signed off: key<TAB>hash (planeter-i18n baseline::message_hash). Regenerated only by a new sign-off.
 help.main	6df761a66cb37705
-help.propose	abef867626e7d56a
+help.propose	4455644e6e4e8fb0
 help.clone	d5dc68f16f4839e0
 help.fetch	2396eef92f106058
 version.line	58ee6b616a6a657e
@@ -57,6 +57,7 @@ propose.base_not_in_history	ffb6b55e235abcac
 propose.over_bound	c6e7a7f03197fc07
 propose.too_many_objects	c49ca8be3becb637
 propose.title_needed	85bc0834d9f4864d
+propose.revision_keeps	7ba71275d0c2cca5
 propose.incomplete	5213cc5af15ab8c5
 propose.incomplete_retry	669c99de3568ac83
 propose.quota	76ed2a3fb38d6b93
