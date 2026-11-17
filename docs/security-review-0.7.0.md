@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | The security pass before a release, for what changed since 0.6.0 (`docs/security-review-0.6.0.md` and `-0.5.0.md` stay as the records of those releases). It is a **review by the architect of the design, the code paths and the evidence**, surface by surface — not an external penetration test. 0.7.0 adds **one surface**: the file-by-file view of a proposal (two read-only routes, two pages, a JSON API), which shows a reviewer content chosen by a possibly hostile proposer. It adds no write path, no action, no setting and no binary, and changes no trust decision. |
-| Date | 2026-11-17. Basis: threat model v0.7 (T-19, C-19a…e, RR-19), the reviews of each part (D-78…D-83), the gates, the real-binary end-to-end look at the candidate (`release-0-7-0-candidate-logs/t7/`) and the gates of the final candidate. |
+| Date | 2026-11-17. Basis: threat model v0.7 (T-19, C-19a…e, RR-19), the reviews of each part (D-78…D-83), the gates, the real-binary end-to-end look at the candidate (`release-0-7-0-candidate-logs/t7/`) and the gates of the final candidate (commit `5f8a81a` plus the docs-only commit that dates the notes). |
 | Verdict | **No open finding blocks 0.7.0.** One defect of an existing feature was found by the end-to-end look and fixed before the tag (IS-59); one advisory against a pin that is not reachable is recorded for the next chain change (IS-60). |
 
 ## How to read the evidence column
@@ -29,7 +29,7 @@
 * **The view needs the spool** (`PLANETER_SPOOL_DIR`): without it the server has no proposals at all (documented).
 * **The upgrade rehearsal of 0.6.0 covers small databases**; 0.7.0 changes no table and no format.
 * **A failed request's reason is shown only with `--verbose`** in the client (the server's hint points to it): a small usability gap, not a security one.
-* **93 messages of the server and 2 of the client in Japanese have not been read by a reviewer**; they ship flagged and the notes count them.
+* **The Japanese of the new messages is the owner's reading only** (95 messages read and accepted on 2026-11-17, then 24 of them reworded after the architect's second reading and read again and passed the same day; the sign-off record is data and `planeter-i18n-sheet --status` lists 0 newer messages). No second reviewer, no user of Japanese assistive technology.
 
 ## Findings made on the way, all closed before this review
 The engine put an English marker inside data (and the page matched it by text, which a hostile line could imitate) → `cut_chars`/`path_cut_bytes`; an unbounded wait per revision → eight waiters; an old cache pointer would have kept serving old markers → versioned key and a miss rule; `planeter-client propose --proposal` could never work (IS-59, since 0.5.0); the dry run of the publish step at an already released version number cannot pass (documented); Japanese pages scrolled sideways at 320 px (fixed and measured).

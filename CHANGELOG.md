@@ -3,7 +3,7 @@
 Releases are bare version tags; each section is the release's notes (assembled into the GitHub
 release by `release.yml`). Kept by hand, per release, so nothing here goes stale by templating.
 
-## [0.7.0] — unreleased until tagged — the file-by-file view of a proposal, and the gate tools pinned
+## [0.7.0] — 2026-11-18 — the file-by-file view of a proposal, and the gate tools pinned
 
 0.7.0 adds the **file-by-file view of a proposal's revision** (RFC 005 part 6): a page that lists the files a revision changes, a page for each file's diff, and two API routes that give the same answers as data. The files are rebuilt by prikk from the patches the server holds; nothing in the view is signed. It also pins the two tools that gate every push and every release. The prikk floor stays **0.57.0** and the minimum compiler **1.89.0**; it adds no setting, changes no default, no database table and no repository format.
 
