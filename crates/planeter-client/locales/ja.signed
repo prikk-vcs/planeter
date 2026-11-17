@@ -57,7 +57,7 @@ propose.base_not_in_history	ffb6b55e235abcac
 propose.over_bound	c6e7a7f03197fc07
 propose.too_many_objects	c49ca8be3becb637
 propose.title_needed	85bc0834d9f4864d
-propose.revision_keeps	7ba71275d0c2cca5
+propose.revision_keeps	0dd65884a10d4d84
 propose.incomplete	5213cc5af15ab8c5
 propose.incomplete_retry	669c99de3568ac83
 propose.quota	76ed2a3fb38d6b93

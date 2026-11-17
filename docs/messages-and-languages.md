@@ -118,9 +118,11 @@ its legend, D3 of the prikk 0.57.0 re-baseline) joined them: twelve messages shi
 of one of them (the legend of the badge 「一覧にありません」, `proposal.patch.not_listed_explain`) and accepted the rest. (3) **2026-11-17**, the third reading
 (commit `c5dd85c`, sheet fingerprint `57d77f1fb0d3689e`, 754 messages): the owner read the 95 messages that were newer than the second sign-off — the file-by-file
 view (79 page messages and 12 API messages), its two cut-marker messages, and the client's `help.propose` (changed) and `propose.revision_keeps` (new) — and
-accepted them all as the sheet had them. The record in `crates/planeter-i18n/src/languages/ja.rs` and both `locales/ja.signed` baselines (written by
-`planeter-i18n-sheet --baseline ja web|client`) are those of this third reading; the sheet reads "754 unchanged, 0 changed, 0 new — 0 message(s) to read" and the
-server logs no count of messages newer than the sign-off.
+accepted them all as the sheet had them. (4) **2026-11-17**, the second part of the day (commit `1392a1e`, sheet fingerprint `efb56f1b6f72541a`, 754 messages): after
+the architect's second reading for consistency and naturalness, 24 of those messages were reworded (23 in the server's catalog, 1 in the client's); the owner read the 24 and
+passed them. The record in `crates/planeter-i18n/src/languages/ja.rs` and both `locales/ja.signed` baselines (written by `planeter-i18n-sheet --baseline ja web|client`)
+are those of this fourth record, which replaces the one made at `5c724f4`; the sheet reads "754 unchanged, 0 changed, 0 new — 0 message(s) to read" and the server
+logs no count of messages newer than the sign-off.
 
 ## What is deliberately not in the catalog (`tests/literals.allow`)
 
