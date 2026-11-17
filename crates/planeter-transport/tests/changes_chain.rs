@@ -204,10 +204,19 @@ fn at_most_eight_requests_wait_for_one_revision_and_the_ninth_is_refused_without
     }
     std::thread::sleep(std::time::Duration::from_millis(200));
     assert_eq!(finished.load(Ordering::SeqCst), 0, "they wait");
-    // the ninth: at once, from this very thread
-    let t = std::time::Instant::now();
-    assert!(matches!(svc.flight("rev-a"), Err(TooManyWaiters)));
-    assert!(t.elapsed().as_millis() < 100, "refused without waiting");
+    // the ninth: at once (on a thread of its own, so that a missing bound fails this test instead of hanging it)
+    let (tx, rx) = std::sync::mpsc::channel();
+    let ninth = svc.clone();
+    std::thread::spawn(move || {
+        let r = ninth.flight("rev-a").map(|_| ());
+        let _ = tx.send(r);
+    });
+    match rx.recv_timeout(std::time::Duration::from_secs(2)) {
+        Ok(r) => assert_eq!(r, Err(TooManyWaiters), "the ninth request is refused"),
+        Err(_) => panic!(
+            "the ninth request parked instead of being refused: there is no bound on the waiters"
+        ),
+    }
     // another revision is not affected
     drop(svc.flight("rev-b").expect("another key has its own queue"));
     drop(holder);
