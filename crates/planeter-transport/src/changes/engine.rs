@@ -345,15 +345,18 @@ impl ChangesService {
                 return Err(self.fail(Reason::NotOneChange));
             }
         };
-        let key = planeter_auth::sha256_hex(
-            format!(
-                "{}\n{}",
-                chain.foot_claim,
-                chain.root_parent.as_deref().unwrap_or("-")
-            )
-            .as_bytes(),
-        )[..40]
-            .to_owned();
+        let key = format!(
+            "{}-{}",
+            super::cache::KEY_SCHEMA,
+            &planeter_auth::sha256_hex(
+                format!(
+                    "{}\n{}",
+                    chain.foot_claim,
+                    chain.root_parent.as_deref().unwrap_or("-")
+                )
+                .as_bytes(),
+            )[..40]
+        );
         // another revision with the same claims may have been computed already
         if let Some(cache) = &self.inner.cache
             && let Some(entry) = cache.list(&key)

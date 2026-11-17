@@ -2,7 +2,7 @@
 {% block title %}{{ title }}{% endblock %}
 {% block nav %}{% include "repo_nav.html" %}{% endblock %}
 {% block body %}
-<h1><code>{{ path }}</code></h1>
+<h1><code>{{ path }}</code>{% if let Some(c) = path_cut %} <span class="muted">{{ c }}</span>{% endif %}</h1>
 {% if path_escaped %}<p>{{ t.get(Key::ChangesFileEscaped) }}</p>
 {% endif %}<p>{{ status_line }}</p>
 {% if let Some(s) = link_sentence %}<p>{{ s }}</p>
@@ -14,7 +14,7 @@
 <thead><tr><th scope="col">{{ t.get(Key::ChangesDiffColOld) }}</th><th scope="col">{{ t.get(Key::ChangesDiffColNew) }}</th><th scope="col">{{ t.get(Key::ChangesColChange) }}</th><th scope="col">{{ t.get(Key::ChangesDiffColText) }}</th></tr></thead>
 {% for h in hunks %}<tbody>
 <tr class="hunk"><th scope="rowgroup" colspan="4">{{ h.header }}</th></tr>
-{% for l in h.lines %}<tr class="{{ l.class }}"><td>{{ l.old }}</td><td>{{ l.new }}</td><td><span aria-hidden="true">{{ l.marker }}</span><span class="visually-hidden">{{ l.word }}</span></td><td><code>{{ l.text }}</code></td></tr>
+{% for l in h.lines %}<tr class="{{ l.class }}"><td>{{ l.old }}</td><td>{{ l.new }}</td><td><span aria-hidden="true">{{ l.marker }}</span><span class="visually-hidden">{{ l.word }}</span></td><td><code>{{ l.text }}</code>{% if let Some(c) = l.cut %} <span class="muted">{{ c }}</span>{% endif %}</td></tr>
 {% endfor %}</tbody>
 {% endfor %}</table>
 {% endif %}{% for n in notes %}<p class="muted">{{ n }}</p>

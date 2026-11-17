@@ -877,7 +877,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "changes.statement.compared",
-        "Compared with {before} (the block the first patch continues from).",
+        "Compared with {before} (the point in history the first patch continues from).",
     ),
     msg("changes.ids.summary", "The full ids"),
     msg("changes.ids.before", "Compared with: {id}"),
@@ -976,6 +976,16 @@ pub const CATALOG: &[Entry] = &[
     msg(
         "changes.file.cut_lines",
         "Lines that were too long are cut, and each cut says how much was left out.",
+    ),
+    plural_msg(
+        "changes.cut.chars",
+        "…({count} more character not shown)",
+        "…({count} more characters not shown)",
+    ),
+    plural_msg(
+        "changes.cut.bytes",
+        "…({count} more byte of the name not shown)",
+        "…({count} more bytes of the name not shown)",
     ),
     msg("changes.file.empty", "This file has no lines."),
     msg("changes.link.added", "This is a symbolic link to {target}."),

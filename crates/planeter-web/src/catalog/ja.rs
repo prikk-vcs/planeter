@@ -995,6 +995,14 @@ pub const CATALOG: &[Entry] = &[
         "changes.file.cut_lines",
         "長すぎる行は途中で切ってあり、切った箇所に省いた量を示しています。",
     ),
+    msg(
+        "changes.cut.chars",
+        "…（あと {count} 文字は表示されません）",
+    ),
+    msg(
+        "changes.cut.bytes",
+        "…（名前のあと {count} バイトは表示されません）",
+    ),
     msg("changes.file.empty", "このファイルには行がありません。"),
     msg(
         "changes.link.added",

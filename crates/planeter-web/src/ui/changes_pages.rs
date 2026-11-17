@@ -248,7 +248,7 @@ fn note_key(n: NotShown) -> Key {
 /// The page's own second line of defence (the first is the engine's display function, the second the template's HTML escaping; this is a third
 /// look at what the engine returned, so that a name or a line that somehow reached here unescaped still cannot reorder or hide anything): every
 /// control, separator, bidirectional or zero-width character becomes a visible `\u{…}` escape. In text a tab is kept and a carriage return is shown
-/// as `␍`; in a name neither is kept. It is **idempotent** on what the engine already escaped (a backslash is not touched) and never cuts.
+/// as `␍`; in a name neither is kept. It is **idempotent** on what the engine already escaped (a backslash is not touched) and never cuts (a cut is the engine's, with its number beside the text).
 fn safe(text: &str, in_text: bool) -> String {
     let mut out = String::with_capacity(text.len());
     for c in text.chars() {
@@ -279,6 +279,8 @@ fn title_path(path: &str) -> String {
 
 struct FileRow {
     path: String,
+    /// "…(N more bytes of the name not shown)" when the name was cut.
+    path_cut: Option<String>,
     /// The address of the file's page, when a diff is shown.
     href: Option<String>,
     status: String,
@@ -372,6 +374,11 @@ fn summary_line(t: &T, set: &ChangeSet) -> String {
         .text()
 }
 
+/// The page's own words for a name the engine cut: the engine gives the head and the number, nothing else.
+fn path_cut(t: &T, bytes: u64) -> Option<String> {
+    (bytes > 0).then(|| t.msg(Key::ChangesCutBytes).n(bytes).text())
+}
+
 fn file_row(t: &T, o: &Opened, owner: &str, name: &str, f: &FileEntry) -> FileRow {
     let counted = f.shown.then_some((f.lines_added, f.lines_removed));
     let (lines, lines_words) = match counted {
@@ -391,6 +398,7 @@ fn file_row(t: &T, o: &Opened, owner: &str, name: &str, f: &FileEntry) -> FileRo
     };
     FileRow {
         path: safe(&f.path, false),
+        path_cut: path_cut(t, f.path_cut_bytes),
         href: f
             .shown
             .then(|| file_href(owner, name, &o.id, o.rev.seq, &f.file_id)),
@@ -496,6 +504,8 @@ struct DiffRow {
     marker: &'static str,
     word: String,
     text: String,
+    /// "…(N more characters not shown)" when the line was cut.
+    cut: Option<String>,
 }
 
 struct HunkView {
@@ -514,6 +524,7 @@ struct FileTpl {
     proposals_nav: bool,
     title: String,
     path: String,
+    path_cut: Option<String>,
     path_escaped: bool,
     status_line: String,
     /// A symbolic link: one sentence in place of the table.
@@ -567,16 +578,6 @@ fn hunk_header(t: &T, h: &planeter_transport::changes::model::DiffHunk) -> Strin
             ),
         )
         .text()
-}
-
-/// A line the engine cut ends with `…(N more characters)`.
-fn is_cut(text: &str) -> bool {
-    let Some(i) = text.rfind("\u{2026}(") else {
-        return false;
-    };
-    let rest = &text[i + "\u{2026}(".len()..];
-    rest.strip_suffix(" more characters)")
-        .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
 }
 
 fn hunk_views(t: &T, d: &FileDiff) -> Vec<HunkView> {
@@ -642,6 +643,8 @@ fn hunk_views(t: &T, d: &FileDiff) -> Vec<HunkView> {
                         marker,
                         word,
                         text: safe(&l.text, true),
+                        cut: (l.cut_chars > 0)
+                            .then(|| t.msg(Key::ChangesCutChars).n(l.cut_chars).text()),
                     }
                 })
                 .collect();
@@ -742,7 +745,7 @@ pub(super) async fn file_page(
     if diff
         .hunks
         .iter()
-        .any(|h| h.lines.iter().any(|l| is_cut(&l.text)))
+        .any(|h| h.lines.iter().any(|l| l.cut_chars > 0))
         && !is_link
     {
         notes.push(t.get(Key::ChangesFileCutLines));
@@ -760,6 +763,7 @@ pub(super) async fn file_page(
             .product()
             .text(),
         path: safe(&e.path, false),
+        path_cut: path_cut(&t, e.path_cut_bytes),
         path_escaped: e.path_escaped,
         status_line: t
             .msg(Key::ChangesFileStatus)

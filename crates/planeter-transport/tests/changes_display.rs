@@ -13,7 +13,7 @@ fn an_ordinary_utf8_path_is_kept_and_is_not_marked() {
         "emoji-🎉.txt",
         "back\\slash",
     ] {
-        assert_eq!(display_path(p.as_bytes()), (p.to_owned(), false), "{p}");
+        assert_eq!(display_path(p.as_bytes()), (p.to_owned(), false, 0), "{p}");
     }
 }
 
@@ -21,15 +21,18 @@ fn an_ordinary_utf8_path_is_kept_and_is_not_marked() {
 fn invalid_utf8_is_shown_byte_by_byte_as_x_escapes() {
     assert_eq!(
         display_path(b"ok\xFF\xFEz"),
-        ("ok\\xFF\\xFEz".to_owned(), true)
+        ("ok\\xFF\\xFEz".to_owned(), true, 0)
     );
     // a Shift_JIS name
     assert_eq!(
         display_path(b"\x83e\x83X\x83g"),
-        ("\\x83e\\x83X\\x83g".to_owned(), true)
+        ("\\x83e\\x83X\\x83g".to_owned(), true, 0)
     );
     // a truncated multibyte sequence at the end
-    assert_eq!(display_path(b"a\xE3\x81"), ("a\\xE3\\x81".to_owned(), true));
+    assert_eq!(
+        display_path(b"a\xE3\x81"),
+        ("a\\xE3\\x81".to_owned(), true, 0)
+    );
 }
 
 #[test]
@@ -65,7 +68,7 @@ fn controls_separators_bidi_and_zero_width_characters_are_visible_escapes_in_a_p
     for (raw, shown) in cases {
         assert_eq!(
             display_path(raw.as_bytes()),
-            ((*shown).to_owned(), true),
+            ((*shown).to_owned(), true, 0),
             "{raw:?}"
         );
     }
@@ -89,44 +92,81 @@ fn a_name_with_html_in_it_is_left_for_the_page_to_escape() {
 }
 
 #[test]
-fn a_long_name_is_cut_with_an_explicit_count_of_the_bytes_left_out() {
+fn a_long_name_is_its_head_with_no_marker_and_the_count_of_the_bytes_left_out_beside_it() {
     let long = vec![b'a'; NAME_MAX_BYTES + 77];
-    let (shown, escaped) = display_path(&long);
+    let (shown, escaped, cut) = display_path(&long);
     assert!(escaped);
     assert_eq!(
         shown,
-        format!("{}…(77 more bytes)", "a".repeat(NAME_MAX_BYTES))
+        "a".repeat(NAME_MAX_BYTES),
+        "the head, and nothing else"
     );
+    assert_eq!(cut, 77);
     // exactly at the limit: not cut
     assert_eq!(
         display_path(&vec![b'a'; NAME_MAX_BYTES]),
-        ("a".repeat(NAME_MAX_BYTES), false)
+        ("a".repeat(NAME_MAX_BYTES), false, 0)
     );
+}
+
+#[test]
+fn a_name_is_cut_at_a_character_boundary_never_inside_a_character() {
+    // 1,023 ASCII bytes, then a three-byte character that straddles the limit
+    let mut name = "a".repeat(NAME_MAX_BYTES - 1).into_bytes();
+    name.extend("あい".as_bytes());
+    let (shown, _, cut) = display_path(&name);
+    assert_eq!(
+        shown,
+        "a".repeat(NAME_MAX_BYTES - 1),
+        "the half character is not shown"
+    );
+    assert_eq!(cut as usize, name.len() - (NAME_MAX_BYTES - 1));
+    // a character that ends exactly at the limit stays
+    let mut exact = "a".repeat(NAME_MAX_BYTES - 3).into_bytes();
+    exact.extend("あい".as_bytes());
+    let (shown, _, cut) = display_path(&exact);
+    assert_eq!(shown, format!("{}あ", "a".repeat(NAME_MAX_BYTES - 3)));
+    assert_eq!(cut, 3);
+    assert!(!shown.contains("\\x"), "no escape from a cut character");
+}
+
+#[test]
+fn the_head_of_a_cut_name_is_still_display_safe() {
+    let mut name = b"x\xFFy\x1B".to_vec();
+    name.extend(vec![b'a'; NAME_MAX_BYTES]);
+    let (shown, escaped, cut) = display_path(&name);
+    assert!(escaped);
+    assert!(shown.starts_with("x\\xFFy\\u{1B}"), "{shown}");
+    assert!(cut > 0);
+    assert!(!shown.contains("more bytes"));
 }
 
 #[test]
 fn text_keeps_tab_shows_a_stray_cr_as_its_symbol_and_escapes_the_rest() {
-    assert_eq!(display_line("a\tb"), "a\tb");
-    assert_eq!(display_line("a\rb\r"), "a\u{240D}b\u{240D}");
+    assert_eq!(display_line("a\tb"), ("a\tb".to_owned(), 0));
+    assert_eq!(display_line("a\rb\r").0, "a\u{240D}b\u{240D}");
     assert_eq!(
-        display_line("x\u{202E}y\u{0}z\u{1B}[31m"),
+        display_line("x\u{202E}y\u{0}z\u{1B}[31m").0,
         "x\\u{202E}y\\u{0}z\\u{1B}[31m"
     );
-    assert_eq!(display_line("日本語 text"), "日本語 text");
-    assert_eq!(display_line_bytes(b"/etc/passwd"), "/etc/passwd");
-    assert_eq!(display_line_bytes(b"to\xFFtarget\n"), "to\\xFFtarget\\u{A}");
+    assert_eq!(display_line("日本語 text").0, "日本語 text");
+    assert_eq!(display_line_bytes(b"/etc/passwd").0, "/etc/passwd");
+    assert_eq!(
+        display_line_bytes(b"to\xFFtarget\n").0,
+        "to\\xFFtarget\\u{A}"
+    );
 }
 
 #[test]
-fn a_long_line_is_cut_with_an_explicit_count_of_the_characters_left_out() {
+fn a_long_line_is_its_head_with_no_marker_and_the_count_of_the_characters_left_out_beside_it() {
     let long = "x".repeat(LINE_MAX_CHARS + 5);
-    assert_eq!(
-        display_line(&long),
-        format!("{}…(5 more characters)", "x".repeat(LINE_MAX_CHARS))
-    );
+    assert_eq!(display_line(&long), ("x".repeat(LINE_MAX_CHARS), 5));
     let exact = "y".repeat(LINE_MAX_CHARS);
-    assert_eq!(display_line(&exact), exact);
+    assert_eq!(display_line(&exact), (exact, 0));
     // multibyte characters are counted as characters, not bytes
     let jp = "あ".repeat(LINE_MAX_CHARS + 1);
-    assert!(display_line(&jp).ends_with("…(1 more characters)"));
+    assert_eq!(display_line(&jp), ("あ".repeat(LINE_MAX_CHARS), 1));
+    // the old English marker is just text now: a line that ends with it is shown as itself, uncut
+    let looks = "see \u{2026}(500 more characters)";
+    assert_eq!(display_line(looks), (looks.to_owned(), 0));
 }

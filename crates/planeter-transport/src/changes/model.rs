@@ -46,8 +46,11 @@ pub enum NotShown {
 pub struct FileEntry {
     /// SHA-256 (hex) of the exact path bytes: this, never the path, goes into URLs.
     pub file_id: String,
-    /// The display-safe path.
+    /// The display-safe path. A name over 1,024 bytes is its first 1,024 bytes (cut at a character boundary), with **no marker** in it.
     pub path: String,
+    /// How many bytes of the name were left out of `path` (omitted when 0). The file id is still the hash of the whole name.
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub path_cut_bytes: u64,
     /// The display differs from the bytes.
     pub path_escaped: bool,
     pub status: Status,
@@ -73,7 +76,15 @@ pub enum DiffOp {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct DiffLine {
     pub op: DiffOp,
+    /// A line over 2,000 characters is its first 2,000 characters, with **no marker** in it.
     pub text: String,
+    /// How many characters of the line were left out of `text` (omitted when 0).
+    #[serde(default, skip_serializing_if = "is_zero")]
+    pub cut_chars: u64,
+}
+
+fn is_zero(n: &u64) -> bool {
+    *n == 0
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

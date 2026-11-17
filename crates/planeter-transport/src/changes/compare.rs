@@ -104,11 +104,12 @@ fn base_entry(
     b: Option<&Node>,
     a: Option<&Node>,
 ) -> FileEntry {
-    let (shown_path, escaped) = display_path(path);
+    let (shown_path, escaped, cut) = display_path(path);
     FileEntry {
         file_id: id.to_owned(),
         path: shown_path,
         path_escaped: escaped,
+        path_cut_bytes: cut,
         status,
         kind,
         size_before: size_of(&b),
@@ -189,7 +190,7 @@ fn one_sided(tree: &Tree, path: &[u8], id: &str, node: &Node, status: Status) ->
         }
         Side::Link(target) => {
             e.kind = Kind::Symlink;
-            let line = display_line_bytes(&target);
+            let (line, cut_chars) = display_line_bytes(&target);
             e.shown = true;
             e.lines_added = None;
             let (op, old_n, new_n) = if added {
@@ -204,7 +205,11 @@ fn one_sided(tree: &Tree, path: &[u8], id: &str, node: &Node, status: Status) ->
                     old_lines: old_n,
                     new_start: u64::from(added),
                     new_lines: new_n,
-                    lines: vec![DiffLine { op, text: line }],
+                    lines: vec![DiffLine {
+                        op,
+                        text: line,
+                        cut_chars,
+                    }],
                 }],
                 truncated: None,
                 approximate: false,
@@ -284,13 +289,21 @@ fn classify_both(
                     new_start: 1,
                     new_lines: 1,
                     lines: vec![
-                        DiffLine {
-                            op: DiffOp::Remove,
-                            text: display_line_bytes(tb),
+                        {
+                            let (text, cut_chars) = display_line_bytes(tb);
+                            DiffLine {
+                                op: DiffOp::Remove,
+                                text,
+                                cut_chars,
+                            }
                         },
-                        DiffLine {
-                            op: DiffOp::Add,
-                            text: display_line_bytes(ta),
+                        {
+                            let (text, cut_chars) = display_line_bytes(ta);
+                            DiffLine {
+                                op: DiffOp::Add,
+                                text,
+                                cut_chars,
+                            }
                         },
                     ],
                 }],
@@ -364,6 +377,7 @@ fn finish_text(mut e: FileEntry, d: diff::LineDiff) -> FileDiff {
                             Op::Remove => DiffOp::Remove,
                         },
                         text: l.text,
+                        cut_chars: l.cut_chars,
                     })
                     .collect(),
             })

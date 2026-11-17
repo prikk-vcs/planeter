@@ -1788,7 +1788,7 @@ fn check_page(html: &str, lang: &str) {
     );
     let visible = html.split_once("<main").map_or(html, |(_, m)| m);
     let lower = visible.to_lowercase();
-    for word in ["claim", "chain", "extract", "foot"] {
+    for word in ["claim", "chain", "extract", "foot", "block"] {
         assert!(
             !lower
                 .split(|c: char| !c.is_alphanumeric())
@@ -1796,7 +1796,7 @@ fn check_page(html: &str, lang: &str) {
             "{lang}: the internal word {word:?} is on the page"
         );
     }
-    for word in ["クレーム", "チェーン", "エクストラクト"] {
+    for word in ["クレーム", "チェーン", "エクストラクト", "ブロック"] {
         assert!(!visible.contains(word), "{lang}: {word}");
     }
 }
@@ -1867,7 +1867,7 @@ async fn the_changes_page_and_a_file_page_say_what_the_files_are_in_both_languag
     let before = json["compared"]["before_block"].as_str().unwrap();
     assert!(
         p.contains(&format!(
-            "Compared with <code>{}</code> (the block the first patch continues from).",
+            "Compared with <code>{}</code> (the point in history the first patch continues from).",
             &before[..12]
         )),
         "{p}"
@@ -2257,7 +2257,7 @@ async fn every_reason_the_view_is_unavailable_is_a_plain_page_with_the_engines_s
 
 // ---------------------------------------------------------------------------------------------- hostile content, and every statement and note
 
-use planeter_transport::changes::cache::{Cache, ListEntry, RevEntry};
+use planeter_transport::changes::cache::{Cache, KEY_SCHEMA, ListEntry, RevEntry};
 use planeter_transport::changes::model::{
     ChangeSet, Compared, DiffHunk, DiffLine, DiffOp, FileDiff, FileEntry, Kind, NotShown, Status,
     Totals, Truncated,
@@ -2279,6 +2279,7 @@ fn entry(
     FileEntry {
         file_id: fid(n),
         path: path.to_owned(),
+        path_cut_bytes: 0,
         path_escaped: false,
         status,
         kind,
@@ -2296,6 +2297,7 @@ fn lines(ops: &[(DiffOp, &str)]) -> Vec<DiffLine> {
         .map(|(op, t)| DiffLine {
             op: *op,
             text: (*t).to_owned(),
+            cut_chars: 0,
         })
         .collect()
 }
@@ -2323,6 +2325,7 @@ fn totals(files: &[FileEntry]) -> Totals {
 fn inject(w: &World, id: &str, key: &str, set: ChangeSet, diffs: &[FileDiff]) {
     let rev = w.changes.revisions_of(id).unwrap().remove(0);
     let cache = Cache::open(&w.spool, 64 << 20).unwrap();
+    let key = &format!("{KEY_SCHEMA}-{key}");
     let writer = cache.begin(key).expect("a fresh key");
     for d in diffs {
         writer.put(d);
@@ -2377,7 +2380,7 @@ async fn hostile_names_and_text_never_reach_a_page_unescaped_and_no_link_comes_f
     let script = "<script>alert(1)</script>.txt";
     let bidi = "fdp.\u{202E}txt";
     let img = "<img src=x onerror=alert(1)>";
-    let long = format!("{}\u{2026}(500 more characters)", "z".repeat(2000)); // as the engine cuts a 2,500-character line
+    let long = "z".repeat(2000); // as the engine cuts a 2,500-character line: the head, 500 characters left out
     let mut e1 = entry(
         1,
         script,
@@ -2425,11 +2428,15 @@ async fn hostile_names_and_text_never_reach_a_page_unescaped_and_no_link_comes_f
     };
     let d1 = diff_of(
         e1.clone(),
-        vec![hunk(lines(&[
-            (DiffOp::Add, img),
-            (DiffOp::Add, "\u{202E}reversed \u{200B}zero-width\u{1B}[31m"),
-            (DiffOp::Add, &long),
-        ]))],
+        vec![hunk({
+            let mut ls = lines(&[
+                (DiffOp::Add, img),
+                (DiffOp::Add, "\u{202E}reversed \u{200B}zero-width\u{1B}[31m"),
+                (DiffOp::Add, &long),
+            ]);
+            ls[2].cut_chars = 500;
+            ls
+        })],
     );
     let d2 = diff_of(e2.clone(), vec![hunk(lines(&[(DiffOp::Add, "line")]))]);
     let d3 = diff_of(
@@ -2525,6 +2532,10 @@ async fn hostile_names_and_text_never_reach_a_page_unescaped_and_no_link_comes_f
     assert!(
         fp.contains("\\u{202E}reversed \\u{200B}zero-width\\u{1B}[31m"),
         "{fp}"
+    );
+    assert!(
+        fp.contains("…(500 more characters not shown)"),
+        "the page's own words for the cut: {fp}"
     );
     // a symbolic link target is text in a sentence, never a link
     let lp = page(&w, &format!("{uri}/{}", fid(3)), "en", None)
@@ -2875,10 +2886,37 @@ async fn a_really_long_line_is_cut_by_the_engine_and_the_page_says_so_in_words()
         let p = page(&w, &uri, lang, None).await.text();
         check_page(&p, lang);
         assert!(
-            p.contains("\u{2026}(1000 more characters)"),
-            "{lang}: the engine's cut is in the line"
+            !p.contains("more characters)"),
+            "{lang}: no English marker comes from the engine"
+        );
+        assert!(
+            p.contains(&format!("<code>{}</code>", "w".repeat(2000))),
+            "{lang}: the head of the line, 2,000 characters, and nothing else"
+        );
+        let words = if lang == "en" {
+            "…(1,000 more characters not shown)"
+        } else {
+            "…（あと 1,000 文字は表示されません）"
+        };
+        assert!(
+            p.contains(words),
+            "{lang}: the page's words with the number: {p}"
         );
     }
+    let json = diff(&w, &id, f).await;
+    let cut: Vec<_> = json["hunks"][0]["lines"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|l| l["cut_chars"].is_number())
+        .collect();
+    assert_eq!(cut.len(), 1, "{json}");
+    assert_eq!(cut[0]["cut_chars"], 1000);
+    assert_eq!(cut[0]["text"].as_str().unwrap().len(), 2000);
+    assert!(
+        json["hunks"][0]["lines"][0].get("cut_chars").is_none(),
+        "omitted when 0"
+    );
     let en = page(&w, &uri, "en", None).await.text();
     assert!(
         en.contains("Lines that were too long are cut, and each cut says how much was left out."),
@@ -3328,4 +3366,198 @@ async fn twenty_simultaneous_requests_for_the_page_make_one_extraction_and_the_r
         );
     }
     assert_eq!(counter(&w, "extractions"), 1);
+}
+
+// ------------------------------------------------------------------------------------------------ cut text is data, not words
+
+#[tokio::test]
+async fn a_line_that_ends_like_the_old_english_marker_is_shown_as_itself_and_makes_no_cut_sentence()
+{
+    if skip() {
+        return;
+    }
+    let mut w = world("pg-lookalike", Opts::default());
+    let looks = format!("{}\u{2026}(500 more characters)", "z".repeat(40));
+    w.client
+        .write("notes.txt", format!("one\n{looks}\nthree\n").as_bytes());
+    w.client.seal("notes");
+    let (id, _) = propose(&w, title(), &w.client.artifact(&w.forge, "lk")).await;
+    let list = list(&w, &id).await.json();
+    let f = find(&list, "notes.txt");
+    let uri = format!(
+        "/alice/forge/proposals/{id}/revisions/1/changes/{}",
+        f["file_id"].as_str().unwrap()
+    );
+    for lang in ["en", "ja"] {
+        let p = page(&w, &uri, lang, None).await.text();
+        check_page(&p, lang);
+        assert!(
+            p.contains(&format!("<code>{looks}</code>")),
+            "{lang}: the line is shown as itself\n{p}"
+        );
+        assert!(
+            !p.contains("Lines that were too long are cut")
+                && !p.contains("長すぎる行は途中で切ってあり"),
+            "{lang}: no cut sentence for a line that was not cut"
+        );
+        assert!(
+            !p.contains("not shown)") && !p.contains("表示されません）"),
+            "{lang}: no marker"
+        );
+    }
+    let d = diff(&w, &id, f).await;
+    assert!(
+        d["hunks"][0]["lines"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|l| l.get("cut_chars").is_none()),
+        "{d}"
+    );
+}
+
+#[tokio::test]
+async fn a_cut_name_is_its_head_with_path_cut_bytes_and_the_pages_say_it_in_each_language() {
+    if skip() {
+        return;
+    }
+    let (w, id) = one_proposal("pg-cutname").await;
+    let head = "n".repeat(1024);
+    let mut e = entry(
+        1,
+        &head,
+        Status::Added,
+        Kind::Text,
+        true,
+        None,
+        (Some(1), Some(0)),
+    );
+    e.path_escaped = true;
+    e.path_cut_bytes = 276;
+    let d = diff_of(
+        e.clone(),
+        vec![DiffHunk {
+            old_start: 0,
+            old_lines: 0,
+            new_start: 1,
+            new_lines: 1,
+            lines: lines(&[(DiffOp::Add, "x")]),
+        }],
+    );
+    let mut one = entry(
+        2,
+        "m",
+        Status::Added,
+        Kind::Text,
+        false,
+        Some(NotShown::Binary),
+        (None, None),
+    );
+    one.path_cut_bytes = 1;
+    let files = vec![e.clone(), one.clone()];
+    inject(
+        &w,
+        &id,
+        "cutname",
+        change_set(compared(Some(&"a".repeat(64)), None, false), false, files),
+        &[d, diff_of(one.clone(), vec![])],
+    );
+    let uri = format!("/alice/forge/proposals/{id}/revisions/1/changes");
+    for (lang, many, single) in [
+        (
+            "en",
+            "…(276 more bytes of the name not shown)",
+            "…(1 more byte of the name not shown)",
+        ),
+        (
+            "ja",
+            "…（名前のあと 276 バイトは表示されません）",
+            "…（名前のあと 1 バイトは表示されません）",
+        ),
+    ] {
+        let list = page(&w, &uri, lang, None).await.text();
+        check_page(&list, lang);
+        assert!(
+            list.contains(many) && list.contains(single),
+            "{lang}: {list}"
+        );
+        let file = page(&w, &format!("{uri}/{}", fid(1)), lang, None)
+            .await
+            .text();
+        check_page(&file, lang);
+        let h1 = file
+            .split("<h1>")
+            .nth(1)
+            .unwrap()
+            .split("</h1>")
+            .next()
+            .unwrap();
+        assert!(
+            h1.contains(&head) && h1.contains(many),
+            "{lang}: the heading says it: {h1}"
+        );
+    }
+    // the JSON carries the number and no words
+    let j = get(&w, &changes_uri(&id, 1), Some("tok-alice"))
+        .await
+        .json();
+    assert_eq!(find_by_id(&j, &fid(1))["path_cut_bytes"], 276);
+    assert_eq!(
+        find_by_id(&j, &fid(1))["path"].as_str().unwrap().len(),
+        1024
+    );
+    assert!(!j.to_string().contains("more bytes"), "{j}");
+}
+
+fn find_by_id<'a>(list: &'a serde_json::Value, id: &str) -> &'a serde_json::Value {
+    list["files"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["file_id"] == id)
+        .unwrap_or_else(|| panic!("no {id} in {}", list["files"]))
+}
+
+#[tokio::test]
+async fn a_pointer_to_a_key_of_an_earlier_format_is_not_read() {
+    if skip() {
+        return;
+    }
+    let (w, id) = one_proposal("pg-schema").await;
+    // an entry as an earlier version wrote it: a key with no version component, a file name with the old English marker in it
+    let rev = w.changes.revisions_of(&id).unwrap().remove(0);
+    let cache = Cache::open(&w.spool, 64 << 20).unwrap();
+    let old_key = "0123456789abcdef0123456789abcdef01234567";
+    let e = entry(
+        1,
+        "OLD-FORMAT.txt\u{2026}(5 more bytes)",
+        Status::Added,
+        Kind::Text,
+        false,
+        Some(NotShown::Binary),
+        (None, None),
+    );
+    let writer = cache.begin(old_key).unwrap();
+    writer.finish(&ListEntry::Set(Box::new(change_set(
+        compared(None, None, false),
+        false,
+        vec![e],
+    ))));
+    cache.put_rev(&rev.revision_id, &RevEntry::Key(old_key.to_owned()));
+    let r = list(&w, &id).await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text());
+    let body = r.text();
+    assert!(
+        !body.contains("OLD-FORMAT"),
+        "the old entry was served: {body}"
+    );
+    assert!(
+        body.contains("x.txt"),
+        "the view was computed again: {body}"
+    );
+    // and the pointer now names a key of this version
+    match cache.rev(&rev.revision_id).unwrap() {
+        RevEntry::Key(k) => assert!(k.starts_with(&format!("{KEY_SCHEMA}-")), "{k}"),
+        other => panic!("{other:?}"),
+    }
 }

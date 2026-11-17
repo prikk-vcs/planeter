@@ -264,7 +264,8 @@ The proposals list shows the review word of each open proposal. An anonymous rea
   after it and nothing is kept.
 * **Paths and text are display-safe.** The URL carries `file_id` (the SHA-256 of the exact path bytes), never the path. Invalid UTF-8 is shown as
   `\xNN`; controls, line and paragraph separators, **bidirectional controls** and zero-width characters as `\u{…}`; a stray CR in text as `␍`; a name
-  over 1,024 bytes and a line over 2,000 characters are cut with an explicit count. (prikk 0.57 itself refuses most of these in a name, so such a tree
+  over 1,024 bytes and a line over 2,000 characters are cut, and **the cut is data, not words**: the text is the head and nothing else (cut at a character
+  boundary for a name), and `path_cut_bytes` / `cut_chars` (omitted when 0) say how much was left out; each page puts that in the reader's language. (prikk 0.57 itself refuses most of these in a name, so such a tree
   cannot be authored today; the escaping is the second line.) `text` is never HTML: the page escapes it.
 * **A text diff** exists for UTF-8 text without NUL, each side ≤ 256 KiB; otherwise `not_shown_because` is one of `too_large`, `not_utf8`,
   `binary`, `symlink`, `directory`, `unreadable`. Three lines of context; at most 5,000 diff lines per file (`truncated.lines_not_shown` says how

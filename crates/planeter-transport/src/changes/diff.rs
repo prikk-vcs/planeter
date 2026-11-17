@@ -24,6 +24,8 @@ pub enum Op {
 pub struct Line {
     pub op: Op,
     pub text: String,
+    /// Characters of the line left out of `text` (0: none).
+    pub cut_chars: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -64,7 +66,7 @@ pub fn split_lines(text: &str) -> Vec<&str> {
 type Script = Vec<(u8, usize, usize)>;
 
 /// Compare two lists of lines. `display` turns a line into the text that is returned (escaping, cutting).
-pub fn diff_lines(old: &[&str], new: &[&str], display: &dyn Fn(&str) -> String) -> LineDiff {
+pub fn diff_lines(old: &[&str], new: &[&str], display: &dyn Fn(&str) -> (String, u64)) -> LineDiff {
     let (script, approximate) = edit_script(old, new);
     build(old, new, &script, approximate, display)
 }
@@ -187,7 +189,7 @@ fn build(
     new: &[&str],
     script: &Script,
     approximate: bool,
-    display: &dyn Fn(&str) -> String,
+    display: &dyn Fn(&str) -> (String, u64),
 ) -> LineDiff {
     let lines_added = script.iter().filter(|s| s.0 == 2).count() as u64;
     let lines_removed = script.iter().filter(|s| s.0 == 1).count() as u64;
@@ -223,9 +225,11 @@ fn build(
                 1 => (Op::Remove, old[i]),
                 _ => (Op::Add, new[j]),
             };
+            let (text, cut_chars) = display(text);
             lines.push(Line {
                 op,
-                text: display(text),
+                text,
+                cut_chars,
             });
         }
         if !lines.is_empty() {

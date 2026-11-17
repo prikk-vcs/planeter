@@ -681,6 +681,8 @@ keys! {
     ChangesFileTruncated => "changes.file.truncated",
     ChangesFileApproximate => "changes.file.approximate",
     ChangesFileCutLines => "changes.file.cut_lines",
+    ChangesCutChars => "changes.cut.chars",
+    ChangesCutBytes => "changes.cut.bytes",
     ChangesFileEmpty => "changes.file.empty",
     ChangesLinkAdded => "changes.link.added",
     ChangesLinkDeleted => "changes.link.deleted",

@@ -8,8 +8,9 @@
 //!   U+2066–2069, U+200E, U+200F, U+061C) and the zero-width and format characters (U+200B–200D, U+2060, U+FEFF) as `\u{…}`;
 //! * in a line of text, tab is kept (it is layout, not a disguise) and a stray carriage return is `␍` (U+240D).
 //!
-//! A name longer than [`NAME_MAX_BYTES`] bytes is cut with an explicit `…(N more bytes)`; a line longer than [`LINE_MAX_CHARS`]
-//! characters is cut with an explicit `…(N more characters)`.
+//! A name longer than [`NAME_MAX_BYTES`] bytes is cut, and a line longer than [`LINE_MAX_CHARS`] characters is cut. **The cut is data, not
+//! words**: the text is the head and nothing else (no marker is written into it), and how much was left out is a number beside it
+//! (`path_cut_bytes`, `cut_chars`), which each reader turns into a sentence in its own language.
 
 /// A path or a symbolic link's target is shown up to this many bytes.
 pub const NAME_MAX_BYTES: usize = 1024;
@@ -63,31 +64,32 @@ fn escape_bytes(bytes: &[u8], text_mode: bool) -> String {
     out
 }
 
-/// The display form of a path (or of a link target) and whether it differs from the bytes: valid UTF-8 kept, everything else escaped, a
-/// name over [`NAME_MAX_BYTES`] bytes cut with `…(N more bytes)`.
-pub fn display_path(bytes: &[u8]) -> (String, bool) {
-    let (head, more) = if bytes.len() > NAME_MAX_BYTES {
-        (&bytes[..NAME_MAX_BYTES], bytes.len() - NAME_MAX_BYTES)
-    } else {
-        (bytes, 0)
-    };
-    // a cut in the middle of a character leaves an invalid tail: it is shown as escapes, which is honest
-    let mut shown = escape_bytes(head, false);
-    if more > 0 {
-        shown.push_str(&format!("…({more} more bytes)"));
+/// The display form of a path (or of a link target), whether it differs from the bytes, and how many bytes were cut off: valid UTF-8
+/// kept, everything else escaped; a name over [`NAME_MAX_BYTES`] bytes is cut **at a character boundary** (no marker in the text; the
+/// number of bytes left out is the third value, 0 when nothing was cut).
+pub fn display_path(bytes: &[u8]) -> (String, bool, u64) {
+    let mut keep = bytes.len().min(NAME_MAX_BYTES);
+    if keep < bytes.len() {
+        // never in the middle of a character: step back over continuation bytes (at most three)
+        while keep > 0 && bytes[keep] & 0xC0 == 0x80 {
+            keep -= 1;
+        }
     }
-    let same = more == 0 && std::str::from_utf8(bytes).is_ok_and(|s| s == shown);
-    (shown, !same)
+    let shown = escape_bytes(&bytes[..keep], false);
+    let cut = (bytes.len() - keep) as u64;
+    let same = cut == 0 && std::str::from_utf8(bytes).is_ok_and(|s| s == shown);
+    (shown, !same, cut)
 }
 
 /// The display form of one line of text (no line terminator in it), given as bytes that may not be UTF-8 (a link's target): tab kept, a
-/// stray CR shown as `␍`, a line over [`LINE_MAX_CHARS`] characters cut with `…(N more characters)`.
-pub fn display_line_bytes(bytes: &[u8]) -> String {
+/// stray CR shown as `␍`; a line over [`LINE_MAX_CHARS`] characters is cut to that many (no marker in the text) and the second value
+/// is the number of characters left out (0 when nothing was cut).
+pub fn display_line_bytes(bytes: &[u8]) -> (String, u64) {
     cut_line(escape_bytes(bytes, true))
 }
 
 /// [`display_line_bytes`] for a line already known to be UTF-8.
-pub fn display_line(line: &str) -> String {
+pub fn display_line(line: &str) -> (String, u64) {
     let mut out = String::with_capacity(line.len());
     for c in line.chars() {
         push_escaped(&mut out, c, true);
@@ -95,12 +97,13 @@ pub fn display_line(line: &str) -> String {
     cut_line(out)
 }
 
-fn cut_line(s: String) -> String {
+fn cut_line(s: String) -> (String, u64) {
     let n = s.chars().count();
     if n <= LINE_MAX_CHARS {
-        return s;
+        return (s, 0);
     }
-    let mut cut: String = s.chars().take(LINE_MAX_CHARS).collect();
-    cut.push_str(&format!("…({} more characters)", n - LINE_MAX_CHARS));
-    cut
+    (
+        s.chars().take(LINE_MAX_CHARS).collect(),
+        (n - LINE_MAX_CHARS) as u64,
+    )
 }

@@ -12,6 +12,11 @@ use serde::{Deserialize, Serialize};
 
 use super::model::{ChangeSet, FileDiff};
 
+/// The version of what an entry holds, the first component of every key. **Bump it when the format of a stored change set changes**: a
+/// pointer to a key of another version is a miss (the view is computed again), and the old entries are only evicted, oldest first.
+/// Version 2: cut text is data (`cut_chars`, `path_cut_bytes`), no marker written into it.
+pub const KEY_SCHEMA: &str = "v2";
+
 /// A failure that is a fact about immutable inputs, so it may be remembered (a busy or killed run may not).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -89,7 +94,11 @@ impl Cache {
     }
 
     pub fn rev(&self, revision_id: &str) -> Option<RevEntry> {
-        Self::read_json(&self.rev_path(revision_id)?)
+        match Self::read_json(&self.rev_path(revision_id)?)? {
+            // a pointer written by an earlier version of the format is not read
+            RevEntry::Key(k) if !k.starts_with(&format!("{KEY_SCHEMA}-")) => None,
+            e => Some(e),
+        }
     }
 
     pub fn put_rev(&self, revision_id: &str, entry: &RevEntry) {

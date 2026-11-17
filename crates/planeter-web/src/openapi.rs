@@ -312,7 +312,8 @@ fn change_schemas() -> Value {
     json!({
         "ChangeFile": obj(&["file_id", "path", "path_escaped", "status", "kind", "size_before", "size_after", "lines_added", "lines_removed", "shown", "not_shown_because"], json!({
             "file_id": {"type": "string", "description": "The SHA-256 (hex) of the exact path bytes: this, never the path, goes into URLs."},
-            "path": {"type": "string", "description": "Display-safe: valid UTF-8 kept; other bytes as `\\xNN`; controls, line and paragraph separators, bidirectional controls and zero-width characters as `\\u{…}`; a name over 1,024 bytes cut with `…(N more bytes)`."},
+            "path": {"type": "string", "description": "Display-safe: valid UTF-8 kept; other bytes as `\\xNN`; controls, line and paragraph separators, bidirectional controls and zero-width characters as `\\u{…}`; a name over 1,024 bytes is its first 1,024 bytes (cut at a character boundary) with no marker in it; `path_cut_bytes` says how much was left out."},
+            "path_cut_bytes": {"type": "integer", "minimum": 1, "description": "How many bytes of the name were left out of `path`. Omitted when nothing was cut. The `file_id` is still the hash of the whole name."},
             "path_escaped": {"type": "boolean", "description": "The display differs from the bytes."},
             "status": {"type": "string", "enum": ["added", "deleted", "modified", "type_changed"], "description": "A file moved to a new name is a deletion plus an addition: no rename is guessed."},
             "kind": {"type": "string", "enum": ["text", "binary", "symlink", "directory"]},
@@ -350,7 +351,7 @@ fn change_schemas() -> Value {
         })),
         "ChangeHunk": obj(&["old_start", "old_lines", "new_start", "new_lines", "lines"], json!({
             "old_start": {"type": "integer"}, "old_lines": {"type": "integer"}, "new_start": {"type": "integer"}, "new_lines": {"type": "integer"},
-            "lines": {"type": "array", "items": obj(&["op", "text"], json!({"op": {"type": "string", "enum": ["context", "add", "remove"]}, "text": {"type": "string", "description": "Display-safe, never HTML: escape it before showing it in a page."}}))}
+            "lines": {"type": "array", "items": obj(&["op", "text"], json!({"op": {"type": "string", "enum": ["context", "add", "remove"]}, "text": {"type": "string", "description": "Display-safe, never HTML: escape it before showing it in a page. A line over 2,000 characters is its first 2,000 characters with no marker in it."}, "cut_chars": {"type": "integer", "minimum": 1, "description": "How many characters of the line were left out of `text`. Omitted when nothing was cut."}}))}
         })),
         "ChangeFileDiff": json!({
             "allOf": [{"$ref": "#/components/schemas/ChangeFile"}, obj(&["hunks", "truncated", "approximate"], json!({

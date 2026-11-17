@@ -131,7 +131,6 @@ re :: proposals.rs :: ^(kept|partly_removed|removed|reason_too_long|state|reason
 exact :: changes_pages.rs :: {}/revisions/{seq}/changes :: a route address, built from the proposal's own
 re :: changes_pages.rs :: ^(heading|seq|repo|id|declared|real|before|files|added|removed|number|from|to|after|target|old|path|status)$ :: the name of a placeholder of a catalog message
 exact :: changes_pages.rs :: {base}?after={} :: a route address with the cursor of the page
-re :: changes_pages.rs :: ^( more characters\))$ :: the end of the marker the engine puts at a cut line (read, not shown: the page says it in words)
 re :: changes_pages.rs :: ^(diff-context|diff-remove|diff-add)$ :: a CSS class name
 re :: changes.rs :: ^(reason|changes|limit_zero|after_unknown)$ :: a JSON field name, a counter name or a stable machine-readable value (RFC 005 part 6)
 exact :: proposals.rs :: unknown field :: the text of serde's error, matched to tell an unknown field from invalid JSON

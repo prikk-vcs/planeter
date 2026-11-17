@@ -536,3 +536,61 @@ fn two_trees_that_are_each_within_the_bound_can_still_change_more_files_than_the
         "20,000 changed files: past the bound"
     );
 }
+
+#[test]
+fn a_long_line_is_its_head_with_cut_chars_and_a_line_that_looks_like_the_old_marker_is_just_text() {
+    let s = scratch("cut-line");
+    let (b, a) = (s.join("b"), s.join("a"));
+    put(&b, "f.txt", b"keep\n");
+    let long = "z".repeat(2500);
+    let looks = "see \u{2026}(500 more characters)";
+    put(
+        &a,
+        "f.txt",
+        format!("keep\n{long}\n{looks}\nand an ordinary line\n").as_bytes(),
+    );
+    let o = run(&b, &a);
+    let d = diff_of(&o, "f.txt");
+    let lines: Vec<_> = d.hunks.iter().flat_map(|h| h.lines.iter()).collect();
+    let cut = lines.iter().find(|l| l.text.starts_with("zzz")).unwrap();
+    assert_eq!(cut.text, "z".repeat(2000), "the head, and nothing else");
+    assert_eq!(cut.cut_chars, 500);
+    let same = lines.iter().find(|l| l.text == looks).unwrap();
+    assert_eq!(
+        same.cut_chars, 0,
+        "text that ends like the old marker is itself"
+    );
+    // the wire form: cut_chars only where there is one
+    let json = serde_json::to_string(d).unwrap();
+    assert_eq!(json.matches("cut_chars").count(), 1, "{json}");
+    assert!(
+        !json.contains(&format!("{}\u{2026}", "z".repeat(2000))),
+        "no marker is written after the head"
+    );
+    assert!(!json.contains("path_cut_bytes"), "omitted when 0");
+}
+
+#[test]
+fn a_name_over_the_limit_is_its_head_with_path_cut_bytes_and_the_id_is_of_the_whole_name() {
+    let s = scratch("cut-name");
+    let (b, a) = (s.join("b"), s.join("a"));
+    fs::create_dir_all(&b).unwrap();
+    // six directories of 200 bytes each: a path of more than 1,200 bytes, each part within the file system's limit
+    let dir = "d".repeat(200);
+    let rel = format!("{dir}/{dir}/{dir}/{dir}/{dir}/{dir}/leaf.txt");
+    put(&a, &rel, b"x\n");
+    let o = run(&b, &a);
+    assert_eq!(o.entries.len(), 1);
+    let e = &o.entries[0];
+    assert_eq!(e.path.len(), 1024, "the head of the name");
+    assert!(!e.path.contains("more bytes"));
+    assert_eq!(e.path_cut_bytes as usize, rel.len() - 1024);
+    assert!(e.path_escaped);
+    assert_eq!(
+        e.file_id,
+        file_id(rel.as_bytes()),
+        "the id is the hash of the whole name"
+    );
+    let json = serde_json::to_string(e).unwrap();
+    assert!(json.contains("\"path_cut_bytes\""), "{json}");
+}

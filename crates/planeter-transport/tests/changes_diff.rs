@@ -6,7 +6,7 @@ use planeter_transport::changes::diff::{
 use std::time::Instant;
 
 fn d(old: &str, new: &str) -> LineDiff {
-    diff_lines(&split_lines(old), &split_lines(new), &|s| s.to_owned())
+    diff_lines(&split_lines(old), &split_lines(new), &|s| (s.to_owned(), 0))
 }
 
 /// Rebuild both sides from a diff and the unchanged parts: every hunk's context + removed lines must be the old lines it covers and
