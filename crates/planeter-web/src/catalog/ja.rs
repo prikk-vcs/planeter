@@ -871,9 +871,201 @@ pub const CATALOG: &[Entry] = &[
     msg("proposal.details", "詳細"),
     msg("proposal.description", "説明"),
     msg("proposal.no_description", "説明は書かれていません。"),
+    msg("changes.link", "リビジョン {seq} の変更点を見る"),
     msg(
-        "proposal.file_view_missing",
-        "ファイルごとの表示はまだ利用できません。",
+        "title.changes",
+        "提案 #{id} のリビジョン {seq} の変更点 · {repo} · {product}",
+    ),
+    msg("changes.heading", "提案 #{id} のリビジョン {seq} の変更点"),
+    msg(
+        "changes.statement.rebuilt",
+        "ここに表示するファイルは、このリビジョンのパッチから再構築したものです。ここにある内容に署名はありません。",
+    ),
+    msg(
+        "changes.statement.provisional",
+        "このリポジトリの履歴を以前に確認した記録がなかったため、履歴を最初から再現してファイルを再構築しました。ファイルはパッチの内容と一致しますが、履歴そのものは確認されていません。",
+    ),
+    msg(
+        "changes.statement.base_differs",
+        "このリビジョンは {declared} を土台にしたと述べていますが、最初のパッチは {real} から続いています。以下の変更点は {real} と比べたものです。",
+    ),
+    msg(
+        "changes.statement.base_differs_none",
+        "このリビジョンは {declared} を土台にしたと述べていますが、最初のパッチは履歴の最初にあたるため、比べる以前のファイルはありません。",
+    ),
+    msg(
+        "changes.statement.starts",
+        "このリビジョンは履歴の最初にあたるため、比べる以前のファイルはありません。",
+    ),
+    msg(
+        "changes.statement.compared",
+        "{before} と比べています（最初のパッチが続いている、履歴上の地点です）。",
+    ),
+    msg("changes.ids.summary", "完全な ID"),
+    msg("changes.ids.before", "比べた相手：{id}"),
+    msg("changes.ids.after", "このリビジョンの最後：{id}"),
+    msg("changes.summary.files", "変わったファイル {count} 件"),
+    msg("changes.summary.added", "追加 {count} 行"),
+    msg("changes.summary.removed", "削除 {count} 行"),
+    msg("changes.summary", "{files}、{added}、{removed}"),
+    msg(
+        "changes.summary.unshown",
+        "そのうち {count} 件は、テキストとして表示できません（「補足」列を参照）。",
+    ),
+    msg(
+        "changes.none",
+        "このリビジョンで変わるファイルはありません。",
+    ),
+    msg(
+        "changes.table.caption",
+        "リビジョン {seq} で変わったファイル",
+    ),
+    msg("changes.col.file", "ファイル"),
+    msg("changes.col.change", "変更内容"),
+    msg("changes.col.lines", "行数"),
+    msg("changes.col.notes", "補足"),
+    msg("changes.status.added", "追加"),
+    msg("changes.status.modified", "内容が変わった"),
+    msg("changes.status.deleted", "削除"),
+    msg("changes.status.type_changed", "種類が変わった"),
+    msg("changes.row.lines", "追加 {added} 行、削除 {removed} 行"),
+    msg("changes.row.lines_none", "行数なし"),
+    msg(
+        "changes.note.too_large",
+        "ファイルが大きすぎるため、ここには表示しません。",
+    ),
+    msg(
+        "changes.note.not_utf8",
+        "UTF-8 のテキストではないため、テキストとして表示できません。",
+    ),
+    msg(
+        "changes.note.binary",
+        "バイナリファイルのため、テキストとして表示できません。",
+    ),
+    msg(
+        "changes.note.symlink",
+        "ファイルとシンボリックリンクの間で種類が変わったため、テキストとして表示できません。",
+    ),
+    msg(
+        "changes.note.directory",
+        "フォルダーであるか、フォルダーに変わったため、表示するテキストがありません。",
+    ),
+    msg(
+        "changes.note.unreadable",
+        "通常のファイルではないか、階層が深すぎるため、何も表示しません。",
+    ),
+    msg(
+        "changes.note.link",
+        "シンボリックリンクです。リンク先を表示しています。",
+    ),
+    msg("changes.earlier", "前のファイル"),
+    msg("changes.more", "続きのファイル"),
+    msg(
+        "title.changes_file",
+        "{path} の変更点（リビジョン {seq}） · {repo} · {product}",
+    ),
+    msg(
+        "changes.file.escaped",
+        "このファイルの名前には特殊な文字が含まれており、バックスラッシュで始まるエスケープ表記で示しています。",
+    ),
+    msg("changes.file.status", "変更内容：{status}"),
+    msg("changes.file.caption", "{path} の変更点"),
+    msg("changes.diff.col.old", "変更前の行"),
+    msg("changes.diff.col.new", "変更後の行"),
+    msg("changes.diff.col.text", "テキスト"),
+    msg("changes.hunk", "{before}、{after}"),
+    msg("changes.hunk.before_one", "変更前：{from} 行目"),
+    msg("changes.hunk.before_many", "変更前：{from}～{to} 行目"),
+    msg("changes.hunk.before_none", "変更前：なし"),
+    msg("changes.hunk.after_one", "変更後：{from} 行目"),
+    msg("changes.hunk.after_many", "変更後：{from}～{to} 行目"),
+    msg("changes.hunk.after_none", "変更後：なし"),
+    msg("changes.row.added", "追加された行"),
+    msg("changes.row.removed", "削除された行"),
+    msg("changes.row.same", "変わっていない行"),
+    msg(
+        "changes.file.truncated",
+        "ほかに {count} 行は表示していません。",
+    ),
+    msg(
+        "changes.file.approximate",
+        "このファイルは変わった部分が多いため、古い行をすべて削除し、新しい行をすべて追加したものとして表示しています。",
+    ),
+    msg(
+        "changes.file.cut_lines",
+        "長すぎる行は途中で切ってあり、切った箇所に省いた量を示しています。",
+    ),
+    msg("changes.file.empty", "このファイルには行がありません。"),
+    msg(
+        "changes.link.added",
+        "{target} へのシンボリックリンクです。",
+    ),
+    msg(
+        "changes.link.deleted",
+        "{target} へのシンボリックリンクでした。",
+    ),
+    msg(
+        "changes.link.modified",
+        "{target} へのシンボリックリンクです。以前は {old} を指していました。",
+    ),
+    msg(
+        "changes.file.download",
+        "読むにはリビジョン {seq} をダウンロード",
+    ),
+    msg("changes.file.back", "ファイルの一覧に戻る"),
+    msg("changes.file.prev", "前のファイルへ"),
+    msg("changes.file.next", "次のファイルへ"),
+    msg(
+        "title.changes_unavailable",
+        "{heading} · 提案 #{id} のリビジョン {seq} · {repo} · {product}",
+    ),
+    msg(
+        "changes.unavailable.claim_not_held.heading",
+        "この変更点は、ここではもう表示できません",
+    ),
+    msg(
+        "changes.unavailable.claim_not_held.body",
+        "このリビジョンの作業は、もう提案としてここにありません。たとえば、署名された履歴として届いた場合です。代わりに、リポジトリの履歴をご覧ください。",
+    ),
+    msg(
+        "changes.unavailable.not_one_change.heading",
+        "このリビジョンはファイルごとに表示できません",
+    ),
+    msg(
+        "changes.unavailable.not_one_change.body",
+        "このリビジョンのパッチは 1 本の連なりになっていないため、ファイルごとに表示できません。提案した人に、1 本の連なりとして送り直してもらってください。",
+    ),
+    msg(
+        "changes.unavailable.tree_too_large.heading",
+        "このリビジョンは大きすぎて表示できません",
+    ),
+    msg(
+        "changes.unavailable.tree_too_large.body",
+        "このリビジョンはファイルが多すぎるか、大きすぎるため、ファイルごとに表示できません。代わりに、ご自分のコンピューターで読んでください。",
+    ),
+    msg(
+        "changes.unavailable.busy.heading",
+        "サーバーが混み合っています",
+    ),
+    msg(
+        "changes.unavailable.busy.body",
+        "サーバーは今、ほかの変更点を表示する処理で混み合っています。しばらくしてから、もう一度お試しください。",
+    ),
+    msg(
+        "changes.unavailable.timed_out.heading",
+        "表示に時間がかかりすぎました",
+    ),
+    msg(
+        "changes.unavailable.timed_out.body",
+        "変更点の表示に時間がかかりすぎたため、中止しました。しばらくしてからもう一度お試しいただき、何度も起きる場合は、ご自分のコンピューターで読んでください。",
+    ),
+    msg(
+        "changes.unavailable.failed.heading",
+        "変更点を表示できませんでした",
+    ),
+    msg(
+        "changes.unavailable.failed.body",
+        "このリビジョンの変更点を表示できませんでした。何も変わっていません。しばらくしてからもう一度お試しいただき、何度も起きる場合は、このサーバーを運用している人に伝えてください。",
     ),
     msg("proposal.revisions.heading", "リビジョン"),
     msg("proposal.revisions.col.revision", "リビジョン"),

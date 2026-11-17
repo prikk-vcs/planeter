@@ -11,8 +11,8 @@
 {% if let Some(m) = rv.means %}<p class="muted">{{ m }}</p>
 {% endif %}{% if let Some(n) = rv.earlier_note %}<p class="muted">{{ n }}</p>
 {% endif %}{% endif %}{% endif %}
-<p class="muted">{{ t.get(Key::ProposalFileViewMissing) }}</p>
-{% if let Some((seq, href)) = latest_download %}
+{% if let Some((seq, href)) = latest_changes %}<p><a href="{{ href }}">{{ t.msg(Key::ChangesLink).with("seq", seq) }}</a></p>
+{% endif %}{% if let Some((seq, href)) = latest_download %}
 <p><a href="{{ href }}">{{ t.msg(Key::ProposalDownloadLink).with("seq", seq) }}</a></p>
 {% endif %}
 {% if may_close %}
@@ -39,7 +39,7 @@
 <table>
 <caption class="visually-hidden">{{ t.get(Key::ProposalRevisionsHeading) }}</caption>
 <thead><tr><th scope="col">{{ t.get(Key::ProposalRevColRevision) }}</th><th scope="col">{{ t.get(Key::ProposalRevColBy) }}</th><th scope="col">{{ t.get(Key::ProposalRevColSent) }}</th><th scope="col">{{ t.get(Key::ProposalRevColAdded) }}</th><th scope="col">{{ t.get(Key::ProposalRevColBuiltOn) }}</th><th scope="col">{{ t.get(Key::ProposalRevColDeclared) }}</th><th scope="col">{{ t.get(Key::ProposalRevColFiles) }}</th></tr></thead>
-<tbody>{% for r in revisions %}<tr><th scope="row">{{ r.seq }}</th><td>{{ r.by }}</td><td>{{ r.sent }}</td><td>{{ r.added }}</td><td>{% if let Some(b) = r.built_on %}<code>{{ b }}</code>{% else %}{{ t.get(Key::ProposalRevNoBase) }}{% endif %}</td><td>{{ t.get(*r.declared) }}</td><td>{% if let Some(href) = r.download %}<a href="{{ href }}">{{ t.msg(Key::ProposalRevDownload).with("seq", r.seq) }}</a>{% else if !r.available %}{{ t.get(Key::ProposalRevRemoved) }}{% endif %} <code>{{ r.digest }}</code></td></tr>{% endfor %}</tbody>
+<tbody>{% for r in revisions %}<tr><th scope="row">{{ r.seq }}</th><td>{{ r.by }}</td><td>{{ r.sent }}</td><td>{{ r.added }}</td><td>{% if let Some(b) = r.built_on %}<code>{{ b }}</code>{% else %}{{ t.get(Key::ProposalRevNoBase) }}{% endif %}</td><td>{{ t.get(*r.declared) }}</td><td>{% if let Some(href) = r.changes %}<a href="{{ href }}">{{ t.msg(Key::ChangesLink).with("seq", r.seq) }}</a> {% endif %}{% if let Some(href) = r.download %}<a href="{{ href }}">{{ t.msg(Key::ProposalRevDownload).with("seq", r.seq) }}</a>{% else if !r.available %}{{ t.get(Key::ProposalRevRemoved) }}{% endif %} <code>{{ r.digest }}</code></td></tr>{% endfor %}</tbody>
 </table>
 {% for r in revisions %}{% if !r.claims.is_empty() || !r.key_ids.is_empty() %}
 <h3>{{ t.get(Key::ProposalRevColRevision) }} {{ r.seq }}</h3>

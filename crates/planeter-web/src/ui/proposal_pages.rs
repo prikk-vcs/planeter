@@ -36,7 +36,7 @@ use planeter_auth::tokens_match;
 // ------------------------------------------------------------------------------------------------ what a page needs
 
 /// The proposals service, when this server has one.
-fn service_of(state: &AppState) -> Option<Arc<ProposalService>> {
+pub(super) fn service_of(state: &AppState) -> Option<Arc<ProposalService>> {
     state.transport.as_ref().and_then(|rt| rt.proposals.clone())
 }
 
@@ -297,6 +297,8 @@ struct RevRow {
     available: bool,
     /// The download address, when the files are still kept.
     download: Option<String>,
+    /// The page of this revision's changes, when the file-by-file view is on.
+    changes: Option<String>,
 }
 
 struct PatchRow {
@@ -337,6 +339,8 @@ struct DetailTpl {
     explain: Vec<ExplainRow>,
     /// The latest revision's download, when the viewer may download and the files are kept.
     latest_download: Option<(u32, String)>,
+    /// The latest revision's changes page (the file-by-file view), when it is on.
+    latest_changes: Option<(u32, String)>,
     may_close: bool,
     /// Where the close form posts.
     close_action: String,
@@ -375,7 +379,7 @@ fn retention_note(t: &T, r: Retention) -> Option<String> {
 }
 
 /// Who may download (review or merge-seal) and who may close (the opener, or whoever `authorize(Close)` allows).
-async fn permissions(
+pub(super) async fn permissions(
     state: &AppState,
     c: &Ctx,
     record: &RepositoryRecord,
@@ -422,6 +426,7 @@ fn detail_tpl(
     proposals_nav: bool,
     may_download: bool,
     may_close: bool,
+    changes_on: bool,
 ) -> DetailTpl {
     let p = &d.proposal;
     let t = c.t;
@@ -450,6 +455,9 @@ fn detail_tpl(
             available: r.artifact_available,
             download: (may_download && r.artifact_available)
                 .then(|| artifact_href(owner, name, &p.change_id, r.record.seq)),
+            changes: changes_on.then(|| {
+                super::changes_pages::changes_href(owner, name, &p.change_id, r.record.seq)
+            }),
         })
         .collect();
     let latest_download = d
@@ -461,6 +469,17 @@ fn detail_tpl(
             (
                 r.record.seq,
                 artifact_href(owner, name, &p.change_id, r.record.seq),
+            )
+        });
+    let latest_changes = d
+        .revisions
+        .iter()
+        .max_by_key(|r| r.record.seq)
+        .filter(|_| changes_on)
+        .map(|r| {
+            (
+                r.record.seq,
+                super::changes_pages::changes_href(owner, name, &p.change_id, r.record.seq),
             )
         });
     let patches: Vec<PatchRow> = d
@@ -530,6 +549,7 @@ fn detail_tpl(
         retention_note: retention_note(&t, d.retention),
         explain,
         latest_download,
+        latest_changes,
         may_close: may_close && p.state == ChangeState::Open,
         close_action: format!("/{owner}/{name}/proposals/{}/close", pct(&p.change_id)),
         review: None,
@@ -584,6 +604,10 @@ pub(super) async fn detail_page(
         proposals_nav,
         may_download,
         may_close,
+        state
+            .transport
+            .as_ref()
+            .is_some_and(|rt| rt.changes.is_some()),
     );
     tpl.review = super::review_pages::review_block(
         &state,

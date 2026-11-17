@@ -15,7 +15,7 @@ use axum::response::Response;
 use serde::{Deserialize, Serialize};
 
 use planeter_core::admission::ceiling_for;
-use planeter_store::RevisionRecord;
+use planeter_store::{RepositoryRecord, RevisionRecord};
 use planeter_transport::changes::diff::{CONTEXT, MAX_DIFF_LINES, MAX_EDIT_DISTANCE};
 use planeter_transport::changes::model::{ChangeSet, Compared, FileDiff, FileEntry, Totals};
 use planeter_transport::changes::tree::TEXT_MAX;
@@ -164,18 +164,6 @@ fn not_found(state: &AppState) -> Response {
     error_response(state, Failure::Read(planeter_core::ReadError::NotFound))
 }
 
-fn fail(state: &AppState, svc: &ChangesService, e: ChangesError) -> Response {
-    match e {
-        ChangesError::NoSuchFile => not_found(state),
-        ChangesError::Unavailable(r) => {
-            if r == ChangesReason::Busy {
-                svc.busy();
-            }
-            unavailable(state, r)
-        }
-    }
-}
-
 /// Everything before the work: the principal, the edge limits, the one read gate, the service, the proposal and its revision.
 async fn open(
     state: &AppState,
@@ -216,12 +204,27 @@ async fn open(
     }
 }
 
+/// Why a view of a revision is not there: what the JSON and the pages each turn into their own answer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Fail {
+    /// The engine's closed list of reasons.
+    Reason(ChangesReason),
+    /// The revision has no changed file with this id.
+    NoSuchFile,
+    /// The cost is over the memory budget of the heavy pool.
+    OverBudget,
+    Internal,
+}
+
+fn fail_of(e: ChangesError) -> Fail {
+    match e {
+        ChangesError::NoSuchFile => Fail::NoSuchFile,
+        ChangesError::Unavailable(r) => Fail::Reason(r),
+    }
+}
+
 /// Run `job` under the view's admission: the heavy pool at the `extract` cost, held for the whole job (both extractions and the comparison).
-async fn admitted<T, F>(
-    state: &AppState,
-    svc: &Arc<ChangesService>,
-    job: F,
-) -> Result<Result<T, ChangesError>, Box<Response>>
+async fn admitted<T, F>(state: &AppState, svc: &Arc<ChangesService>, job: F) -> Result<T, Fail>
 where
     F: FnOnce(Option<u64>) -> Result<T, ChangesError> + Send + 'static,
     T: Send + 'static,
@@ -233,15 +236,136 @@ where
         .run_weighted_heavy(cost, "changes", move || job(ceiling))
         .await
     {
-        Ok(r) => Ok(r),
+        Ok(r) => r.map_err(fail_of),
         Err(AdmitError::Busy) => {
             svc.busy();
-            Err(Box::new(unavailable(state, ChangesReason::Busy)))
+            Err(Fail::Reason(ChangesReason::Busy))
         }
-        Err(AdmitError::TooLarge { .. }) => {
-            Err(Box::new(error_response(state, Failure::OverBudget)))
+        Err(AdmitError::TooLarge { .. }) => Err(Fail::OverBudget),
+        Err(AdmitError::Aborted) => Err(Fail::Internal),
+    }
+}
+
+/// Take our turn on this revision. More than eight waiting already: refused at once, as busy.
+async fn take_turn(
+    svc: &Arc<ChangesService>,
+    rev: &RevisionRecord,
+) -> Result<planeter_transport::Flight, Fail> {
+    let (flier, rid) = (Arc::clone(svc), rev.revision_id.clone());
+    match offload(move || flier.flight(&rid)).await {
+        Ok(Ok(t)) => Ok(t),
+        Ok(Err(_)) => {
+            svc.busy();
+            Err(Fail::Reason(ChangesReason::Busy))
         }
-        Err(AdmitError::Aborted) => Err(Box::new(error_response(state, Failure::Internal))),
+        Err(_) => Err(Fail::Internal),
+    }
+}
+
+/// The change set of a revision: from the cache, or computed under the admission. The caller holds the turn.
+async fn list_under_turn(
+    state: &AppState,
+    svc: &Arc<ChangesService>,
+    record: &RepositoryRecord,
+    rev: &RevisionRecord,
+) -> Result<ChangeSet, Fail> {
+    let cached = {
+        let (svc, rev) = (Arc::clone(svc), rev.clone());
+        offload(move || svc.cached_list(&rev))
+            .await
+            .map_err(|_| Fail::Internal)?
+    };
+    match cached {
+        Some(r) => r.map_err(fail_of),
+        None => {
+            let (svc2, record, rev2) = (Arc::clone(svc), record.clone(), rev.clone());
+            admitted(state, svc, move |ceiling| {
+                svc2.list(&record, &rev2, ceiling)
+            })
+            .await
+        }
+    }
+}
+
+/// One file's diff: from the cache, or computed under the admission. The caller holds the turn.
+async fn file_under_turn(
+    state: &AppState,
+    svc: &Arc<ChangesService>,
+    record: &RepositoryRecord,
+    rev: &RevisionRecord,
+    file_id: &str,
+) -> Result<FileDiff, Fail> {
+    let cached = {
+        let (svc, rev, fid) = (Arc::clone(svc), rev.clone(), file_id.to_owned());
+        offload(move || svc.cached_file(&rev, &fid))
+            .await
+            .map_err(|_| Fail::Internal)?
+    };
+    match cached {
+        Some(r) => r.map_err(fail_of),
+        None => {
+            let (svc2, record, rev2, fid) = (
+                Arc::clone(svc),
+                record.clone(),
+                rev.clone(),
+                file_id.to_owned(),
+            );
+            admitted(state, svc, move |ceiling| {
+                svc2.file(&record, &rev2, &fid, ceiling)
+            })
+            .await
+        }
+    }
+}
+
+/// The change set of a revision (the list page and the JSON list).
+pub(crate) async fn fetch_list(
+    state: &AppState,
+    svc: &Arc<ChangesService>,
+    record: &RepositoryRecord,
+    rev: &RevisionRecord,
+) -> Result<ChangeSet, Fail> {
+    let _turn = take_turn(svc, rev).await?;
+    list_under_turn(state, svc, record, rev).await
+}
+
+/// One file's diff (the JSON file answer).
+pub(crate) async fn fetch_file(
+    state: &AppState,
+    svc: &Arc<ChangesService>,
+    record: &RepositoryRecord,
+    rev: &RevisionRecord,
+    file_id: &str,
+) -> Result<FileDiff, Fail> {
+    let _turn = take_turn(svc, rev).await?;
+    file_under_turn(state, svc, record, rev, file_id).await
+}
+
+/// One file's diff and the whole list (the file page: the neighbours come from the list). The list is read first, so that a list that is
+/// not cached is computed once, with every diff written to the cache, and the file then comes from the cache.
+pub(crate) async fn fetch_file_and_list(
+    state: &AppState,
+    svc: &Arc<ChangesService>,
+    record: &RepositoryRecord,
+    rev: &RevisionRecord,
+    file_id: &str,
+) -> Result<(FileDiff, ChangeSet), Fail> {
+    let _turn = take_turn(svc, rev).await?;
+    let set = list_under_turn(state, svc, record, rev).await?;
+    if !set.files.iter().any(|f| f.file_id == file_id) {
+        return Err(Fail::NoSuchFile);
+    }
+    let diff = file_under_turn(state, svc, record, rev, file_id).await?;
+    Ok((diff, set))
+}
+
+/// The JSON answer for a failure.
+fn json_fail(state: &AppState, f: Fail) -> Response {
+    match f {
+        Fail::Reason(r) => unavailable(state, r),
+        Fail::NoSuchFile => not_found(state),
+        Fail::OverBudget => error_response(state, Failure::OverBudget),
+        Fail::Internal => error_response(state, Failure::Internal),
     }
 }
 
@@ -263,43 +387,9 @@ pub(crate) async fn list_handler(
         return invalid_with_reason(&state, "limit_zero");
     }
     let limit = q.limit.unwrap_or(LIST_DEFAULT).min(LIST_MAX);
-    // take our turn on this revision, then look in the cache before asking for any memory
-    let turn = {
-        let (flier, rid) = (Arc::clone(&svc), rev.revision_id.clone());
-        match offload(move || flier.flight(&rid)).await {
-            Ok(Ok(t)) => t,
-            // more than eight already wait for this revision: refused at once, in words
-            Ok(Err(_)) => {
-                return fail(&state, &svc, ChangesError::Unavailable(ChangesReason::Busy));
-            }
-            Err(_) => return error_response(&state, Failure::Internal),
-        }
-    };
-    let cached = {
-        let (svc, rev) = (Arc::clone(&svc), rev.clone());
-        match offload(move || svc.cached_list(&rev)).await {
-            Ok(c) => c,
-            Err(_) => return error_response(&state, Failure::Internal),
-        }
-    };
-    let result = match cached {
-        Some(r) => r,
-        None => {
-            let (svc2, record, rev2) = (Arc::clone(&svc), record.clone(), rev.clone());
-            match admitted(&state, &svc, move |ceiling| {
-                svc2.list(&record, &rev2, ceiling)
-            })
-            .await
-            {
-                Ok(r) => r,
-                Err(resp) => return *resp,
-            }
-        }
-    };
-    drop(turn);
-    let set = match result {
+    let set = match fetch_list(&state, &svc, &record, &rev).await {
         Ok(s) => s,
-        Err(e) => return fail(&state, &svc, e),
+        Err(f) => return json_fail(&state, f),
     };
     match page(&svc, &rev, set, q.after.as_deref(), limit) {
         Paged::View(v) => json_ok(&state, &*v),
@@ -364,45 +454,7 @@ pub(crate) async fn file_handler(
     {
         return not_found(&state);
     }
-    let turn = {
-        let (flier, rid) = (Arc::clone(&svc), rev.revision_id.clone());
-        match offload(move || flier.flight(&rid)).await {
-            Ok(Ok(t)) => t,
-            // more than eight already wait for this revision: refused at once, in words
-            Ok(Err(_)) => {
-                return fail(&state, &svc, ChangesError::Unavailable(ChangesReason::Busy));
-            }
-            Err(_) => return error_response(&state, Failure::Internal),
-        }
-    };
-    let cached = {
-        let (svc, rev, fid) = (Arc::clone(&svc), rev.clone(), file_id.clone());
-        match offload(move || svc.cached_file(&rev, &fid)).await {
-            Ok(c) => c,
-            Err(_) => return error_response(&state, Failure::Internal),
-        }
-    };
-    let result = match cached {
-        Some(r) => r,
-        None => {
-            let (svc2, record, rev2, fid) = (
-                Arc::clone(&svc),
-                record.clone(),
-                rev.clone(),
-                file_id.clone(),
-            );
-            match admitted(&state, &svc, move |ceiling| {
-                svc2.file(&record, &rev2, &fid, ceiling)
-            })
-            .await
-            {
-                Ok(r) => r,
-                Err(resp) => return *resp,
-            }
-        }
-    };
-    drop(turn);
-    match result {
+    match fetch_file(&state, &svc, &record, &rev, &file_id).await {
         Ok(FileDiff {
             entry,
             hunks,
@@ -417,6 +469,6 @@ pub(crate) async fn file_handler(
                 approximate,
             },
         ),
-        Err(e) => fail(&state, &svc, e),
+        Err(f) => json_fail(&state, f),
     }
 }

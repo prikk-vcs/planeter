@@ -38,6 +38,7 @@ use crate::gate::GateError;
 use crate::principal::principal_from_request;
 use crate::sanitize::render_markdown;
 
+mod changes_pages;
 mod creation_pages;
 mod proposal_pages;
 mod review_pages;
@@ -128,6 +129,8 @@ pub fn routes() -> Routes {
         .route("/{owner}/{name}/verify", read, &["GET"], get(verify_page))
         .route("/{owner}/{name}/proposals", read, &["GET"], get(proposal_pages::list_page))
         .route("/{owner}/{name}/proposals/{id}", read, &["GET"], get(proposal_pages::detail_page))
+        .route("/{owner}/{name}/proposals/{id}/revisions/{seq}/changes", read, &["GET"], get(changes_pages::changes_page))
+        .route("/{owner}/{name}/proposals/{id}/revisions/{seq}/changes/{file_id}", read, &["GET"], get(changes_pages::file_page))
         .route("/{owner}/{name}/proposals/{id}/close", close, &["POST"], post(proposal_pages::close_submit))
         .route("/{owner}/{name}/proposals/{id}/comments", comment_class, &["POST"], post(review_pages::comment_submit))
         .route("/{owner}/{name}/proposals/{id}/decisions", decision_class, &["POST"], post(review_pages::decision_submit))

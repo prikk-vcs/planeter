@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block nav %}{% include "repo_nav.html" %}{% endblock %}
+{% block body %}
+<h1>{{ heading }}</h1>
+<p>{{ body }}</p>
+<p><a href="{{ proposal_href }}">{{ t.get(Key::ProposalBack) }}</a></p>
+{% if let Some(href) = download %}<p><a href="{{ href }}">{{ t.msg(Key::ProposalDownloadLink).with("seq", seq) }}</a></p>
+{% endif %}{% endblock %}

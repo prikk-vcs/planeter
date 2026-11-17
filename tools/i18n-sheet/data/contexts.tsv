@@ -47,6 +47,12 @@ web	proposal.retention.*	B	Proposals: one proposal	how long a proposal's files a
 web	proposal.close.*	B	Proposals: one proposal	the form that closes a proposal
 web	proposal.*	B	Proposals: one proposal	the proposal page
 web	title.proposal	B	Proposals: one proposal	the browser title of a proposal
+web	changes.link	B	Proposals: one proposal	the link from a revision to its changes
+web	changes.unavailable.*	B	Proposals: the changes of a revision	the page that says why the changes of a revision cannot be shown, and what to do
+web	changes.statement.*	B	Proposals: the changes of a revision	the statements that say what the files are, what they are compared with and how far to trust that
+web	changes.ids.*	B	Proposals: the changes of a revision	the full ids behind the short ones
+web	changes.*	B	Proposals: the changes of a revision	the page that lists the files a revision changes, and the page of one file's diff
+web	title.changes*	B	Proposals: the changes of a revision	the browser title of those pages
 web	review.*	B	Review on a proposal	the review part of the proposal page (decisions, earlier revisions)
 web	decision.*	B	Review on a proposal	a refused decision
 web	comments.*	B	Comments	the list of comments

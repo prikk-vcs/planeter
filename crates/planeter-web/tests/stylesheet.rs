@@ -894,3 +894,106 @@ fn the_reader_reads_nested_blocks_and_comments() {
     assert_eq!(rules[0].get("color"), Some("#fff"));
     assert_eq!(rules[1].media, ["(a:b)", "(c)"]);
 }
+
+// ---------------------------------------------------------------------------------------------- the diff table (RFC 005 part 6, pages)
+
+/// Findings about the file-by-file view's rules: the diff text keeps its spaces and wraps anywhere (so nothing scrolls sideways at 320 CSS px),
+/// the line-number columns do not wrap a number, and added and removed rows differ by a border style (a dashed and a solid one), also in forced
+/// colours, in addition to their background (colour is supplementary).
+fn diff_findings(css: &str) -> Vec<String> {
+    let rules = parse(css);
+    let mut out = Vec::new();
+    let has = |sel: &str, prop: &str, want: &str| {
+        rules.iter().any(|r| {
+            r.media.is_empty()
+                && r.selectors.iter().any(|s| s.trim() == sel)
+                && r.get(prop).is_some_and(|v| v.contains(want))
+        })
+    };
+    if !has("table.diff td code", "white-space", "pre-wrap") {
+        out.push("the diff text does not keep its spaces (`white-space: pre-wrap` on `table.diff td code`)".to_owned());
+    }
+    if !has("table.diff td code", "overflow-wrap", "anywhere") {
+        out.push("the diff text does not wrap anywhere (`overflow-wrap: anywhere` on `table.diff td code`): a long line would scroll the page sideways".to_owned());
+    }
+    if !has("table.diff td:nth-child(-n+3)", "white-space", "nowrap") {
+        out.push("the line-number columns may wrap a number".to_owned());
+    }
+    for (sel, style) in [
+        ("tr.diff-add td:first-child", "solid"),
+        ("tr.diff-remove td:first-child", "dashed"),
+    ] {
+        if !has(sel, "border-inline-start", style) {
+            out.push(format!(
+                "`{sel}` has no {style} border: added and removed rows would differ by colour alone"
+            ));
+        }
+        let in_forced = rules.iter().any(|r| {
+            r.media.iter().any(|m| m.contains("forced-colors"))
+                && r.selectors.iter().any(|s| s.trim() == sel)
+                && r.get("border-inline-start")
+                    .is_some_and(|v| v.contains(style) && v.contains("CanvasText"))
+        });
+        if !in_forced {
+            out.push(format!(
+                "`{sel}` is not restated in forced colours (a {style} border in CanvasText)"
+            ));
+        }
+    }
+    out
+}
+
+#[test]
+fn the_diff_text_wraps_the_numbers_do_not_and_added_and_removed_rows_differ_by_more_than_colour() {
+    assert_eq!(diff_findings(CSS), Vec::<String>::new());
+    // the rows' text on their backgrounds is in the tested contrast table, in both themes
+    let (rows, problems) = contrast_rows(CSS);
+    assert!(problems.is_empty(), "{problems:?}");
+    for sel in ["tr.diff-add td", "tr.diff-remove td"] {
+        for theme in [Theme::Light, Theme::Dark] {
+            let r = rows
+                .iter()
+                .find(|r| r.selector == sel && r.theme == theme)
+                .unwrap_or_else(|| panic!("`{sel}` is not in the contrast table ({theme:?})"));
+            assert!(r.ratio >= TEXT_MIN, "{sel} {theme:?}: {:.2}", r.ratio);
+        }
+    }
+}
+
+#[test]
+fn the_diff_rules_fail_when_the_wrap_the_number_guard_or_a_border_style_is_removed() {
+    for (from, to, what) in [
+        (
+            "white-space:pre-wrap;overflow-wrap:anywhere}",
+            "white-space:pre-wrap}",
+            "wrap anywhere",
+        ),
+        (
+            "table.diff td code,table.diff th{white-space:pre-wrap;",
+            "table.diff td code,table.diff th{",
+            "keeps its spaces",
+        ),
+        (
+            "tr.diff-remove td:first-child{border-inline-start:4px dashed var(--fg)}",
+            "tr.diff-remove td:first-child{border-inline-start:4px solid var(--fg)}",
+            "dashed border",
+        ),
+        (
+            "tr.diff-add td:first-child{border-inline-start:4px solid CanvasText}",
+            "",
+            "forced colours",
+        ),
+        (
+            "white-space:nowrap;overflow-wrap:normal;width:1%",
+            "overflow-wrap:normal;width:1%",
+            "wrap a number",
+        ),
+    ] {
+        assert!(
+            CSS.contains(from),
+            "the planted change needs `{from}` in the stylesheet"
+        );
+        let findings = diff_findings(&CSS.replacen(from, to, 1));
+        assert!(!findings.is_empty(), "removing the {what} must be found");
+    }
+}

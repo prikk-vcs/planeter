@@ -3876,10 +3876,9 @@ async fn the_pages_say_the_default_view_in_plain_words_and_keep_the_rest_under_d
     );
     assert!(p.contains("Proposed by alice"), "{p}");
     assert!(p.contains("2 patches in 1 revision"), "{p}");
-    assert!(
-        p.contains("The file-by-file view is not available yet."),
-        "{p}"
-    );
+    // the old sentence is gone; without the file-by-file view (no service in this world) the page says nothing of it and has no link
+    assert!(!p.contains("not available yet"), "{p}");
+    assert!(!p.contains("See the changes in revision"), "{p}");
     assert_eq!(
         p.matches("<details").count() - p.matches("<details class=\"explain\"").count(),
         1,

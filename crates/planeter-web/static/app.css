@@ -1,5 +1,5 @@
-:root{color-scheme:light dark;--bg:#fff;--fg:#1a1a1a;--muted:#666;--line:#ddd;--control:#767676;--accent:#2a5db0;--ok:#1a7f37;--warn:#9a6700;--bad:#b42318}
-@media (prefers-color-scheme:dark){:root{--bg:#111;--fg:#eee;--muted:#aaa;--line:#333;--control:#8c8c8c;--accent:#7aa7ff;--ok:#3fb950;--warn:#d4a72c;--bad:#f85149}}
+:root{color-scheme:light dark;--bg:#fff;--fg:#1a1a1a;--muted:#666;--line:#ddd;--control:#767676;--accent:#2a5db0;--ok:#1a7f37;--warn:#9a6700;--bad:#b42318;--add-bg:#e3f4e8;--remove-bg:#fbe4e1}
+@media (prefers-color-scheme:dark){:root{--bg:#111;--fg:#eee;--muted:#aaa;--line:#333;--control:#8c8c8c;--accent:#7aa7ff;--ok:#3fb950;--warn:#d4a72c;--bad:#f85149;--add-bg:#17331f;--remove-bg:#45201e}}
 *{box-sizing:border-box}body{margin:0;font:15px/1.5 system-ui,sans-serif;color:var(--fg);background:var(--bg)}
 header{border-bottom:1px solid var(--line);padding:.6rem 1rem;display:flex;flex-wrap:wrap;gap:.25rem 1rem;align-items:center}
 header a{color:var(--fg);text-decoration:none;font-weight:600}header a:hover,header a:focus-visible{text-decoration:underline}header .who{margin-inline-start:auto;min-width:0;color:var(--muted)}
@@ -26,6 +26,16 @@ th a,td a,.crumbs a{unicode-bidi:plaintext}
 .readme img{max-width:100%;height:auto}
 /* plain words (RFC 012 D-4): the in-place explanations are native <details>, no script */
 details.explain{margin-block:.5rem}details.explain summary{cursor:pointer;min-height:24px;min-width:24px;padding-block:.15rem}details.explain p{margin-block:.4rem;overflow-wrap:anywhere}
+/* the file-by-file view (RFC 005 part 6): colour is supplementary. A marker in the cell and its hidden word say added or removed; a solid or a dashed border tells them apart without colour, and survives forced colours. Text keeps its spaces and wraps anywhere, so nothing scrolls sideways at 320 CSS px */
+ul.statements{padding-inline-start:1.25rem}
+table.diff td code,table.diff th{white-space:pre-wrap;overflow-wrap:anywhere}
+table.diff td:nth-child(-n+3){white-space:nowrap;overflow-wrap:normal;width:1%;text-align:end;vertical-align:top}
+table.diff td:last-child{vertical-align:top}
+tr.hunk th{font-weight:600}
+tr.diff-add td{background:var(--add-bg);color:var(--fg)}
+tr.diff-remove td{background:var(--remove-bg);color:var(--fg)}
+tr.diff-add td:first-child{border-inline-start:4px solid var(--fg)}
+tr.diff-remove td:first-child{border-inline-start:4px dashed var(--fg)}
 /* language switcher (RFC 012 D-3b): one button per language in the footer, the current one marked by weight and a solid border (not by colour alone) */
 footer .footer-line{margin:0}
 nav.lang ul{list-style:none;display:flex;flex-wrap:wrap;gap:.25rem .5rem;margin:.5rem 0 0;padding:0}
@@ -42,4 +52,5 @@ body:lang(ja) thead th,body:lang(ja) th[scope=row]+td:not(.muted){overflow-wrap:
 :focus-visible{outline:2px solid Highlight}
 button,input{border:1px solid ButtonBorder}
 header,td,th{border-bottom:1px solid CanvasText}
+tr.diff-add td:first-child{border-inline-start:4px solid CanvasText}tr.diff-remove td:first-child{border-inline-start:4px dashed CanvasText}
 }
