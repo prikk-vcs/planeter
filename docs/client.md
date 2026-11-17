@@ -44,8 +44,15 @@ happened and what comes next:
 > Proposed as proposal #c-42 (revision 1). Your work is held for review on this server; no branch has changed. Reviewers can see it at
 > https://forge.example/alice/app/proposals/c-42.
 
+**Adding a revision.** `propose … --proposal ID` adds your new work to a proposal that exists, as its next revision, instead of opening a new one
+(the message then says "Added as revision 2 of proposal #…"). **The first revision fixes the proposal's title, its description and its target
+branch**: a revision keeps them, so the program sends none of the three with `--proposal`, and `--title` or `--description-file` together with
+`--proposal` is refused at once, before anything is read or sent ("A revision keeps the title and the description of the proposal it is added to
+…"). `--ref` still names the branch of **your** repository that is built and sent. (Until 0.7.0 the program also sent the target branch with
+`--proposal`, which the server refuses beside a proposal id, so a revision could not be added at all; upgrade the client. The server did not change.)
+
 `--dry-run` builds and declares, says what would be sent, and sends nothing (it needs no token). A refusal is **one sentence for the
-reason and one for what to do**; the server's own words (`code`, `message`, `hint`) appear only under `--verbose`. If the server did
+reason and one for what to do**; the server's own words (`code`, `message`, `hint`, and the `reason` of a refused request) appear only under `--verbose`. If the server did
 not finish taking the work in (`incomplete`), the same work is sent again only with `--retry`: the program never repeats a send by
 itself, and the record of an unfinished send is the only thing it keeps about a proposal.
 
