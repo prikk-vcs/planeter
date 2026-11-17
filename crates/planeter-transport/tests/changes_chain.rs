@@ -165,3 +165,61 @@ fn a_cycle_is_not_one_change_and_does_not_loop() {
         ChainError::NotOneChange
     );
 }
+
+// ------------------------------------------------------------------------------------------------ the bound on waiters
+
+use planeter_transport::{ChangesConfig, ChangesService, MAX_WAITERS, Metrics, TooManyWaiters};
+use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+fn service() -> ChangesService {
+    let hosting = Arc::new(planeter_core::HostingService::new(
+        std::env::temp_dir().join("changes-flight"),
+        Arc::new(planeter_store::InMemoryRepositoryStore::new())
+            as Arc<dyn planeter_store::RepositoryStore>,
+    ));
+    ChangesService::new(hosting, Arc::new(Metrics::new()), ChangesConfig::default())
+}
+
+#[test]
+fn at_most_eight_requests_wait_for_one_revision_and_the_ninth_is_refused_without_parking() {
+    let svc = service();
+    let holder = svc.flight("rev-a").unwrap();
+    let started = Arc::new(AtomicUsize::new(0));
+    let finished = Arc::new(AtomicUsize::new(0));
+    let mut waiters = Vec::new();
+    for _ in 0..MAX_WAITERS {
+        let (svc, started, finished) = (svc.clone(), Arc::clone(&started), Arc::clone(&finished));
+        waiters.push(std::thread::spawn(move || {
+            started.fetch_add(1, Ordering::SeqCst);
+            let f = svc.flight("rev-a").expect("a waiter within the bound");
+            finished.fetch_add(1, Ordering::SeqCst);
+            drop(f);
+        }));
+    }
+    // wait until all eight are parked (they cannot finish: the holder still holds)
+    let t = std::time::Instant::now();
+    while started.load(Ordering::SeqCst) < MAX_WAITERS && t.elapsed().as_secs() < 5 {
+        std::thread::sleep(std::time::Duration::from_millis(5));
+    }
+    std::thread::sleep(std::time::Duration::from_millis(200));
+    assert_eq!(finished.load(Ordering::SeqCst), 0, "they wait");
+    // the ninth: at once, from this very thread
+    let t = std::time::Instant::now();
+    assert!(matches!(svc.flight("rev-a"), Err(TooManyWaiters)));
+    assert!(t.elapsed().as_millis() < 100, "refused without waiting");
+    // another revision is not affected
+    drop(svc.flight("rev-b").expect("another key has its own queue"));
+    drop(holder);
+    for w in waiters {
+        w.join().unwrap();
+    }
+    assert_eq!(
+        finished.load(Ordering::SeqCst),
+        MAX_WAITERS,
+        "every waiter got its turn"
+    );
+    // and the bookkeeping is clean: a new request is the holder again
+    let again = svc.flight("rev-a").expect("free again");
+    drop(again);
+}

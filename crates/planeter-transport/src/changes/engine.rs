@@ -9,7 +9,7 @@
 //!   first's result in the cache instead of extracting again.
 //! * No file name, path or content is ever written to a log line or a counter.
 
-use std::collections::HashSet;
+use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant};
@@ -92,7 +92,8 @@ struct Inner {
     metrics: Arc<Metrics>,
     config: ChangesConfig,
     cache: Option<Cache>,
-    busy: Mutex<HashSet<String>>,
+    /// Per revision: whether a view is being computed, and how many requests wait for it.
+    flights: Mutex<HashMap<String, FlightState>>,
     turn: Condvar,
 }
 
@@ -100,6 +101,19 @@ struct Inner {
 pub struct ChangesService {
     inner: Arc<Inner>,
 }
+
+/// The most requests that wait for one revision's view (the one that computes it is not a waiter). The next is refused at once, without parking a thread.
+pub const MAX_WAITERS: usize = 8;
+
+#[derive(Default)]
+struct FlightState {
+    running: bool,
+    waiters: usize,
+}
+
+/// More than [`MAX_WAITERS`] requests are already waiting for this revision's view.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TooManyWaiters;
 
 /// Held while one revision's view is being computed; the next request for the same revision waits for it to drop.
 pub struct Flight {
@@ -109,12 +123,17 @@ pub struct Flight {
 
 impl Drop for Flight {
     fn drop(&mut self) {
-        let mut busy = self
+        let mut flights = self
             .inner
-            .busy
+            .flights
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        busy.remove(&self.key);
+        if let Some(f) = flights.get_mut(&self.key) {
+            f.running = false;
+            if f.waiters == 0 {
+                flights.remove(&self.key);
+            }
+        }
         self.inner.turn.notify_all();
     }
 }
@@ -134,7 +153,7 @@ impl ChangesService {
                 metrics,
                 config,
                 cache,
-                busy: Mutex::new(HashSet::new()),
+                flights: Mutex::new(HashMap::new()),
                 turn: Condvar::new(),
             }),
         }
@@ -154,25 +173,39 @@ impl ChangesService {
         ReadVerb::Extract.cost_with_bound(0, self.inner.config.max_bytes)
     }
 
-    /// Wait for our turn on this revision. Blocks; call it on the blocking pool, before asking for memory.
-    pub fn flight(&self, revision_id: &str) -> Flight {
-        let mut busy = self
+    /// Wait for our turn on this revision. Blocks; call it on the blocking pool, before asking for memory. At most [`MAX_WAITERS`] requests wait for
+    /// one revision: the next gets [`TooManyWaiters`] at once (counted as `busy`), so a burst of identical requests cannot park the blocking pool.
+    pub fn flight(&self, revision_id: &str) -> Result<Flight, TooManyWaiters> {
+        let mut flights = self
             .inner
-            .busy
+            .flights
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner);
-        while busy.contains(revision_id) {
-            busy = self
-                .inner
-                .turn
-                .wait(busy)
-                .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let entry = flights.entry(revision_id.to_owned()).or_default();
+        if entry.running {
+            if entry.waiters >= MAX_WAITERS {
+                return Err(TooManyWaiters);
+            }
+            entry.waiters += 1;
+            loop {
+                flights = self
+                    .inner
+                    .turn
+                    .wait(flights)
+                    .unwrap_or_else(std::sync::PoisonError::into_inner);
+                if !flights.get(revision_id).is_some_and(|f| f.running) {
+                    break;
+                }
+            }
+            if let Some(f) = flights.get_mut(revision_id) {
+                f.waiters -= 1;
+            }
         }
-        busy.insert(revision_id.to_owned());
-        Flight {
+        flights.entry(revision_id.to_owned()).or_default().running = true;
+        Ok(Flight {
             inner: Arc::clone(&self.inner),
             key: revision_id.to_owned(),
-        }
+        })
     }
 
     fn count(&self, what: &str) {

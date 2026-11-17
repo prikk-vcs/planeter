@@ -1595,3 +1595,91 @@ async fn a_proposal_built_after_another_carries_the_earlier_claims_again_and_its
         "the revision's own chain against its sealed base: the earlier work is part of this revision's claims"
     );
 }
+
+#[tokio::test]
+async fn twenty_simultaneous_identical_requests_make_one_extraction_eight_wait_and_the_rest_are_busy_at_once()
+ {
+    if skip() {
+        return;
+    }
+    let mut w = world("waiters", Opts::default());
+    for i in 0..30 {
+        w.client.write(
+            &format!("f{i}.txt"),
+            format!("file {i}\n").repeat(200).as_bytes(),
+        );
+    }
+    w.client.seal("thirty files");
+    let art = w.client.artifact(&w.forge, "wt");
+    let (id, _) = propose(&w, title(), &art).await;
+    // twenty requests at once; the first computes (a second or so), eight wait for it, eleven are refused without parking
+    let replies = futures_join_all((0..20).map(|_| list(&w, &id)).collect()).await;
+    let ok = replies
+        .iter()
+        .filter(|r| r.status == StatusCode::OK)
+        .count();
+    let busy: Vec<&Reply> = replies
+        .iter()
+        .filter(|r| r.status == StatusCode::SERVICE_UNAVAILABLE)
+        .collect();
+    assert_eq!(
+        (ok, busy.len()),
+        (
+            1 + planeter_transport::MAX_WAITERS,
+            20 - 1 - planeter_transport::MAX_WAITERS
+        ),
+        "{:?}",
+        replies
+            .iter()
+            .map(|r| r.status.as_u16())
+            .collect::<Vec<_>>()
+    );
+    for r in &busy {
+        let j = r.json();
+        assert_eq!(
+            (j["code"].as_str(), j["reason"].as_str()),
+            (Some("changes_unavailable"), Some("busy"))
+        );
+        assert!(r.headers.get("retry-after").is_some());
+    }
+    assert_eq!(
+        counter(&w, "extractions"),
+        1,
+        "one pair of extractions for all twenty"
+    );
+    assert_eq!(
+        counter(&w, "busy"),
+        busy.len() as u64,
+        "counted in the existing busy counter"
+    );
+    let bodies: Vec<&Vec<u8>> = replies
+        .iter()
+        .filter(|r| r.status == StatusCode::OK)
+        .map(|r| &r.body)
+        .collect();
+    assert!(bodies.windows(2).all(|p| p[0] == p[1]));
+}
+
+/// Poll every call together on this one task, so that they overlap.
+async fn futures_join_all<F: std::future::Future<Output = Reply>>(calls: Vec<F>) -> Vec<Reply> {
+    let mut out: Vec<Option<Reply>> = (0..calls.len()).map(|_| None).collect();
+    let mut pinned: Vec<std::pin::Pin<Box<F>>> = calls.into_iter().map(Box::pin).collect();
+    std::future::poll_fn(|cx| {
+        let mut done = true;
+        for (i, f) in pinned.iter_mut().enumerate() {
+            if out[i].is_none() {
+                match f.as_mut().poll(cx) {
+                    std::task::Poll::Ready(r) => out[i] = Some(r),
+                    std::task::Poll::Pending => done = false,
+                }
+            }
+        }
+        if done {
+            std::task::Poll::Ready(())
+        } else {
+            std::task::Poll::Pending
+        }
+    })
+    .await;
+    out.into_iter().map(Option::unwrap).collect()
+}

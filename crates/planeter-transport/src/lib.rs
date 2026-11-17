@@ -21,7 +21,8 @@ pub use artifacts::{
     TransportDirs, UploadWriter,
 };
 pub use changes::engine::{
-    ChangesConfig, ChangesError, ChangesService, Flight, Reason as ChangesReason,
+    ChangesConfig, ChangesError, ChangesService, Flight, MAX_WAITERS, Reason as ChangesReason,
+    TooManyWaiters,
 };
 pub use creation::{
     Confirmed, CreateError, CreationConfig, CreationService, LandingOutcome, StageMeta,

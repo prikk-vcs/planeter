@@ -265,9 +265,13 @@ pub(crate) async fn list_handler(
     let limit = q.limit.unwrap_or(LIST_DEFAULT).min(LIST_MAX);
     // take our turn on this revision, then look in the cache before asking for any memory
     let turn = {
-        let (svc, rid) = (Arc::clone(&svc), rev.revision_id.clone());
-        match offload(move || svc.flight(&rid)).await {
-            Ok(t) => t,
+        let (flier, rid) = (Arc::clone(&svc), rev.revision_id.clone());
+        match offload(move || flier.flight(&rid)).await {
+            Ok(Ok(t)) => t,
+            // more than eight already wait for this revision: refused at once, in words
+            Ok(Err(_)) => {
+                return fail(&state, &svc, ChangesError::Unavailable(ChangesReason::Busy));
+            }
             Err(_) => return error_response(&state, Failure::Internal),
         }
     };
@@ -361,9 +365,13 @@ pub(crate) async fn file_handler(
         return not_found(&state);
     }
     let turn = {
-        let (svc, rid) = (Arc::clone(&svc), rev.revision_id.clone());
-        match offload(move || svc.flight(&rid)).await {
-            Ok(t) => t,
+        let (flier, rid) = (Arc::clone(&svc), rev.revision_id.clone());
+        match offload(move || flier.flight(&rid)).await {
+            Ok(Ok(t)) => t,
+            // more than eight already wait for this revision: refused at once, in words
+            Ok(Err(_)) => {
+                return fail(&state, &svc, ChangesError::Unavailable(ChangesReason::Busy));
+            }
             Err(_) => return error_response(&state, Failure::Internal),
         }
     };
