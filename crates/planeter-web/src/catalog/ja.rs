@@ -769,27 +769,27 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "error.changes_unavailable.claim_not_held.hint",
-        "このリビジョンの作業はもうレビュー待ちとしてここに残っていないため、プロジェクトの履歴を見るか、リビジョンのファイルをダウンロードして、自分のコンピューターで確認してください。",
+        "このリビジョンの作業はもうレビュー待ちとしてここに残っていないため、プロジェクトの履歴を見るか、リビジョンのファイルをダウンロードして、自分のコンピューターで読んでください。",
     ),
     msg(
         "error.changes_unavailable.not_one_change.message",
-        "このリビジョンは 1 本の変更の連なりではないため、ファイルごとの表示は作られません。",
+        "このリビジョンは一直線の作業ではないため、ファイルごとに表示できません。",
     ),
     msg(
         "error.changes_unavailable.not_one_change.hint",
-        "表示には、終わりが 1 つだけの一連の作業が必要なため、リビジョンのファイルをダウンロードして、自分のコンピューターで確認してください。",
+        "表示できるのは、枝分かれのない一直線の作業だけです。リビジョンのファイルをダウンロードして、自分のコンピューターで読んでください。",
     ),
     msg(
         "error.changes_unavailable.tree_too_large.message",
-        "このリビジョンはファイルが多すぎるか大きすぎるため、ファイルごとの表示は作られません。",
+        "このリビジョンはファイルが多すぎるか大きすぎるため、ファイルごとに表示できません。",
     ),
     msg(
         "error.changes_unavailable.tree_too_large.hint",
-        "リビジョンのファイルをダウンロードして、自分のコンピューターで確認してください。",
+        "リビジョンのファイルをダウンロードして、自分のコンピューターで読んでください。",
     ),
     msg(
         "error.changes_unavailable.busy.message",
-        "現在、サーバーはファイルごとの表示を作る処理で混み合っています。",
+        "現在、サーバーはファイルごとの表示で混み合っています。",
     ),
     msg(
         "error.changes_unavailable.busy.hint",
@@ -797,15 +797,15 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "error.changes_unavailable.timed_out.message",
-        "ファイルごとの表示を作るのに時間がかかりすぎたため、中止しました。",
+        "ファイルごとの表示に時間がかかりすぎたため、中止しました。",
     ),
     msg(
         "error.changes_unavailable.timed_out.hint",
-        "あとでもう一度お試しいただき、何度も起きる場合は、リビジョンのファイルをダウンロードして、自分のコンピューターで確認してください。",
+        "あとでもう一度お試しいただき、何度も起きる場合は、リビジョンのファイルをダウンロードして、自分のコンピューターで読んでください。",
     ),
     msg(
         "error.changes_unavailable.failed.message",
-        "ファイルごとの表示を作れませんでした。",
+        "ファイルごとに表示できませんでした。",
     ),
     msg(
         "error.changes_unavailable.failed.hint",
@@ -879,7 +879,7 @@ pub const CATALOG: &[Entry] = &[
     msg("changes.heading", "提案 #{id} のリビジョン {seq} の変更点"),
     msg(
         "changes.statement.rebuilt",
-        "ここに表示するファイルは、このリビジョンのパッチから再構築したものです。ここにある内容に署名はありません。",
+        "ここに表示するファイルは、このリビジョンのパッチから再構築したものです。ここに表示した内容は、署名されたものではありません。",
     ),
     msg(
         "changes.statement.provisional",
@@ -903,7 +903,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg("changes.ids.summary", "完全な ID"),
     msg("changes.ids.before", "比べた相手：{id}"),
-    msg("changes.ids.after", "このリビジョンの最後：{id}"),
+    msg("changes.ids.after", "このリビジョンの終点：{id}"),
     msg("changes.summary.files", "変わったファイル {count} 件"),
     msg("changes.summary.added", "追加 {count} 行"),
     msg("changes.summary.removed", "削除 {count} 行"),
@@ -921,13 +921,13 @@ pub const CATALOG: &[Entry] = &[
         "リビジョン {seq} で変わったファイル",
     ),
     msg("changes.col.file", "ファイル"),
-    msg("changes.col.change", "変更内容"),
+    msg("changes.col.change", "変更の種別"),
     msg("changes.col.lines", "行数"),
     msg("changes.col.notes", "補足"),
     msg("changes.status.added", "追加"),
-    msg("changes.status.modified", "内容が変わった"),
+    msg("changes.status.modified", "変更"),
     msg("changes.status.deleted", "削除"),
-    msg("changes.status.type_changed", "種類が変わった"),
+    msg("changes.status.type_changed", "種類の変更"),
     msg("changes.row.lines", "追加 {added} 行、削除 {removed} 行"),
     msg("changes.row.lines_none", "行数なし"),
     msg(
@@ -958,8 +958,8 @@ pub const CATALOG: &[Entry] = &[
         "changes.note.link",
         "シンボリックリンクです。リンク先を表示しています。",
     ),
-    msg("changes.earlier", "前のファイル"),
-    msg("changes.more", "続きのファイル"),
+    msg("changes.earlier", "ここより前のファイル"),
+    msg("changes.more", "ここより後のファイル"),
     msg(
         "title.changes_file",
         "{path} の変更点（リビジョン {seq}） · {repo} · {product}",
@@ -968,7 +968,7 @@ pub const CATALOG: &[Entry] = &[
         "changes.file.escaped",
         "このファイルの名前には特殊な文字が含まれており、バックスラッシュで始まるエスケープ表記で示しています。",
     ),
-    msg("changes.file.status", "変更内容：{status}"),
+    msg("changes.file.status", "変更の種別：{status}"),
     msg("changes.file.caption", "{path} の変更点"),
     msg("changes.diff.col.old", "変更前の行"),
     msg("changes.diff.col.new", "変更後の行"),
@@ -1021,8 +1021,8 @@ pub const CATALOG: &[Entry] = &[
         "読むにはリビジョン {seq} をダウンロード",
     ),
     msg("changes.file.back", "ファイルの一覧に戻る"),
-    msg("changes.file.prev", "前のファイルへ"),
-    msg("changes.file.next", "次のファイルへ"),
+    msg("changes.file.prev", "前の変更されたファイルへ"),
+    msg("changes.file.next", "次の変更されたファイルへ"),
     msg(
         "title.changes_unavailable",
         "{heading} · 提案 #{id} のリビジョン {seq} · {repo} · {product}",
@@ -1033,7 +1033,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "changes.unavailable.claim_not_held.body",
-        "このリビジョンの作業は、もう提案としてここにありません。たとえば、署名された履歴として届いた場合です。代わりに、リポジトリの履歴をご覧ください。",
+        "このリビジョンの作業は、もう提案としてここには残っていません。たとえば、署名された履歴として届いた場合です。代わりに、リポジトリの履歴をご覧ください。",
     ),
     msg(
         "changes.unavailable.not_one_change.heading",
@@ -1041,7 +1041,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "changes.unavailable.not_one_change.body",
-        "このリビジョンのパッチは 1 本の連なりになっていないため、ファイルごとに表示できません。提案した人に、1 本の連なりとして送り直してもらってください。",
+        "このリビジョンのパッチは一直線につながっていない（枝分かれや合流がある）ため、ファイルごとに表示できません。提案した人に、一直線につながる形で送り直してもらってください。",
     ),
     msg(
         "changes.unavailable.tree_too_large.heading",
@@ -1049,7 +1049,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "changes.unavailable.tree_too_large.body",
-        "このリビジョンはファイルが多すぎるか、大きすぎるため、ファイルごとに表示できません。代わりに、ご自分のコンピューターで読んでください。",
+        "このリビジョンはファイルが多すぎるか、大きすぎるため、ファイルごとに表示できません。代わりに、自分のコンピューターで読んでください。",
     ),
     msg(
         "changes.unavailable.busy.heading",
@@ -1065,7 +1065,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "changes.unavailable.timed_out.body",
-        "変更点の表示に時間がかかりすぎたため、中止しました。しばらくしてからもう一度お試しいただき、何度も起きる場合は、ご自分のコンピューターで読んでください。",
+        "変更点の表示に時間がかかりすぎたため、中止しました。しばらくしてからもう一度お試しいただき、何度も起きる場合は、自分のコンピューターで読んでください。",
     ),
     msg(
         "changes.unavailable.failed.heading",

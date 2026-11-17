@@ -1944,7 +1944,7 @@ async fn the_changes_page_and_a_file_page_say_what_the_files_are_in_both_languag
     check_page(&jp, "ja");
     dump("changes-page.ja.html", &jp);
     assert_eq!(h1_of(&jp), format!("提案 #{short} のリビジョン 1 の変更点"));
-    assert!(jp.contains("ここに表示するファイルは、このリビジョンのパッチから再構築したものです。ここにある内容に署名はありません。"), "{jp}");
+    assert!(jp.contains("ここに表示するファイルは、このリビジョンのパッチから再構築したものです。ここに表示した内容は、署名されたものではありません。"), "{jp}");
     assert!(
         jp.contains("変わったファイル 3 件、追加 3 行、削除 2 行"),
         "{jp}"
@@ -1953,7 +1953,7 @@ async fn the_changes_page_and_a_file_page_say_what_the_files_are_in_both_languag
         jp.contains("<caption>リビジョン 1 で変わったファイル</caption>"),
         "{jp}"
     );
-    for h in ["ファイル", "変更内容", "行数", "補足"] {
+    for h in ["ファイル", "変更の種別", "行数", "補足"] {
         assert!(jp.contains(&format!("<th scope=\"col\">{h}</th>")), "{h}");
     }
     let jf = page(&w, &readme, "ja", None).await;
@@ -3169,8 +3169,8 @@ async fn the_previous_and_next_file_follow_the_list_and_skip_files_with_no_diff(
     }
     let ja = page(&w, &href(3), "ja", None).await.text();
     assert!(
-        ja.contains("前のファイルへ")
-            && ja.contains("次のファイルへ")
+        ja.contains("前の変更されたファイルへ")
+            && ja.contains("次の変更されたファイルへ")
             && ja.contains("ファイルの一覧に戻る"),
         "{ja}"
     );

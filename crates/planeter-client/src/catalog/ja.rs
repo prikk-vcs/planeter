@@ -233,7 +233,7 @@ pub static CATALOG: &[Entry] = &[
     ),
     msg(
         "propose.revision_keeps",
-        "リビジョンを追加するときは、追加先の提案のタイトルと説明がそのまま使われます。--proposal と --title や --description-file はいっしょに使えません。それらを外すか、新しい提案を開く場合は --proposal を外してください。",
+        "リビジョンを追加するときは、追加先の提案のタイトルと説明がそのまま使われます。--proposal と --title や --description-file はいっしょに使えません。--title や --description-file を付けずに実行するか、新しい提案を開くなら --proposal を付けずに実行してください。",
     ),
     msg(
         "propose.incomplete",
