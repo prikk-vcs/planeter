@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | planeter Threat Model (security) |
-| Version | v0.6 (2026-10-30 — T-18 the client helper and a hostile server; T-11 status: no standing advisory ignore, the OIDC verifier on the aws-lc backend, a per-crate licence exception for the Mozilla root list; RR-17 (the C library in the sign-in path), RR-18 (the container image must run the binary); v0.5 2026-10-27 — the inbound write and review surfaces of RFC 004/005 as built: T-15 hostile proposals, T-16 review abuse and dishonest status, T-17 repository creation from a hostile archive and key trust; INV-10, INV-11; RR-12…RR-16; C-4f for `extract`; no change to T-1…T-14; v0.4 2026-10-17 — release 0.3.0 status lines under T-2, T-6, T-7 and T-9: constant-work sign-in and the auth gate, host-gated raw content, cache directives, the bounded read and auth paths; no new threat or control id; v0.3 2026-09-24 — 0.2.0: OpenID Connect under T-2/C-2a, the trusted-proxy client-IP rule and per-client-IP throttle under RR-11, the first egress-guard caller under T-8; the two residual risks v0.2 added are renumbered RR-10/RR-11 because v0.2 reused the ids RR-6/RR-7 already held by the CI-runner and supply-chain risks; v0.2 2026-09-23 recorded implementation status through 0.1.x under T-2/T-6/T-8; v0.1 2026-09-15 was the review draft) |
+| Version | v0.7 (2026-11-17 — T-19 the file-by-file review view: hostile file names and contents shown to a reviewer, and the cost of showing them; T-15's accept classification (a failed accept is refused only on evidence, 0.6.0); v0.6 (2026-10-30 — T-18 the client helper and a hostile server; T-11 status: no standing advisory ignore, the OIDC verifier on the aws-lc backend, a per-crate licence exception for the Mozilla root list; RR-17 (the C library in the sign-in path), RR-18 (the container image must run the binary); v0.5 2026-10-27 — the inbound write and review surfaces of RFC 004/005 as built: T-15 hostile proposals, T-16 review abuse and dishonest status, T-17 repository creation from a hostile archive and key trust; INV-10, INV-11; RR-12…RR-16; C-4f for `extract`; no change to T-1…T-14; v0.4 2026-10-17 — release 0.3.0 status lines under T-2, T-6, T-7 and T-9: constant-work sign-in and the auth gate, host-gated raw content, cache directives, the bounded read and auth paths; no new threat or control id; v0.3 2026-09-24 — 0.2.0: OpenID Connect under T-2/C-2a, the trusted-proxy client-IP rule and per-client-IP throttle under RR-11, the first egress-guard caller under T-8; the two residual risks v0.2 added are renumbered RR-10/RR-11 because v0.2 reused the ids RR-6/RR-7 already held by the CI-runner and supply-chain risks; v0.2 2026-09-23 recorded implementation status through 0.1.x under T-2/T-6/T-8; v0.1 2026-09-15 was the review draft) |
 | Date | 2026-09-24 (v0.3); 2026-09-23 (v0.2); 2026-09-15 (v0.1) |
 | Basis | planeter Requirements v0.1 (PU/NG/CAP/STD/SEC/INT/OPS/BN/UD/OQ) and External Design v0.1 (BD/AC/TX/WEB/API/AUTH/CI/REG/HOOK/PK/FL/CT/OP/GATED); **forge-commons** (the standards frame); prikk reality (2026-09-15 survey, prikk `HEAD f6cbd057`); project rules (a threat model is a first-class release deliverable) |
 | ID scheme | `A-` asset · `TB-` trust boundary · `T-` threat · `C-` control · `INV-` security invariant · `RR-` residual risk · `ASSUME-` assumption |
@@ -474,6 +474,43 @@ memory or disk, or trick the user into trusting a key (A-USER-KEYS, A-TOKEN).
   advertisement carries `update_seq` (planned, part 10); a server that withholds the newest state from this client alone
   remains undetectable without a second source (RFC 004 D-8).
 
+### T-19 (Tampering / Spoofing / Information disclosure / DoS) — the file-by-file review view (RFC 005 part 6; v0.7, 0.7.0)
+A reviewer asks to see what a revision changes. The forge rebuilds two trees with prikk in the sandbox, compares them and
+shows the result. Everything in those trees is chosen by the proposer, who may be a stranger (A-CONTENT, A-REVIEWER-TRUST).
+What an attacker wants: markup or script in a page (T-6); a file name or line that **hides or reorders** what the reviewer
+reads (bidirectional controls, zero-width characters, control codes, a very long line that pushes a change off screen);
+a link in a file that leads somewhere (`javascript:`); a symbolic link that makes the forge read its own files; a pipe or
+device that hangs it; a tree or a diff that exhausts memory, disk or time; a view that implies the work is signed or
+verified when it is not.
+
+- **C-19a — nothing in a tree is followed or trusted.** The walk uses `lstat` for the type of every entry; a link is read
+  as bytes and never opened; only an entry that is a regular file is opened, and re-checked just before; pipes, devices and
+  sockets are listed and never opened; depth 64, 10,000 entries per tree, a file read only up to 256 KiB (a larger one is
+  compared by a streamed hash). *Tests with a mutation each* (a link followed, a FIFO opened, no depth cap, no entry cap).
+- **C-19b — what is shown is made safe twice.** The engine turns every name and line into display-safe text (invalid
+  bytes, controls, separators, bidirectional controls and zero-width characters become visible escapes; very long names
+  and lines are cut and say so), and the page escapes it again and runs its own second look; the diff text is **text, not
+  HTML**, and the sanitizer is not involved. No link on a page comes from file content, and a link target is shown as
+  text. *Tests*: markup, `<img onerror>`, a bidirectional override, zero-width and ESC characters, a 2,500-character line,
+  a `javascript:` target; mutations remove each of the two escapings and a made-up link.
+- **C-19c — bounded cost.** The same admission as any `extract` (the heavy pool at 9.5 × the byte bound + 8 MiB, RFC 011),
+  one view at a time per revision (single flight, at most eight waiters, the ninth is refused as busy), a 30 s wall,
+  bounded outputs (10,000 files, 5,000 diff lines per file, 2,000 characters per line, 1,024 bytes per name), a
+  deterministic bounded diff (no wall-clock-dependent answer), and a cache keyed by content (64 MiB, least recently used
+  out); transient failures are never cached. No file name or content reaches a log or a counter (*test*: a canary in the
+  built binary's whole log).
+- **C-19d — the view says what it is.** Every page says the files are rebuilt from the patches and that nothing is signed;
+  a tree rebuilt without a verified checkpoint says the history itself has not been checked; a revision whose declared
+  base differs is compared with its real parent and says so. The view shows no signature outcome and changes no state
+  (it is read-only: nothing signed, selected, landed or merged — INV-2 stands).
+- **C-19e — the same rules as reading the proposal.** The routes are in the authorization table; a hidden repository, an
+  unknown proposal, revision or file give one 404, byte for byte. A cached answer needs no memory and is served the same.
+- **Residual (RR-19).** A reviewer reads rebuilt files, not signed content: an approval is still an opinion (RR-15); a
+  proposer can craft a diff that is hard to read (very long lines are cut and said so; whitespace-only changes are shown as
+  changes, not hidden); text in an encoding other than UTF-8 is not shown (the reviewer is told to download it), which
+  reads as a limit for some languages, not as a safeguard; the view of a landed proposal after a merge (0.8) will need the
+  sealed block, not the claims, and is designed with RFC 008.
+
 ## 4. Security invariants (INV-…) — the non-negotiables
 
 A change that breaks one of these is a security bug, not a preference. Several must be enforced by test.
@@ -574,6 +611,9 @@ A change that breaks one of these is a security bug, not a preference. Several m
 - **RR-18 — The container image has to be able to run the binary (v0.6; IS-56 until closed).** The release binaries
   are built on glibc 2.39 runners; a base image with an older glibc cannot start them. Closed by a base on a new enough
   glibc and a gate that runs each image and checks the binary's needs against it before anything is pushed.
+- **RR-19 — A reviewer reads rebuilt files, and a hostile diff can still be hard to read (v0.7; T-19).** The view shows what prikk rebuilds
+  from the patches, not signed content; it cuts very long lines and names and says so, never hides a whitespace-only change, and
+  does not show text that is not UTF-8 (the reviewer is told to download it). An approval remains an opinion (RR-15).
 - **ASSUME-1 — The operator and host are trusted; planeter defends against network actors and malicious
   users, not a hostile operator** (TB-8).
 - **ASSUME-2 — prikk's offline `verify` is correct and is the ultimate arbiter of history integrity.**
@@ -626,6 +666,7 @@ contributing; **C-14**a/b is the primary control for **T-14** (secrets at scale)
 | T-14 / C-14* / INV-8 | C-7b, and modern secret-scanning practice |
 | T-15 / C-15* / C-4f / INV-10 | RFC 004 D-3, D-5, D-6; RFC 005 D-1, D-8, D-9; RFC 011; ledger PK-41, PK-59, PK-68, PK-69 |
 | T-16 / C-16* / INV-11 | RFC 005 D-5, D-6, D-7, D-10, D-11; RFC 003 sanitizer |
+| T-19 / C-19* | RFC 005 part 6 (D-4); docs/proposals.md; `review-view-engine-review-request.md`, `review-view-pages-review-request.md`; ledger PK-77–PK-79 |
 | T-18 / C-18* | RFC 004 D-10, D-8; docs/client.md; ledger PK-33, PK-72 |
 | T-17 / C-17* | RFC 004 D-4; ledger PK-32, PK-33, PK-67, PK-72 |
 
