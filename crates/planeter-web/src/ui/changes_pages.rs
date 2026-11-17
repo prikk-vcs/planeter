@@ -14,6 +14,7 @@ use axum::http::{HeaderMap, StatusCode};
 use axum::response::Response;
 
 use planeter_store::{RepositoryRecord, RevisionRecord};
+use planeter_transport::changes::display::is_disguise;
 use planeter_transport::changes::model::{
     ChangeSet, DiffOp, FileDiff, FileEntry, Kind, NotShown, Status,
 };
@@ -244,6 +245,26 @@ fn note_key(n: NotShown) -> Key {
     }
 }
 
+/// The page's own second line of defence (the first is the engine's display function, the second the template's HTML escaping; this is a third
+/// look at what the engine returned, so that a name or a line that somehow reached here unescaped still cannot reorder or hide anything): every
+/// control, separator, bidirectional or zero-width character becomes a visible `\u{…}` escape. In text a tab is kept and a carriage return is shown
+/// as `␍`; in a name neither is kept. It is **idempotent** on what the engine already escaped (a backslash is not touched) and never cuts.
+fn safe(text: &str, in_text: bool) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        if in_text && c == '\t' {
+            out.push('\t');
+        } else if in_text && c == '\r' {
+            out.push('\u{240D}');
+        } else if is_disguise(c) {
+            out.push_str(&format!("\\u{{{:X}}}", u32::from(c)));
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 /// The title of a page that names a file: the display path, cut so that a title stays a title.
 fn title_path(path: &str) -> String {
     const MAX: usize = 80;
@@ -369,7 +390,7 @@ fn file_row(t: &T, o: &Opened, owner: &str, name: &str, f: &FileEntry) -> FileRo
         _ => None,
     };
     FileRow {
-        path: f.path.clone(),
+        path: safe(&f.path, false),
         href: f
             .shown
             .then(|| file_href(owner, name, &o.id, o.rev.seq, &f.file_id)),
@@ -448,7 +469,7 @@ pub(super) async fn changes_page(
         summary: summary_line(&t, &set),
         unshown: (set.totals.unshown > 0).then(|| {
             t.msg(Key::ChangesSummaryUnshown)
-                .with("count", set.totals.unshown)
+                .with("number", set.totals.unshown)
                 .text()
         }),
         caption: t.msg(Key::ChangesTableCaption).with("seq", seq).text(),
@@ -620,7 +641,7 @@ fn hunk_views(t: &T, d: &FileDiff) -> Vec<HunkView> {
                         new,
                         marker,
                         word,
-                        text: l.text.clone(),
+                        text: safe(&l.text, true),
                     }
                 })
                 .collect();
@@ -643,8 +664,8 @@ fn link_sentence(t: &T, d: &FileDiff) -> Option<Rich> {
     match (d.entry.status, of(DiffOp::Add), of(DiffOp::Remove)) {
         (Status::Modified, Some(new), Some(old)) => Some(
             t.msg(Key::ChangesLinkModified)
-                .code("target", new)
-                .code("old", old)
+                .code("target", safe(new, true))
+                .code("old", safe(old, true))
                 .html(),
         ),
         (Status::Added, Some(target), _) => {
@@ -733,12 +754,12 @@ pub(super) async fn file_page(
         t,
         title: t
             .msg(Key::TitleChangesFile)
-            .with("path", title_path(&e.path))
+            .with("path", title_path(&safe(&e.path, false)))
             .with("seq", seq)
             .with("repo", &repo)
             .product()
             .text(),
-        path: e.path.clone(),
+        path: safe(&e.path, false),
         path_escaped: e.path_escaped,
         status_line: t
             .msg(Key::ChangesFileStatus)
@@ -750,7 +771,10 @@ pub(super) async fn file_page(
             None
         },
         not_shown: e.not_shown_because.map(|n| t.get(note_key(n))),
-        caption: t.msg(Key::ChangesFileCaption).code("path", &e.path).html(),
+        caption: t
+            .msg(Key::ChangesFileCaption)
+            .code("path", safe(&e.path, false))
+            .html(),
         hunks: if is_link {
             Vec::new()
         } else {

@@ -33,6 +33,15 @@ use planeter_transport::{
 };
 use planeter_web::{AppState, ContentOrigin, RateLimiter, TransportRuntime, router};
 
+#[allow(dead_code)]
+#[path = "structure/dom.rs"]
+mod dom;
+#[allow(dead_code)]
+#[path = "structure/rules.rs"]
+mod rules;
+#[allow(unused_imports)]
+use planeter_web::catalog::{msg, planted_language};
+
 static NOW: AtomicU64 = AtomicU64::new(1_000_000);
 fn now() -> u64 {
     NOW.load(Ordering::Relaxed)
@@ -276,6 +285,7 @@ struct World {
     gate: Arc<planeter_web::PrikkGate>,
     spool: PathBuf,
     forge_keys: PathBuf,
+    sessions: Arc<planeter_auth::InMemorySessionStore>,
 }
 
 struct Opts {
@@ -428,13 +438,14 @@ fn world_with(name: &str, o: Opts, initial: &[(&str, &[u8])]) -> World {
         principal_limit: RateLimiter::new(100_000, Duration::from_secs(60)),
     }));
     let gate = Arc::new(o.gate.unwrap_or_default());
+    let sessions = Arc::new(planeter_auth::InMemorySessionStore::new());
     let router = router(AppState {
         read,
         gate: gate.clone(),
         auth_gate: Arc::new(planeter_web::BlockingGate::auth_default()),
         auth,
         content_origin: ContentOrigin::new("https://raw.planeter.example"),
-        sessions: Arc::new(planeter_auth::InMemorySessionStore::new()),
+        sessions: sessions.clone(),
         now_unix: now,
         login_throttle: Arc::new(planeter_auth::LoginThrottle::default()),
         ip_throttle: Arc::new(planeter_auth::LoginThrottle::new(20, 15 * 60)),
@@ -454,6 +465,7 @@ fn world_with(name: &str, o: Opts, initial: &[(&str, &[u8])]) -> World {
         gate,
         spool: spool_dir,
         forge_keys: base.join("forge-keys"),
+        sessions,
     }
 }
 
@@ -1682,4 +1694,1646 @@ async fn futures_join_all<F: std::future::Future<Output = Reply>>(calls: Vec<F>)
     })
     .await;
     out.into_iter().map(Option::unwrap).collect()
+}
+
+// ================================================================================================ the pages (handoff 2)
+
+impl Reply {
+    fn text(&self) -> String {
+        String::from_utf8_lossy(&self.body).into_owned()
+    }
+    fn h(&self, name: &str) -> String {
+        self.headers
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .unwrap_or("")
+            .to_owned()
+    }
+}
+
+/// A page, as a browser asks for it: a language, and perhaps a session.
+async fn page(w: &World, uri: &str, lang: &str, cookie: Option<&str>) -> Reply {
+    let mut req = Request::builder()
+        .method("GET")
+        .uri(uri)
+        .header("host", "forge.example")
+        .header("accept-language", lang);
+    if let Some(c) = cookie {
+        req = req.header("cookie", c);
+    }
+    call(&w.router, req.body(Body::empty()).unwrap()).await
+}
+
+fn session(w: &World, user: &str) -> String {
+    use planeter_auth::SessionStore as _;
+    let s = w
+        .sessions
+        .create(UserId::new(user), now(), now() + 3600)
+        .unwrap();
+    format!("planeter_csrf=tok123; planeter_session={}", s.id.0)
+}
+
+fn violations(html: &str) -> Vec<String> {
+    rules::check(&dom::parse(html))
+        .into_iter()
+        .map(|v| format!("{}: {}", v.rule, v.detail))
+        .collect()
+}
+
+fn unfilled(page: &str) -> Option<String> {
+    let b: Vec<char> = page.chars().collect();
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == '{' {
+            let mut j = i + 1;
+            while j < b.len() && (b[j].is_ascii_lowercase() || b[j] == '_') {
+                j += 1;
+            }
+            if j > i + 1 && j < b.len() && b[j] == '}' {
+                return Some(b[i..=j].iter().collect());
+            }
+        }
+        i += 1;
+    }
+    None
+}
+
+/// `CHANGES_PAGES_DUMP=<dir>` saves the pages these tests render (the review request quotes them).
+fn dump(name: &str, html: &str) {
+    if let Ok(dir) = std::env::var("CHANGES_PAGES_DUMP") {
+        let _ = std::fs::create_dir_all(&dir);
+        let _ = std::fs::write(Path::new(&dir).join(name), html);
+    }
+}
+
+fn title_of(html: &str) -> String {
+    let a = html.find("<title>").unwrap() + 7;
+    html[a..a + html[a..].find("</title>").unwrap()].to_owned()
+}
+
+fn h1_of(html: &str) -> String {
+    let a = html.find("<h1>").unwrap() + 4;
+    html[a..a + html[a..].find("</h1>").unwrap()].to_owned()
+}
+
+/// What every page of the view must be, in every language: a valid structure, no placeholder left, one `<h1>`, no sideways-scrolling construct, no inline
+/// style or script, and no word of the engine's inside.
+fn check_page(html: &str, lang: &str) {
+    assert_eq!(violations(html), Vec::<String>::new(), "{lang}: {html}");
+    assert_eq!(unfilled(html), None, "{lang}");
+    assert_eq!(html.matches("<h1").count(), 1, "{lang}");
+    assert!(
+        !html.contains("style=") && !html.contains("<script"),
+        "{lang}: no inline style or script"
+    );
+    let visible = html.split_once("<main").map_or(html, |(_, m)| m);
+    let lower = visible.to_lowercase();
+    for word in ["claim", "chain", "extract", "foot"] {
+        assert!(
+            !lower
+                .split(|c: char| !c.is_alphanumeric())
+                .any(|w| w == word),
+            "{lang}: the internal word {word:?} is on the page"
+        );
+    }
+    for word in ["クレーム", "チェーン", "エクストラクト"] {
+        assert!(!visible.contains(word), "{lang}: {word}");
+    }
+}
+
+fn file_href_of(html: &str, path: &str) -> String {
+    let marker = format!("<code>{path}</code></a>");
+    let at = html
+        .find(&marker)
+        .unwrap_or_else(|| panic!("no link for {path} in {html}"));
+    let a = html[..at].rfind("<a href=\"").unwrap() + 9;
+    html[a..a + html[a..].find('"').unwrap()].to_owned()
+}
+
+/// A world with one real proposal that edits, adds and deletes, and its two addresses.
+async fn pages_world(name: &str) -> (World, String, String) {
+    let initial: &[(&str, &[u8])] = &[("gone.txt", b"bye\n"), ("keep.txt", b"keep\n")];
+    let mut w = world_with(name, Opts::default(), initial);
+    w.client
+        .write("README.md", b"# Hello\n\nA readme, edited.\n");
+    w.client.write("docs/new.txt", b"first\nsecond\n");
+    w.client.remove("gone.txt");
+    w.client.seal("edit, add, delete");
+    let art = w.client.artifact(&w.forge, "pg");
+    let (id, _) = propose(&w, title(), &art).await;
+    let uri = format!("/alice/forge/proposals/{id}/revisions/1/changes");
+    (w, id, uri)
+}
+
+#[tokio::test]
+async fn the_changes_page_and_a_file_page_say_what_the_files_are_in_both_languages_and_pass_every_structural_rule()
+ {
+    if skip() {
+        return;
+    }
+    let (w, id, uri) = pages_world("pg-both").await;
+    let json = list(&w, &id).await.json();
+    assert_eq!(
+        json["provisional"], true,
+        "the precondition: this world's answer is provisional (a young repository has no verified checkpoint)"
+    );
+    let short = &id[..12];
+    // ---- English
+    let en = page(&w, &uri, "en", None).await;
+    assert_eq!(en.status, StatusCode::OK, "{}", en.text());
+    let p = en.text();
+    check_page(&p, "en");
+    assert_eq!(
+        h1_of(&p),
+        format!("Changes in revision 1 of proposal #{short}")
+    );
+    assert!(
+        title_of(&p).starts_with(&format!(
+            "Changes in revision 1 of proposal #{short} · alice/forge"
+        )),
+        "{}",
+        title_of(&p)
+    );
+    for sentence in [
+        "These files are rebuilt from the patches in this revision. Nothing here is signed.",
+        "No earlier check of this repository&#39;s history was available, so the files were rebuilt by replaying the history from the start. They match the patches; the history itself has not been checked.",
+    ] {
+        assert!(
+            p.contains(sentence) || p.contains(&sentence.replace("&#39;", "'")),
+            "missing: {sentence}\n{p}"
+        );
+    }
+    let before = json["compared"]["before_block"].as_str().unwrap();
+    assert!(
+        p.contains(&format!(
+            "Compared with <code>{}</code> (the block the first patch continues from).",
+            &before[..12]
+        )),
+        "{p}"
+    );
+    assert!(
+        p.contains(&format!("<code>{before}</code>")),
+        "the full id is under a <details>"
+    );
+    assert!(
+        p.contains("3 files changed, 3 lines added, 2 lines removed"),
+        "{p}"
+    );
+    assert!(
+        p.contains("<caption>Files changed in revision 1</caption>"),
+        "{p}"
+    );
+    for h in ["File", "Change", "Lines", "Notes"] {
+        assert!(p.contains(&format!("<th scope=\"col\">{h}</th>")), "{h}");
+    }
+    for (path, word) in [
+        ("README.md", "Changed"),
+        ("docs/new.txt", "Added"),
+        ("gone.txt", "Deleted"),
+    ] {
+        let row = &p[p.find(&format!("<code>{path}</code>")).unwrap()..];
+        let row = &row[..row.find("</tr>").unwrap()];
+        assert!(row.contains(&format!("<td>{word}</td>")), "{path}: {row}");
+    }
+    assert!(p.contains("<span aria-hidden=\"true\">+1 \u{2212}1</span><span class=\"visually-hidden\">1 added, 1 removed</span>"), "{p}");
+    assert!(p.contains("Back to the proposal"), "{p}");
+    // ---- the file page
+    let readme = file_href_of(&p, "README.md");
+    assert_eq!(
+        readme,
+        format!(
+            "{uri}/{}",
+            find(&json, "README.md")["file_id"].as_str().unwrap()
+        )
+    );
+    let f = page(&w, &readme, "en", None).await;
+    assert_eq!(f.status, StatusCode::OK, "{}", f.text());
+    let fp = f.text();
+    check_page(&fp, "en");
+    dump("file-page.en.html", &fp);
+    assert_eq!(h1_of(&fp), "<code>README.md</code>");
+    assert!(
+        fp.contains("<caption>Changes to <code>README.md</code></caption>"),
+        "{fp}"
+    );
+    for h in ["Old line", "New line", "Change", "Text"] {
+        assert!(fp.contains(&format!("<th scope=\"col\">{h}</th>")), "{h}");
+    }
+    assert!(
+        fp.contains("<th scope=\"rowgroup\" colspan=\"4\">Lines 1–3 before, lines 1–3 after</th>"),
+        "{fp}"
+    );
+    assert!(fp.contains("<tr class=\"diff-remove\"><td>3</td><td></td><td><span aria-hidden=\"true\">\u{2212}</span><span class=\"visually-hidden\">Removed line</span></td><td><code>A readme.</code></td></tr>"), "{fp}");
+    assert!(fp.contains("<tr class=\"diff-add\"><td></td><td>3</td><td><span aria-hidden=\"true\">+</span><span class=\"visually-hidden\">Added line</span></td><td><code>A readme, edited.</code></td></tr>"), "{fp}");
+    assert!(
+        fp.contains("<span class=\"visually-hidden\">Unchanged line</span>"),
+        "{fp}"
+    );
+    assert!(fp.contains("Change: Changed"), "{fp}");
+    assert!(fp.contains("Back to the list of files") && fp.contains("Back to the proposal"));
+    // the neighbours in list order: README.md is first among the shown files (docs/new.txt, then README.md? ordered by path)
+    assert!(
+        fp.contains("Next changed file") || fp.contains("Previous changed file"),
+        "{fp}"
+    );
+    // ---- Japanese
+    let ja = page(&w, &uri, "ja", None).await;
+    assert_eq!(ja.status, StatusCode::OK);
+    let jp = ja.text();
+    check_page(&jp, "ja");
+    dump("changes-page.ja.html", &jp);
+    assert_eq!(h1_of(&jp), format!("提案 #{short} のリビジョン 1 の変更点"));
+    assert!(jp.contains("ここに表示するファイルは、このリビジョンのパッチから再構築したものです。ここにある内容に署名はありません。"), "{jp}");
+    assert!(
+        jp.contains("変わったファイル 3 件、追加 3 行、削除 2 行"),
+        "{jp}"
+    );
+    assert!(
+        jp.contains("<caption>リビジョン 1 で変わったファイル</caption>"),
+        "{jp}"
+    );
+    for h in ["ファイル", "変更内容", "行数", "補足"] {
+        assert!(jp.contains(&format!("<th scope=\"col\">{h}</th>")), "{h}");
+    }
+    let jf = page(&w, &readme, "ja", None).await;
+    assert_eq!(jf.status, StatusCode::OK);
+    let jfp = jf.text();
+    check_page(&jfp, "ja");
+    assert!(
+        jfp.contains("変更前：1～3 行目、変更後：1～3 行目"),
+        "{jfp}"
+    );
+    assert!(
+        jfp.contains("<span class=\"visually-hidden\">削除された行</span>"),
+        "{jfp}"
+    );
+    // the page keeps its language's attribute and the whole set of dynamic-page headers
+    assert!(jp.contains("<html lang=\"ja\""), "{jp}");
+}
+
+#[tokio::test]
+async fn one_file_one_line_and_zero_lines_use_the_right_plural_forms_in_both_languages() {
+    if skip() {
+        return;
+    }
+    let mut w = world("pg-plural", Opts::default());
+    w.client.write("only.txt", b"one line\n");
+    w.client.seal("one");
+    let (id, _) = propose(&w, title(), &w.client.artifact(&w.forge, "pl")).await;
+    let uri = format!("/alice/forge/proposals/{id}/revisions/1/changes");
+    let en = page(&w, &uri, "en", None).await.text();
+    assert!(
+        en.contains("1 file changed, 1 line added, 0 lines removed"),
+        "{en}"
+    );
+    let ja = page(&w, &uri, "ja", None).await.text();
+    assert!(
+        ja.contains("変わったファイル 1 件、追加 1 行、削除 0 行"),
+        "{ja}"
+    );
+    // two files, 1,200 lines (grouped digits)
+    let mut w2 = world("pg-plural2", Opts::default());
+    w2.client.write("a.txt", "x\n".repeat(1200).as_bytes());
+    w2.client.write("b.txt", b"y\n");
+    w2.client.seal("many");
+    let (id2, _) = propose(&w2, title(), &w2.client.artifact(&w2.forge, "pl2")).await;
+    let en2 = page(
+        &w2,
+        &format!("/alice/forge/proposals/{id2}/revisions/1/changes"),
+        "en",
+        None,
+    )
+    .await
+    .text();
+    assert!(
+        en2.contains("2 files changed, 1,201 lines added, 0 lines removed"),
+        "{en2}"
+    );
+}
+
+// ---------------------------------------------------------------------------------------------- the reasons, as pages
+
+struct Titled {
+    identity: String,
+    title: String,
+}
+
+#[tokio::test]
+async fn every_reason_the_view_is_unavailable_is_a_plain_page_with_the_engines_status_in_both_languages()
+ {
+    if skip() {
+        return;
+    }
+    let mut titles: Vec<Titled> = Vec::new();
+    let mut seen: Vec<(&str, u16)> = Vec::new();
+    let mut check = |reason: &'static str, status: u16, en: &Reply, ja: &Reply| {
+        assert_eq!(
+            (en.status.as_u16(), ja.status.as_u16()),
+            (status, status),
+            "{reason}"
+        );
+        for (lang, r) in [("en", en), ("ja", ja)] {
+            check_page(&r.text(), lang);
+            dump(&format!("reason-{reason}.{lang}.html"), &r.text());
+            let t = r.text();
+            assert!(!t.contains("<table"), "{reason}: a plain page has no table");
+            assert!(t.contains("proposals/"), "{reason}: a way back");
+        }
+        titles.push(Titled {
+            identity: format!("reason-{reason}"),
+            title: title_of(&en.text()),
+        });
+        titles.push(Titled {
+            identity: format!("reason-{reason}-ja"),
+            title: title_of(&ja.text()),
+        });
+        seen.push((reason, status));
+    };
+
+    // claim_not_held (409): the work arrived as received sealed history
+    let mut w = world(
+        "pg-r-held",
+        Opts {
+            cache: false,
+            ..Opts::default()
+        },
+    );
+    w.client.write("y.txt", b"y\n");
+    w.client.seal("work");
+    let (id, _) = propose(&w, title(), &w.client.artifact(&w.forge, "r1")).await;
+    let archive = w.base.join("work.archive");
+    prikk(
+        &w.client.repo,
+        &w.client.keys,
+        &["archive", "export", archive.to_str().unwrap()],
+    );
+    prikk(
+        &w.forge,
+        &w.forge_keys,
+        &["archive", "import", archive.to_str().unwrap()],
+    );
+    let uri = format!("/alice/forge/proposals/{id}/revisions/1/changes");
+    let en = page(&w, &uri, "en", None).await;
+    let ja = page(&w, &uri, "ja", None).await;
+    assert!(en.text().contains("The work of this revision is no longer held here as a proposal, for example because it arrived as signed history. Look at the repository&#39;s history instead."), "{}", en.text());
+    check(&"claim_not_held", 409, &en, &ja);
+
+    // tree_too_large (422)
+    let mut w = world(
+        "pg-r-large",
+        Opts {
+            max_bytes: Some(2048),
+            ..Opts::default()
+        },
+    );
+    w.client.write("big.bin", &vec![b'x'; 10_000]);
+    w.client.seal("big");
+    let (id, _) = propose(&w, title(), &w.client.artifact(&w.forge, "r2")).await;
+    let uri = format!("/alice/forge/proposals/{id}/revisions/1/changes");
+    let (en, ja) = (
+        page(&w, &uri, "en", None).await,
+        page(&w, &uri, "ja", None).await,
+    );
+    check("tree_too_large", 422, &en, &ja);
+
+    // timed_out (503)
+    let mut w = world(
+        "pg-r-time",
+        Opts {
+            wall: Some(Duration::ZERO),
+            ..Opts::default()
+        },
+    );
+    w.client.write("x.txt", b"x\n");
+    w.client.seal("x");
+    let (id, _) = propose(&w, title(), &w.client.artifact(&w.forge, "r3")).await;
+    let uri = format!("/alice/forge/proposals/{id}/revisions/1/changes");
+    let (en, ja) = (
+        page(&w, &uri, "en", None).await,
+        page(&w, &uri, "ja", None).await,
+    );
+    check("timed_out", 503, &en, &ja);
+
+    // failed (503): the store cannot be read
+    let mut w = world("pg-r-fail", Opts::default());
+    w.client.write("x.txt", b"x\n");
+    w.client.seal("x");
+    let (id, _) = propose(&w, title(), &w.client.artifact(&w.forge, "r4")).await;
+    let uri = format!("/alice/forge/proposals/{id}/revisions/1/changes");
+    let moved = w.forge.join(".prikk-away");
+    std::fs::rename(w.forge.join(".prikk"), &moved).unwrap();
+    let (en, ja) = (
+        page(&w, &uri, "en", None).await,
+        page(&w, &uri, "ja", None).await,
+    );
+    std::fs::rename(&moved, w.forge.join(".prikk")).unwrap();
+    check("failed", 503, &en, &ja);
+
+    // busy (503, Retry-After): the only slot is taken
+    let gate = planeter_web::PrikkGate::new(1, Duration::from_millis(100));
+    let mut w = world(
+        "pg-r-busy",
+        Opts {
+            gate: Some(gate),
+            ..Opts::default()
+        },
+    );
+    w.client.write("x.txt", b"x\n");
+    w.client.seal("x");
+    let (id, _) = propose(&w, title(), &w.client.artifact(&w.forge, "r5")).await;
+    let uri = format!("/alice/forge/proposals/{id}/revisions/1/changes");
+    let g = w.gate.clone();
+    let holder = tokio::spawn(async move {
+        g.run(|| std::thread::sleep(Duration::from_millis(1500)))
+            .await
+    });
+    tokio::time::sleep(Duration::from_millis(150)).await;
+    let (en, ja) = (
+        page(&w, &uri, "en", None).await,
+        page(&w, &uri, "ja", None).await,
+    );
+    assert!(en.headers.get("retry-after").is_some() && ja.headers.get("retry-after").is_some());
+    check("busy", 503, &en, &ja);
+    let _ = holder.await;
+
+    // not_one_change (422): a revision naming two claims on one parent
+    let mut w = world("pg-r-two", Opts::default());
+    let mut other = Client {
+        repo: w.base.join("client2"),
+        keys: w.base.join("client-keys2"),
+        archive: w.client.archive.clone(),
+        n: 0,
+    };
+    assert!(
+        Command::new("cp")
+            .arg("-a")
+            .arg(&w.client.repo)
+            .arg(&other.repo)
+            .status()
+            .unwrap()
+            .success()
+    );
+    assert!(
+        Command::new("cp")
+            .arg("-a")
+            .arg(&w.client.keys)
+            .arg(&other.keys)
+            .status()
+            .unwrap()
+            .success()
+    );
+    w.client.write("a.txt", b"head one\n");
+    w.client.seal("head one");
+    other.write("b.txt", b"head two\n");
+    other.seal("head two");
+    let (id_a, _) = propose(&w, title(), &w.client.artifact(&w.forge, "ha")).await;
+    let (id_b, rb) = propose(&w, title(), &other.artifact(&w.forge, "hb")).await;
+    let claim_b = rb.json()["claims"][0]["claim_id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let a_rev = w.changes.revisions_of(&id_a).unwrap().remove(0);
+    let b_rev = w.changes.revisions_of(&id_b).unwrap().remove(0);
+    let mut two = a_rev.clone();
+    two.claim_ids.push(claim_b);
+    two.revision_id = "v-two-heads".to_owned();
+    two.seq = 1;
+    let mut change = w.changes.get_change(&id_a).unwrap().unwrap();
+    change.change_id = "c-two-heads".to_owned();
+    two.change_id = change.change_id.clone();
+    two.artifact_digest = "ab".repeat(32);
+    two.artifact_bytes = b_rev.artifact_bytes;
+    w.changes
+        .open_or_resume_intent(
+            "i-two-heads",
+            &two.repo_id,
+            &two.artifact_digest,
+            two.artifact_bytes,
+            &[],
+            "alice",
+            now(),
+        )
+        .unwrap();
+    w.changes
+        .complete_intent_with_revision("i-two-heads", Some(&change), &two, now())
+        .unwrap();
+    let uri = "/alice/forge/proposals/c-two-heads/revisions/1/changes";
+    let (en, ja) = (
+        page(&w, uri, "en", None).await,
+        page(&w, uri, "ja", None).await,
+    );
+    check("not_one_change", 422, &en, &ja);
+
+    let mut reasons: Vec<&str> = seen.iter().map(|s| s.0).collect();
+    reasons.sort_unstable();
+    assert_eq!(
+        reasons,
+        vec![
+            "busy",
+            "claim_not_held",
+            "failed",
+            "not_one_change",
+            "timed_out",
+            "tree_too_large"
+        ],
+        "every reason of the closed list has its page"
+    );
+    // each reason has its own title, in each language
+    for t in &titles {
+        let same: Vec<&Titled> = titles
+            .iter()
+            .filter(|o| o.title == t.title && o.identity != t.identity)
+            .collect();
+        assert!(
+            same.is_empty(),
+            "{} shares its title {:?} with another reason",
+            t.identity,
+            t.title
+        );
+    }
+}
+
+// ---------------------------------------------------------------------------------------------- hostile content, and every statement and note
+
+use planeter_transport::changes::cache::{Cache, ListEntry, RevEntry};
+use planeter_transport::changes::model::{
+    ChangeSet, Compared, DiffHunk, DiffLine, DiffOp, FileDiff, FileEntry, Kind, NotShown, Status,
+    Totals, Truncated,
+};
+
+fn fid(n: u32) -> String {
+    format!("{:064x}", n)
+}
+
+fn entry(
+    n: u32,
+    path: &str,
+    status: Status,
+    kind: Kind,
+    shown: bool,
+    why: Option<NotShown>,
+    added: Option<u64>,
+    removed: Option<u64>,
+) -> FileEntry {
+    FileEntry {
+        file_id: fid(n),
+        path: path.to_owned(),
+        path_escaped: false,
+        status,
+        kind,
+        size_before: None,
+        size_after: None,
+        lines_added: added,
+        lines_removed: removed,
+        shown,
+        not_shown_because: why,
+    }
+}
+
+fn lines(ops: &[(DiffOp, &str)]) -> Vec<DiffLine> {
+    ops.iter()
+        .map(|(op, t)| DiffLine {
+            op: *op,
+            text: (*t).to_owned(),
+        })
+        .collect()
+}
+
+fn totals(files: &[FileEntry]) -> Totals {
+    Totals {
+        files_changed: files.len() as u64,
+        lines_added: files
+            .iter()
+            .filter(|f| f.shown)
+            .filter_map(|f| f.lines_added)
+            .sum(),
+        lines_removed: files
+            .iter()
+            .filter(|f| f.shown)
+            .filter_map(|f| f.lines_removed)
+            .sum(),
+        unshown: files.iter().filter(|f| !f.shown).count() as u64,
+    }
+}
+
+/// Replace what the server will answer for revision 1 of `id` by a hand-made change set (the cache is a pure function of immutable inputs, so the
+/// engine never rewrites it): the way to put content on a page that real prikk will not author (a name with `</script>`, a bidirectional override, a link
+/// target `javascript:…`), exactly as the engine would hand it to the page, or worse, unescaped.
+fn inject(w: &World, id: &str, key: &str, set: ChangeSet, diffs: &[FileDiff]) {
+    let rev = w.changes.revisions_of(id).unwrap().remove(0);
+    let cache = Cache::open(&w.spool, 64 << 20).unwrap();
+    let writer = cache.begin(key).expect("a fresh key");
+    for d in diffs {
+        writer.put(d);
+    }
+    writer.finish(&ListEntry::Set(Box::new(set)));
+    cache.put_rev(&rev.revision_id, &RevEntry::Key(key.to_owned()));
+}
+
+fn compared(before: Option<&str>, declared: Option<&str>, differs: bool) -> Compared {
+    Compared {
+        before_block: before.map(str::to_owned),
+        after_block: "b".repeat(64),
+        base_differs: differs,
+        declared_base: declared.map(str::to_owned),
+    }
+}
+
+fn change_set(compared: Compared, provisional: bool, files: Vec<FileEntry>) -> ChangeSet {
+    ChangeSet {
+        compared,
+        rebuilt: true,
+        provisional,
+        chain_signature: None,
+        totals: totals(&files),
+        files,
+    }
+}
+
+fn diff_of(entry: FileEntry, hunks: Vec<DiffHunk>) -> FileDiff {
+    FileDiff {
+        entry,
+        hunks,
+        truncated: None,
+        approximate: false,
+    }
+}
+
+async fn one_proposal(name: &str) -> (World, String) {
+    let mut w = world(name, Opts::default());
+    w.client.write("x.txt", b"x\n");
+    w.client.seal("x");
+    let (id, _) = propose(&w, title(), &w.client.artifact(&w.forge, "inj")).await;
+    (w, id)
+}
+
+#[tokio::test]
+async fn hostile_names_and_text_never_reach_a_page_unescaped_and_no_link_comes_from_file_content() {
+    if skip() {
+        return;
+    }
+    let (w, id) = one_proposal("pg-hostile").await;
+    let script = "<script>alert(1)</script>.txt";
+    let bidi = "fdp.\u{202E}txt";
+    let img = "<img src=x onerror=alert(1)>";
+    let long = format!("{}\u{2026}(500 more characters)", "z".repeat(2000)); // as the engine cuts a 2,500-character line
+    let mut e1 = entry(
+        1,
+        script,
+        Status::Added,
+        Kind::Text,
+        true,
+        None,
+        Some(3),
+        Some(0),
+    );
+    e1.path_escaped = false;
+    let e2 = entry(
+        2,
+        bidi,
+        Status::Added,
+        Kind::Text,
+        true,
+        None,
+        Some(1),
+        Some(0),
+    ); // as a broken engine would hand it: not escaped
+    let e3 = entry(
+        3,
+        "evil.lnk",
+        Status::Added,
+        Kind::Symlink,
+        true,
+        None,
+        None,
+        None,
+    );
+    let e4 = entry(
+        4,
+        "a\u{200B}b\u{FEFF}c\u{2028}d",
+        Status::Added,
+        Kind::Text,
+        false,
+        Some(NotShown::Binary),
+        None,
+        None,
+    );
+    let files = vec![e1.clone(), e2.clone(), e3.clone(), e4.clone()];
+    let hunk = |ls: Vec<DiffLine>| DiffHunk {
+        old_start: 0,
+        old_lines: 0,
+        new_start: 1,
+        new_lines: ls.len() as u64,
+        lines: ls,
+    };
+    let d1 = diff_of(
+        e1.clone(),
+        vec![hunk(lines(&[
+            (DiffOp::Add, img),
+            (DiffOp::Add, "\u{202E}reversed \u{200B}zero-width\u{1B}[31m"),
+            (DiffOp::Add, &long),
+        ]))],
+    );
+    let d2 = diff_of(e2.clone(), vec![hunk(lines(&[(DiffOp::Add, "line")]))]);
+    let d3 = diff_of(
+        e3.clone(),
+        vec![hunk(lines(&[(DiffOp::Add, "javascript:alert(1)")]))],
+    );
+    inject(
+        &w,
+        &id,
+        "hostile-1",
+        change_set(compared(Some(&"a".repeat(64)), None, false), true, files),
+        &[
+            d1.clone(),
+            d2.clone(),
+            d3.clone(),
+            diff_of(e4.clone(), vec![]),
+        ],
+    );
+    let uri = format!("/alice/forge/proposals/{id}/revisions/1/changes");
+    for lang in ["en", "ja"] {
+        let r = page(&w, &uri, lang, None).await;
+        assert_eq!(r.status, StatusCode::OK, "{}", r.text());
+        let p = r.text();
+        check_page(&p, lang);
+        assert!(
+            !p.contains("<script") && !p.contains("</script>"),
+            "{lang}: {p}"
+        );
+        assert!(
+            (p.contains("&#60;script&#62;alert(1)&#60;/script&#62;.txt")
+                || p.contains("&lt;script&gt;alert(1)&lt;/script&gt;.txt")),
+            "{lang}: the name is there, escaped\n{p}"
+        );
+        for raw in ['\u{202E}', '\u{200B}', '\u{FEFF}', '\u{2028}', '\u{1B}'] {
+            assert!(!p.contains(raw), "{lang}: {raw:?} is on the page raw");
+        }
+        assert!(
+            p.contains("fdp.\\u{202E}txt"),
+            "{lang}: the override is a visible escape\n{p}"
+        );
+        // every address on the page is one of ours: nothing a file said is a link
+        for href in p
+            .split("href=\"")
+            .skip(1)
+            .map(|s| &s[..s.find('"').unwrap()])
+        {
+            assert!(
+                href.starts_with('/') || href == "#main",
+                "{lang}: a link that is not ours: {href}"
+            );
+        }
+        // a file page for each
+        for (n, d) in [(1, &d1), (2, &d2), (3, &d3)] {
+            let f = page(&w, &format!("{uri}/{}", fid(n)), lang, None).await;
+            assert_eq!(f.status, StatusCode::OK, "{lang} file {n}: {}", f.text());
+            let fp = f.text();
+            check_page(&fp, lang);
+            assert!(
+                !fp.contains("<img") && !fp.contains("<script"),
+                "{lang} file {n}: {fp}"
+            );
+            for raw in ['\u{202E}', '\u{200B}', '\u{FEFF}', '\u{1B}'] {
+                assert!(!fp.contains(raw), "{lang} file {n}: {raw:?} raw");
+            }
+            for href in fp
+                .split("href=\"")
+                .skip(1)
+                .map(|s| &s[..s.find('"').unwrap()])
+            {
+                assert!(
+                    href.starts_with('/') || href == "#main",
+                    "{lang} file {n}: a link that is not ours: {href}"
+                );
+            }
+            let _ = d;
+        }
+    }
+    // the first file's page: the markup line is text, the long line is cut with its own words, and the sentence says so
+    let fp = page(&w, &format!("{uri}/{}", fid(1)), "en", None)
+        .await
+        .text();
+    assert!(
+        (fp.contains("<code>&#60;img src=x onerror=alert(1)&#62;</code>")
+            || fp.contains("<code>&lt;img src=x onerror=alert(1)&gt;</code>")),
+        "{fp}"
+    );
+    assert!(
+        fp.contains("Lines that were too long are cut, and each cut says how much was left out."),
+        "{fp}"
+    );
+    assert!(
+        fp.contains("\\u{202E}reversed \\u{200B}zero-width\\u{1B}[31m"),
+        "{fp}"
+    );
+    // a symbolic link target is text in a sentence, never a link
+    let lp = page(&w, &format!("{uri}/{}", fid(3)), "en", None)
+        .await
+        .text();
+    assert!(
+        lp.contains("This is a symbolic link to <code>javascript:alert(1)</code>."),
+        "{lp}"
+    );
+    assert!(!lp.contains("href=\"javascript"), "{lp}");
+    assert!(!lp.contains("<table"), "a link has no diff table");
+    let ljp = page(&w, &format!("{uri}/{}", fid(3)), "ja", None)
+        .await
+        .text();
+    assert!(
+        ljp.contains("<code>javascript:alert(1)</code> へのシンボリックリンクです。"),
+        "{ljp}"
+    );
+    // a file with no diff: its reason, no table, and the way out is only offered to someone who may download
+    let np = page(&w, &format!("{uri}/{}", fid(4)), "en", None)
+        .await
+        .text();
+    assert!(
+        np.contains("This is a binary file, so it cannot be shown as text."),
+        "{np}"
+    );
+    assert!(
+        !np.contains("<table") && !np.contains("Download revision"),
+        "{np}"
+    );
+}
+
+#[tokio::test]
+async fn each_statement_and_each_note_appears_exactly_when_it_is_true() {
+    if skip() {
+        return;
+    }
+    let (w, id) = one_proposal("pg-statements").await;
+    let uri = format!("/alice/forge/proposals/{id}/revisions/1/changes");
+    let (before, declared) = ("a".repeat(64), "c".repeat(64));
+    let rebuilt =
+        "These files are rebuilt from the patches in this revision. Nothing here is signed.";
+    let provisional = "No earlier check of this repository&#39;s history was available";
+    let starts = "This revision starts the history, so there are no earlier files to compare with.";
+    let differs = format!(
+        "This revision says it was built on <code>{}</code>, but its first patch continues from <code>{}</code>. The changes below are compared with <code>{}</code>.",
+        &declared[..12],
+        &before[..12],
+        &before[..12]
+    );
+    let e = entry(
+        1,
+        "f.txt",
+        Status::Modified,
+        Kind::Text,
+        true,
+        None,
+        Some(1),
+        Some(1),
+    );
+    // 1. not provisional, a declared base that is the real parent
+    inject(
+        &w,
+        &id,
+        "st-1",
+        change_set(
+            compared(Some(&before), Some(&before), false),
+            false,
+            vec![e.clone()],
+        ),
+        &[],
+    );
+    let p = page(&w, &uri, "en", None).await.text();
+    assert!(
+        p.contains(rebuilt)
+            && !p.contains(provisional)
+            && !p.contains(starts)
+            && !p.contains("This revision says it was built on"),
+        "{p}"
+    );
+    assert!(
+        p.contains(&format!("Compared with <code>{}</code>", &before[..12])),
+        "{p}"
+    );
+    // 2. provisional
+    inject(
+        &w,
+        &id,
+        "st-2",
+        change_set(compared(Some(&before), None, false), true, vec![e.clone()]),
+        &[],
+    );
+    let p = page(&w, &uri, "en", None).await.text();
+    assert!(p.contains(provisional), "{p}");
+    assert!(
+        page(&w, &uri, "ja", None)
+            .await
+            .text()
+            .contains("履歴を最初から再現してファイルを再構築しました")
+    );
+    // 3. the declared base is not the real parent
+    inject(
+        &w,
+        &id,
+        "st-3",
+        change_set(
+            compared(Some(&before), Some(&declared), true),
+            false,
+            vec![e.clone()],
+        ),
+        &[],
+    );
+    let p = page(&w, &uri, "en", None).await.text();
+    assert!(p.contains(&differs), "{p}");
+    assert!(!p.contains(starts));
+    check_page(&p, "en");
+    // 4. the revision starts the history: no earlier files, no "compared with"
+    inject(
+        &w,
+        &id,
+        "st-4",
+        change_set(compared(None, None, false), false, vec![e.clone()]),
+        &[],
+    );
+    let p = page(&w, &uri, "en", None).await.text();
+    assert!(p.contains(starts) && !p.contains("Compared with"), "{p}");
+    check_page(&p, "en");
+    // 5. a declared base on a revision that starts the history
+    inject(
+        &w,
+        &id,
+        "st-5",
+        change_set(
+            compared(None, Some(&declared), true),
+            false,
+            vec![e.clone()],
+        ),
+        &[],
+    );
+    let p = page(&w, &uri, "en", None).await.text();
+    assert!(p.contains(&format!("This revision says it was built on <code>{}</code>, but its first patch starts the history", &declared[..12])), "{p}");
+    assert!(!p.contains(starts), "the other sentence says it already");
+    // 6. an empty change set
+    inject(
+        &w,
+        &id,
+        "st-6",
+        change_set(compared(Some(&before), None, false), false, vec![]),
+        &[],
+    );
+    let p = page(&w, &uri, "en", None).await.text();
+    assert!(
+        p.contains("This revision changes no files.") && !p.contains("<table"),
+        "{p}"
+    );
+    assert!(
+        page(&w, &uri, "ja", None)
+            .await
+            .text()
+            .contains("このリビジョンで変わるファイルはありません。")
+    );
+    check_page(&p, "en");
+    // 7. some files cannot be shown as text: the summary says how many, each row says why (every reason of the closed list)
+    let reasons = [
+        NotShown::TooLarge,
+        NotShown::NotUtf8,
+        NotShown::Binary,
+        NotShown::Symlink,
+        NotShown::Directory,
+        NotShown::Unreadable,
+    ];
+    let mut files: Vec<FileEntry> = reasons
+        .iter()
+        .enumerate()
+        .map(|(i, r)| {
+            entry(
+                10 + i as u32,
+                &format!("n{i}.dat"),
+                Status::Modified,
+                Kind::Binary,
+                false,
+                Some(*r),
+                None,
+                None,
+            )
+        })
+        .collect();
+    files.push(entry(
+        20,
+        "current.lnk",
+        Status::Added,
+        Kind::Symlink,
+        true,
+        None,
+        None,
+        None,
+    ));
+    files.push(e.clone());
+    inject(
+        &w,
+        &id,
+        "st-7",
+        change_set(compared(Some(&before), None, false), false, files),
+        &[],
+    );
+    let p = page(&w, &uri, "en", None).await.text();
+    check_page(&p, "en");
+    assert!(
+        p.contains("8 files changed, 1 line added, 1 line removed"),
+        "{p}"
+    );
+    assert!(
+        p.contains("6 of them cannot be shown as text (see the Notes column)."),
+        "{p}"
+    );
+    for note in [
+        "This file is too large to show here.",
+        "This file is not UTF-8 text, so it cannot be shown as text.",
+        "This is a binary file, so it cannot be shown as text.",
+        "This path changed between a file and a symbolic link, so it cannot be shown as text.",
+        "This path is a folder, or became one, so there is no text to show.",
+        "This entry is not an ordinary file, or is nested too deeply, so nothing is shown.",
+        "A symbolic link: its target is shown.",
+    ] {
+        assert!(p.contains(note), "{note}\n{p}");
+    }
+    // a file that cannot be shown has no link to a page; the rows that can are links
+    assert!(
+        !p.contains("<code>n0.dat</code></a>") && p.contains("<code>f.txt</code></a>"),
+        "{p}"
+    );
+    let pj = page(&w, &uri, "ja", None).await.text();
+    check_page(&pj, "ja");
+    assert!(
+        pj.contains("そのうち 6 件は、テキストとして表示できません（「補足」列を参照）。"),
+        "{pj}"
+    );
+    // 8. truncation, approximation and a diff with no lines (an empty file)
+    let mut big = diff_of(
+        entry(
+            30,
+            "big.txt",
+            Status::Added,
+            Kind::Text,
+            true,
+            None,
+            Some(6000),
+            Some(0),
+        ),
+        vec![DiffHunk {
+            old_start: 0,
+            old_lines: 0,
+            new_start: 1,
+            new_lines: 2,
+            lines: lines(&[(DiffOp::Add, "one"), (DiffOp::Add, "two")]),
+        }],
+    );
+    big.truncated = Some(Truncated {
+        lines_not_shown: 5998,
+    });
+    big.approximate = true;
+    let empty = diff_of(
+        entry(
+            31,
+            "empty.txt",
+            Status::Added,
+            Kind::Text,
+            true,
+            None,
+            Some(0),
+            Some(0),
+        ),
+        vec![],
+    );
+    inject(
+        &w,
+        &id,
+        "st-8",
+        change_set(
+            compared(Some(&before), None, false),
+            false,
+            vec![big.entry.clone(), empty.entry.clone()],
+        ),
+        &[big.clone(), empty.clone()],
+    );
+    let p = page(&w, &format!("{uri}/{}", fid(30)), "en", None)
+        .await
+        .text();
+    check_page(&p, "en");
+    assert!(p.contains("5,998 more lines are not shown."), "{p}");
+    assert!(p.contains("This file changed so much that it is shown as all of the old lines removed and all of the new lines added."), "{p}");
+    assert!(p.contains("No lines before, lines 1–2 after"), "{p}");
+    let e1 = page(&w, &format!("{uri}/{}", fid(31)), "en", None)
+        .await
+        .text();
+    assert!(
+        e1.contains("This file has no lines.") && !e1.contains("<table"),
+        "{e1}"
+    );
+    let one = diff_of(
+        entry(
+            32,
+            "one.txt",
+            Status::Added,
+            Kind::Text,
+            true,
+            None,
+            Some(1),
+            Some(0),
+        ),
+        vec![DiffHunk {
+            old_start: 0,
+            old_lines: 0,
+            new_start: 1,
+            new_lines: 1,
+            lines: lines(&[(DiffOp::Add, "only")]),
+        }],
+    );
+    inject(
+        &w,
+        &id,
+        "st-9",
+        change_set(
+            compared(Some(&before), None, false),
+            false,
+            vec![one.entry.clone()],
+        ),
+        &[one],
+    );
+    let p = page(&w, &format!("{uri}/{}", fid(32)), "en", None)
+        .await
+        .text();
+    assert!(p.contains("No lines before, line 1 after"), "{p}");
+    assert!(p.contains("1 more line") || !p.contains("more line"), "{p}");
+}
+
+#[tokio::test]
+async fn a_really_long_line_is_cut_by_the_engine_and_the_page_says_so_in_words() {
+    if skip() {
+        return;
+    }
+    let mut w = world("pg-longline", Opts::default());
+    let text = format!("start\n{}\nend\n", "w".repeat(3000));
+    w.client.write("wide.txt", text.as_bytes());
+    w.client.seal("wide");
+    let (id, _) = propose(&w, title(), &w.client.artifact(&w.forge, "ll")).await;
+    let list = list(&w, &id).await.json();
+    let f = find(&list, "wide.txt");
+    let uri = format!(
+        "/alice/forge/proposals/{id}/revisions/1/changes/{}",
+        f["file_id"].as_str().unwrap()
+    );
+    for lang in ["en", "ja"] {
+        let p = page(&w, &uri, lang, None).await.text();
+        check_page(&p, lang);
+        assert!(
+            p.contains("\u{2026}(1000 more characters)"),
+            "{lang}: the engine's cut is in the line"
+        );
+    }
+    let en = page(&w, &uri, "en", None).await.text();
+    assert!(
+        en.contains("Lines that were too long are cut, and each cut says how much was left out."),
+        "{en}"
+    );
+    assert!(
+        page(&w, &uri, "ja", None)
+            .await
+            .text()
+            .contains("長すぎる行は途中で切ってあり")
+    );
+    // the unchanged end of the file is not mistaken for a cut
+    let (id2, _) = (id.clone(), ());
+    let _ = id2;
+}
+
+#[tokio::test]
+async fn the_proposal_page_links_each_revision_to_its_changes_with_a_text_of_its_own_and_the_old_sentence_is_gone()
+ {
+    if skip() {
+        return;
+    }
+    let (w, id, _) = pages_world("pg-link").await;
+    let proposal = format!("/alice/forge/proposals/{id}");
+    for (lang, text) in [
+        ("en", "See the changes in revision 1"),
+        ("ja", "リビジョン 1 の変更点を見る"),
+    ] {
+        let r = page(&w, &proposal, lang, None).await;
+        assert_eq!(r.status, StatusCode::OK);
+        let p = r.text();
+        check_page(&p, lang);
+        let href = format!("{proposal}/revisions/1/changes");
+        assert!(
+            p.contains(&format!("<a href=\"{href}\">{text}</a>")),
+            "{lang}: {p}"
+        );
+        // beside the actions, above the details (the default view), and in the revisions' table
+        let (default_view, details) = p.split_once("<summary>").unwrap();
+        assert!(
+            default_view.contains(text),
+            "{lang}: the link is in the default view"
+        );
+        assert!(details.contains(text), "{lang}: and in the revisions table");
+        assert!(
+            !p.contains("not available yet") && !p.contains("まだ利用できません"),
+            "{lang}"
+        );
+    }
+    // a second revision: one link per revision, each with its own text, the latest also in the default view
+    let mut w2 = world("pg-link2", Opts::default());
+    w2.client.write("a.txt", b"a\n");
+    w2.client.seal("one");
+    let (id2, _) = propose(&w2, title(), &w2.client.artifact(&w2.forge, "l1")).await;
+    w2.client.write("b.txt", b"b\n");
+    w2.client.seal("two");
+    let art = w2.client.artifact(&w2.forge, "l2");
+    let (id2b, _) = propose(&w2, serde_json::json!({"proposal": id2.clone()}), &art).await;
+    assert_eq!(
+        id2, id2b,
+        "the second artifact is a revision of the same proposal"
+    );
+    let p = page(&w2, &format!("/alice/forge/proposals/{id2}"), "en", None)
+        .await
+        .text();
+    check_page(&p, "en");
+    assert!(
+        p.contains("See the changes in revision 1") && p.contains("See the changes in revision 2"),
+        "{p}"
+    );
+    let default_view = p.split_once("<summary>").unwrap().0;
+    assert!(
+        default_view.contains("See the changes in revision 2")
+            && !default_view.contains("See the changes in revision 1"),
+        "the default view links the latest revision"
+    );
+    // the page of revision 2 compares the two blocks of the artifact against its own base
+    let r2 = page(
+        &w2,
+        &format!("/alice/forge/proposals/{id2}/revisions/2/changes"),
+        "en",
+        None,
+    )
+    .await;
+    assert_eq!(r2.status, StatusCode::OK, "{}", r2.text());
+    check_page(&r2.text(), "en");
+}
+
+#[tokio::test]
+async fn the_pages_carry_the_headers_of_the_other_dynamic_pages_and_the_download_only_for_who_may_use_it()
+ {
+    if skip() {
+        return;
+    }
+    let (w, id, uri) = pages_world("pg-headers").await;
+    let proposal = page(&w, &format!("/alice/forge/proposals/{id}"), "ja", None).await;
+    let changes = page(&w, &uri, "ja", None).await;
+    for name in [
+        "cache-control",
+        "vary",
+        "content-language",
+        "content-security-policy",
+        "x-content-type-options",
+        "referrer-policy",
+        "content-type",
+    ] {
+        assert_eq!(
+            changes.h(name),
+            proposal.h(name),
+            "{name} is the proposal page's"
+        );
+    }
+    assert!(
+        changes.h("cache-control").contains("no-store"),
+        "{}",
+        changes.h("cache-control")
+    );
+    assert!(
+        changes.h("vary").to_lowercase().contains("accept-language"),
+        "{}",
+        changes.h("vary")
+    );
+    assert_eq!(changes.h("content-language"), "ja");
+    assert!(
+        changes.h("content-security-policy").contains("default-src"),
+        "{}",
+        changes.h("content-security-policy")
+    );
+    let file = page(&w, &format!("{uri}/{}", fid(0)), "en", None).await;
+    assert_eq!(
+        file.status,
+        StatusCode::NOT_FOUND,
+        "an unknown file is the page of a missing thing"
+    );
+    // the download: not for a stranger (no review right), for the signed-in owner
+    let anon = page(&w, &uri, "en", None).await.text();
+    assert!(!anon.contains("Download the files of revision"), "{anon}");
+    let cookie = session(&w, "alice");
+    let owner = page(&w, &uri, "en", Some(&cookie)).await.text();
+    assert!(owner.contains(&format!("<a href=\"/api/v1/repos/alice/forge/proposals/{id}/revisions/1/artifact\">Download the files of revision 1</a>")), "{owner}");
+    check_page(&owner, "en");
+}
+
+#[tokio::test]
+async fn a_hidden_repository_an_unknown_proposal_revision_or_file_are_one_page_whoever_asks() {
+    if skip() {
+        return;
+    }
+    let (w, id, uri) = pages_world("pg-404").await;
+    let asks = [
+        format!("/alice/private/proposals/{id}/revisions/1/changes"),
+        format!("/alice/forge/proposals/no-such/revisions/1/changes"),
+        format!("/alice/forge/proposals/{id}/revisions/9/changes"),
+        format!("/alice/forge/proposals/{id}/revisions/x/changes"),
+        format!("/alice/nope/proposals/{id}/revisions/1/changes"),
+        format!("{uri}/{}", "0".repeat(64)),
+        format!("{uri}/not-hex"),
+    ];
+    let mut bodies = Vec::new();
+    for u in &asks {
+        let r = page(&w, u, "en", None).await;
+        assert_eq!(r.status, StatusCode::NOT_FOUND, "{u}");
+        check_page(&r.text(), "en");
+        // the page names the proposal's address in its title; blank it to compare the rest
+        bodies.push(r.text().split("<main").nth(1).unwrap().to_owned());
+    }
+    // the repository that does not exist and the one that is hidden say exactly the same thing (they differ only in the address they name)
+    let strip = |s: &str| s.replace("private", "X").replace("nope", "X");
+    assert_eq!(
+        strip(&bodies[0]).split_once("</main>").unwrap().0.len(),
+        strip(&bodies[4]).split_once("</main>").unwrap().0.len()
+    );
+}
+
+#[tokio::test]
+async fn the_previous_and_next_file_follow_the_list_and_skip_files_with_no_diff() {
+    if skip() {
+        return;
+    }
+    let (w, id) = one_proposal("pg-neighbours").await;
+    let uri = format!("/alice/forge/proposals/{id}/revisions/1/changes");
+    let mk = |n: u32, path: &str, shown: bool| {
+        entry(
+            n,
+            path,
+            Status::Added,
+            Kind::Text,
+            shown,
+            (!shown).then_some(NotShown::Binary),
+            shown.then_some(1),
+            shown.then_some(0),
+        )
+    };
+    let files = vec![
+        mk(1, "a.txt", true),
+        mk(2, "b.bin", false),
+        mk(3, "c.txt", true),
+        mk(4, "d.txt", true),
+    ];
+    let one = |e: &FileEntry| {
+        diff_of(
+            e.clone(),
+            if e.shown {
+                vec![DiffHunk {
+                    old_start: 0,
+                    old_lines: 0,
+                    new_start: 1,
+                    new_lines: 1,
+                    lines: lines(&[(DiffOp::Add, "x")]),
+                }]
+            } else {
+                vec![]
+            },
+        )
+    };
+    let diffs: Vec<FileDiff> = files.iter().map(one).collect();
+    inject(
+        &w,
+        &id,
+        "nb-1",
+        change_set(compared(Some(&"a".repeat(64)), None, false), false, files),
+        &diffs,
+    );
+    let href = |n: u32| format!("{uri}/{}", fid(n));
+    let p1 = page(&w, &href(1), "en", None).await.text();
+    assert!(
+        !p1.contains("Previous changed file")
+            && p1.contains(&format!("<a href=\"{}\">Next changed file</a>", href(3))),
+        "the next of a.txt skips b.bin: {p1}"
+    );
+    let p3 = page(&w, &href(3), "en", None).await.text();
+    assert!(
+        p3.contains(&format!(
+            "<a href=\"{}\">Previous changed file</a>",
+            href(1)
+        )) && p3.contains(&format!("<a href=\"{}\">Next changed file</a>", href(4))),
+        "{p3}"
+    );
+    let p4 = page(&w, &href(4), "en", None).await.text();
+    assert!(
+        p4.contains(&format!(
+            "<a href=\"{}\">Previous changed file</a>",
+            href(3)
+        )) && !p4.contains("Next changed file"),
+        "{p4}"
+    );
+    for p in [&p1, &p3, &p4] {
+        assert!(p.contains(&format!("<a href=\"{uri}\">Back to the list of files</a>")));
+        check_page(p, "en");
+    }
+    let ja = page(&w, &href(3), "ja", None).await.text();
+    assert!(
+        ja.contains("前のファイルへ")
+            && ja.contains("次のファイルへ")
+            && ja.contains("ファイルの一覧に戻る"),
+        "{ja}"
+    );
+}
+
+#[tokio::test]
+async fn more_than_a_hundred_files_are_paged_with_earlier_and_more_links() {
+    if skip() {
+        return;
+    }
+    let (w, id) = one_proposal("pg-paging").await;
+    let uri = format!("/alice/forge/proposals/{id}/revisions/1/changes");
+    let files: Vec<FileEntry> = (0..250u32)
+        .map(|i| {
+            entry(
+                i + 1,
+                &format!("f{i:03}.txt"),
+                Status::Added,
+                Kind::Text,
+                true,
+                None,
+                Some(1),
+                Some(0),
+            )
+        })
+        .collect();
+    inject(
+        &w,
+        &id,
+        "pg-1",
+        change_set(compared(Some(&"a".repeat(64)), None, false), false, files),
+        &[],
+    );
+    let p1 = page(&w, &uri, "en", None).await.text();
+    check_page(&p1, "en");
+    assert!(
+        p1.contains("250 files changed")
+            && p1.contains("<code>f099.txt</code>")
+            && !p1.contains("<code>f100.txt</code>"),
+        "100 on the first page"
+    );
+    assert!(!p1.contains("Earlier files"));
+    let more1 = p1
+        .split("href=\"")
+        .skip(1)
+        .map(|s| &s[..s.find('"').unwrap()])
+        .find(|h| h.contains("?after="))
+        .unwrap()
+        .to_owned();
+    assert_eq!(more1, format!("{uri}?after={}", fid(100)));
+    let p2 = page(&w, &more1.replace("&amp;", "&"), "en", None)
+        .await
+        .text();
+    check_page(&p2, "en");
+    assert!(
+        p2.contains("<code>f100.txt</code>")
+            && p2.contains("<code>f199.txt</code>")
+            && !p2.contains("<code>f200.txt</code>"),
+        "{p2}"
+    );
+    assert!(
+        p2.contains(&format!("<a href=\"{uri}\">Earlier files</a>")),
+        "the earlier page of the second is the first"
+    );
+    let more2 = format!("{uri}?after={}", fid(200));
+    assert!(
+        p2.contains(&format!("<a href=\"{more2}\">More files</a>")),
+        "{p2}"
+    );
+    let p3 = page(&w, &more2, "en", None).await.text();
+    assert!(
+        p3.contains("<code>f249.txt</code>") && !p3.contains("More files"),
+        "{p3}"
+    );
+    assert!(
+        p3.contains(&format!(
+            "<a href=\"{uri}?after={}\">Earlier files</a>",
+            fid(100)
+        )),
+        "{p3}"
+    );
+    // an unknown cursor is the first page
+    let bad = page(&w, &format!("{uri}?after={}", fid(9999)), "en", None).await;
+    assert_eq!(bad.status, StatusCode::OK);
+    assert!(bad.text().contains("<code>f000.txt</code>"));
+}
+
+#[tokio::test]
+async fn files_that_real_prikk_rebuilt_as_binary_non_utf8_or_too_large_say_why_and_offer_the_download_to_who_may_use_it()
+ {
+    if skip() {
+        return;
+    }
+    let big = "a line of text\n".repeat(20_000);
+    let initial: Vec<(&str, Vec<u8>)> = vec![
+        ("bin.dat", vec![0, 1, 2, 3]),
+        ("big.txt", big.clone().into_bytes()),
+        ("sjis.txt", b"\x83e\x83X\x83g\n".to_vec()),
+    ];
+    let init: Vec<(&str, &[u8])> = initial.iter().map(|(a, b)| (*a, b.as_slice())).collect();
+    let mut w = world_with("pg-unshown", Opts::default(), &init);
+    w.client.write("bin.dat", &[0, 1, 2, 9]);
+    w.client
+        .write("big.txt", big.replacen("a line", "A line", 1).as_bytes());
+    w.client.write("sjis.txt", b"\x83e\x83X\x83g\n\x83e\n");
+    w.client.seal("unshown");
+    let (id, _) = propose(&w, title(), &w.client.artifact(&w.forge, "un")).await;
+    let uri = format!("/alice/forge/proposals/{id}/revisions/1/changes");
+    let list = list(&w, &id).await.json();
+    let owner = session(&w, "alice");
+    for (path, note) in [
+        (
+            "bin.dat",
+            "This is a binary file, so it cannot be shown as text.",
+        ),
+        ("big.txt", "This file is too large to show here."),
+        (
+            "sjis.txt",
+            "This file is not UTF-8 text, so it cannot be shown as text.",
+        ),
+    ] {
+        let href = format!("{uri}/{}", find(&list, path)["file_id"].as_str().unwrap());
+        let anon = page(&w, &href, "en", None).await.text();
+        check_page(&anon, "en");
+        assert!(
+            anon.contains(note) && !anon.contains("<table") && !anon.contains("Download revision"),
+            "{path}: {anon}"
+        );
+        let signed = page(&w, &href, "en", Some(&owner)).await.text();
+        check_page(&signed, "en");
+        assert!(signed.contains(&format!("<a href=\"/api/v1/repos/alice/forge/proposals/{id}/revisions/1/artifact\">Download revision 1 to read it</a>")), "{path}: {signed}");
+        let ja = page(&w, &href, "ja", Some(&owner)).await.text();
+        check_page(&ja, "ja");
+        assert!(
+            ja.contains("読むにはリビジョン 1 をダウンロード"),
+            "{path}: {ja}"
+        );
+    }
+    let p = page(&w, &uri, "en", None).await.text();
+    assert!(
+        p.contains("3 of them cannot be shown as text (see the Notes column)."),
+        "{p}"
+    );
+    // none of the three has a link to a file page
+    assert!(
+        !p.contains("<code>bin.dat</code></a>")
+            && !p.contains("<code>big.txt</code></a>")
+            && !p.contains("<code>sjis.txt</code></a>"),
+        "{p}"
+    );
+}
+
+#[tokio::test]
+async fn twenty_simultaneous_requests_for_the_page_make_one_extraction_and_the_rest_are_the_busy_page_at_once()
+ {
+    if skip() {
+        return;
+    }
+    let mut w = world("pg-waiters", Opts::default());
+    for i in 0..30 {
+        w.client.write(
+            &format!("f{i}.txt"),
+            format!("file {i}\n").repeat(200).as_bytes(),
+        );
+    }
+    w.client.seal("thirty files");
+    let (id, _) = propose(&w, title(), &w.client.artifact(&w.forge, "pw")).await;
+    let uri = format!("/alice/forge/proposals/{id}/revisions/1/changes");
+    let replies = futures_join_all((0..20).map(|_| page(&w, &uri, "en", None)).collect()).await;
+    let ok = replies
+        .iter()
+        .filter(|r| r.status == StatusCode::OK)
+        .count();
+    let busy: Vec<&Reply> = replies
+        .iter()
+        .filter(|r| r.status == StatusCode::SERVICE_UNAVAILABLE)
+        .collect();
+    assert_eq!(
+        (ok, busy.len()),
+        (
+            1 + planeter_transport::MAX_WAITERS,
+            20 - 1 - planeter_transport::MAX_WAITERS
+        )
+    );
+    for r in &busy {
+        assert!(r.headers.get("retry-after").is_some());
+        let t = r.text();
+        check_page(&t, "en");
+        assert!(
+            t.contains(
+                "The server is busy showing other changes right now. Try again in a moment."
+            ),
+            "{t}"
+        );
+    }
+    assert_eq!(counter(&w, "extractions"), 1);
 }

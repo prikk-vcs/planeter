@@ -227,6 +227,8 @@ fn the_table_lists_the_routes_the_contract_knows_and_every_public_entry_has_a_re
         "/{owner}/{name}/proposals/{id}/close",
         "/{owner}/{name}/proposals/{id}/comments",
         "/{owner}/{name}/proposals/{id}/decisions",
+        "/{owner}/{name}/proposals/{id}/revisions/{seq}/changes",
+        "/{owner}/{name}/proposals/{id}/revisions/{seq}/changes/{file_id}",
         "/{owner}/{name}/proposals/{id}/comments/{cid}/hide",
         "/{owner}/{name}/proposals/{id}/comments/{cid}/unhide",
     ]);
@@ -252,8 +254,8 @@ fn the_table_lists_the_routes_the_contract_knows_and_every_public_entry_has_a_re
         .collect();
     assert_eq!(
         authorized.len(),
-        11 + 3 + 9,
-        "11 API reads (two of them the file-by-file view), the transport's advertise, fetch and have-list, and 9 repository pages"
+        11 + 3 + 11,
+        "11 API reads (two of them the file-by-file view), the transport's advertise, fetch and have-list, and 11 repository pages (two of them the file-by-file view)"
     );
     assert!(authorized.iter().all(|p| p.contains("{owner}")));
 }

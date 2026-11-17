@@ -910,7 +910,7 @@ pub const CATALOG: &[Entry] = &[
     msg("changes.summary", "{files}、{added}、{removed}"),
     msg(
         "changes.summary.unshown",
-        "そのうち {count} 件は、テキストとして表示できません（「補足」列を参照）。",
+        "そのうち {number} 件は、テキストとして表示できません（「補足」列を参照）。",
     ),
     msg(
         "changes.none",
