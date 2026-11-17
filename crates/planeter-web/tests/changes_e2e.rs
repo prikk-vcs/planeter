@@ -2885,6 +2885,7 @@ async fn a_really_long_line_is_cut_by_the_engine_and_the_page_says_so_in_words()
     for lang in ["en", "ja"] {
         let p = page(&w, &uri, lang, None).await.text();
         check_page(&p, lang);
+        dump(&format!("cut-line-file.{lang}.html"), &p);
         assert!(
             !p.contains("more characters)"),
             "{lang}: no English marker comes from the engine"
@@ -3477,6 +3478,7 @@ async fn a_cut_name_is_its_head_with_path_cut_bytes_and_the_pages_say_it_in_each
     ] {
         let list = page(&w, &uri, lang, None).await.text();
         check_page(&list, lang);
+        dump(&format!("cut-name-list.{lang}.html"), &list);
         assert!(
             list.contains(many) && list.contains(single),
             "{lang}: {list}"
@@ -3485,6 +3487,7 @@ async fn a_cut_name_is_its_head_with_path_cut_bytes_and_the_pages_say_it_in_each
             .await
             .text();
         check_page(&file, lang);
+        dump(&format!("cut-name-file.{lang}.html"), &file);
         let h1 = file
             .split("<h1>")
             .nth(1)
