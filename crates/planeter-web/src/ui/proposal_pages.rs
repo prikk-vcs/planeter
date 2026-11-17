@@ -418,16 +418,25 @@ fn may_close(
     Ok(is_opener && read.credential_permits(principal, record, Action::Close))
 }
 
+/// What the proposal page offers this viewer.
+struct Offers {
+    /// The download of a revision's files (review or merge-seal).
+    download: bool,
+    /// The close form.
+    close: bool,
+    /// The link to the changes of a revision (the file-by-file view is on).
+    changes: bool,
+}
+
 fn detail_tpl(
     c: &Ctx,
     d: &Detail,
     owner: &str,
     name: &str,
     proposals_nav: bool,
-    may_download: bool,
-    may_close: bool,
-    changes_on: bool,
+    offers: &Offers,
 ) -> DetailTpl {
+    let (may_download, may_close, changes_on) = (offers.download, offers.close, offers.changes);
     let p = &d.proposal;
     let t = c.t;
     let revisions: Vec<RevRow> = d
@@ -602,12 +611,14 @@ pub(super) async fn detail_page(
         &owner,
         &name,
         proposals_nav,
-        may_download,
-        may_close,
-        state
-            .transport
-            .as_ref()
-            .is_some_and(|rt| rt.changes.is_some()),
+        &Offers {
+            download: may_download,
+            close: may_close,
+            changes: state
+                .transport
+                .as_ref()
+                .is_some_and(|rt| rt.changes.is_some()),
+        },
     );
     tpl.review = super::review_pages::review_block(
         &state,

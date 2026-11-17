@@ -2078,7 +2078,7 @@ async fn every_reason_the_view_is_unavailable_is_a_plain_page_with_the_engines_s
     let en = page(&w, &uri, "en", None).await;
     let ja = page(&w, &uri, "ja", None).await;
     assert!(en.text().contains("The work of this revision is no longer held here as a proposal, for example because it arrived as signed history. Look at the repository&#39;s history instead."), "{}", en.text());
-    check(&"claim_not_held", 409, &en, &ja);
+    check("claim_not_held", 409, &en, &ja);
 
     // tree_too_large (422)
     let mut w = world(
@@ -2274,8 +2274,7 @@ fn entry(
     kind: Kind,
     shown: bool,
     why: Option<NotShown>,
-    added: Option<u64>,
-    removed: Option<u64>,
+    (added, removed): (Option<u64>, Option<u64>),
 ) -> FileEntry {
     FileEntry {
         file_id: fid(n),
@@ -2386,8 +2385,7 @@ async fn hostile_names_and_text_never_reach_a_page_unescaped_and_no_link_comes_f
         Kind::Text,
         true,
         None,
-        Some(3),
-        Some(0),
+        (Some(3), Some(0)),
     );
     e1.path_escaped = false;
     let e2 = entry(
@@ -2397,8 +2395,7 @@ async fn hostile_names_and_text_never_reach_a_page_unescaped_and_no_link_comes_f
         Kind::Text,
         true,
         None,
-        Some(1),
-        Some(0),
+        (Some(1), Some(0)),
     ); // as a broken engine would hand it: not escaped
     let e3 = entry(
         3,
@@ -2407,8 +2404,7 @@ async fn hostile_names_and_text_never_reach_a_page_unescaped_and_no_link_comes_f
         Kind::Symlink,
         true,
         None,
-        None,
-        None,
+        (None, None),
     );
     let e4 = entry(
         4,
@@ -2417,8 +2413,7 @@ async fn hostile_names_and_text_never_reach_a_page_unescaped_and_no_link_comes_f
         Kind::Text,
         false,
         Some(NotShown::Binary),
-        None,
-        None,
+        (None, None),
     );
     let files = vec![e1.clone(), e2.clone(), e3.clone(), e4.clone()];
     let hunk = |ls: Vec<DiffLine>| DiffHunk {
@@ -2587,8 +2582,7 @@ async fn each_statement_and_each_note_appears_exactly_when_it_is_true() {
         Kind::Text,
         true,
         None,
-        Some(1),
-        Some(1),
+        (Some(1), Some(1)),
     );
     // 1. not provisional, a declared base that is the real parent
     inject(
@@ -2712,8 +2706,7 @@ async fn each_statement_and_each_note_appears_exactly_when_it_is_true() {
                 Kind::Binary,
                 false,
                 Some(*r),
-                None,
-                None,
+                (None, None),
             )
         })
         .collect();
@@ -2724,8 +2717,7 @@ async fn each_statement_and_each_note_appears_exactly_when_it_is_true() {
         Kind::Symlink,
         true,
         None,
-        None,
-        None,
+        (None, None),
     ));
     files.push(e.clone());
     inject(
@@ -2776,8 +2768,7 @@ async fn each_statement_and_each_note_appears_exactly_when_it_is_true() {
             Kind::Text,
             true,
             None,
-            Some(6000),
-            Some(0),
+            (Some(6000), Some(0)),
         ),
         vec![DiffHunk {
             old_start: 0,
@@ -2799,8 +2790,7 @@ async fn each_statement_and_each_note_appears_exactly_when_it_is_true() {
             Kind::Text,
             true,
             None,
-            Some(0),
-            Some(0),
+            (Some(0), Some(0)),
         ),
         vec![],
     );
@@ -2837,8 +2827,7 @@ async fn each_statement_and_each_note_appears_exactly_when_it_is_true() {
             Kind::Text,
             true,
             None,
-            Some(1),
-            Some(0),
+            (Some(1), Some(0)),
         ),
         vec![DiffHunk {
             old_start: 0,
@@ -3041,7 +3030,7 @@ async fn a_hidden_repository_an_unknown_proposal_revision_or_file_are_one_page_w
     let (w, id, uri) = pages_world("pg-404").await;
     let asks = [
         format!("/alice/private/proposals/{id}/revisions/1/changes"),
-        format!("/alice/forge/proposals/no-such/revisions/1/changes"),
+        "/alice/forge/proposals/no-such/revisions/1/changes".to_string(),
         format!("/alice/forge/proposals/{id}/revisions/9/changes"),
         format!("/alice/forge/proposals/{id}/revisions/x/changes"),
         format!("/alice/nope/proposals/{id}/revisions/1/changes"),
@@ -3079,8 +3068,7 @@ async fn the_previous_and_next_file_follow_the_list_and_skip_files_with_no_diff(
             Kind::Text,
             shown,
             (!shown).then_some(NotShown::Binary),
-            shown.then_some(1),
-            shown.then_some(0),
+            (shown.then_some(1), shown.then_some(0)),
         )
     };
     let files = vec![
@@ -3165,8 +3153,7 @@ async fn more_than_a_hundred_files_are_paged_with_earlier_and_more_links() {
                 Kind::Text,
                 true,
                 None,
-                Some(1),
-                Some(0),
+                (Some(1), Some(0)),
             )
         })
         .collect();
