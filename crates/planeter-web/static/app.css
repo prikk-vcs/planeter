@@ -47,6 +47,8 @@ body:lang(ja),button:lang(ja){font-family:system-ui,"Hiragino Sans","Hiragino Ka
 body:lang(ja){line-height:1.75}
 /* in a narrow table column the catalog's own short words (a status like 問題あり, a heading like チェック) stay whole instead of breaking one character per line; data cells still wrap anywhere */
 body:lang(ja) thead th,body:lang(ja) th[scope=row]+td:not(.muted){overflow-wrap:break-word;word-break:keep-all}
+/* the file-by-file tables carry long Japanese words in narrow columns (変わった, 種類が変わった, 変更前の行): there they may break inside a word rather than make the page scroll sideways at 320 CSS px */
+body:lang(ja) table.changes thead th,body:lang(ja) table.changes th[scope=row]+td:not(.muted),body:lang(ja) table.diff thead th{overflow-wrap:anywhere;word-break:normal}
 @media (forced-colors:active){
 .badge{border:1px solid CanvasText}.skip-link{border:1px solid CanvasText}
 :focus-visible{outline:2px solid Highlight}

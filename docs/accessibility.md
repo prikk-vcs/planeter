@@ -45,6 +45,15 @@ Everything below was checked by tools, not by people.
 - **Colour scheme and forced colours** were looked at in Chromium with `prefers-color-scheme` light and dark and
   `forced-colors: active` emulated, and with the test-only right-to-left language: the pages mirror and nothing
   overlaps. Screenshots are kept with the review.
+- **The file-by-file view of a revision** (2026-11-17, handoff `review-view-pages-handoff-v1`): its pages are in the structural tests above
+  (the changes page, one file's page and a page for each reason the view can be unavailable, in English and Japanese, over a real client, real
+  prikk and the real router), the stylesheet tests (the diff rows' text on their backgrounds in both themes, a border style — solid for added,
+  dashed for removed — that survives forced colours, so colour is never the only difference; the diff text keeps its spaces and wraps anywhere), and
+  a browser measurement made once and not part of the build (Chromium 157 headless, 25 pages, light and dark, 320 and 1280 CSS px, with and without the
+  WCAG 1.4.12 text-spacing override: no page scrolled sideways, no interactive target under 24 × 24 CSS px, every one of 822 focusable elements
+  showed a focus ring). A name or a line of text from a proposal reaches a page only after the engine's display function, a second look at the page
+  and the template's escaping; tests render a name with `<script>`, a line with `<img onerror>`, bidirectional overrides, zero-width characters, a
+  2,500-character line and a symbolic-link target `javascript:…`, and none of them reaches a page unescaped or becomes a link.
 - **A one-off baseline** (2026-10-21) measured the pages in Chromium with axe-core 4.14.0 and html-validate
   11.17.0, scripted keyboard walks with puppeteer-core 25.14.0, colour contrast computed from the stylesheet
   (lowest ratio 4.87:1, passes), and the browser's accessibility tree. That run is where the list of gaps
@@ -68,6 +77,9 @@ hover and on keyboard focus**, not by colour alone.
   control. Whether the pages are *usable* with them, as opposed to passing the checks above, is unknown.
   In particular: how a screen reader reads the status badges and the tables row by row; whether a failed
   sign-in is noticed (the failure is announced as an alert, but that has not been heard).
+- **The diff table with a screen reader.** It is one table with a caption, header cells, a hidden word for each row's change ("Added line",
+  "Removed line", "Unchanged line") and a row for each block of lines; how it is *heard* — row by row, with the line numbers, in a long file — has
+  not been tried, and is the first thing to try with a person who uses one. The same holds for the table of changed files.
 - **Other browsers and systems.** The tool measurements used Chromium on Linux only; Firefox and Safari were
   not measured, nor the focus ring in them.
 - **Forced colours on a real system** (Windows high-contrast with a real screen; the block was checked only
@@ -127,9 +139,11 @@ breaks. A vulnerability is different: see [`SECURITY.md`](../SECURITY.md) and do
 - 画面に出る言葉はすべて 1 つのメッセージカタログ（RFC 012 D-3）から来て、テストで確認されます。
 - スタイルシート：文字色の組が 4.5:1 未満、操作部品の枠線またはフォーカスリングが 3:1 未満（明るいテーマと暗いテーマの両方）、物理方向の指定、消されたアウトライン、モーションを抑える設定のない動き、24 × 24 CSS px 未満の操作部品、などをテストが検出します。
 - ブラウザーでの測定（2026-10-23、ヘッドレス Chromium、61 の状態）：320 CSS px でも 1280 px でも横にスクロールする状態はなく（WCAG 1.4.12 の文字間隔の上書きがあってもなくても）、24 × 24 CSS px 未満の操作部品もありません。これは 1 回だけ、ビルドに含まれないスクリプトで測定したものです。
+- ファイルごとの変更点の表示（2026-11-17）：変更点のページ、1 つのファイルのページ、表示できない理由ごとのページを、日本語と英語で構造のテスト（実際のクライアントと prikk、実際のルーターを使用）とスタイルシートのテストに加えました（差分の行の文字と背景の組が明るいテーマでも暗いテーマでも基準を満たすこと、追加は実線・削除は破線の枠線で、強制カラーでも色だけに頼らずに区別できること、差分の文字が空白を保ったままどこでも折り返すこと）。ブラウザーでの測定は 1 回だけ、ビルドに含まれないスクリプトで行いました（ヘッドレス Chromium 157、25 ページ、明るいテーマと暗いテーマ、320 と 1280 CSS px、WCAG 1.4.12 の文字間隔の上書きがあってもなくても）。横にスクロールするページも、24 × 24 CSS px 未満の操作部品もなく、822 個のフォーカスできる要素のすべてでフォーカスの枠が見えました。提案に含まれる名前や本文は、サーバーの表示用の関数、ページ側の再確認、テンプレートのエスケープを通ってから表示されます。`<script>` を含む名前、`<img onerror>` を含む行、双方向制御文字、幅のない文字、2,500 文字の行、`javascript:` で始まるシンボリックリンクの先をテストで表示し、どれもそのまま表示されたり、リンクになったりしないことを確認しています。
 
 **確認していないこと。**
 - スクリーンリーダー、拡大鏡、スイッチ、音声操作など、支援技術を使う人による試用。バッジや表がどう読み上げられるか、ログインの失敗が気づかれるかは、分かっていません。
+- スクリーンリーダーでの差分の表。キャプション、見出しセル、各行の「追加された行」「削除された行」「変わっていない行」の隠しテキスト、行のかたまりごとの見出し行を備えた 1 つの表ですが、実際にどう読み上げられるか（行ごと、行番号つき、長いファイルで）は試していません。支援技術を使う人と最初に試すべき点です。変わったファイルの一覧の表も同様です。
 - Chromium（Linux）以外のブラウザーとシステム。実際のシステムでの強制カラー、文字だけの 200 % 拡大、印刷。
 - 実機でのタッチ操作のしやすさ（すべての操作部品は 24 × 24 CSS px 以上ですが、これは最小値であり、快適な大きさではありません）。
 - 実際の右から左へ書く言語（テスト用の言語だけを表示しました）。

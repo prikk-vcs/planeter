@@ -919,6 +919,16 @@ fn diff_findings(css: &str) -> Vec<String> {
     if !has("table.diff td:nth-child(-n+3)", "white-space", "nowrap") {
         out.push("the line-number columns may wrap a number".to_owned());
     }
+    // Japanese words in narrow columns may break rather than make the page scroll sideways (the older rule keeps short words whole elsewhere)
+    for sel in [
+        "body:lang(ja) table.changes thead th",
+        "body:lang(ja) table.changes th[scope=row]+td:not(.muted)",
+        "body:lang(ja) table.diff thead th",
+    ] {
+        if !has(sel, "overflow-wrap", "anywhere") || !has(sel, "word-break", "normal") {
+            out.push(format!("`{sel}` may not break a Japanese word: the table could scroll the page sideways at 320 CSS px"));
+        }
+    }
     for (sel, style) in [
         ("tr.diff-add td:first-child", "solid"),
         ("tr.diff-remove td:first-child", "dashed"),

@@ -12,7 +12,7 @@
 {% if empty %}<p>{{ t.get(Key::ChangesNone) }}</p>
 {% else %}<p>{{ summary }}</p>
 {% if let Some(u) = unshown %}<p>{{ u }}</p>
-{% endif %}<table>
+{% endif %}<table class="changes">
 <caption>{{ caption }}</caption>
 <thead><tr><th scope="col">{{ t.get(Key::ChangesColFile) }}</th><th scope="col">{{ t.get(Key::ChangesColChange) }}</th><th scope="col">{{ t.get(Key::ChangesColLines) }}</th><th scope="col">{{ t.get(Key::ChangesColNotes) }}</th></tr></thead>
 <tbody>{% for f in files %}<tr><th scope="row">{% if let Some(href) = f.href %}<a href="{{ href }}"><code>{{ f.path }}</code></a>{% else %}<code>{{ f.path }}</code>{% endif %}</th><td>{{ f.status }}</td><td>{% if let Some(v) = f.lines %}<span aria-hidden="true">{{ v }}</span>{% else %}<span aria-hidden="true">—</span>{% endif %}<span class="visually-hidden">{{ f.lines_words }}</span></td><td>{% if let Some(n) = f.note %}{{ n }}{% endif %}</td></tr>{% endfor %}</tbody>

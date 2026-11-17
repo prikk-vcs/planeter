@@ -1843,6 +1843,7 @@ async fn the_changes_page_and_a_file_page_say_what_the_files_are_in_both_languag
     assert_eq!(en.status, StatusCode::OK, "{}", en.text());
     let p = en.text();
     check_page(&p, "en");
+    dump("changes-page.en.html", &p);
     assert_eq!(
         h1_of(&p),
         format!("Changes in revision 1 of proposal #{short}")
@@ -1959,6 +1960,7 @@ async fn the_changes_page_and_a_file_page_say_what_the_files_are_in_both_languag
     assert_eq!(jf.status, StatusCode::OK);
     let jfp = jf.text();
     check_page(&jfp, "ja");
+    dump("file-page.ja.html", &jfp);
     assert!(
         jfp.contains("変更前：1～3 行目、変更後：1～3 行目"),
         "{jfp}"
@@ -2457,6 +2459,7 @@ async fn hostile_names_and_text_never_reach_a_page_unescaped_and_no_link_comes_f
         assert_eq!(r.status, StatusCode::OK, "{}", r.text());
         let p = r.text();
         check_page(&p, lang);
+        dump(&format!("hostile-list.{lang}.html"), &p);
         assert!(
             !p.contains("<script") && !p.contains("</script>"),
             "{lang}: {p}"
@@ -2490,6 +2493,7 @@ async fn hostile_names_and_text_never_reach_a_page_unescaped_and_no_link_comes_f
             assert_eq!(f.status, StatusCode::OK, "{lang} file {n}: {}", f.text());
             let fp = f.text();
             check_page(&fp, lang);
+            dump(&format!("hostile-file{n}.{lang}.html"), &fp);
             assert!(
                 !fp.contains("<img") && !fp.contains("<script"),
                 "{lang} file {n}: {fp}"
@@ -3175,6 +3179,7 @@ async fn more_than_a_hundred_files_are_paged_with_earlier_and_more_links() {
     );
     let p1 = page(&w, &uri, "en", None).await.text();
     check_page(&p1, "en");
+    dump("paged-list.en.html", &p1);
     assert!(
         p1.contains("250 files changed")
             && p1.contains("<code>f099.txt</code>")

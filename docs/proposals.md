@@ -278,3 +278,29 @@ The proposals list shows the review word of each open proposal. An anonymous rea
   `tree_too_large` (422), `busy` (503, `Retry-After`), `timed_out` (503), `failed` (503). A hidden repository, an unknown proposal, revision or file
   are the same `404`.
 * **Counters** (one per outcome, `cache_hit`, `extractions`) are in the metrics; no file name, path or content is ever logged or counted.
+
+### The pages of the file-by-file view (0.7.0, handoff 2)
+
+The proposal page links each revision to its changes ("See the changes in revision {seq}": in the default view for the latest revision, and in the
+revisions table for every one), when the view is on. **`/{owner}/{name}/proposals/{id}/revisions/{seq}/changes`** is the changes page and
+**`…/changes/{file_id}`** the page of one file; both are `Authorized(Read)` like the proposal page, and a hidden repository, an unknown proposal,
+revision or file is the same not-found page. They ask the same functions as the JSON side (the cache, the admission, the bound of eight waiters),
+so the two cost the same.
+
+* **The changes page** has one `<h1>` ("Changes in revision {seq} of proposal #{id}"), the statements, a summary line ("3 files changed, 3 lines
+  added, 2 lines removed"; the count of files that cannot be shown as text), one table (File, Change, Lines, Notes; a change is a word, never a colour;
+  the lines are "+3 −1" with the words hidden for assistive technology; a file with no diff is a name, not a link, with its reason in Notes), "Earlier
+  files" / "More files" (100 a page, by cursor), a way back and the download when the viewer may use it. A revision that changes no file says so.
+* **The statements** are always: "These files are rebuilt from the patches in this revision. Nothing here is signed."; when the answer is
+  `provisional`: no earlier check of the history was available, so the files were replayed from the start (they match the patches, the history has not
+  been checked); when `base_differs`: what the revision says and what it was compared with; when there is no earlier file: that the revision starts the
+  history; and what it was compared with (the block as twelve characters in code, the full ids under one `<details>`). No signature outcome is shown.
+* **The file page** has the display path as its `<h1>` (and a sentence when it contains escapes), the change in words, **one table** (Old line, New line,
+  Change, Text) with a row per hunk ("Lines 1–3 before, lines 1–3 after"), a visible "+" or "−" and a hidden word ("Added line", "Removed line",
+  "Unchanged line") in each Change cell, the text in code with its spaces kept and long lines wrapped; sentences under it for lines left out, an approximate
+  diff and cut lines; the previous and next file that has a diff; a symbolic link is one sentence ("This is a symbolic link to {target}") and never a link.
+* **Every reason the view is unavailable** is a plain page — a heading, what happened and what to do, a way back (and the download when permitted) —
+  with the engine's status (409, 422, 503; `Retry-After` for busy), in no internal word.
+* **Safety.** A name or a line passes the engine's display function, a second look in the page (`safe`: controls, separators, bidirectional and
+  zero-width characters as visible escapes) and the template's escaping; the sanitizer is not used (it is text). The stylesheet keeps the spaces and wraps
+  anywhere (nothing scrolls sideways at 320 CSS px); added and removed rows differ by a solid and a dashed border as well as by colour.
