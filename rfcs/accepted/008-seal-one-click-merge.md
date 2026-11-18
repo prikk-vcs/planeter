@@ -1,6 +1,6 @@
 # RFC 008 — Landing by delivery: how reviewed work becomes the project's branch without a forge key
 
-**Status.** **Proposed — revised 2026-11-18** (replaces the 2026-09 text, archived as `archive/008-seal-one-click-merge-2026-09-superseded.md`). Needs the owner's acceptance of the wording in D-4 before any handoff is built (RFC 000: nothing moves to `accepted/` without it).
+**Status.** **Accepted 2026-11-18** (the owner: "Yes", including the two sentences of D-4). Revised 2026-11-18; replaces the 2026-09 text, archived as `archive/008-seal-one-click-merge-2026-09-superseded.md`. Handoffs: `handoffs/008-seal-one-click-merge/` (`delivery-engine-handoff-v1.md` first).
 **Tracks.** ROADMAP 0.8.0 (SCHEDULE D-91…D-94); RFC 004 D-8 ("model B", decided 2026-10-29: the *what*), RFC 005 D-6 (landing), RFC 012 (words, accessibility), threat model `INV-2`, `RR-2`, new T-20.
 **Touches.** `planeter-transport` (a delivery service beside creation and accept), `planeter-web` (two API routes, a page, the repository page), `planeter-client` (`deliver`), the proposal landing observation (one line: the followed ref), docs. **Not here:** a forge-held key (rejected, INV-2); adding or rotating maintainer keys after creation; required approvals; web one-click (a browser cannot sign); a merge queue.
 **Evidence.** Ledger PK-29, PK-34, PK-60, PK-67, PK-83 (a received-ref delivery cannot serve clients) and PK-84 (successor replacement, measured: `model-b-measure-v2-review-request.md`).
