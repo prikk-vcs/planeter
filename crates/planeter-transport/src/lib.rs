@@ -8,6 +8,7 @@
 pub mod artifacts;
 pub mod changes;
 pub mod creation;
+pub mod delivery;
 pub mod export;
 pub mod fingerprint;
 pub mod metrics;
@@ -28,6 +29,10 @@ pub use creation::{
     Confirmed, CreateError, CreationConfig, CreationService, LandingOutcome, StageMeta,
     StageSummary, StageUpload, StartupSweep, Uploaded as StageUploaded,
 };
+pub use delivery::{
+    DeliveryConfig, DeliveryError, DeliveryService, DeliveryUpload, DeliveryView, Installed,
+    Reconciled, Report as DeliveryReport, Uploaded as DeliveryUploaded,
+};
 pub use export::{
     Advertisement, Artifact, ExportConfig, ExportService, FetchError, Kind, Offer, RefClass,
     RefInfo,
@@ -35,10 +40,10 @@ pub use export::{
 pub use metrics::{CacheStatus, FetchRecord, Metrics, Outcome, ProposeOutcome, ProposeRecord};
 pub use planeter_prikk::findings::{ArchiveFindings, FoundKey, FoundRef};
 pub use proposals::{
-    DETAIL_PATCH_LIMIT, Detail, FOLLOWED_REF, LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX, OBSERVATION_BLOCKS_DEFAULT,
-    OBSERVATION_BLOCKS_MAX, OBSERVATION_BLOCKS_MIN, Page, PatchEntry, ProposalConfig,
-    ProposalError, ProposalService, REASON_MAX_CHARS, Retention, RevisionView, StateFilter,
-    Summary, SweepReport, observation_blocks_from, record_digest,
+    DETAIL_PATCH_LIMIT, Detail, FOLLOWED_REF, LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX,
+    OBSERVATION_BLOCKS_DEFAULT, OBSERVATION_BLOCKS_MAX, OBSERVATION_BLOCKS_MIN, Page, PatchEntry,
+    ProposalConfig, ProposalError, ProposalService, REASON_MAX_CHARS, Retention, RevisionView,
+    StateFilter, Summary, SweepReport, observation_blocks_from, record_digest,
 };
 pub use propose::{
     IncompleteCause, MetaError, Plan, ProposeConfig, ProposeError, ProposeMeta, ProposeService,
