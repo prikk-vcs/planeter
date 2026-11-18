@@ -54,7 +54,7 @@ pub const CONTENT_MAX_BYTES: u64 = 4 * MIB;
 
 /// The prikk version the cost table was measured on (`MIN_PRIKK_VERSION` when the floor was last raised).
 ///
-/// The floor is 0.57.0 (2026-11-14, the 0.56/0.57 re-baseline). The table was first measured on **0.54.1** (the same code as 0.54.0, an installer fix)
+/// The floor is 0.58.0 (2026-11-19, the 0.58 re-baseline). The table was first measured on **0.54.1** (the same code as 0.54.0, an installer fix)
 /// at the 0.54 re-baseline: the seven read verbs on the eleven fixtures of the investigation (nothing tripped its 1.5 × ceiling), and `extract` anew;
 /// re-validated on **0.55.0** (2026-10-29) with the same script (nothing tripped; `extract` moved by at most 1 MiB).
 ///
@@ -65,7 +65,15 @@ pub const CONTENT_MAX_BYTES: u64 = 4 * MIB;
 /// edited 128 times, plan: 73.3 MiB against 66.8 on 0.55.0), above the 9.0 × that the rule had until 0.6.0 (now 9.5 ×, which covers it with 3.7 %, and
 /// with the 8 MiB base the rule's cost is 84 MiB against the 73.3 held) and far inside the ceiling (126 MiB). Logs: `prikk-0-57-rebaseline-logs/` of the review request. The table test requires the floor's own
 /// minor version, so this is the version the table was last measured on.
-pub const MEASURED_ON: (u64, u64, u64) = (0, 57, 0);
+///
+/// **Re-validated on 0.58.0** (2026-11-19, the 0.58 re-baseline, D-97 / PK-85) with the same scripts and the eleven fixtures rebuilt by 0.58.0: all 77
+/// rows fit their cost, none tripped its ceiling, and **no row moved by more than 5 %** (neither its smallest working `RLIMIT_DATA` nor its peak RSS);
+/// the highest peak RSS / ceiling is 0.705 (0.57.0: 0.686, `files10k`/`tree`) and the highest smallest working `RLIMIT_DATA` / ceiling 0.815 (the same
+/// row as on 0.57.0, `bin64one`/`verify`). `extract`, 42 shapes: the same file counts and bytes; 3 figures moved by more than 5 %, all downwards and
+/// none by more than 6.5 MiB (the worst `VmData` / largest-file ratio, `deepedit8x128`, is **8.35** in both its plan and its write, where 0.57.0's
+/// plan said 9.16). Logs: `prikk-0-58-rebaseline-logs/` of the review request. So the table and the 9.5 × rule stand and only the version they were
+/// measured on moves.
+pub const MEASURED_ON: (u64, u64, u64) = (0, 58, 0);
 
 /// The most entries a store walk will visit before giving up (a sane store has about forty files).
 pub const MAX_STORE_ENTRIES: usize = 100_000;
@@ -145,7 +153,7 @@ impl ReadVerb {
             // `extract` (prikk 0.54.1, part 5b T4): `VmData` = 0.26 MiB + 2.00 × the largest file (+ 0.7 MiB per 1,000
             // pending patches) for a tree, one big file, a claim, a plan or a write alike; a file **edited many times**,
             // replayed from the start, reaches 7.0 to 8.6 × its size (8 MiB × 8 edits: 7.0; × 63: 7.9; 1 MiB × 63: 8.6;
-            // 16 MiB × 63: 8.6; 8 MiB × 128: 8.35, and 9.16 on 0.57.0, see `MEASURED_ON`). 9.0 × covered the worst measured on 0.54.1 with 5 %; the worst on 0.57.0 (9.16) is above it by itself, so the multiple is **9.5 ×** (covers 9.16 with 3.7 %, the worst of 0.54.1 with 10 %); the ceiling (1.5 ×) is 14.25 ×.
+            // 16 MiB × 63: 8.6; 8 MiB × 128: 8.35, and 9.16 on 0.57.0's plan, 8.35 on 0.58.0, see `MEASURED_ON`). 9.0 × covered the worst measured on 0.54.1 with 5 %; the worst on 0.57.0 (9.16) is above it by itself, so the multiple is **9.5 ×** (covers 9.16 with 3.7 %, the worst of 0.54.1 with 10 %); the ceiling (1.5 ×) is 14.25 ×.
             // The store size does not enter. 8 MiB is prikk's floor plus the pending set (5,000 pending: +4 MiB).
             ReadVerb::Extract => (0, 0, 95, 8 * MIB, COST_FLOOR),
             // `sync have` (prikk 0.55.0 and 0.54.1 alike, RFC 004 part 8 T0): the file is 32 bytes a patch plus 60 (92 B for 1, 32,060 B for

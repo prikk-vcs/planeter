@@ -499,7 +499,7 @@ const EXTRACT_MEASURED: &[(&str, u64, u64, u64, u64)] = &[
         668,
     ),
     // prikk 0.57.0 (2026-11-14, `deepedit8x128`): the same shape held 73.3 MiB, the worst figure measured (VmData / largest file 9.16), above
-    // the 9.0 x that this rule had until 0.6.0.
+    // the 9.0 x that this rule had until 0.6.0. (Kept as the worst figure ever measured: prikk 0.58.0 holds 66.8 MiB for the same shape in its plan as in its write.)
     (
         "8 MiB text edited 128 times, replayed (prikk 0.57.0)",
         8390607,

@@ -2205,7 +2205,7 @@ fn sandbox_standin(base: &Path, accept_body: &str) -> PathBuf {
         &script,
         format!(
             r#"#!/bin/sh
-if [ "$1" = --version ]; then echo "prikk 0.57.0"; exit 0; fi
+if [ "$1" = --version ]; then echo "prikk 0.58.0"; exit 0; fi
 if [ "$1" = sync ] && [ "$2" = pending ]; then echo "pending (accepted, unsealed) patches: 0"; exit 0; fi
 if [ "$1" = sync ] && [ "$2" = accept ]; then
 {accept_body}
@@ -2885,7 +2885,7 @@ async fn a_single_blob_of_the_default_bound_is_accepted_end_to_end_under_the_def
     largest_blob_end_to_end("largest-blob", ProposeConfig::default()).await;
 }
 
-/// The operator can raise the bound by configuration: 256 MiB costs 1.8 GiB, and the accept of a blob of that size still goes through
+/// The operator can raise the bound by configuration: 256 MiB costs 1.14 GiB (1.8 GiB until prikk 0.57.0), and the accept of a blob of that size still goes through
 /// the real sandbox under its (larger) ceiling; the start-up sentence agrees for a host that has the memory (`accept_admission.rs`).
 #[tokio::test]
 async fn a_single_blob_of_a_bound_raised_to_256_mib_by_configuration_is_accepted_end_to_end() {

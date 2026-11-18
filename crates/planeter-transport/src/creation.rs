@@ -72,6 +72,11 @@ const ARCHIVE_FILE: &str = "archive";
 /// of `/proc/<pid>/status`, eleven archives from 0.12 MiB to 256 MiB; the table, the fit and the scripts are in the part 7
 /// review request, `repository-creation-logs/t0/`).
 ///
+/// **Re-measured on prikk 0.58.0 (2026-11-18, the 0.58 re-baseline, D-97 / PK-85)**, the same shapes and the 0.8.0 lineages (0.1, 62 and 258 MiB): `archive verify` 3.00 × and
+/// `archive import --adopt` 6.00 × the largest blob (identical on 0.57.0; 10 MiB: 3.02 × and 7.02 ×, inside the 10 MiB base), 1.0 × for many-file shapes; no constant
+/// changes (the rule, 1.1 × the worst measured, rounded up, never above the present value, gives 3.3 and 6.6, both above them). The import reads 9 % more than on
+/// 0.57.0 (it records the history it confirmed) and holds no more memory.
+///
 /// * `archive verify` holds **3.00 ×** the archive's largest blob (3.00 to 3.02 × for one blob of 10, 50, 100 and 200 MiB,
 ///   random or zeros; 0.03 × for 100 files of 1 MiB; 0.15 × for a 4 MiB file edited 50 times);
 /// * `archive import` holds **6.00 ×** the largest blob (6.00 to 6.03 ×; 0.07 × and 0.24 × for the two many-file shapes);

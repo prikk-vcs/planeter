@@ -191,10 +191,10 @@ docker run --rm ghcr.io/prikk-vcs/planeter:X.Y.Z --version
 >   its own volume) holds exports being served and is **disposable**. Give the artifact directory and the spool volumes of their own so one cannot fill the other.
 > * **Backups:** planeter has **no online backup command** (OPS-3 is open). A consistent backup is taken with the server stopped, or from one filesystem snapshot that covers the database,
 >   the repositories and the artifact directory at the same instant. A restore is the same three together; after a restore, run `verify` on a repository before trusting it.
-> * **Memory:** the budget for prikk work defaults to a quarter of usable memory (256 MiB to 8 GiB). A proposal of the default largest size (100 MiB) needs about 0.7 GiB of it, so a host with
->   **4 GiB of memory admits the default bound and a 2 GiB host does not** (the start-up line says which, and what to change). Raise `PRIKK_EXCHANGE_MAX_BYTES` only with the budget:
->   256 MiB needs about 1.8 GiB of budget (a host of about 9 GiB at the default share).
-> * **Disk and time:** accepting a proposal costs one disk flush per patch or blob (14 ms on a quiet disk, up to 52 ms on a loaded one; about 3 times faster on prikk 0.55), so the default of 5,000
+> * **Memory:** the budget for prikk work defaults to a quarter of usable memory (256 MiB to 8 GiB). A proposal of the default largest size (100 MiB) needs about 0.46 GiB of it (0.7 GiB until prikk 0.57.0), so a host with
+>   **3 GiB of memory admits the default bound and a 2 GiB host does not** (the start-up line says which, and what to change). Raise `PRIKK_EXCHANGE_MAX_BYTES` only with the budget:
+>   256 MiB needs about 1.14 GiB of budget (a host of about 5.2 GiB at the default share).
+> * **Disk and time:** accepting a proposal costs four disk flushes per patch or blob on prikk 0.58.0 (ten on 0.57.0; about 19 ms a patch on the measuring machine for 1,000 patches, the same on both), so the default of 5,000
 >   objects and 600 s leaves a wide margin; on slow storage lower the object bound.
 > * **Running the image:** the sandbox needs user namespaces inside the container (see the **Container** bullet). The release pipeline proves that the image **starts** (`planeter`, `prikk`, `bwrap`,
 >   `prlimit`) and that the pushed image is the one that was run; it does **not** run the sandbox inside the container, so test your run options once with a real proposal.
@@ -339,7 +339,7 @@ docker run --rm ghcr.io/prikk-vcs/planeter:X.Y.Z --version
   unavailable`, one log line naming the verb and the ceiling), not the host. Every refusal logs one
   line (verb, cost, budget; no path, no repository name). The repository page shows its `verify` badge
   from a separate admission: a repository whose `verify` does not fit still gets its page, with
-  "verify unavailable". The costs are measured on a prikk release (0.57.0, since the 0.56/0.57 re-baseline; first measured on 0.54.1) and are re-measured at every
+  "verify unavailable". The costs are measured on a prikk release (0.58.0, since the 0.58 re-baseline; first measured on 0.54.1) and are re-measured at every
   floor change (`docs/UPSTREAM.md`).
 - **Two pools (RFC 011 refinement R-1):** the budget is split so that a cheap read is never queued behind
   a large one that waits for memory (one FIFO would park a `log` behind a waiting `verify`, and refuse it

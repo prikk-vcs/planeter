@@ -3,7 +3,7 @@
 What this is: the part of planeter that asks prikk for **the files of one point of history** (a ref, a block, or a pending
 claim) and gets them as a directory. It is a driver only. No page, no API route and no job uses it yet: the review UI (RFC 005
 part 6) and the checkpoint-refresh job (RFC 006) are built on it. Code: `planeter-prikk::extract`; cost: `planeter-core::admission`.
-prikk ≥ 0.57.0 (`MIN_PRIKK_VERSION`, since the 0.56/0.57 re-baseline; was 0.54.0); measured on 0.57.0 (the cost rule was first measured on 0.54.1 and re-validated on 0.55.0 and 0.57.0); the refusal ids re-checked on 0.55.0.
+prikk ≥ 0.58.0 (`MIN_PRIKK_VERSION`, since the 0.58 re-baseline; was 0.57.0, and 0.54.0 before the 0.56/0.57 one); measured on 0.58.0 (the cost rule was first measured on 0.54.1 and re-validated on 0.55.0, 0.57.0 and 0.58.0); the refusal ids re-checked on 0.55.0.
 
 ## The destination is ours to make safe
 
@@ -65,7 +65,7 @@ sealed here refuses with `damaged-repository` ("missing Block …"); the reposit
 "damaged" for a claim: it returns `ClaimParentNotSealedOrDamaged`, whose text names both possibilities (a test reproduces it with a
 real accepted artifact of two commits: the first claim extracts, the second does not). **prikk 0.55.0 gave it its own id**,
 `claim-parent-not-sealed`, and the driver returns `ClaimParentNotSealed`: the repository is not damaged and the text says so. **Since prikk
-0.56.0 the case no longer refuses at all** (see the next paragraph); the floor is 0.57.0, so the two refusals are history the driver still
+0.56.0 the case no longer refuses at all** (see the next paragraph); the floor is 0.58.0, so the two refusals are history the driver still
 reads (an older prikk's text) and never expects. `refusal-v1` has no field for the claim or its parent (only `command`, `refusal`,
 `reason`, `message`); the two ids are in prikk's text, which the driver keeps **verbatim** and never parses (the claim is the one the
 caller asked for). **A chain of pending claims extracts** (prikk 0.56.0 and later): `extract --claim` walks back through the claims recognizing each parent until a

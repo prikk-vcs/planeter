@@ -99,40 +99,43 @@ impl Default for ProposeConfig {
     }
 }
 
-/// The memory cost model of one accept (RFC 004 D-5.3, amended by part 4b). **One table, one place.**
+/// The memory cost model of one accept (RFC 004 D-5.3, amended by part 4b; **re-measured on prikk 0.58.0, 2026-11-19, D-97 / PK-85**).
+/// **One table, one place.**
 ///
 /// What is modelled is the **data segment** of the `prikk sync accept` child (`VmData`, the quantity `RLIMIT_DATA`
 /// limits), not its resident set, because the ceiling is a data limit. Every constant below was measured with
-/// **prikk 0.53.0 on 2026-10-22** (part 4b T1: `prikk sync accept`, the call the server makes, sampled from
-/// `/proc/<pid>/status`; the table, the least-squares fit and the scripts are in the part 4b review request) and is the
-/// *worst* of the shapes measured: an admission that is too small kills a legitimate accept and flags the repository,
-/// one that is too large only queues. A new prikk release re-measures these (RFC 011: the cost table is per release).
+/// **prikk 0.58.0 on 2026-11-18/19** (`prikk sync accept`, the call the server makes, sampled from `/proc/<pid>/status`; the table,
+/// the least-squares fit and the scripts are in the 0.58 re-baseline review request) and is the *worst* of the shapes measured
+/// times 1.1: an admission that is too small kills a legitimate accept and flags the repository, one that is too large only queues.
+/// A new prikk release re-measures these (RFC 011: the cost table is per release). (Until 0.57.0 the accept read the whole artifact
+/// into memory: 7.0 × the artifact, 2 KiB a patch; since 0.58.0 it streams and its memory follows the largest object.)
 pub mod cost_model {
     const KIB: u64 = 1 << 10;
     const MIB: u64 = 1 << 20;
 
-    /// The fixed part: prikk's own start and the pending set it reads. Measured intercept 0.3 MiB on an empty store, and
-    /// 1.1 MiB for every 1,000 patches already pending (5,000 pending: +5.6 MiB); 10 MiB covers a pending set of
-    /// about 8,000 patches.
+    /// The fixed part: prikk's own start and the pending set it reads. Measured on 0.58.0: 0.9 MiB for every 1,000 patches already
+    /// pending (10,000 pending: +9.2 MiB on a 1 MiB blob, +10.2 MiB on 50 MiB); 10 MiB covers a pending set of about 10,000 patches.
     pub const BASE_BYTES: u64 = 10 * MIB;
 
-    /// What each byte of the artifact costs, in tenths. **7.0** is the worst shape measured: one large blob, whose
-    /// `VmData` is 7.00 × the artifact for 10, 25, 50, 100 and 250 MiB, random or compressible alike (and 7.3 MiB for
-    /// 1 MiB). Artifacts of many files or patches measure 4.0 to 4.3 × (the 4.2 of U-12); the fit
-    /// `4.10 × artifact + 2.91 × largest blob` explains all shapes (R² = 0.99999), and the largest blob is not known
-    /// before prikk has read the artifact, so the whole artifact is assumed to be one.
-    pub const BYTES_TENTHS: u64 = 70;
+    /// What each byte of the artifact costs, in tenths. **4.5**: 1.1 × the worst measured, rounded up to a tenth, and not below 4.5
+    /// (the rule of the re-baseline). The worst shape measured on 0.58.0 is a blob or a 10 to 250 MiB text whose `VmData` is
+    /// 4.00 to 4.02 × the artifact (10 to 250 MiB, random or compressible alike, the 250 MiB three times each: 1,000.2 MiB every
+    /// time); artifacts of many files or patches measure 0.01 to 0.2 ×; the fit `0.07 × artifact + 3.93 × largest object` explains
+    /// all shapes (R² = 0.9999). The largest object is not known before prikk has read the artifact, so the whole artifact is assumed to
+    /// be one; prikk's own letter names an outlier of 5.0 × (1,256 MB for 250 MiB) that was **not** seen in 6 runs here, and the
+    /// ceiling (× 1.5) would hold it (4.5 × 1.5 = 6.75 ×).
+    pub const BYTES_TENTHS: u64 = 45;
 
-    /// What each patch the object bound allows costs on top of its bytes: measured 1.7 KiB a patch beyond the artifact
-    /// term (1,000 to 10,000 one-file patches); 2 KiB. The bound applies to patches and to blobs separately, and the
-    /// measured cost follows the patches (1,000 blobs in one patch cost no more than the fit says).
-    pub const PER_OBJECT_BYTES: u64 = 2 * KIB;
+    /// What each patch the object bound allows costs on top of its bytes: measured 1.34 KiB a patch on 0.58.0 (1,000 to 10,000
+    /// one-file patches, the artifact's own bytes included); × 1.1 = 1.5 KiB. The bound applies to patches and to blobs separately,
+    /// and the measured cost follows the patches (1,000 blobs in one patch cost 1.2 MiB in all).
+    pub const PER_OBJECT_BYTES: u64 = 3 * KIB / 2;
 
     /// The ceiling over the cost (RFC 011 D-2): unchanged.
     pub const CEILING_TENTHS: u64 = 15;
 
     /// The admission cost of one accept of an artifact of `bytes` under an object bound of `max_objects`:
-    /// `BASE + 7.0 × bytes + 2 KiB × max_objects`.
+    /// `BASE + 4.5 × bytes + 1.5 KiB × max_objects`.
     pub fn cost(bytes: u64, max_objects: u64) -> u64 {
         BASE_BYTES
             .saturating_add(bytes.saturating_mul(BYTES_TENTHS) / 10)

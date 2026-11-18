@@ -103,52 +103,51 @@ fn the_metadata_rules_each_have_a_named_reason() {
 
 const MIB: u64 = 1 << 20;
 
-/// What `prikk sync accept` (0.53.0, the call the server makes) was measured to hold in its **data segment** (`VmData`, what
-/// `RLIMIT_DATA` limits), the worst of an empty store and one holding 5,000 pending patches: `(shape, artifact bytes, patches,
-/// blobs, VmData in tenths of a MiB)`. Part 4b T1, 2026-10-22; the script and the raw table are in the part 4b review request.
-/// Every row is a shape somebody could propose; the model has to cover all of them.
+/// What `prikk sync accept` (**0.58.0**, 2026-11-18/19, the call the server makes) was measured to hold in its **data segment** (`VmData`, what
+/// `RLIMIT_DATA` limits), the worst of an empty store and one holding 10,000 pending patches (where the shape was measured on both): `(shape,
+/// artifact bytes, patches, blobs, VmData in tenths of a MiB)`. The 0.58 re-baseline (D-97, PK-85); the script and the raw table are in its review
+/// request. Every row is a shape somebody could propose; the model has to cover all of them. (The 0.53.0 table of part 4b held 7.0 × the artifact for a
+/// single blob; 0.58.0 streams, and holds 4.0 × the largest object.) The 20 MiB file edited 50 times (a 1.4 GiB artifact) is not a row any more: it is
+/// over the 256 MiB bound of the server, and the 4 MiB one is the same shape.
 const MEASURED: &[(&str, u64, u64, u64, u64)] = &[
-    ("one-file patches, 1,000", 531906, 1001, 1001, 38),
-    ("one 1 MiB blob", 1049378, 1, 1, 103),
-    ("one-file patches, 2,500", 1348584, 2501, 2501, 91),
-    ("one-file patches, 5,000", 2709714, 5001, 5001, 180),
-    ("one-file patches, 7,500", 4070844, 7501, 7501, 264),
-    ("one 5 MiB blob", 5243682, 1, 1, 413),
-    ("one patch of 100 files of 100 KiB", 10263864, 1, 100, 425),
-    ("one 10 MiB blob (random or zeros)", 10486564, 1, 1, 763),
-    ("one 25 MiB blob", 26215202, 1, 1, 1813),
+    ("one-file patches, 1,000", 511496, 1000, 1000, 112),
+    ("one-file patches, 10,000", 5213564, 10000, 10000, 134),
+    ("one 1 MiB blob", 1049378, 1, 1, 134),
+    ("one patch of 100 files of 100 KiB", 10263864, 1, 100, 104),
+    ("one 10 MiB blob (random or zeros)", 10486562, 1, 1, 503),
+    ("one 25 MiB blob", 26215202, 1, 1, 1002),
     (
         "one 50 MiB blob (random, zeros or text)",
-        52429604,
+        52429602,
         1,
         1,
-        3558,
+        2104,
     ),
     (
         "one patch of 1,000 files of 100 KiB",
         102634464,
         1,
         1000,
-        3953,
+        12,
     ),
-    ("1,000 patches of 100 KiB", 102832376, 1000, 1000, 3969),
-    ("one 100 MiB blob", 104858402, 1, 1, 7058),
-    ("25 patches of 4 MiB", 104868700, 25, 25, 4190),
-    ("100 patches of 1 MiB", 104900950, 100, 100, 4071),
-    ("one 250 MiB blob (random or zeros)", 262144804, 1, 1, 17558),
-    ("a 4 MiB file edited 50 times", 268686725, 51, 1, 10660),
-    ("a 20 MiB file edited 50 times", 1524039877, 51, 1, 60164),
+    ("1,000 patches of 100 KiB", 102832376, 1000, 1000, 18),
+    ("one 100 MiB blob", 104858402, 1, 1, 4002),
+    ("25 patches of 4 MiB", 104868700, 25, 25, 163),
+    ("100 patches of 1 MiB", 104900950, 100, 100, 134),
+    ("one 250 MiB blob (random or zeros)", 262144802, 1, 1, 10002),
+    ("a 4 MiB file edited 50 times", 268686725, 51, 1, 411),
 ];
 
 #[test]
-fn the_cost_of_an_accept_is_ten_mib_plus_seven_times_the_artifact_plus_two_kib_an_object() {
+fn the_cost_of_an_accept_is_ten_mib_plus_four_and_a_half_times_the_artifact_plus_one_and_a_half_kib_an_object()
+ {
     use planeter_transport::propose::cost_model;
     assert_eq!(cost_model::cost(0, 0), 10 * MIB);
-    assert_eq!(cost_model::cost(100 * MIB, 0), 10 * MIB + 700 * MIB);
-    assert_eq!(cost_model::cost(0, 5000), 10 * MIB + 5000 * 2048);
+    assert_eq!(cost_model::cost(100 * MIB, 0), 10 * MIB + 450 * MIB);
+    assert_eq!(cost_model::cost(0, 5000), 10 * MIB + 5000 * 1536);
     assert_eq!(
         cost_model::ceiling(100 * MIB, 0),
-        (10 * MIB + 700 * MIB) * 15 / 10
+        (10 * MIB + 450 * MIB) * 15 / 10
     );
     // The configuration carries the object bound; the default is the provisional 5,000.
     let c = ProposeConfig::default();
@@ -156,12 +155,13 @@ fn the_cost_of_an_accept_is_ten_mib_plus_seven_times_the_artifact_plus_two_kib_a
     assert_eq!(c.accept_deadline, Duration::from_secs(600));
     let cost = c.accept_cost(c.max_artifact_bytes);
     assert_eq!(cost, cost_model::cost(100 * MIB, 5_000));
-    assert!(cost > 700 * MIB && cost < 740 * MIB, "{} MiB", cost / MIB);
+    // 10 + 450 + 7.3 MiB = about 467 MiB (0.46 GiB; 720 MiB until 0.57.0)
+    assert!(cost > 460 * MIB && cost < 480 * MIB, "{} MiB", cost / MIB);
     assert_eq!(c.accept_ceiling(c.max_artifact_bytes), cost * 15 / 10);
-    // The operator can raise the bound: 256 MiB costs about 1.8 GiB.
+    // The operator can raise the bound: 256 MiB costs about 1.14 GiB (1.8 GiB until 0.57.0).
     let raised = cost_model::cost(256 * MIB, 5_000);
     assert!(
-        raised > 1700 * MIB && raised < 1900 * MIB,
+        raised > 1100 * MIB && raised < 1250 * MIB,
         "{} MiB",
         raised / MIB
     );
@@ -209,23 +209,25 @@ fn the_model_admits_every_measured_shape_at_no_less_than_what_it_held_and_kills_
 }
 
 #[test]
-fn the_old_model_would_have_killed_a_single_blob_from_22_mib_and_the_new_one_does_not() {
-    // IS-52: 10 MiB + 4.2 x the artifact, times 1.5, against 7.0 x the artifact held by a single blob.
-    let old_ceiling = |bytes: u64| (10 * MIB + bytes * 42 / 10) * 15 / 10;
-    let held = |bytes: u64| bytes * 7;
-    assert!(old_ceiling(21 * MIB) > held(21 * MIB));
-    assert!(
-        old_ceiling(25 * MIB) < held(25 * MIB),
-        "the 25 MiB blob measured 175 MiB against 172 MiB"
-    );
-    assert!(
-        old_ceiling(105 * MIB) < held(105 * MIB),
-        "the 105 MiB blob of the assessment"
-    );
+fn the_ceiling_holds_a_single_blob_of_0_58_at_every_size_and_prikks_outlier_of_five_times() {
+    // 0.58.0 holds 4.0 x a single blob (1,000.2 MiB for 250 MiB, six runs); 0.57.0 held 7.0 x it. The model must hold the former with its ceiling
+    // (x 1.5), and prikk's own letter names an outlier of 5.0 x (1,256 MB for 250 MiB, once in eleven runs) that the ceiling must hold too.
+    let held = |bytes: u64| bytes * 4 + 2 * MIB;
+    let outlier = |bytes: u64| bytes * 5;
     let c = ProposeConfig::default();
     for mib in [1, 5, 10, 25, 50, 105, 250, 256] {
         assert!(c.accept_ceiling(mib * MIB) > held(mib * MIB), "{mib} MiB");
+        assert!(
+            c.accept_ceiling(mib * MIB) > outlier(mib * MIB),
+            "{mib} MiB: the 5.0 x outlier"
+        );
+        assert!(
+            c.accept_cost(mib * MIB) > held(mib * MIB),
+            "{mib} MiB: the cost admits what is held"
+        );
     }
+    // And 0.57.0's 7.0 x would NOT be held by this model's cost (the floor is what makes the smaller model true): the cost is below it from 10 MiB.
+    assert!(c.accept_cost(100 * MIB) < 700 * MIB);
 }
 
 #[test]

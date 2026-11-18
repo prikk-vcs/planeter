@@ -297,21 +297,21 @@ fn the_startup_line_for_the_default_bound_on_a_four_gib_and_a_two_gib_budget() {
     // A quarter of 4 GiB is 1024 MiB, and 7/8 of it is the heavy pool; a quarter of 2 GiB is 512 MiB.
     assert_eq!(
         accept_line("line-4g", "1024", None),
-        "planeter: the memory budget (heavy pool 896 MiB) admits an accept of an artifact up to 125 MiB; PRIKK_EXCHANGE_MAX_BYTES is 100 MiB, which fits"
+        "planeter: the memory budget (heavy pool 896 MiB) admits an accept of an artifact up to 195 MiB; PRIKK_EXCHANGE_MAX_BYTES is 100 MiB, which fits"
     );
     let two = accept_line("line-2g", "512", None);
     assert!(
-        two.starts_with("planeter: WARNING: the memory budget (heavy pool 448 MiB) admits an accept of an artifact up to 61 MiB, but PRIKK_EXCHANGE_MAX_BYTES is 100 MiB")
-            && two.ends_with("lower PRIKK_EXCHANGE_MAX_BYTES to 61 MiB"),
+        two.starts_with("planeter: WARNING: the memory budget (heavy pool 448 MiB) admits an accept of an artifact up to 95 MiB, but PRIKK_EXCHANGE_MAX_BYTES is 100 MiB")
+            && two.ends_with("lower PRIKK_EXCHANGE_MAX_BYTES to 95 MiB"),
         "{two}"
     );
-    // A bound raised to 256 MiB by configuration is a warning on a 4 GiB budget and fits on 2304 MiB (a 9 GiB host).
+    // A bound raised to 256 MiB by configuration is a warning on a 4 GiB budget and fits on 1536 MiB (a 6 GiB host; the 9 GiB of prikk 0.57.0's model is gone).
     let raised = accept_line("line-raised-4g", "1024", Some("268435456"));
     assert!(
         raised.contains("WARNING") && raised.contains("is 256 MiB"),
         "{raised}"
     );
-    let raised = accept_line("line-raised-9g", "2304", Some("268435456"));
+    let raised = accept_line("line-raised-6g", "1536", Some("268435456"));
     assert!(
         !raised.contains("WARNING") && raised.ends_with("which fits"),
         "{raised}"

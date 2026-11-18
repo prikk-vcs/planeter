@@ -159,18 +159,26 @@ uploaded artifact is kept in the store; the retry sends it again and resumes the
 | `PLANETER_DECISIONS_PER_HOUR` | 10 | most review decisions one person may record on one proposal in an hour |
 | `PLANETER_PRIKK_MEMORY_BUDGET_MB` | see `--help` | the budget an accept draws from, like a read, always from the **heavy** pool |
 
-**At start** the server asks the `prikk` on its `PATH` for its version once and applies the floor: a prikk below 0.57.0 refuses to start with `unsupported prikk version X; planeter requires >= 0.57.0` (it used to start and answer every read "temporarily unavailable"). A missing prikk is reported when a repository is first opened, as before; one that runs but prints something unreadable is warned of once and left to the same pin at each open.
+**At start** the server asks the `prikk` on its `PATH` for its version once and applies the floor: a prikk below 0.58.0 refuses to start with `unsupported prikk version X; planeter requires >= 0.58.0` (it used to start and answer every read "temporarily unavailable"). A missing prikk is reported when a repository is first opened, as before; one that runs but prints something unreadable is warned of once and left to the same pin at each open.
 
-An accept of an artifact of *A* bytes under an object bound of *N* is admitted at **10 MiB + 7.0 × *A* + 2 KiB × *N*** and given a
+An accept of an artifact of *A* bytes under an object bound of *N* is admitted at **10 MiB + 4.5 × *A* + 1.5 KiB × *N*** and given a
 data-segment ceiling (`RLIMIT_DATA`) of 1.5 times that. The constants are in one place, `cost_model` in
-`crates/planeter-transport/src/propose.rs`, each annotated with its measurement (prikk 0.53.0, 2026-10-22, part 4b): a single
-large blob needs 7.0 × its size whatever it holds, artifacts of many files or patches 4.0 to 4.3 ×, and each patch about 1.7 KiB more.
-At the default bounds (100 MiB, 5,000 objects) that is about **0.7 GiB** of the budget and a ceiling of about 1.05 GiB: a host with about
-3.3 GiB or more of usable memory admits it at the default budget (a 4 GiB host admits artifacts up to 125 MiB). At a raised bound of
-256 MiB it is about 1.8 GiB, which needs about 8.1 GiB of usable memory (or a raised `PLANETER_PRIKK_MEMORY_BUDGET_MB`). The start-up
+`crates/planeter-transport/src/propose.rs`, each annotated with its measurement (prikk 0.58.0, 2026-11-18/19, the 0.58 re-baseline): a single
+large blob needs 4.0 × its size whatever it holds (1,000 MiB for 250 MiB, six runs; 7.0 × until prikk 0.57.0, which read the whole artifact into
+memory), artifacts of many files or patches 0.01 to 0.2 × (prikk 0.58.0 reads the artifact object by object, so its memory follows the largest
+object), and each patch about 1.3 KiB more. The model still assumes the whole artifact is one object, because the largest object is not known
+before prikk has read it; 4.5 is 1.1 times the worst measured, and the ceiling covers the 5.0 × outlier prikk's letter names.
+At the default bounds (100 MiB, 5,000 objects) that is about **0.46 GiB** of the budget (0.7 GiB until 0.57.0) and a ceiling of about 0.68 GiB: a host with about
+2.1 GiB or more of usable memory admits it at the default budget (a 4 GiB host admits artifacts up to 195 MiB). At a raised bound of
+256 MiB it is about 1.14 GiB, which needs about 5.2 GiB of usable memory (or a raised `PLANETER_PRIKK_MEMORY_BUDGET_MB`). The start-up
 log names the largest artifact the configured budget admits and the configured bound, and warns when the bound is the larger of the two:
 the operator raises the budget or lowers `PRIKK_EXCHANGE_MAX_BYTES`. A proposal larger than the heavy pool is refused as
 too large *before* anything is accepted; one that is admitted is not killed by its own ceiling.
+
+**What an accept costs in time, and the maintainer's side (prikk 0.58.0, measured).** An accept takes **4 fsyncs a patch** (10 on 0.57.0); its wall time per patch was the
+same on the measuring machine (about 19 ms a patch for 1,000 patches), so the default bound of 5,000 objects and 600 s is unchanged. **Sealing what the forge holds** is the
+maintainer's own `prikk sync seal`, not the server's; on 0.58.0 it reads about 23 KB a claim: 1,000 claims took 104 s and read 23 MB, 10,000 claims took 670 s and read 233 MB with a peak
+data segment of 184 MiB, on a quiet machine (the figures are the machine's, not a promise: `prikk-0-58-rebaseline-logs` of the review request has the host's load with each).
 
 ## Limits worth knowing
 
@@ -192,7 +200,7 @@ too large *before* anything is accepted; one that is admitted is not killed by i
   from a prikk store. They are counted by nothing until a revision records the artifact; rate limits and the repository's disk are
   what bound a hostile repeat of this.
 * Two proposals of the same artifact by different people while one is unfinished: the second gets `409 intent_pending`.
-* The accept's wall time follows the number of objects (patches and blobs), not the bytes: about one disk flush each, so 15 to 50 ms on the test machine's disk, depending on what else the host is doing (and well under a millisecond on a RAM disk): 5,000 patches in 70 to 230 s, and 20,000 could pass the 600 s deadline. The default bound keeps the worst accept inside it; the measurements are in the part 4b review request.
+* The accept's wall time follows the number of objects (patches and blobs), not the bytes: disk flushes (four a patch on prikk 0.58.0, ten on 0.57.0) and the work of recording each: 10 to 20 ms a patch on the test machine's disk, depending on what else the host is doing (and well under a millisecond on a RAM disk): 5,000 patches in about 60 to 110 s, and 20,000 could still approach the 600 s deadline (measured on 0.58.0: 1,000 patches 19 s, 10,000 patches 115 s on a quiet machine). The default bound keeps the worst accept inside it; the measurements are in the part 4b review request.
 
 ## Recovery: the runbook (RFC 004 part 4)
 

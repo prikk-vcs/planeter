@@ -17,10 +17,10 @@ fn the_default_bound_is_a_hundred_mib_and_a_four_gib_host_admits_it_and_a_two_gi
     let c = ProposeConfig::default();
     assert_eq!(c.max_artifact_bytes, 100 * MIB);
     let cost = c.accept_cost(c.max_artifact_bytes);
-    // 10 MiB + 7.0 x 100 MiB + 2 KiB x 5,000 = about 720 MiB; the heavy pool is 7/8 of a quarter of the host.
+    // 10 MiB + 4.5 x 100 MiB + 1.5 KiB x 5,000 = about 467 MiB (720 MiB until prikk 0.57.0); the heavy pool is 7/8 of a quarter of the host.
     for (gib, admitted) in [
         (2, false),
-        (3, false),
+        (3, true),
         (4, true),
         (8, true),
         (16, true),
@@ -38,14 +38,22 @@ fn the_default_bound_is_a_hundred_mib_and_a_four_gib_host_admits_it_and_a_two_gi
 }
 
 #[test]
-fn a_raised_bound_of_256_mib_is_admitted_from_nine_gib_and_the_line_says_so_before_that() {
+fn a_raised_bound_of_256_mib_is_admitted_from_six_gib_and_the_line_says_so_before_that() {
     let raised = ProposeConfig {
         max_artifact_bytes: 256 * MIB,
         ..ProposeConfig::default()
     };
     let cost = raised.accept_cost(raised.max_artifact_bytes);
-    assert!(cost > 1700 * MIB && cost < 1900 * MIB, "{} MiB", cost / MIB);
-    for (gib, admitted) in [(4, false), (8, false), (9, true), (16, true), (64, true)] {
+    // 10 + 4.5 x 256 + 7.3 = about 1,169 MiB (1.8 GiB until prikk 0.57.0)
+    assert!(cost > 1150 * MIB && cost < 1190 * MIB, "{} MiB", cost / MIB);
+    for (gib, admitted) in [
+        (4, false),
+        (5, false),
+        (6, true),
+        (8, true),
+        (16, true),
+        (64, true),
+    ] {
         let (heavy, budget) = heavy_and_budget(gib);
         assert_eq!(accept_admitted(cost, heavy, budget), admitted, "{gib} GiB");
         let (warn, line) =
@@ -62,14 +70,14 @@ fn the_startup_line_names_what_the_budget_admits_and_the_bound_for_a_four_and_a_
     assert!(!warn);
     assert_eq!(
         line,
-        "the memory budget (heavy pool 896 MiB) admits an accept of an artifact up to 125 MiB; PRIKK_EXCHANGE_MAX_BYTES is 100 MiB, which fits"
+        "the memory budget (heavy pool 896 MiB) admits an accept of an artifact up to 195 MiB; PRIKK_EXCHANGE_MAX_BYTES is 100 MiB, which fits"
     );
     let (heavy, budget) = heavy_and_budget(2);
     let (warn, line) = accept_startup_line(c.max_artifact_bytes, c.max_objects, heavy, budget);
     assert!(warn);
     assert_eq!(
         line,
-        "WARNING: the memory budget (heavy pool 448 MiB) admits an accept of an artifact up to 61 MiB, but PRIKK_EXCHANGE_MAX_BYTES is 100 MiB, so a proposal larger than that is refused as too large; raise PLANETER_PRIKK_MEMORY_BUDGET_MB or lower PRIKK_EXCHANGE_MAX_BYTES to 61 MiB"
+        "WARNING: the memory budget (heavy pool 448 MiB) admits an accept of an artifact up to 95 MiB, but PRIKK_EXCHANGE_MAX_BYTES is 100 MiB, so a proposal larger than that is refused as too large; raise PLANETER_PRIKK_MEMORY_BUDGET_MB or lower PRIKK_EXCHANGE_MAX_BYTES to 95 MiB"
     );
     // A pool too small for even the fixed part says so instead of a made-up number.
     let (warn, line) = accept_startup_line(c.max_artifact_bytes, c.max_objects, 4 * MIB, 8 * MIB);
