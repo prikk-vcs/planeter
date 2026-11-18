@@ -86,13 +86,8 @@ fn expected(label: &str, state: &str) -> Result<(), &'static str> {
             }
         }
         "x" | "mix" => Err("unadopted_key"),
-        "dev" => {
-            if s1 {
-                Err("nothing_to_deliver")
-            } else {
-                Ok(())
-            }
-        }
+        // a delivery that only adds a branch changes a ref: acceptable in both states
+        "dev" => Ok(()),
         "unrelated" => Err("unrelated"),
         _ => Err("damaged_archive"),
     }
@@ -1017,4 +1012,74 @@ fn a_repository_on_another_filesystem_is_refused_with_unavailable() {
         s.deliveries.non_final().unwrap().is_empty(),
         "no delivery was begun"
     );
+}
+
+#[test]
+fn the_stage_takes_the_live_directorys_mode_whatever_it_is() {
+    need_prikk!();
+    use std::os::unix::fs::PermissionsExt;
+    let fx = fixtures();
+    for mode in [0o750, 0o755, 0o700] {
+        let (s, _) = new_world(&format!("mode-{mode:o}"));
+        std::fs::set_permissions(&s.record.path, std::fs::Permissions::from_mode(mode)).unwrap();
+        install(&s, &fx.d1);
+        let got = std::os::unix::fs::MetadataExt::mode(&std::fs::metadata(&s.record.path).unwrap())
+            & 0o7777;
+        assert_eq!(got, mode, "{mode:o}");
+        assert!(s.live().verify().unwrap().verdict.ok);
+    }
+}
+
+#[test]
+fn a_recovery_run_that_clears_the_flag_completes_the_delivery_without_a_restart() {
+    need_prikk!();
+    let fx = fixtures();
+    let base = scratch("recovery-completes");
+    create_live(&base, &fx.h0, &[&fx.m1, &fx.m2]);
+    let sc = scenario(&open(&base, None), fx);
+    let wrap = counting_wrapper(
+        &base,
+        "sync accept",
+        2,
+        "echo 'error: injected failure' >&2; exit 1",
+    );
+    let broken = open_full(
+        &base,
+        None,
+        planeter_prikk::Sandbox::Unconfined,
+        Some(wrap),
+        |_| {},
+    );
+    let (id, _) = deliver(&broken, &sc.d).unwrap();
+    assert!(
+        broken
+            .delivery
+            .confirm(&alice(), &broken.record, &id)
+            .is_err()
+    );
+    drop(broken);
+    // the repository is flagged and the delivery is `reaccepting`; the administrator runs the recovery procedure (not a restart)
+    let s = open(&base, None);
+    assert_eq!(
+        s.deliveries.get(&id).unwrap().unwrap().state,
+        DeliveryState::Reaccepting
+    );
+    let result = s.recovery.recover(&s.record, "administrator", &[]).unwrap();
+    assert_eq!(
+        result.outcome,
+        planeter_transport::RecoveryOutcome::Recovered
+    );
+    assert_eq!(
+        s.deliveries.get(&id).unwrap().unwrap().state,
+        DeliveryState::Done
+    );
+    assert_eq!(s.pending(), sc.stays);
+    assert!(
+        !s.changes
+            .repo_flags(&s.record.repo_id)
+            .unwrap()
+            .needs_recovery
+    );
+    assert!(deliveries_dir_is_empty(&s));
+    assert!(s.live().verify().unwrap().verdict.ok);
 }

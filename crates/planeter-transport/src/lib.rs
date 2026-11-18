@@ -50,9 +50,10 @@ pub use propose::{
     Proposed, Submitter, Upload, Uploaded, refused_on_evidence,
 };
 pub use recovery::{
-    Blocker, Cause, Inspection, Note as RecoveryNote, Outcome as RecoveryOutcome,
-    Plan as RecoveryPlan, ProcFs, ProcessInfo, ProcessTable, RecoveryConfig, RecoveryError,
-    RecoveryResult, RecoveryService, classify_cause, inside_repository,
+    Blocker, Cause, DeliveryCompletion, Inspection, Note as RecoveryNote,
+    Outcome as RecoveryOutcome, Plan as RecoveryPlan, ProcFs, ProcessInfo, ProcessTable,
+    RecoveryConfig, RecoveryError, RecoveryResult, RecoveryService, classify_cause,
+    inside_repository,
 };
 pub use reviews::{
     DecisionView, Limited, NewComment, ReviewConfig, ReviewError, ReviewService, ReviewView,

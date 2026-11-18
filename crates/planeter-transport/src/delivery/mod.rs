@@ -426,6 +426,20 @@ fn exchange(
     Ok(window)
 }
 
+/// Give the staged repository's directory the **mode of the live one** before the exchange (RFC 008 handoff 2, T0.2), and refuse
+/// when the two directories do not belong to the same user: the stage was made by this server, so a live directory that is someone
+/// else's is not one the server may replace.
+fn stage_takes_live_mode(live: &Path, stage: &Path) -> std::io::Result<()> {
+    use std::os::unix::fs::PermissionsExt;
+    let (l, s) = (fs::metadata(live)?, fs::metadata(stage)?);
+    if l.uid() != s.uid() {
+        return Err(std::io::Error::other(
+            "the repository's directory belongs to another user",
+        ));
+    }
+    fs::set_permissions(stage, fs::Permissions::from_mode(l.mode() & 0o7777))
+}
+
 fn remove_tree(path: &Path) -> std::io::Result<bool> {
     match fs::symlink_metadata(path) {
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(false),
@@ -1293,7 +1307,15 @@ impl DeliveryService {
                 .read_staged(delivery_id, &driver, &adopted)
                 .map_err(|f| f.word().to_owned())?;
             match decide(&live, &staged) {
-                Ok(a) if Some(a.new_tip.as_str()) == row.new_tip.as_deref() => Ok(()),
+                Ok(a) if Some(a.new_tip.as_str()) == row.new_tip.as_deref() => {
+                    // the stage becomes the repository: it must look like it to everyone who opens it
+                    stage_takes_live_mode(&record.path, &dir.join(STAGE_DIR)).map_err(|e| {
+                        eprintln!(
+                            "planeter: delivery {delivery_id}: the stage cannot take the repository's place: {e}"
+                        );
+                        "exchange_failed".to_owned()
+                    })
+                }
                 Ok(_) => Err("moved".to_owned()),
                 Err(r) => Err(r.code().to_owned()),
             }
@@ -1721,6 +1743,18 @@ impl DeliveryService {
         self.flag(record);
         if let Some(recovery) = &self.recovery {
             let _ = recovery.auto(record);
+            // the recovery run completes a delivery of its own accord (its completion hook): then there is nothing left to do here
+            if self
+                .deliveries
+                .get(&id)
+                .ok()
+                .flatten()
+                .is_some_and(|r| r.state.is_final())
+            {
+                eprintln!("planeter: delivery {id}: start-up: completed by the recovery run");
+                out.completed.push(id);
+                return;
+            }
         }
         let lease = match self.leases.acquire(
             &record.repo_id,
@@ -1957,6 +1991,34 @@ awk -v n={blocks} -v limit=$limit 'BEGIN {{
         use std::os::unix::fs::PermissionsExt;
         fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
         script
+    }
+
+    #[test]
+    fn the_stage_takes_the_live_directorys_mode_and_refuses_a_directory_of_another_user() {
+        use std::os::unix::fs::PermissionsExt;
+        let base =
+            std::env::temp_dir().join(format!("planeter-delivery-mode-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&base);
+        for mode in [0o750, 0o700, 0o755, 0o2750] {
+            let (live, stage) = (base.join("live"), base.join("stage"));
+            let _ = fs::remove_dir_all(&base);
+            fs::create_dir_all(&live).unwrap();
+            fs::create_dir_all(&stage).unwrap();
+            fs::set_permissions(&live, fs::Permissions::from_mode(mode)).unwrap();
+            fs::set_permissions(&stage, fs::Permissions::from_mode(0o700)).unwrap();
+            stage_takes_live_mode(&live, &stage).unwrap();
+            assert_eq!(
+                fs::metadata(&stage).unwrap().mode() & 0o7777,
+                fs::metadata(&live).unwrap().mode() & 0o7777,
+                "{mode:o}"
+            );
+        }
+        // a live directory of another user (`/usr` is root's; skipped when this runs as root)
+        let me = fs::metadata(base.join("stage")).unwrap().uid();
+        if fs::metadata("/usr").unwrap().uid() != me {
+            assert!(stage_takes_live_mode(Path::new("/usr"), &base.join("stage")).is_err());
+        }
+        let _ = fs::remove_dir_all(&base);
     }
 
     #[test]

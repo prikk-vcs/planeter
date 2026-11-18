@@ -13,7 +13,7 @@
 //!    same ref: else `unrelated` (the two histories share no block), `older_or_diverged` (they share one: `heads/main`), or
 //!    `not_a_successor` (any other ref);
 //! 4. no live ref is missing in the stage (`branch_missing`); a ref the live repository lacks may be added;
-//! 5. the staged `heads/main` differs from the live one (`nothing_to_deliver`).
+//! 5. the delivery changes at least one ref: a ref moved, or a ref the live repository lacks is added (else `nothing_to_deliver`).
 //!
 //! Where two reasons both hold for the same archive the more specific one wins (an unadopted key's block makes `no_main` too:
 //! the answer is `unadopted_key`).
@@ -185,16 +185,32 @@ pub fn decide(live: &LiveFacts, staged: &StagedFacts) -> Result<Acceptable, Refu
     {
         return Err(Refusal::BranchMissing);
     }
-    // 5. the delivered heads/main differs from the live one.
-    let new_tip = main.tip().ok_or(Refusal::NoMain)?.to_owned();
-    let old = find(&live.refs, FOLLOWED_REF).and_then(RefFacts::tip);
-    if old == Some(new_tip.as_str()) {
+    // 5. the delivery changes at least one ref: a ref that moved, or a ref the live repository lacks.
+    let changed = staged
+        .local
+        .iter()
+        .any(|s| match find(&live.refs, &s.name) {
+            Some(l) => l.tip() != s.tip(),
+            None => true,
+        });
+    if !changed {
         return Err(Refusal::NothingToDeliver);
     }
-    let new_blocks = match old {
-        Some(o) => main.blocks.iter().position(|b| b == o).unwrap_or(0) as u64,
-        None => main.blocks.len() as u64,
-    };
+    let new_tip = main.tip().ok_or(Refusal::NoMain)?.to_owned();
+    let old = find(&live.refs, FOLLOWED_REF).and_then(RefFacts::tip);
+    // the distinct blocks of the staged chains that the live repository does not have
+    let held: BTreeSet<&str> = live
+        .refs
+        .iter()
+        .flat_map(|r| r.blocks.iter().map(String::as_str))
+        .collect();
+    let new_blocks = staged
+        .local
+        .iter()
+        .flat_map(|r| r.blocks.iter().map(String::as_str))
+        .filter(|b| !held.contains(b))
+        .collect::<BTreeSet<_>>()
+        .len() as u64;
     let mut refs_added: Vec<String> = staged
         .local
         .iter()

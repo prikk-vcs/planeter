@@ -24,7 +24,7 @@
 //! the flag set, and the plan names the exact commands for an operator.
 
 use std::collections::HashSet;
-use std::sync::{Arc, Mutex};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use planeter_core::admission::{ReadVerb, ceiling_for, store_size};
@@ -497,7 +497,13 @@ pub struct RecoveryService {
     now_unix: fn() -> u64,
     /// Repositories an unattended run is on now (an unattended run never starts twice on one repository).
     running: Mutex<HashSet<RepoId>>,
+    /// What the delivery engine does when a run clears its `delivery_unfinished` flag: complete the delivery (RFC 008 handoff 2,
+    /// T0.3). Set once, at start-up, after both services exist.
+    delivery_completion: OnceLock<DeliveryCompletion>,
 }
+
+/// A function the recovery calls with the repository whose `delivery_unfinished` flag it cleared.
+pub type DeliveryCompletion = Arc<dyn Fn(&RepositoryRecord) + Send + Sync>;
 
 fn system_now() -> u64 {
     std::time::SystemTime::now()
@@ -647,7 +653,15 @@ impl RecoveryService {
             metrics,
             now_unix: system_now,
             running: Mutex::new(HashSet::new()),
+            delivery_completion: OnceLock::new(),
         }
+    }
+
+    /// Register what completes an unfinished delivery once a recovery run has cleared its flag. **One place**: the end of
+    /// [`RecoveryService::recover`] (so an administrator's run, the unattended run after a failed install and the start-up run all
+    /// complete it). Only the first call counts.
+    pub fn set_delivery_completion(&self, completion: DeliveryCompletion) {
+        let _ = self.delivery_completion.set(completion);
     }
 
     /// Test seam: the host's process table.
@@ -981,6 +995,13 @@ impl RecoveryService {
             }
         }
         let driver = self.driver(record)?;
+        // what the flag said before the run clears it: a delivery's own is completed afterwards
+        let was_a_delivery = self
+            .changes
+            .repo_flags(repo)
+            .ok()
+            .and_then(|f| f.reason)
+            .is_some_and(|r| classify_cause(&r).code() == "delivery_unfinished");
         let rec_id = new_id();
         self.recoveries
             .begin(&rec_id, repo, actor, (self.now_unix)())
@@ -1014,6 +1035,13 @@ impl RecoveryService {
                 .map(|s| format!(" stopped={s}"))
                 .unwrap_or_default()
         );
+        // The lease is released and the flag is clear: the delivery the flag was about is finished from its intent.
+        if was_a_delivery
+            && outcome == Outcome::Recovered
+            && let Some(complete) = self.delivery_completion.get()
+        {
+            complete(record);
+        }
         Ok(RecoveryResult {
             outcome,
             recovery_id: Some(rec_id),

@@ -517,6 +517,14 @@ pub fn open_full(
     if let Some(h) = hook {
         delivery = delivery.with_failpoint(h);
     }
+    let delivery = Arc::new(delivery);
+    // a recovery run that clears a `delivery_unfinished` flag completes the delivery (what the server's start-up wires)
+    let weak = Arc::downgrade(&delivery);
+    recovery.set_delivery_completion(Arc::new(move |record| {
+        if let Some(d) = weak.upgrade() {
+            let _ = d.resume(record);
+        }
+    }));
     Services {
         base: base.to_path_buf(),
         hosting,
@@ -529,7 +537,7 @@ pub fn open_full(
         metrics,
         propose,
         recovery,
-        delivery: Arc::new(delivery),
+        delivery,
         record,
     }
 }

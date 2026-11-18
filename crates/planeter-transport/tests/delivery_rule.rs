@@ -195,9 +195,10 @@ fn table() -> Vec<Case> {
         Case {
             label: "dev (D1 + heads/dev, M1)",
             staged: dev,
-            s0: Ok((5, vec!["heads/dev"])),
-            // the same heads/main tip as the forge's: the rule answers "nothing to deliver" even though a branch would be added
-            s1: Err(Refusal::NothingToDeliver),
+            // the blocks of main the forge lacks (5) and the one block of the branch
+            s0: Ok((6, vec!["heads/dev"])),
+            // the same heads/main tip as the forge's, and a branch to add: acceptable (the delivery changes a ref)
+            s1: Ok((1, vec!["heads/dev"])),
         },
         Case {
             label: "truncated D1",
@@ -427,4 +428,59 @@ fn the_engine_never_signs_closes_merges_or_forces() {
         checked += 1;
     }
     assert!(checked >= 2);
+}
+
+#[test]
+fn a_delivery_is_nothing_to_deliver_only_when_no_ref_changes_and_none_is_added() {
+    let live = live(&[
+        ("heads/main", d1()),
+        ("heads/dev", on_top(&d1(), "e", 11, 11)),
+    ]);
+    // nothing moved, nothing added
+    let same = clean(
+        vec![
+            refs("heads/main", &d1()),
+            refs("heads/dev", &on_top(&d1(), "e", 11, 11)),
+        ],
+        M1,
+    );
+    assert_eq!(decide(&live, &same), Err(Refusal::NothingToDeliver));
+    // only a branch moved: acceptable, main's tip is the old one, one new block
+    let dev_moved = clean(
+        vec![
+            refs("heads/main", &d1()),
+            refs("heads/dev", &on_top(&d1(), "e", 11, 12)),
+        ],
+        M1,
+    );
+    let a = decide(&live, &dev_moved).unwrap();
+    assert_eq!(
+        (a.old_tip.as_deref(), a.new_tip.as_str()),
+        (Some("d10"), "d10")
+    );
+    assert_eq!(a.new_blocks, 1);
+    assert!(a.refs_added.is_empty());
+    // only a branch added
+    let live_main = LiveFacts {
+        refs: vec![refs("heads/main", &d1())],
+    };
+    let added = clean(
+        vec![
+            refs("heads/main", &d1()),
+            refs("heads/dev", &on_top(&d1(), "e", 11, 11)),
+        ],
+        M1,
+    );
+    let a = decide(&live_main, &added).unwrap();
+    assert_eq!(a.refs_added, vec!["heads/dev".to_owned()]);
+    assert_eq!(a.new_blocks, 1);
+    // the blocks both branches share are counted once
+    let two = clean(
+        vec![
+            refs("heads/main", &on_top(&d1(), "d", 11, 11)),
+            refs("heads/dev", &on_top(&d1(), "d", 11, 11)),
+        ],
+        M1,
+    );
+    assert_eq!(decide(&live_main, &two).unwrap().new_blocks, 1);
 }
