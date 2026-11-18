@@ -70,8 +70,8 @@ pub const CONTENT_MAX_BYTES: u64 = 4 * MIB;
 /// rows fit their cost, none tripped its ceiling, and **no row moved by more than 5 %** (neither its smallest working `RLIMIT_DATA` nor its peak RSS);
 /// the highest peak RSS / ceiling is 0.705 (0.57.0: 0.686, `files10k`/`tree`) and the highest smallest working `RLIMIT_DATA` / ceiling 0.815 (the same
 /// row as on 0.57.0, `bin64one`/`verify`). `extract`, 42 shapes: the same file counts and bytes; 3 figures moved by more than 5 %, all downwards and
-/// none by more than 6.5 MiB (the worst `VmData` / largest-file ratio, `deepedit8x128`, is **8.35** in both its plan and its write, where 0.57.0's
-/// plan said 9.16). Logs: `prikk-0-58-rebaseline-logs/` of the review request. So the table and the 9.5 × rule stand and only the version they were
+/// none by more than 6.5 MiB (the worst `VmData` / largest-file ratio is **8.59**, `deepedit1x63`: 1 MiB edited 63 times; `deepedit8x128` is 8.35 in both
+/// its plan and its write, where 0.57.0's plan said 9.16, so nothing is above the 9.5 × of the rule). Logs: `prikk-0-58-rebaseline-logs/` of the review request. So the table and the 9.5 × rule stand and only the version they were
 /// measured on moves.
 pub const MEASURED_ON: (u64, u64, u64) = (0, 58, 0);
 
