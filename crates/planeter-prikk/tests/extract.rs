@@ -53,7 +53,7 @@ fn stand_in(base: &Path, body: &str) -> PathBuf {
     std::fs::write(
         &bin,
         format!(
-            "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'prikk 0.57.0'; exit 0; fi\necho \"$*\" >> {log}\n{body}\n",
+            "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'prikk 0.58.0'; exit 0; fi\necho \"$*\" >> {log}\n{body}\n",
             log = base.join("argv.log").display()
         ),
     )
@@ -662,8 +662,8 @@ fn have_prikk() -> bool {
         .unwrap_or(false)
 }
 
-/// The installed prikk is 0.57.0 or later (the floor).
-fn prikk_is_0_57_or_later() -> bool {
+/// The installed prikk is 0.58.0 or later (the floor).
+fn prikk_is_0_58_or_later() -> bool {
     let Ok(out) = Command::new("prikk").arg("--version").output() else {
         return false;
     };
@@ -674,7 +674,7 @@ fn prikk_is_0_57_or_later() -> bool {
         .split('.')
         .map(|p| p.parse::<u32>().unwrap_or(0));
     let (major, minor) = (parts.next().unwrap_or(0), parts.next().unwrap_or(0));
-    (major, minor) >= (0, 57)
+    (major, minor) >= (0, 58)
 }
 
 /// The installed prikk is 0.55.0 or later (the two ids of 0.55.0 exist only there).
@@ -1044,15 +1044,15 @@ fn real_prikk_a_claim_whose_parent_is_pending_is_not_called_damage() {
     );
 }
 
-/// The same accepted artifact on prikk 0.56.0 and later (the floor is 0.57.0): **both claims extract**, the second through its pending
+/// The same accepted artifact on prikk 0.56.0 and later (the floor is 0.58.0): **both claims extract**, the second through its pending
 /// parent. The report of the second carries the **chain** of pending claims it walked back through, root to foot, and the weakest
 /// signature outcome over it; the first carries a chain of one. (Until 0.55.0 the second claim refused `claim-parent-not-sealed`; the id is
 /// still known to the driver, see `all_fifteen_refusal_ids_read_to_their_own_value_and_never_to_another`.)
 #[test]
 fn real_prikk_extracts_a_chain_of_pending_claims_and_reports_the_chain() {
-    if !have_prikk() || !prikk_is_0_57_or_later() {
+    if !have_prikk() || !prikk_is_0_58_or_later() {
         eprintln!(
-            "skipping: needs prikk >= 0.57.0 (the floor; extract --claim over a chain of pending claims)"
+            "skipping: needs prikk >= 0.58.0 (the floor; extract --claim over a chain of pending claims)"
         );
         return;
     }
@@ -1097,7 +1097,10 @@ fn real_prikk_extracts_a_chain_of_pending_claims_and_reports_the_chain() {
             assert!(c.signature.key_id.is_some());
             assert!(c.other_candidates.is_empty());
         }
-        assert!(r.provisional && r.written);
+        // prikk 0.58.0: `archive import --adopt` records the history it confirmed, so the extraction of a chain over an adopted
+        // import is not provisional (0.57.0 said `provisional: true` here; a full replay of a history that was never adopted still
+        // is: `real_prikk_no_checkpoint_in_reach_...` above).
+        assert!(!r.provisional && r.written);
     }
     assert!(
         foot.file_count > root.file_count,

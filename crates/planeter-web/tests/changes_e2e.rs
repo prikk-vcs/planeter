@@ -1835,8 +1835,8 @@ async fn the_changes_page_and_a_file_page_say_what_the_files_are_in_both_languag
     let (w, id, uri) = pages_world("pg-both").await;
     let json = list(&w, &id).await.json();
     assert_eq!(
-        json["provisional"], true,
-        "the precondition: this world's answer is provisional (a young repository has no verified checkpoint)"
+        json["provisional"], false,
+        "the precondition: this world's answer is not provisional (prikk 0.58.0: the creation by `archive import --adopt` recorded the history it confirmed; 0.57.0 said true for a young repository)"
     );
     let short = &id[..12];
     // ---- English
@@ -1856,15 +1856,20 @@ async fn the_changes_page_and_a_file_page_say_what_the_files_are_in_both_languag
         "{}",
         title_of(&p)
     );
-    for sentence in [
-        "These files are rebuilt from the patches in this revision. Nothing here is signed.",
-        "No earlier check of this repository&#39;s history was available, so the files were rebuilt by replaying the history from the start. They match the patches; the history itself has not been checked.",
-    ] {
+    for sentence in
+        ["These files are rebuilt from the patches in this revision. Nothing here is signed."]
+    {
         assert!(
             p.contains(sentence) || p.contains(&sentence.replace("&#39;", "'")),
             "missing: {sentence}\n{p}"
         );
     }
+    // prikk 0.58.0: the history of a repository created by `archive import --adopt` was recorded, so this world's answer is not
+    // provisional and the page does not say it is. The page that does say it is tested below with a change set that is provisional.
+    assert!(
+        !p.contains("No earlier check of this repository"),
+        "the provisional sentence is on a page whose answer is not provisional\n{p}"
+    );
     let before = json["compared"]["before_block"].as_str().unwrap();
     assert!(
         p.contains(&format!(
@@ -1946,6 +1951,10 @@ async fn the_changes_page_and_a_file_page_say_what_the_files_are_in_both_languag
     dump("changes-page.ja.html", &jp);
     assert_eq!(h1_of(&jp), format!("提案 #{short} のリビジョン 1 の変更点"));
     assert!(jp.contains("ここに表示するファイルは、このリビジョンのパッチから再構築したものです。ここに表示した内容は、署名されたものではありません。"), "{jp}");
+    assert!(
+        !jp.contains("履歴を最初から再現してファイルを再構築しました"),
+        "the provisional sentence is on a page whose answer is not provisional\n{jp}"
+    );
     assert!(
         jp.contains("変わったファイル 3 件、追加 3 行、削除 2 行"),
         "{jp}"
@@ -2630,12 +2639,11 @@ async fn each_statement_and_each_note_appears_exactly_when_it_is_true() {
     );
     let p = page(&w, &uri, "en", None).await.text();
     assert!(p.contains(provisional), "{p}");
-    assert!(
-        page(&w, &uri, "ja", None)
-            .await
-            .text()
-            .contains("履歴を最初から再現してファイルを再構築しました")
-    );
+    // the page that carries the provisional sentence still passes every structural rule (the world above no longer does: prikk 0.58.0)
+    check_page(&p, "en");
+    let jp = page(&w, &uri, "ja", None).await.text();
+    assert!(jp.contains("履歴を最初から再現してファイルを再構築しました"));
+    check_page(&jp, "ja");
     // 3. the declared base is not the real parent
     inject(
         &w,
