@@ -1,0 +1,37 @@
+{
+  "schema_version": "verify-report-v1",
+  "verdict": {
+    "ok": true,
+    "failed_conditions": []
+  },
+  "active_sessions": {"count": 1, "verified_count": 1},
+  "stages": [
+    {"stage": "objects", "status": "evaluated"},
+    {"stage": "refs", "status": "evaluated"},
+    {"stage": "ref-update-schema-trust", "status": "evaluated"},
+    {"stage": "wal-replay", "status": "evaluated"},
+    {"stage": "wal-persistence", "status": "evaluated"},
+    {"stage": "rollback-drafts", "status": "evaluated"},
+    {"stage": "wal-record-schema", "status": "evaluated"},
+    {"stage": "active-wal-metadata", "status": "evaluated"},
+    {"stage": "commit-witness", "status": "evaluated"},
+    {"stage": "publication-reclassification", "status": "evaluated"},
+    {"stage": "commit-index", "status": "evaluated"},
+    {"stage": "lifecycle-cache", "status": "evaluated"},
+    {"stage": "wal-ordering", "status": "evaluated"},
+    {"stage": "received-refs", "status": "evaluated"},
+    {"stage": "local-tag-trust", "status": "evaluated"},
+    {"stage": "object-connectivity", "status": "evaluated"},
+    {"stage": "appended-file-tails", "status": "evaluated"}
+  ],
+  "unreached_objects": [],
+  "non_ascii_paths_in_old_format": [],
+  "sealed_path_collisions": [],
+  "object_items": {"scanned": 5, "failed": 0},
+  "failed_objects": [],
+  "unverifiable_author_signatures": 0,
+  "block_seals": [
+    {"block_id": "211befbfee56a1747d0edb35a36ec8cd019eab60fa8081a5c274209ac6b9637e", "sealed_by": ["ed25519-5f429a3304963870"], "trusted_by": "ed25519-5f429a3304963870", "sealed_by_signatures": [{"key_id": "ed25519-5f429a3304963870", "outcome": "sound"}]}
+  ],
+  "publication_trust_issues": []
+}
