@@ -1856,14 +1856,12 @@ async fn the_changes_page_and_a_file_page_say_what_the_files_are_in_both_languag
         "{}",
         title_of(&p)
     );
-    for sentence in
-        ["These files are rebuilt from the patches in this revision. Nothing here is signed."]
-    {
-        assert!(
-            p.contains(sentence) || p.contains(&sentence.replace("&#39;", "'")),
-            "missing: {sentence}\n{p}"
-        );
-    }
+    let sentence =
+        "These files are rebuilt from the patches in this revision. Nothing here is signed.";
+    assert!(
+        p.contains(sentence) || p.contains(&sentence.replace("&#39;", "'")),
+        "missing: {sentence}\n{p}"
+    );
     // prikk 0.58.0: the history of a repository created by `archive import --adopt` was recorded, so this world's answer is not
     // provisional and the page does not say it is. The page that does say it is tested below with a change set that is provisional.
     assert!(
