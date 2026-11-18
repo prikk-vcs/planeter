@@ -68,7 +68,7 @@ use crate::proposals::FOLLOWED_REF;
 use crate::propose::{ProposeConfig, SlotGuard, Slots};
 use crate::recovery::RecoveryService;
 
-pub use rule::{Acceptable, LiveFacts, RefFacts, Refusal, StagedFacts, decide};
+pub use rule::{Acceptable, LiveFacts, RefFacts, Refusal, StagedFacts, decide, offending_ref};
 
 const MIB: u64 = 1 << 20;
 
@@ -102,6 +102,9 @@ pub struct DeliveryConfig {
     pub max_concurrent: usize,
     /// The bounds and the ceiling of the re-accept of one retained artifact (the accept's own).
     pub propose: ProposeConfig,
+    /// How long a request waits for the work of a delivery before it answers with the delivery as it stands (25 s; a constant of the
+    /// routes, here so that a test can shorten it for one service).
+    pub request_wait: Duration,
 }
 
 impl Default for DeliveryConfig {
@@ -115,6 +118,7 @@ impl Default for DeliveryConfig {
             lease_wait: c.lease_wait,
             max_concurrent: c.max_concurrent,
             propose: ProposeConfig::default(),
+            request_wait: Duration::from_secs(25),
         }
     }
 }
@@ -270,6 +274,9 @@ pub struct Report {
     pub verdict: Verdict,
     /// The closed reason of a refusal.
     pub reason: Option<String>,
+    /// The branch a `branch_missing` or `not_a_successor` refusal is about (a name the maintainer's own repository has).
+    #[serde(default)]
+    pub reason_ref: Option<String>,
     pub old_tip: Option<String>,
     pub new_tip: Option<String>,
     pub new_blocks: u64,
@@ -289,6 +296,7 @@ impl Report {
         Report {
             verdict: Verdict::Refused,
             reason: Some(reason.code().to_owned()),
+            reason_ref: None,
             old_tip: None,
             new_tip: None,
             new_blocks: 0,
@@ -319,7 +327,10 @@ pub struct DeliveryView {
     pub reason: Option<String>,
     pub report: Option<Report>,
     pub created_at: u64,
+    pub updated_at: u64,
     pub expires_at: u64,
+    /// The install stopped after its exchange and waits to be finished (the repository is flagged `delivery_unfinished`).
+    pub needs_recovery: bool,
 }
 
 /// What a finished install did.
@@ -802,6 +813,31 @@ impl DeliveryService {
         })
     }
 
+    /// What can be decided about a delivery to `record` before the first byte of the archive is read: the repository does not wait for
+    /// recovery and no delivery is in flight. (`start` decides the same again, atomically, with the limits.)
+    pub fn precheck(&self, record: &RepositoryRecord) -> Result<(), DeliveryError> {
+        let flags = self
+            .changes
+            .repo_flags(&record.repo_id)
+            .map_err(|e| unavailable("cannot read the repository's flag", e))?;
+        if flags.needs_recovery {
+            return Err(DeliveryError::NeedsRecovery {
+                reason: flags.reason.unwrap_or_default(),
+            });
+        }
+        if self
+            .deliveries
+            .in_flight(&record.repo_id)
+            .map_err(|e| unavailable("cannot read the deliveries", e))?
+            .is_some()
+        {
+            return Err(DeliveryError::Busy {
+                retry_after: self.config.lease_wait,
+            });
+        }
+        Ok(())
+    }
+
     /// Expire the staged and reported deliveries whose day is over; their directories go.
     pub fn sweep_expired(&self) -> usize {
         let now = self.now();
@@ -1088,7 +1124,11 @@ impl DeliveryService {
         }
         let staged = self.read_staged(id, &call(import_ceiling)?, &adopted)?;
         match decide(&live, &staged) {
-            Err(reason) => Ok(refused(reason)),
+            Err(reason) => {
+                let (mut report, none) = refused(reason);
+                report.reason_ref = offending_ref(&live, &staged, reason);
+                Ok((report, none))
+            }
             Ok(a) => {
                 let Sorted { stay, land, cannot } = self
                     .proposals_against(&record.repo_id, &staged.followed_patch_ids)
@@ -1096,6 +1136,7 @@ impl DeliveryService {
                 let report = Report {
                     verdict: Verdict::Acceptable,
                     reason: None,
+                    reason_ref: None,
                     old_tip: a.old_tip.clone(),
                     new_tip: Some(a.new_tip.clone()),
                     new_blocks: a.new_blocks,
@@ -1168,6 +1209,14 @@ impl DeliveryService {
             .report_json
             .as_deref()
             .and_then(|j| serde_json::from_str::<Report>(j).ok());
+        let unfinished = matches!(
+            row.state,
+            DeliveryState::Exchanged | DeliveryState::Reaccepting
+        ) && self
+            .changes
+            .repo_flags(&row.repo_id)
+            .map(|f| f.needs_recovery)
+            .unwrap_or(false);
         Ok(DeliveryView {
             delivery_id: row.delivery_id,
             repo_id: row.repo_id,
@@ -1175,9 +1224,11 @@ impl DeliveryService {
             reason: row.reason,
             report,
             created_at: row.created_at,
+            updated_at: row.updated_at,
             expires_at: row
                 .created_at
                 .saturating_add(self.config.stage_ttl.as_secs()),
+            needs_recovery: unfinished,
         })
     }
 
@@ -1199,6 +1250,20 @@ impl DeliveryService {
             }
             other => Err(DeliveryError::NotConfirmable(other)),
         }
+    }
+
+    /// The titles of proposals of `repo` by id (an id that is not the repository's proposal is left out): for the lists of a report.
+    pub fn titles(&self, repo: &RepoId, ids: &[String]) -> Vec<(String, String)> {
+        ids.iter()
+            .filter_map(|id| {
+                self.changes
+                    .get_change(id)
+                    .ok()
+                    .flatten()
+                    .filter(|c| &c.repo_id == repo)
+                    .map(|c| (c.change_id, c.title))
+            })
+            .collect()
     }
 
     /// The last finished delivery of the repository (who, when, old and new tip).

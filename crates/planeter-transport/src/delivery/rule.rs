@@ -225,3 +225,26 @@ pub fn decide(live: &LiveFacts, staged: &StagedFacts) -> Result<Acceptable, Refu
         refs_added,
     })
 }
+
+/// The ref a refusal is about, for the sentence that names it: the first live ref the delivery lacks (`branch_missing`), or the first
+/// other live ref whose tip the delivery's chain of that ref does not hold (`not_a_successor`). Pure, like [`decide`].
+pub fn offending_ref(live: &LiveFacts, staged: &StagedFacts, reason: Refusal) -> Option<String> {
+    match reason {
+        Refusal::BranchMissing => live
+            .refs
+            .iter()
+            .find(|l| find(&staged.local, &l.name).is_none())
+            .map(|l| l.name.clone()),
+        Refusal::NotASuccessor => live
+            .refs
+            .iter()
+            .filter(|l| l.name != FOLLOWED_REF)
+            .find(|l| {
+                find(&staged.local, &l.name)
+                    .zip(l.tip())
+                    .is_some_and(|(s, tip)| !s.blocks.iter().any(|b| b == tip))
+            })
+            .map(|l| l.name.clone()),
+        _ => None,
+    }
+}

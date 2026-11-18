@@ -728,10 +728,22 @@ pub struct Scenario {
 }
 
 pub fn scenario(s: &Services, fx: &Fixtures) -> Scenario {
-    let work = s.base.join("work");
+    scenario_with(&s.base, &s.record.path, fx, &|title, artifact| {
+        s.propose_artifact(title, artifact, None).proposal_id
+    })
+}
+
+/// The scenario with the proposals made by `propose(title, artifact) -> proposal id` (in process, or over HTTP to a server).
+pub fn scenario_with(
+    base: &Path,
+    live: &Path,
+    fx: &Fixtures,
+    propose: &dyn Fn(&str, &[u8]) -> String,
+) -> Scenario {
+    let work = base.join("work");
     std::fs::create_dir_all(&work).unwrap();
-    let live_keys = s.base.join("forge-keys");
-    let live = s.record.path.clone();
+    let live_keys = base.join("forge-keys");
+    let live = live.to_path_buf();
     let at_h0 = Maintainer {
         work: fx.m1_at_h0.clone(),
         keys: fx.m1_at_h0_keys.clone(),
@@ -740,7 +752,7 @@ pub fn scenario(s: &Services, fx: &Fixtures) -> Scenario {
     // P1: one patch.
     step(&m1, "p1");
     let a1 = artifact_of(&m1, &live, &live_keys, "heads/main", "a1");
-    let p1 = s.propose_artifact("P1", &a1, None).proposal_id;
+    let p1 = propose("P1", &a1);
     // P3: two patches; the delivery will carry the first only.
     let cc = clone_of(&m1, &work, "cc");
     step(&cc, "p3a");
@@ -748,13 +760,13 @@ pub fn scenario(s: &Services, fx: &Fixtures) -> Scenario {
     step(&cc, "p3b");
     let p3b = patch_ids_of_last(&cc, 1);
     let a3 = artifact_of(&cc, &live, &live_keys, "heads/main", "a3");
-    let p3 = s.propose_artifact("P3", &a3, None).proposal_id;
+    let p3 = propose("P3", &a3);
     // P2: one patch no delivery carries.
     let pc = clone_of(&m1, &work, "pc");
     step(&pc, "p2");
     let p2ids = patch_ids_of_last(&pc, 1);
     let a2 = artifact_of(&pc, &live, &live_keys, "heads/main", "a2");
-    let p2 = s.propose_artifact("P2", &a2, None).proposal_id;
+    let p2 = propose("P2", &a2);
     // The delivery: H0 + p1 + p3a + e1 + e2; then one more.
     step(&cc2, "e1");
     step(&cc2, "e2");
