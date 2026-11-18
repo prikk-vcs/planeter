@@ -19,3 +19,7 @@ tools/enf2-symbol-check/check.sh
 ```
 
 CI runs it in the `enf2` job (see `.github/workflows/ci.yml`).
+
+It also holds one more line for the delivery engine (RFC 008 handoff 2): the **release** `planeter` must not contain the name of the
+debug-only test hook (`PLANETER_FAILPOINT`, which makes a debug build stop at a named point of an install so that a test can kill it
+there). The check greps the binary for the name and fails if it is there.

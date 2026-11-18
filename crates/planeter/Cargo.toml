@@ -19,3 +19,8 @@ planeter-transport = { path = "../planeter-transport", version = "0.7.0" }
 planeter-ci = { path = "../planeter-ci", version = "0.7.0" }
 planeter-registry = { path = "../planeter-registry", version = "0.7.0" }
 tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "signal"] }
+
+[dev-dependencies]
+# Test-only (the real-server delivery tests read JSON replies and share the engine tests' fixtures): already in the lock through the
+# web and prikk crates; nothing new enters `Cargo.lock`.
+serde_json = "1"

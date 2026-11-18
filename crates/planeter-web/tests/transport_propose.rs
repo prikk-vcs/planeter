@@ -555,6 +555,7 @@ fn world(name: &str, o: Opts) -> World {
         proposals: Some(proposals.clone()),
         reviews: Some(reviews.clone()),
         changes: None,
+        deliveries: None,
         ip_limit: RateLimiter::new(o.ip_limit, Duration::from_secs(60)),
         principal_limit: RateLimiter::new(o.ip_limit, Duration::from_secs(60)),
     }));

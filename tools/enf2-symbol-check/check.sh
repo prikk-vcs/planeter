@@ -46,6 +46,12 @@ for a in "${artifacts[@]}"; do
   fi
 done
 
+# The delivery engine's test hook (RFC 008 handoff 2, T5) exists in debug builds only: the release server must not carry its name.
+if [ -e target/release/planeter ] && grep -aq 'PLANETER_FAILPOINT' target/release/planeter; then
+  echo "ENF-2 FAIL: the release server carries the test hook PLANETER_FAILPOINT (it belongs to debug builds only)"
+  found=1
+fi
+
 if [ "$scanned" -eq 0 ]; then
   echo "ENF-2 ERROR: no artifacts found to scan (did the build produce target/release/*?)." >&2
   exit 2

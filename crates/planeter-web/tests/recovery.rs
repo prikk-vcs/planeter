@@ -343,6 +343,7 @@ fn world(name: &str, o: Opts) -> W {
             proposals: None,
             reviews: None,
             changes: None,
+            deliveries: None,
             ip_limit: RateLimiter::new(10_000, Duration::from_secs(60)),
             principal_limit: RateLimiter::new(10_000, Duration::from_secs(60)),
         })),

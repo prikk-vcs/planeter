@@ -281,6 +281,7 @@ fn fixture(name: &str, o: Opts) -> Fx {
             proposals: None,
             reviews: None,
             changes: None,
+            deliveries: None,
             ip_limit: RateLimiter::new(o.ip_limit, Duration::from_secs(60)),
             principal_limit: RateLimiter::new(o.principal_limit, Duration::from_secs(60)),
         })

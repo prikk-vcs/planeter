@@ -434,6 +434,7 @@ fn world_with(name: &str, o: Opts, initial: &[(&str, &[u8])]) -> World {
         proposals: Some(proposals),
         reviews: None,
         changes: Some(svc.clone()),
+        deliveries: None,
         ip_limit: RateLimiter::new(100_000, Duration::from_secs(60)),
         principal_limit: RateLimiter::new(100_000, Duration::from_secs(60)),
     }));

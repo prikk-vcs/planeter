@@ -35,7 +35,7 @@ use planeter_web::errors::ErrorCode;
 use planeter_web::{AppState, BlockingGate, ContentOrigin, PrikkGate, TrustedProxies, router};
 
 /// The routes the API is meant to have, written down independently of `api::paths`.
-const EXPECTED_PATHS: [&str; 27] = [
+const EXPECTED_PATHS: [&str; 30] = [
     "/api/v1/repos/{owner}/{name}/history",
     "/api/v1/repos/{owner}/{name}/change/{target}",
     "/api/v1/repos/{owner}/{name}/file",
@@ -62,6 +62,9 @@ const EXPECTED_PATHS: [&str; 27] = [
     "/api/v1/repos/import",
     "/api/v1/repos/import/{stage}",
     "/api/v1/repos/import/{stage}/confirm",
+    "/api/v1/repos/{owner}/{name}/deliveries",
+    "/api/v1/repos/{owner}/{name}/deliveries/{id}",
+    "/api/v1/repos/{owner}/{name}/deliveries/{id}/confirm",
     "/api/v1/openapi.json",
 ];
 
@@ -253,7 +256,7 @@ fn every_code_has_one_plain_sentence_and_the_shape_is_stable() {
             assert_eq!(text.matches(". ").count(), allowed, "sentences: {text:?}");
         }
     }
-    assert_eq!(seen.len(), 50);
+    assert_eq!(seen.len(), 52);
 }
 
 #[test]
@@ -322,7 +325,7 @@ async fn the_document_lists_exactly_the_routes_the_router_serves() {
             .replace("{seq}", "1")
             .replace("{cid}", "m1");
         let req = Request::builder()
-            .method("DELETE")
+            .method("PUT")
             .uri(&concrete)
             .body(Body::empty())
             .unwrap();
@@ -510,9 +513,9 @@ async fn every_view_serializes_to_exactly_the_declared_fields() {
             })
             .unwrap(),
         ),
-        (
-            "RefsView",
-            serde_json::to_value(RefsView {
+        ("RefsView", {
+            // what `refs` answers: the core view and, beside it, the project's branch and the last delivery (RFC 008)
+            let mut v = serde_json::to_value(RefsView {
                 current_branch: None,
                 branches: vec![BranchView {
                     ref_name: "heads/main".into(),
@@ -525,8 +528,21 @@ async fn every_view_serializes_to_exactly_the_declared_fields() {
                     target_block_id: "b".into(),
                 }],
             })
-            .unwrap(),
-        ),
+            .unwrap();
+            v["followed_ref"] = json!("heads/main");
+            v["last_delivery"] = serde_json::to_value(planeter_web::deliveries::LastDelivery {
+                delivered_at: 1,
+                delivered_by: "Alice".into(),
+                old_tip: Some("a".into()),
+                new_tip: None,
+                trusted_keys: vec![planeter_web::deliveries::KeyJson {
+                    key_id: "k".into(),
+                    fingerprint: "f".into(),
+                }],
+            })
+            .unwrap();
+            v
+        }),
         (
             "VerifyView",
             serde_json::to_value(VerifyView {
@@ -579,6 +595,15 @@ async fn every_view_serializes_to_exactly_the_declared_fields() {
 
     fn check(schemas: &Value, schema: &Value, sample: &Value, at: &str) -> Result<(), String> {
         let schema = resolve(schemas, schema);
+        // an optional value, and a value that is one named schema (`allOf` of one)
+        if sample.is_null() && schema["nullable"] == true {
+            return Ok(());
+        }
+        if let Some(all) = schema["allOf"].as_array() {
+            return all
+                .iter()
+                .try_for_each(|part| check(schemas, part, sample, at));
+        }
         if let Some(one_of) = schema["oneOf"].as_array() {
             return if one_of
                 .iter()
@@ -860,7 +885,7 @@ fn api_routes_are_registered_only_through_the_shared_paths() {
         .map(str::trim)
         .filter(|l| l.contains(".route("))
         .collect();
-    assert_eq!(route_lines.len(), 27, "{route_lines:?}");
+    assert_eq!(route_lines.len(), 30, "{route_lines:?}");
     assert!(
         route_lines.iter().all(|l| l.contains("paths::")),
         "a route is registered with a literal path: {route_lines:?}"
