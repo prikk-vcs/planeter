@@ -1,147 +1,52 @@
-# RFC 008 — One-click merge without a forge key (UD-6): the sealing ergonomics problem
+# RFC 008 — Landing by delivery: how reviewed work becomes the project's branch without a forge key
 
-**Status.** Proposed — **re-opened 2026-10-15 for revision** (RFC 000: the folder tells the truth). The 2026-09-15 acceptance stands as history and the implementer must not start until the revision is accepted. Reason: its mechanism is superseded by prikk's RFC 154 adoption, which is unscheduled; the client-signer ladder needs re-scoping. The text below is the 2026-09-15 acceptance as revised on 2026-09-16.
-*Original status:* Accepted (2026-09-15) — **Track B, joint planeter + prikk, gated.** The planeter design is
-settled; the implementer may build the D-2 (CLI one-click) increment against it per the handoff. Carries
-a **prikk-side ask** (D-4) to be raised as a companion prikk RFC with the prikk project/owner, and a
-web-one-click scope decision (D-6) for the owner. Upgrades the *mechanism* of RFC 005's merge without
-changing its model.
-Handoff: [`../handoffs/008-seal-one-click-merge/seal-one-click-merge-handoff-v1.md`](../handoffs/008-seal-one-click-merge/seal-one-click-merge-handoff-v1.md).
-**Tracks.** ROADMAP Phase B1 (Track B — never blocks Track A; RFC 005's keyless fallback ships the merge
-meanwhile). Requirements `UD-6`, OQ-1 (a); external design `GATED-1`, `TX-05`; internal design `WR-5a`;
-threat model `INV-2`, `RR-2`.
-**Touches.** The client helper (RFC 004 `TX-05`), `planeter-transport`/`planeter-web` (the merge action),
-and a **companion prikk RFC** for any prikk-side affordance. **Not here:** the merge *model* (RFC 005,
-unchanged), CI (RFC 006).
-
-## Revision 2026-09-16 — superseded in mechanism by prikk RFC 154 + RFC 155
-
-prikk turned this RFC's question into accepted/proposed prikk-side capabilities that resolve it more
-cleanly than the mechanisms drafted here. **Gated on the prikk binary** (order: key-id fix → RFC 155 →
-RFC 154, post-0.43.0):
-
-- **The seal → canonical step is RFC 154 adoption (accepted).** The maintainer seals client-side; the
-  forge **adopts** the trusted-maintainer-signed fast-forward — keyless, no forge key, and
-  multi-maintainer. This achieves D-1/D-2's goal via a prikk primitive rather than forge orchestration.
-- **The "compact sealable claim" (A1 / D-4) is withdrawn.** prikk correctly declined blind-signing a
-  state root the maintainer never verified; RFC 154 (adopt a *fully verified* fast-forward) + RFC 155
-  (the repository-complete artifact) supersede it. The maintainer signs history they verified in their
-  own repo; the forge adopts.
-- **One-click merge** = client seals → produces the advance (via the RFC 155 artifact) → forge adopts
-  (RFC 154). D-2 (CLI one-click) and D-3 (web one-click via a client-side signer — the browser still
-  cannot hold the key) stand as the ergonomics ladder over this substrate; D-5's forge-key opt-in remains
-  the labeled exception only.
+**Status.** **Proposed — revised 2026-11-18** (replaces the 2026-09 text, archived as `archive/008-seal-one-click-merge-2026-09-superseded.md`). Needs the owner's acceptance of the wording in D-4 before any handoff is built (RFC 000: nothing moves to `accepted/` without it).
+**Tracks.** ROADMAP 0.8.0 (SCHEDULE D-91…D-94); RFC 004 D-8 ("model B", decided 2026-10-29: the *what*), RFC 005 D-6 (landing), RFC 012 (words, accessibility), threat model `INV-2`, `RR-2`, new T-20.
+**Touches.** `planeter-transport` (a delivery service beside creation and accept), `planeter-web` (two API routes, a page, the repository page), `planeter-client` (`deliver`), the proposal landing observation (one line: the followed ref), docs. **Not here:** a forge-held key (rejected, INV-2); adding or rotating maintainer keys after creation; required approvals; web one-click (a browser cannot sign); a merge queue.
+**Evidence.** Ledger PK-29, PK-34, PK-60, PK-67, PK-83 (a received-ref delivery cannot serve clients) and PK-84 (successor replacement, measured: `model-b-measure-v2-review-request.md`).
 
 ## Summary
 
-Merging seals accepted claims onto a ref, and a seal needs the maintainer's Ed25519 key. Under OQ-1(a)
-the **forge holds no key**, so the seal is the maintainer's own — and RFC 005 already delivers that via a
-keyless fallback (fetch → seal locally → push). This RFC is about making it **one click without ever
-putting a key in the forge**. Its central, honest finding: **the forge staying keyless is easy; the hard
-part is the *browser → user-key* bridge**, because a web page cannot hold or use a maintainer's prikk
-signing key. Mainstream forges dodge this by signing web-merges with the *forge's own* key — exactly the
-option (b) planeter refuses as a default (`INV-2`/`RR-2`). So this RFC's job is to get as close to
-one-click as possible **while keeping the key on the maintainer's side**, and to name precisely what (if
-anything) prikk should add to help.
+A maintainer's own sealed history becomes the project's branch like this: the maintainer runs **`planeter-client deliver`**; the client sends **a repository archive** (what `prikk archive export` writes: the same artifact repository creation takes); the server **stages** it in a scratch repository that trusts only **the repository's adopted keys**, checks it against a **written rule**, shows the maintainer **what will change**, and — after the maintainer confirms — **replaces the repository by its staged successor** and re-creates the pending state of the open proposals from their retained artifacts. The forge's `heads/main` is then the delivered `heads/main`: **a clone, a fetch, the reads, the proposal base, landing and the changes view all keep working with no new concept**. The forge signs nothing at any step.
 
-## The constraints that scope this design
+## Why not the earlier idea (a delivery as a *received* ref)
 
-- **The forge holds no signing key** (`INV-2`), except the explicit per-repo opt-in (b). This RFC exists
-  to make (b) unnecessary for a good merge UX.
-- **A web browser cannot produce a prikk seal.** A prikk seal is an Ed25519 signature over a block; a
-  browser has no access to the maintainer's prikk key, and **WebAuthn/passkeys sign challenges, not
-  arbitrary block data**, so they cannot substitute. A user-key web merge therefore needs a **client-side
-  signer** (a local agent / the client tool holding the key), not browser crypto.
-- **Sealing needs the accepted-claim state + the key together.** prikk's `sync seal <ref> --claim`
-  operates where the accepted claim lives. Today that is the server (which has no key) or the
-  maintainer's local clone (which has the key after a fetch). Bridging the two without a forge key is the
-  problem.
-- **prikk's exact sync/seal semantics are prikk's to state.** Whether a maintainer can seal locally and
-  push the sealed ref-advance (the fallback assumes yes), and whether a compact "sealable claim" can be
-  handed to a client and its sealed result re-ingested, are **questions for the prikk team** (D-4), not
-  facts this RFC may assume.
+D-8 (2026-10-29) chose "model B": import the sealed history as a received ref and *select* it as the branch. Measured on prikk 0.57.0 (PK-83): the forge's `heads/main` never moves, so a clone gets the creation snapshot, a person without a maintainer key has no route to the delivered tip, `fetch` fails or silently misses it, and proposals are built on the stale base. The idea fails on usability, not on safety. Replacement fixes it by making the delivered history the repository's own branch; prikk's own adoption rule (only adopted-key-signed refs land as *local* branches in the stage) is the safety check, so the forge parses nothing itself.
 
 ## Decisions
 
-- **D-1 — The property, stated as ergonomics not trust.** Goal: the maintainer merges in **one action**,
-  the seal is produced by **their own key**, and the **forge holds no key** at any point. Everything
-  below is about reducing the maintainer's steps, never about relocating the key to the forge.
-- **D-2 — UD-6a — CLI one-click, buildable now (no prikk change).** The client helper (RFC 004 `TX-05`)
-  orchestrates the fallback behind a single command: `planeter merge <change>` → fetch the change's
-  claims → `sync accept` into the maintainer's (or an ephemeral) local prikk → `sync seal` (the
-  maintainer's key) → push the sealed block; planeter stores + re-verifies + advances the ref. This makes
-  merge **one command for a maintainer at a terminal**, keyless-for-the-forge, using only existing prikk
-  verbs. **This is B1's first, committed increment.**
-- **D-3 — UD-6b — web one-click via a client-side signer (the frontier).** For the browser "merge"
-  button, the click triggers the maintainer's **local signer** — a small local agent, or the client tool
-  invoked through a registered handler — which performs the seal (D-2's steps, or D-4's compact form) and
-  returns the sealed block; planeter stores/verifies/advances. **The key never enters the browser or the
-  forge.** This is the genuinely hard UX; it is designed here as a *client/agent* problem, and pursued
-  incrementally. It is **not** required for merge to work (D-2 covers that) and its depth for v0 is an
-  owner scope call (D-6).
-- **D-4 — The prikk-side ask (the joint part): a portable *sealable claim*.** To make D-3 clean — so the
-  client signs a **compact package** rather than reproducing a full fetch/accept/clone — planeter asks
-  prikk to consider: (i) confirming that a maintainer may seal a claim locally and push the sealed
-  ref-advance (the fallback's assumption); and (ii) optionally, a **portable sealable-claim** capability —
-  export a claim's minimal sealable state from the server, seal it on a client, and re-ingest the sealed
-  block. This is **prikk's/owner's to design** (a companion prikk RFC, the analogue of brygge's UD-
-  dependencies); planeter **names the requirement and targets whatever prikk settles**. If prikk declines
-  (ii), D-2/D-3 still work via the full fetch-based path — just heavier.
-- **D-5 — The rejected shortcut, named so it stays rejected.** A forge-held key signing web-merges
-  (option b) is what mainstream forges do and is the easy "green button." It is **not** planeter's default
-  (`INV-2`); it remains only the explicit, per-repo, key-isolated, forge-attributed opt-in (`RR-2`). This
-  entire RFC exists to make the *keyless* path good enough that (b) is a deliberate exception, not a
-  convenience default.
-- **D-6 — Scope ladder for v0 (owner call).** B1 delivers **D-2 (CLI one-click)** — keyless, buildable,
-  no prikk change. **D-3/D-4 (web one-click + the prikk affordance)** are the frontier increment; the
-  owner decides how far to push them for 1.0 versus leaving the web merge as "guided" (trigger the local
-  signer with a couple of confirmations) until a clean client-signer exists. The forge is keyless at
-  every rung.
+- **D-1 — The delivery is a repository archive, nothing else.** One artifact, one parser (prikk's), one bound. No bundle route, no patch route, no web upload form in this RFC (the API takes the file; the client sends it).
+- **D-2 — The stage is the whole safety argument.** The archive is imported (`archive import --adopt`, sandboxed, `RLIMIT_DATA` ceiling of the creation cost model) into a **fresh repository whose trusted keys are exactly the live repository's adopted keys** (read from the live repository; never from the archive). A key the archive merely *carries* is not adopted and changes nothing (measured: `xcarry`).
+- **D-3 — The written rule (all must hold; the staged repository is the only input; the first failure is the answer).**
+  1. `heads/main` exists as a **local** branch in the stage and **nothing is received** (a ref signed by an unadopted key lands as a received ref: refused with prikk's own reason);
+  2. every local ref's tip is sealed by an adopted key and `verify` passes with **no publication-trust issue** (an unadopted block *under* an adopted tip is refused: measured: `mix`);
+  3. for **every published ref the live repository has**, the live tip is a block of the staged ref's chain (a fast-forward or the same tip): an older, diverged or unrelated history is refused (measured: `older`, `div`, `unrelated`); `log --format json` with a limit of at least the chain length is the reader (a short limit would answer a false *no*);
+  4. a ref the live repository has is **not missing** in the stage (no deleted branch); a ref the live repository lacks **may be added** (it is then published; landing counts only the followed branch, D-6);
+  5. the delivered `heads/main` is **different from the live one** (the same tip is answered "nothing to deliver", not an error and not a replacement).
+  A rule failure leaves the live repository byte-identical (tested by tree hash) and answers with one plain reason (D-5).
+- **D-4 — The sentence the feature stands on (to be accepted by the owner).** Wherever a page shows the project's branch it may add: **"Delivered by {name} on {date}: signed by a key this repository trusts and checked by prikk."** The delivery page tells the maintainer, before they confirm: **"Delivering replaces this repository's branch {ref} with yours. It is accepted only if yours continues from the current one; nothing is signed by this server."** (English; the Japanese is written by the dev team and read by the owner.) No page says "selected", "received" or "by this server's rule": there is one branch.
+- **D-5 — Two steps, as in creation; the second is a confirmation, not a decision made blind.** `POST …/deliveries` (the archive) stages and applies the rule and returns a **delivery report** — `acceptable` or `refused` with one reason from a closed list (`not_a_successor`, `older_or_diverged`, `unrelated`, `unadopted_key`, `branch_missing`, `nothing_to_deliver`, `damaged_archive`, `too_large`, `stage_limit`, `busy`, `no_main`), the old and new tip, the number of new blocks, the open proposals that **stay**, the proposals that **will land**, and the ones that **cannot be kept** (D-8) — and `POST …/deliveries/{id}/confirm` carries it out. A staged delivery expires after the existing stage lifetime (24 h); one in flight per repository.
+- **D-6 — Landing counts the followed branch only.** RFC 005 D-6's observation (the patches are in a block of a published ref) is restricted to **`heads/main`** (a constant in v1: no policy table; the repository page says "the project's branch is heads/main"). A proposal does not land by being in a branch a maintainer happened to deliver beside it. A landed proposal stays landed (final, as before).
+- **D-7 — Installing it (the one place that writes).** Under the repository's **write lease**, and with a **delivery intent** recorded first (a row in the metadata database; the stage and the archive are kept until the end): (1) re-check the rule against the live tip (the live repository may have moved since the report — a re-accepted proposal does not move `heads/main`, so only another delivery can: then `busy`/refused), (2) **exchange the stage and the live directory with `renameat2(RENAME_EXCHANGE)`** (one atomic step; both on the repositories' own filesystem; no moment without the repository), (3) **bump the revision counter** (`write_completed`: the fingerprint must not rest on file times alone), (4) **re-accept the retained artifact of every revision of every open proposal, in revision order** (idempotent; a patch already sealed in the delivery is a no-op), (5) `verify` the new repository, (6) mark the intent done, remove the previous generation and the stage. **Recovery** (existing machinery: the repository's `needs-recovery` flag and the server's start-up reconciliation): an intent not marked done is completed on restart from step 2 or step 4 as its state says, or — if the exchange did not happen — abandoned by discarding the stage. Stale locks of a killed prikk call are cleared with `unlock --force` after the witnesses agree (as for an unfinished accept). A killed **stage import** is never resumed: the stage is discarded and made again.
+- **D-8 — What cannot be kept, said before it happens.** A proposal whose retained artifact is gone (removed by retention) cannot be re-created in the new repository; the report lists it and the confirmation names it ("these proposals will stay readable but their changes can no longer be shown: #12"). Nothing is deleted. The limit of 100 MiB for an archive (the creation setting) applies; a larger repository cannot be delivered until the operator raises it or prikk has a delta form (PK-36) — said in words.
+- **D-9 — Who may deliver.** `Action::MergeSeal` (Role Maintain on the repository; a token whose scope is capped below merge-seal cannot). **A stolen token alone cannot move the branch to attacker content**: the rule needs history signed by an adopted key. It can only deliver an archive that a maintainer's key already signed, and only as a successor of the current branch.
+- **D-10 — What a maintainer's clone does afterwards (stated, not hidden).** A **fresh clone** has the delivered `heads/main` exactly. A clone made earlier receives the new tip through `fetch` as a **received copy** and its own branches are never touched (the client's documented rule); a person who follows it with `merge --from` makes **their own block**, not the forge's (measured, PK-84). `fetch` and the repository page say so in one sentence, and the client's freshness record is kept **per clone**, not per address (a bug found in this measurement).
+- **D-11 — The view of landed work.** The 0.7.0 changes view works from pending claims; after a delivery a landed proposal's claims are sealed. For a **landed** revision the view is built from the sealed history: the blocks that carry its patch ids are read from `log heads/main`, the "before" is the parent of the first of them, the "after" is the last, both extracted with `extract --ref <block>` (measured: 0.06 s small, 0.37 s at 63 MiB, `provisional: false`); if its patches are not one run of consecutive blocks the answer is the existing `not_one_change`. A revision with some patches landed and some open keeps `claim_not_held` with its present sentence. *Cut first if the release grows.*
 
-## Security (INV-2, RR-2)
+## What a maintainer and a reader see (plain words, RFC 012)
 
-The seal is **always** the maintainer's own key; the forge only ever **stores and re-verifies** the
-returned sealed block against trusted maintainer keys, and **advances the ref only if it verifies**. A
-missing or invalid seal fails the merge — the forge never substitutes its own. The client-side signer (D-3)
-must protect the key on the maintainer's side (its threat surface is the maintainer's machine, not the
-forge). No rung of the ladder adds a forge-held signing path to the default build (ENF-2 holds
-throughout).
+`planeter-client deliver https://host/owner/name` — reads the maintainer's own repository, exports it, uploads, prints the report ("Your branch continues from the server's. 4 new blocks. 2 open proposals stay; 1 will land (#7).") and asks "Deliver it? [y/N]" (or `--yes`); on confirm: "Delivered. The branch heads/main is now {tip}." A refusal is one sentence and what to do ("Your branch does not continue from the server's: update it first, then deliver again."). The repository page: "Branch heads/main · delivered {date} by {name}" and the trusted keys; the history page needs no change.
 
-## What "done" means
+## Security (threat model T-20, written with the build handoff)
 
-- **D-2 (UD-6a) end-to-end:** `planeter merge <change>` merges keyless-for-the-forge via the client
-  helper; the sealed ref-advance verifies; **ENF-2 still passes**. RFC 005's merge flow adopts this as
-  its mechanism with no model change.
-- **D-3/D-4 specified, not necessarily built:** the client-signer design and the prikk-side ask are
-  written and the **companion prikk RFC is raised**; whether D-3 ships for v0 is recorded per D-6.
-- Threat model re-verified: `INV-2` holds at every rung; `RR-2` (the opt-in b) unchanged; if D-3's local
-  agent introduces a new flow, `planeter-03` notes it (the agent's surface is client-side).
+Hostile archive: prikk parses it in the sandbox with bounded memory, never the server; the stage is scratch; every refusal leaves the live repository untouched (tree hash). A compromised maintainer *account*: bounded by D-9. A compromised maintainer *key*: out of scope (RR; key rotation is its own RFC) — the delivered history is then validly signed, as with any forge. Denial of service: one delivery in flight per repository, the stage budget, the heavy-pool admission, a deadline; a stale stage expires. Rollback by any route: refused by the rule and never forced (the driver never passes `--allow-non-fast-forward`). The forge adds no signature: ENF-2 keeps scanning both binaries.
 
-## Alternatives considered
+## Increments (handoffs, in order; each reviewed before the next)
+1. **Delivery engine** (`planeter-transport`): stage, rule (D-3), report (D-5), install (D-7: intent, exchange, counter, re-accept, verify), recovery, the delivery table; tests with real prikk for every refusal of the measurement, every kill point, the proposals that stay, land and cannot be kept; mutations.
+2. **API and page**: the two routes (OpenAPI, error codes, IS-14 table), the delivery report page and the repository page line, the landing restricted to `heads/main`, messages in English and Japanese, accessibility tests.
+3. **`planeter-client deliver`** and the client fixes (per-clone freshness; the sentence after `fetch`).
+4. **The view of landed work** (D-11) — cut first.
+5. Threat model T-20, the 0.8.0 security review, the release candidate.
 
-- **Forge-key web merge as default (option b).** Rejected (`INV-2`/D-5): it is the mainstream shortcut and
-  the thing a *prikk* forge exists to avoid; it stays an explicit opt-in.
-- **A browser-held key (WebAuthn/passkey) signing the seal.** Rejected: passkeys sign challenges, not
-  arbitrary block data (constraints §2); they cannot produce a prikk seal. A device-held prikk key via a
-  local agent (D-3) is the viable path.
-- **Require a full local clone for every merge (the pre-008 fallback only).** Not rejected — it *is* the
-  fallback and D-2 automates it; D-4's portable sealable-claim would make it lighter if prikk provides it.
-
-## Open questions & dependencies
-
-- **Companion prikk RFC / owner (D-4)** — confirm the seal-locally-and-push semantics; decide whether
-  prikk adds a portable sealable-claim affordance. planeter adapts either way; **B1 (D-2) does not wait on
-  it.**
-- **Owner (D-6)** — how far to push web one-click (D-3) for v0 vs. leaving it guided until a clean
-  client-signer exists.
-- **Client-signer design (D-3)** — the local agent / registered-handler mechanism and its client-side key
-  protection; a handoff/companion design once D-6 is ruled.
-
-## Sequencing & handoff
-
-Track B, parallel to Track A; RFC 005's keyless fallback ships the merge regardless. On acceptance, the
-architect (a) writes `handoffs/008-seal-one-click-merge/` for **D-2 (CLI one-click)** — the client-helper
-orchestration and the tests — as B1's buildable increment, and (b) raises the **companion prikk RFC** for
-D-4 and drafts the D-3 client-signer design for the owner's D-6 ruling. This upgrades the merge ergonomics
-without ever giving the forge a key. All v0.x; 1.0 is the owner gate. Next in the main line: **RFC 006
-(CI)**.
+## Not decided here (and why)
+Adding a second maintainer after creation, rotating or revoking keys, required approvals, several followed branches, a delta delivery, undoing a delivery (a revert is a new delivered successor): each is its own question with its own risk. The RFC says plainly that **the repository's trusted keys are the creator's**.
