@@ -123,7 +123,7 @@ exact :: transport.rs :: bytes :: the Accept-Ranges unit
 exact :: transport.rs :: bytes {first}-{}/{size} :: the Content-Range of a partial response
 
 # --- recovery (RFC 004 part 4)
-re :: transport.rs :: ^(accept_deadline|accept_ceiling|accept_failed|accept_unreadable|accept_not_recorded|server_stopped|cause_not_ours|lease_held|foreign_process|doctor_problems|output_unreadable|unexpected_lock|too_many_open_intents|processes_uninspected)$ :: a stable machine-readable code of the recovery plan (the words are catalog messages)
+re :: transport.rs :: ^(accept_deadline|accept_ceiling|accept_failed|accept_unreadable|accept_not_recorded|server_stopped|delivery_unfinished|cause_not_ours|lease_held|foreign_process|doctor_problems|output_unreadable|unexpected_lock|too_many_open_intents|processes_uninspected)$ :: a stable machine-readable code of the recovery plan (the words are catalog messages)
 exact :: lib.rs :: GET, POST :: the value of the `Allow` header of the recovery path
 
 # --- proposals over HTTP (RFC 005 part 5): JSON field names and values, protocol tokens, never words a person reads
@@ -170,3 +170,15 @@ re :: ui.rs :: ^creates a repository for the signed-in person.* :: the reason a 
 re :: errors.rs :: ^(repository_quota|name_taken|stage_limit|archive_refused|stage_expired|stage_in_use|adoption_refused|creation_verify_failed)$ :: a stable machine-readable error code (RFC 004 part 7)
 re :: errors.rs :: ^(the owner holds as many|a repository with that name exists|too many archives are waiting|prikk refused the archive and|the archive was kept for a day|a confirmation is running on|the typed fingerprints do not match|the repository the archive makes).* :: ErrorCode::description: OpenAPI prose for developers, English by decision (D-3d)
 exact :: edge.rs :: text/plain :: a media-type prefix compared with the framework's own rejection responses (japanese-final-handoff T2); no person reads it
+
+# --- the delivery routes (RFC 008)
+exact :: api.rs :: DELETE :: an HTTP method name in the route table
+re :: deliveries.rs :: ^(no_main|unadopted_key|not_a_successor|older_or_diverged|unrelated|branch_missing|nothing_to_deliver|damaged_archive|moved|exchange_failed|verify_failed|publication_trust|timed_out|ceiling|unavailable|repository_gone|acceptable|refused)$ :: a stable machine-readable word of the delivery's report or failure (the words a person reads are catalog messages)
+exact :: deliveries.rs :: ref :: the name of a catalog placeholder
+re :: deliveries.rs :: ^(limit|limit_bytes|forbidden|content_type|too_short|magic|metadata_too_long|no_archive|truncated|length|metadata|delivery-stage|delivery-confirm)$ :: a JSON field name, a stable machine-readable framing reason, or the label of a gated job (a log word); never shown as text
+exact :: deliveries.rs :: application/octet-stream :: a media type
+exact :: deliveries.rs :: application/json :: a media type
+exact :: deliveries.rs :: no-store :: a cache directive
+re :: errors.rs :: ^(delivery_busy|delivery_not_confirmable)$ :: a stable machine-readable error code (RFC 008)
+re :: errors.rs :: ^(another delivery to the repository is in flight|the delivery cannot be confirmed in its present state) :: the OpenAPI description of an error code (developer-facing, English by decision)
+re :: deliveries.rs :: ^(name|date)$ :: the name of a catalog placeholder

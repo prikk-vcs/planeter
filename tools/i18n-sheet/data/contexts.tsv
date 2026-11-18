@@ -62,6 +62,7 @@ web	unhide.*	B	Comments	showing a hidden comment again
 web	new.*	B	Creating a repository	the form that creates a repository (empty, or from an archive)
 web	title.new	B	Creating a repository	the browser title of the creation form
 web	stage.*	B	Creating a repository	the screen that shows what an uploaded archive holds
+web	delivery.*	B	Delivering to a repository	what the API says of a delivery of a maintainer's archive: its state, why it was refused, what to do next
 web	title.stage	B	Creating a repository	the browser title of that screen
 web	created.*	B	Creating a repository	the page after a repository was created
 web	title.created	B	Creating a repository	the browser title of that page

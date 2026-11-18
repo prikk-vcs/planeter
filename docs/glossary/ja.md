@@ -34,6 +34,7 @@ says the same for every count; numbers group with commas (`1,200`).
 | request changes | 変更を依頼する | yes | The other decision (`decision.form.request_changes`). Here 変更 is the ordinary word for *a change to the work*, not the glossary's *change* (a recorded unit of history). Alternative: 修正を依頼する. | Hard term — reviewers decide |
 | hide (a comment) | 非表示にする | yes | `hide.*`, `comment.hidden`; the opposite is 再表示する (`unhide.*`). | Proposed |
 | archive | アーカイブ | yes | The usual loan word for one file that holds a whole repository (`new.import.*`, `stage.*`). | Hard term — reviewers decide |
+| deliver / delivery (an archive of a maintainer's repository, to replace the project's branch) | 引き渡す / 引き渡し | yes | What a maintainer does with the archive of their repository when it continues the project's branch (RFC 008; `delivery.*`, `error.delivery_*`, `repo.delivered_by`). The plain word for handing something over; *landing* is not used (it is the proposals' 反映済み) and neither are 配信 (publishing) nor 納品. Alternatives: 送付, 提出. Counted with 回 where counted. | Hard term — reviewers decide |
 | maintainer key | メンテナーの鍵 | yes | `stage.keys.*`; メンテナー as in the existing sentences. | Proposed |
 | fingerprint | フィンガープリント | yes | The usual loan word for what is compared to know a key (`stage.key.*`). Alternative: 指紋 (unusual in software). | Hard term — reviewers decide |
 | trust (a key) | 鍵を信頼する | yes | Plain: 信頼する / 信頼しない (`stage.key.skip`, `created.trusted`). prikk's *adopt* is not shown. | Hard term — reviewers decide |
