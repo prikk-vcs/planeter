@@ -3,6 +3,21 @@
 Releases are bare version tags; each section is the release's notes (assembled into the GitHub
 release by `release.yml`). Kept by hand, per release, so nothing here goes stale by templating.
 
+## [Unreleased]
+
+- **The prikk floor moves to 0.58.0 (D-97, ledger PK-85).** Why: `prikk sync accept` reads the artifact object by object instead of holding it whole, so its memory follows the
+  largest object and not the artifact (measured on 0.58.0: a single blob of 10 to 250 MiB, random or compressible, holds **4.0 ×** its size, 1,000 MiB for 250 MiB in six runs, against
+  7.0 × on 0.57.0; artifacts of 10 MiB or more made of many files or patches 0.01 to 0.2 ×), and it takes **4 fsyncs a patch instead of 10** (4.02 against 10.03 on a 1,000-patch accept; 4.01 against
+  10.01 on 10,000); the wall time of an accept per patch did not change on the machine it was measured on (about 19 ms a patch for 1,000 patches on both, so no speed is claimed).
+  `sync seal`, the maintainer's side, reads 21 to 23 KB a claim instead of growing with the history: 1,000 claims took 104 s and read 23 MB (0.57.0: 139 s and 5.5 GB), 10,000 claims
+  took 670 s on a quiet machine and read 233 MB with a peak data segment of 184 MiB. An import records the history it confirmed, so the changes view of a repository **created from
+  an archive on 0.58.0** is no longer "provisional" and its page no longer says that no earlier check of the history was available (a repository that was created on 0.57.0 stays provisional: measured). **What the operator sees:** the memory an accept is admitted at is now `10 MiB + 4.5 × the artifact + 1.5 KiB × the object bound` (was 7.0 × and 2 KiB),
+  so the default 100 MiB bound needs about 0.46 GiB of the memory budget (0.7 GiB) and a **3 GiB host now admits it** (a 2 GiB host still does not); a 4 GiB host admits artifacts up to 195 MiB
+  (125 MiB); a bound raised to 256 MiB needs about 1.14 GiB (1.8 GiB), a host of about 6 GiB. The cost of a read (`log`, `show`, `tree`, `cat`, `verify`, `extract`) and of a creation or a
+  delivery is unchanged: all 77 read-cost rows were measured again on 0.58.0 and none moved by more than 5 %. **Upgrading:** install prikk 0.58.0 or later (the container image carries it);
+  a server on prikk 0.57.0 refuses to start with `unsupported prikk version 0.57.0; planeter requires >= 0.58.0`, and `planeter-client` stops with its own message. Nothing else changes: no setting,
+  no database table, no repository format (new repositories are format 8 as before).
+
 ## [0.7.0] — 2026-11-18 — the file-by-file view of a proposal, and the gate tools pinned
 
 0.7.0 adds the **file-by-file view of a proposal's revision** (RFC 005 part 6): a page that lists the files a revision changes, a page for each file's diff, and two API routes that give the same answers as data. The files are rebuilt by prikk from the patches the server holds; nothing in the view is signed. It also pins the two tools that gate every push and every release. The prikk floor stays **0.57.0** and the minimum compiler **1.89.0**; it adds no setting, changes no default, no database table and no repository format.
