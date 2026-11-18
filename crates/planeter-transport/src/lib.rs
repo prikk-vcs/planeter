@@ -35,7 +35,7 @@ pub use export::{
 pub use metrics::{CacheStatus, FetchRecord, Metrics, Outcome, ProposeOutcome, ProposeRecord};
 pub use planeter_prikk::findings::{ArchiveFindings, FoundKey, FoundRef};
 pub use proposals::{
-    DETAIL_PATCH_LIMIT, Detail, LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX, OBSERVATION_BLOCKS_DEFAULT,
+    DETAIL_PATCH_LIMIT, Detail, FOLLOWED_REF, LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX, OBSERVATION_BLOCKS_DEFAULT,
     OBSERVATION_BLOCKS_MAX, OBSERVATION_BLOCKS_MIN, Page, PatchEntry, ProposalConfig,
     ProposalError, ProposalService, REASON_MAX_CHARS, Retention, RevisionView, StateFilter,
     Summary, SweepReport, observation_blocks_from, record_digest,

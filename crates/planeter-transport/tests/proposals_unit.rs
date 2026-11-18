@@ -444,6 +444,27 @@ fn a_proposal_lands_when_every_patch_is_in_a_published_block_even_if_pending_sti
     );
 }
 
+/// RFC 008 D-6: only the blocks of `heads/main` make a patch landed. A published extra branch (a delivery may add one) holds the
+/// patch, and the proposal stays open; the same patch in `heads/main` lands it.
+#[test]
+fn a_patch_in_an_extra_published_branch_does_not_land_a_proposal_only_heads_main_does() {
+    let f = Fixture::new("extra-branch", now, 200);
+    let (a, b) = (pid(1), pid(2));
+    f.propose("both", "alice", &[a.clone(), b.clone()], 101);
+    f.pending(&[a.clone(), b.clone()]);
+    f.say(
+        "branches.json",
+        r#"{"schema_version":"branch-list-v1","branches":[{"ref_name":"heads/main","ref_state_id":"aa","closed":false,"current":true},{"ref_name":"heads/dev","ref_state_id":"cc","closed":false,"current":false}],"received":[],"unpublished_current_branch":null}"#,
+    );
+    f.log("heads/main", &[]);
+    f.log("heads/dev", &[a.clone(), b.clone()]);
+    assert_eq!(f.list(StateFilter::Landed), Vec::<&str>::new());
+    assert_eq!(f.state_of("both"), ChangeState::Open);
+    f.move_state();
+    f.log("heads/main", &[a.clone(), b.clone()]);
+    assert_eq!(f.list(StateFilter::Landed), vec!["both"]);
+}
+
 /// D-40: a block of a received ref is not evidence. It lands nothing, it shows as a sighting, and the patch stays held.
 #[test]
 fn a_patch_in_a_block_of_a_received_ref_does_not_land_the_proposal_and_is_a_sighting() {

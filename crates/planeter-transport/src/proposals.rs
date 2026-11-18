@@ -40,6 +40,9 @@ use crate::export::ExportService;
 use crate::metrics::Metrics;
 
 /// The default and the largest page of the list (bounded: RFC 005 T2).
+/// The one ref whose blocks make a patch *landed* (RFC 008 D-6). The delivery report counts landing against the same constant.
+pub const FOLLOWED_REF: &str = "heads/main";
+
 pub const LIST_LIMIT_DEFAULT: usize = 50;
 pub const LIST_LIMIT_MAX: usize = 100;
 /// The most patches the detail lists (a proposal cannot make the page unbounded); `truncated` says when there are more.
@@ -437,8 +440,8 @@ impl ProposalService {
         Ok(refs)
     }
 
-    /// The patch ids in every block `log` lists for a **published** ref (D-40): read once per observation, and only when
-    /// somebody needs it. Closed branches are published refs too.
+    /// The patch ids in every block `log` lists for the **followed** ref, [`FOLLOWED_REF`] (D-40, RFC 008 D-6): read once per
+    /// observation, and only when somebody needs it.
     fn sealed(
         &self,
         record: &RepositoryRecord,
@@ -457,7 +460,9 @@ impl ProposalService {
             ids: BTreeSet::new(),
             truncated: false,
         };
-        for b in &refs.branches {
+        // RFC 008 D-6: a patch has *landed* when a block of the followed ref holds it, and of no other branch (a delivered extra
+        // branch is published, but it is not the project's line).
+        for b in refs.branches.iter().filter(|b| b.ref_name == FOLLOWED_REF) {
             let (ids, truncated) =
                 Self::patch_ids_of(&driver, &b.ref_name, self.config.observation_blocks)?;
             found.ids.extend(ids);
