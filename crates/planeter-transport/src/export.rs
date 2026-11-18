@@ -401,6 +401,15 @@ impl ExportService {
         Ok(fingerprint(revision, &files))
     }
 
+    /// Forget what is cached of `repo` (its listing): after a delivery replaced the repository's directory (RFC 008 D-7). The
+    /// fingerprint moved already (the revision counter), so a stale entry could not be served; this only frees it.
+    pub fn forget_listing(&self, repo: &planeter_store::RepoId) {
+        self.listings
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .remove(repo.as_str());
+    }
+
     /// Record that a write to the repository has **completed**: bumps its revision counter, which changes the
     /// fingerprint, so the next fetch exports again. The caller must hold the repository's **W lease** (passed as
     /// proof; any other lease is a programming error and panics), and calls this before releasing it.

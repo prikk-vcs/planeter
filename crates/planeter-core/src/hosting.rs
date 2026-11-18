@@ -384,6 +384,12 @@ impl HostingService {
             .with_limits(limits)
     }
 
+    /// The directory all hosted repositories live under (the delivery engine keeps its stages beside them, on the same
+    /// filesystem, so that a stage can replace a repository by renaming).
+    pub fn repos_root(&self) -> &std::path::Path {
+        self.layout.repos_root()
+    }
+
     /// The sandbox policy every prikk call of this service runs under.
     pub fn sandbox(&self) -> &planeter_prikk::Sandbox {
         &self.sandbox

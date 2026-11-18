@@ -119,6 +119,9 @@ pub struct Snapshot {
     /// The review view (RFC 005 part 6): one count per outcome (`ok`, `not_one_change`, `tree_too_large`, `busy`, `timeout`, `claim_not_held`,
     /// `failed`), `cache_hit` and `extractions` (the pairs of extractions made). No file name, path or content is ever counted or logged.
     pub changes: BTreeMap<String, u64>,
+    /// Deliveries (RFC 008): one count per outcome (`accepted_reports`, each refusal reason, `confirmed`, `done`, `failed`, `abandoned`,
+    /// `recovered`, `exchange_window`). No file, branch or key name is ever counted or logged.
+    pub deliveries: BTreeMap<String, u64>,
 }
 
 impl Snapshot {
@@ -275,6 +278,11 @@ impl Metrics {
     /// One answer of the review view, by outcome (or `cache_hit`, `extractions`).
     pub fn changes(&self, outcome: &str) {
         self.with(|m| *m.changes.entry(outcome.to_owned()).or_insert(0) += 1);
+    }
+
+    /// One outcome of the delivery engine (see [`Snapshot::deliveries`]).
+    pub fn delivery(&self, outcome: &str) {
+        self.with(|m| *m.deliveries.entry(outcome.to_owned()).or_insert(0) += 1);
     }
 
     /// One failed read of the received logs; returns the count since start.

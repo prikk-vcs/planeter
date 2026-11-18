@@ -36,14 +36,16 @@ use planeter_store::{ChangeStore, IntentRecord, RecoveryStore, RepoId, Repositor
 use crate::export::ExportService;
 use crate::metrics::Metrics;
 
-/// The flag causes that are ours (`ProposeService::incomplete` writes the first five, `reconcile_at_start` the last).
-pub const OUR_CAUSES: [&str; 6] = [
+/// The flag causes that are ours (`ProposeService::incomplete` writes the first five, `reconcile_at_start` the sixth, the delivery
+/// engine the last: an install that stopped between its exchange and its end, RFC 008).
+pub const OUR_CAUSES: [&str; 7] = [
     "accept_deadline",
     "accept_ceiling",
     "accept_failed",
     "accept_unreadable",
     "accept_not_recorded",
     "server_stopped",
+    "delivery_unfinished",
 ];
 
 /// The kinds of lock an accept leaves behind. A lock of any other kind is evidence we do not have.

@@ -58,6 +58,12 @@ pub struct LogBlock {
     pub required_attestation_count: u64,
     pub patch_messages: Vec<PatchMessage>,
     pub previous_ref_state_id: Option<String>,
+    /// The key ids that sealed this block (RFC 008: the stage's rule reads the tip's sealers). Empty when the report has none.
+    #[serde(default)]
+    pub sealed_by: Vec<String>,
+    /// The blocks this one continues. Empty when the report has none.
+    #[serde(default)]
+    pub parent_block_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
@@ -145,6 +151,20 @@ pub struct VerifyReport {
     /// no such array (`default`: empty). **Recorded, not shown**: the verification page's verdict stays `verdict.ok`.
     #[serde(default)]
     pub unreached_objects: Vec<UnreachedObject>,
+    /// RFC 008: who sealed each block (`block_seals`) and the publication-trust findings, as `verify --format json` prints them.
+    /// Empty when the report has none.
+    #[serde(default)]
+    pub block_seals: Vec<BlockSeal>,
+    #[serde(default)]
+    pub publication_trust_issues: Vec<serde_json::Value>,
+}
+
+/// One block and the keys that sealed it (`verify --format json`).
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+pub struct BlockSeal {
+    pub block_id: String,
+    #[serde(default)]
+    pub sealed_by: Vec<String>,
 }
 
 impl VerifyReport {
