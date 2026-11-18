@@ -1962,7 +1962,8 @@ awk -v n={blocks} -v limit=$limit 'BEGIN {{
     #[test]
     fn a_chain_longer_than_any_fixed_limit_is_read_whole() {
         let script = standin("six-thousand", 6000);
-        let driver = CliPrikkRepo::with_binary(script.parent().unwrap(), script.clone());
+        let driver = CliPrikkRepo::with_binary(script.parent().unwrap(), script.clone())
+            .with_sandbox(Sandbox::Unconfined);
         let chain = read_chain(&driver, "heads/main").unwrap().expect("bounded");
         assert_eq!(chain.facts.blocks.len(), 6000, "not cut at a fixed 5,000");
         assert_eq!(chain.facts.tip(), Some("b6000"));
@@ -1977,7 +1978,8 @@ awk -v n={blocks} -v limit=$limit 'BEGIN {{
         // more blocks than the engine reads at all
         let blocks = u64::try_from(CHAIN_BLOCKS_MAX).unwrap() + 1;
         let script = standin("unbounded", blocks);
-        let driver = CliPrikkRepo::with_binary(script.parent().unwrap(), script.clone());
+        let driver = CliPrikkRepo::with_binary(script.parent().unwrap(), script.clone())
+            .with_sandbox(Sandbox::Unconfined);
         assert!(read_chain(&driver, "heads/main").unwrap().is_none());
         let _ = fs::remove_dir_all(script.parent().unwrap());
     }
