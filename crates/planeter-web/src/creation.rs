@@ -333,14 +333,14 @@ fn admit_fail(e: AdmitError) -> Fail {
     }
 }
 
-fn retry_after(mut resp: Response, secs: u64) -> Response {
+pub(crate) fn retry_after(mut resp: Response, secs: u64) -> Response {
     if let Ok(v) = HeaderValue::from_str(&secs.max(1).to_string()) {
         resp.headers_mut().insert(header::RETRY_AFTER, v);
     }
     resp
 }
 
-fn detail(
+pub(crate) fn detail(
     state: &AppState,
     code: ErrorCode,
     keys: ErrorKeys,
@@ -826,13 +826,13 @@ pub(crate) async fn create_handler(
 }
 
 /// The first bytes of an archive creation's body.
-const MAGIC: &[u8] = b"PLANETER-IMPORT-1\n";
+pub(crate) const MAGIC: &[u8] = b"PLANETER-IMPORT-1\n";
 /// The magic and the 8-byte big-endian metadata length.
-const PREFIX_LEN: u64 = MAGIC.len() as u64 + 8;
+pub(crate) const PREFIX_LEN: u64 = MAGIC.len() as u64 + 8;
 /// The most metadata an archive creation carries.
-const METADATA_MAX: u64 = 64 * 1024;
+pub(crate) const METADATA_MAX: u64 = 64 * 1024;
 
-fn bad_framing(state: &AppState, reason: &'static str) -> Response {
+pub(crate) fn bad_framing(state: &AppState, reason: &'static str) -> Response {
     detail(
         state,
         ErrorCode::InvalidRequest,

@@ -708,6 +708,7 @@ struct RepoTpl {
     files: Vec<FileRow>,
     ref_query: String,
     readme_html: Option<String>,
+    delivered: Option<crate::deliveries::DeliveredBlock>,
 }
 #[derive(Template)]
 #[template(path = "tree.html")]
@@ -770,6 +771,7 @@ struct HistoryTpl {
     assurance_label: Key,
     explain: Vec<ExplainRow>,
     entries: Vec<HistoryRow>,
+    delivered: Option<crate::deliveries::DeliveredBlock>,
 }
 struct OpRow {
     kind: String,
@@ -1492,6 +1494,8 @@ async fn repo_home(
     let readme_html = readme.map(|raw| render_markdown(&String::from_utf8_lossy(&raw.bytes)));
     let (dirs, files) = listing(&tree.entries, "");
     let (proposals_nav, open_proposals) = proposal_pages::nav_for(&state, &c, &owner, &name).await;
+    let delivered =
+        crate::deliveries::delivered_block(&state, &c.principal, &owner, &name, &c.t).await;
     render(
         &state,
         StatusCode::OK,
@@ -1513,6 +1517,7 @@ async fn repo_home(
             files,
             ref_query: ref_query(r),
             readme_html,
+            delivered,
         },
         &c,
     )
@@ -1722,6 +1727,8 @@ async fn history_page(
         });
     }
     let (proposals_nav, _) = proposal_pages::nav_for(&state, &c, &owner, &name).await;
+    let delivered =
+        crate::deliveries::delivered_block(&state, &c.principal, &owner, &name, &c.t).await;
     render(
         &state,
         StatusCode::OK,
@@ -1738,6 +1745,7 @@ async fn history_page(
             assurance_label: al,
             explain,
             entries,
+            delivered,
         },
         &c,
     )

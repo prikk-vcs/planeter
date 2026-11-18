@@ -571,6 +571,20 @@ impl ReadService {
             .map(|(record, _)| record)
     }
 
+    /// The record of a repository the principal may **deliver to** (`MergeSeal`: RFC 008 D-9), by the same rules as
+    /// [`ReadService::propose_access`] and [`ReadService::admin_access`]: the read gate first (`NotFound` for a stranger, one answer for
+    /// a hidden and an absent repository), then the action (`NotPermitted` for a reader who may not, and for a credential whose scope
+    /// is capped below it).
+    pub fn merge_access(
+        &self,
+        principal: &Principal,
+        owner: &Owner,
+        name: &str,
+    ) -> std::result::Result<RepositoryRecord, ProposeAccess> {
+        self.action_access(Action::MergeSeal, principal, owner, name)
+            .map(|(record, _)| record)
+    }
+
     /// Whether the principal may do `action` in the repository `record` — a record the **caller has already obtained through
     /// the read gate**. `Close`, `Review` and `Comment` are decided on the repository's items, the others on the repository.
     /// A credential's own ceiling (its scope: the class of access, the repositories, the expiry) applies as everywhere

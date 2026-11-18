@@ -51,6 +51,8 @@ pub struct TransportRuntime {
     pub reviews: Option<Arc<planeter_transport::ReviewService>>,
     /// The file-by-file view of a revision (RFC 005 part 6), when the write side is on; `None` otherwise.
     pub changes: Option<Arc<planeter_transport::ChangesService>>,
+    /// Landing by delivery (RFC 008), on exactly when the write side is; `None` otherwise.
+    pub deliveries: Option<Arc<planeter_transport::DeliveryService>>,
     pub ip_limit: RateLimiter,
     pub principal_limit: RateLimiter,
 }
@@ -1485,6 +1487,7 @@ fn cause_key(code: &str) -> crate::catalog::Key {
         "accept_unreadable" => Key::RecoveryCauseAcceptUnreadable,
         "accept_not_recorded" => Key::RecoveryCauseAcceptNotRecorded,
         "server_stopped" => Key::RecoveryCauseServerStopped,
+        "delivery_unfinished" => Key::RecoveryCauseDeliveryUnfinished,
         _ => Key::RecoveryCauseOther,
     }
 }

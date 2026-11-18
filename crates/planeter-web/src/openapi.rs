@@ -231,8 +231,10 @@ fn schemas() -> Value {
             "closed": {"type": "boolean"}, "current": {"type": "boolean"}
         })),
         "Tag": obj(&["ref_name", "target_block_id"], json!({"ref_name": string_prop(), "target_block_id": string_prop()})),
-        "RefsView": obj(&["current_branch", "branches", "tags"], json!({
-            "current_branch": nullable_string(), "branches": array_of("Branch"), "tags": array_of("Tag")
+        "RefsView": obj(&["current_branch", "branches", "tags", "followed_ref", "last_delivery"], json!({
+            "current_branch": nullable_string(), "branches": array_of("Branch"), "tags": array_of("Tag"),
+            "followed_ref": {"type": "string", "description": "The project's branch: the one ref whose blocks make a proposal landed (RFC 008). Always `heads/main` in this version."},
+            "last_delivery": {"nullable": true, "allOf": [{"$ref": "#/components/schemas/LastDelivery"}], "description": "The last finished delivery of this repository; null when it has had none."}
         })),
         "Offer": obj(&["kind", "ref", "size", "etag"], json!({
             "kind": {"type": "string", "enum": ["bundle", "archive", "have"]},
@@ -296,6 +298,9 @@ fn schemas() -> Value {
         all.extend(more.clone());
     }
     if let (Some(all), Some(more)) = (all.as_object_mut(), creation_schemas().as_object()) {
+        all.extend(more.clone());
+    }
+    if let (Some(all), Some(more)) = (all.as_object_mut(), delivery_schemas().as_object()) {
         all.extend(more.clone());
     }
     if let (Some(all), Some(more)) = (all.as_object_mut(), proposal_schemas().as_object()) {
@@ -870,10 +875,151 @@ fn creation_paths(paths_obj: &mut serde_json::Map<String, Value>) {
 }
 
 /// The recovery schemas (RFC 004 part 4), in two parts so that no one `json!` is too deep for the compiler.
+/// The delivery schemas (RFC 008).
+fn delivery_schemas() -> Value {
+    json!({
+        "LastDelivery": obj(&["delivered_at", "delivered_by", "old_tip", "new_tip", "trusted_keys"], json!({
+            "trusted_keys": {"type": "array", "items": {"$ref": "#/components/schemas/DeliveryKey"}, "description": "The keys this repository trusted when the delivery was checked."},
+            "delivered_at": {"type": "integer", "minimum": 0, "description": "Unix seconds."},
+            "delivered_by": {"type": "string", "description": "The display name of whoever delivered (the account id when they have none)."},
+            "old_tip": nullable_string(), "new_tip": nullable_string()
+        })),
+        "DeliveryProposal": obj(&["id", "title"], json!({"id": string_prop(), "title": string_prop()})),
+        "DeliveryKey": obj(&["key_id", "fingerprint"], json!({"key_id": string_prop(), "fingerprint": string_prop()})),
+        "DeliveryReport": obj(&["verdict", "reason", "reason_ref", "old_tip", "new_tip", "new_blocks", "refs_added", "proposals_stay", "proposals_land", "proposals_cannot_be_kept", "trusted_keys", "archive_bytes"], json!({
+            "verdict": {"type": "string", "enum": ["acceptable", "refused"]},
+            "reason": {"type": "string", "nullable": true, "enum": ["no_main", "unadopted_key", "not_a_successor", "older_or_diverged", "unrelated", "branch_missing", "nothing_to_deliver", "damaged_archive", null], "description": "Why the delivery is refused; null when it is acceptable."},
+            "reason_ref": {"type": "string", "nullable": true, "description": "The branch a `branch_missing` or `not_a_successor` refusal is about."},
+            "old_tip": {"type": "string", "nullable": true, "description": "The block at the end of the project's branch now."},
+            "new_tip": {"type": "string", "nullable": true, "description": "The block at the end of the project's branch in the delivery."},
+            "new_blocks": {"type": "integer", "minimum": 0, "description": "The blocks of the delivery's branches that this repository does not have."},
+            "refs_added": {"type": "array", "items": {"type": "string"}, "description": "The branches the delivery adds."},
+            "proposals_stay": array_of("DeliveryProposal"),
+            "proposals_land": {"type": "array", "items": {"$ref": "#/components/schemas/DeliveryProposal"}, "description": "Open proposals whose every patch is in the delivered project branch."},
+            "proposals_cannot_be_kept": {"type": "array", "items": {"$ref": "#/components/schemas/DeliveryProposal"}, "description": "Open proposals with a revision whose files were removed: they stay readable, their changes can no longer be shown."},
+            "trusted_keys": array_of("DeliveryKey"),
+            "archive_bytes": {"type": "integer", "minimum": 0}
+        })),
+        "DeliveryFailure": obj(&["reason"], json!({"reason": {"type": "string", "enum": ["no_main", "unadopted_key", "not_a_successor", "older_or_diverged", "unrelated", "branch_missing", "nothing_to_deliver", "damaged_archive", "moved", "exchange_failed", "verify_failed", "publication_trust", "timed_out", "ceiling", "unavailable", "repository_gone"]}})),
+        "DeliveryView": obj(&["id", "state", "started_at", "updated_at", "report", "failure", "needs_recovery", "message", "hint"], json!({
+            "id": string_prop(),
+            "state": {"type": "string", "enum": ["staged", "reported", "confirmed", "exchanged", "reaccepting", "done", "failed", "abandoned", "expired"], "description": "`reported` is a delivery that was checked and is acceptable, waiting for its confirmation; a refused one is `failed`."},
+            "started_at": {"type": "integer", "minimum": 0}, "updated_at": {"type": "integer", "minimum": 0},
+            "report": {"nullable": true, "allOf": [{"$ref": "#/components/schemas/DeliveryReport"}]},
+            "failure": {"nullable": true, "allOf": [{"$ref": "#/components/schemas/DeliveryFailure"}]},
+            "needs_recovery": {"type": "boolean", "description": "The server stopped while carrying it out; it is finished by itself (or by a recovery run)."},
+            "message": {"type": "string", "description": "What the state means, in plain words, in the negotiated language. An acceptable report says: delivering replaces the branch and nothing is signed by this server."},
+            "hint": {"type": "string", "description": "What to do next."}
+        }))
+    })
+}
+
+fn delivery_paths(paths_obj: &mut serde_json::Map<String, Value>) {
+    let id_param = param(
+        "id",
+        "path",
+        true,
+        "The delivery's id (from the response that started it).",
+        json!({"type": "string"}),
+    );
+    let mut with_id = owner_name();
+    with_id.push(id_param);
+    let bearer = json!([{"bearerToken": []}]);
+    paths_obj.insert(
+        paths::DELIVERIES.into(),
+        with_errors(
+            json!({"post": {
+                "operationId": "postDelivery",
+                "summary": "Deliver an archive of the repository (step 1 of 2: check it)",
+                "description": "**Bearer token only; `MergeSeal` on the repository** (a maintainer or an administrator, and a token whose scope is `full`: a `read-only` or `write` token is refused with `403`). The body is the archive of a repository (`prikk archive export`) in **the framing of the import**: `PLANETER-IMPORT-1\\n`, an 8-byte big-endian metadata length, the metadata (`{}`), then the archive. The size bound is the import's (`PLANETER_IMPORT_MAX_MB`), checked with the rest before a byte of the archive is read. The archive is checked in a scratch repository that trusts **only the keys this repository already trusts** (never a key the archive carries), and accepted only if it continues every branch of this repository, deletes none, holds nothing signed by another key, and changes at least one branch. **Nothing is changed by this call**; the answer is the delivery with its report. A refused report is `201` with `report.verdict: refused` (the question was answered); `202` when the check takes longer than 25 seconds (poll the delivery). One delivery in flight per repository (`409`), at most 2 per person.",
+                "parameters": owner_name(),
+                "security": bearer.clone(),
+                "requestBody": {"required": true, "content": {"application/octet-stream": {"schema": {"type": "string", "format": "binary"}}}},
+                "responses": {
+                    "201": {"description": "The delivery, checked.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DeliveryView"}}}},
+                    "202": {"description": "Still being checked: look at the delivery again.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DeliveryView"}}}}
+                },
+            }}),
+            &[
+                ErrorCode::Forbidden,
+                ErrorCode::RateLimited,
+                ErrorCode::Busy,
+                ErrorCode::TransportOff,
+                ErrorCode::LengthRequired,
+                ErrorCode::PayloadTooLarge,
+                ErrorCode::StageLimit,
+                ErrorCode::DeliveryBusy,
+                ErrorCode::NeedsRecovery,
+                ErrorCode::TooLarge,
+            ],
+        ),
+    );
+    // One path with two methods: each gets its own errors, and the `Allow` header says what the route takes.
+    let one_errors = [
+        ErrorCode::Forbidden,
+        ErrorCode::RateLimited,
+        ErrorCode::TransportOff,
+        ErrorCode::DeliveryNotConfirmable,
+    ];
+    let mut one = serde_json::Map::new();
+    for op in [
+        json!({"get": {
+            "operationId": "getDelivery",
+            "summary": "A delivery, as its owner sees it",
+            "description": "**Bearer token only; `MergeSeal`.** Only the person who started a delivery sees it: anyone else, a delivery of another repository and an unknown id are the same `404`, byte for byte, as a hidden repository.",
+            "parameters": with_id.clone(),
+            "security": bearer.clone(),
+            "responses": {"200": {"description": "The delivery.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DeliveryView"}}}}},
+        }}),
+        json!({"delete": {
+            "operationId": "deleteDelivery",
+            "summary": "Give up a delivery that was checked and not carried out",
+            "description": "**Bearer token only; `MergeSeal`.** Only a delivery that is being checked or waits for its confirmation; one that is being carried out cannot be given up (`409`).",
+            "parameters": with_id.clone(),
+            "security": bearer.clone(),
+            "responses": {"204": {"description": "Given up."}},
+        }}),
+    ] {
+        let mut op = with_errors(op, &one_errors);
+        for (_, v) in op.as_object_mut().into_iter().flatten() {
+            v["responses"]["405"]["headers"]["Allow"]["description"] =
+                json!("The methods this route supports: `GET` and `DELETE`.");
+        }
+        one.extend(op.as_object().cloned().unwrap_or_default());
+    }
+    paths_obj.insert(paths::DELIVERY.into(), Value::Object(one));
+    paths_obj.insert(
+        paths::DELIVERY_CONFIRM.into(),
+        with_errors(
+            json!({"post": {
+                "operationId": "postDeliveryConfirm",
+                "summary": "Carry a checked delivery out (step 2 of 2)",
+                "description": "**Bearer token only; `MergeSeal`**, by the person who started it, only for a delivery that is `reported` and acceptable, within its day. The work runs **detached from the request**: a dropped connection does not stop it. Under the repository's write lease the server checks again that the repository is as the report saw it, puts the new repository in place, puts every open proposal's files back on it, checks it, and finishes. The request waits up to 25 seconds: `200` with the delivery (`done`, or `failed` with its reason: the request worked, the delivery did not), or `202` with the delivery as it stands (`reaccepting`, or `needs_recovery: true` when the server stopped; poll `GET`). `409` `delivery_busy` leaves the delivery `reported` (confirm again).",
+                "parameters": with_id,
+                "security": bearer,
+                "responses": {
+                    "200": {"description": "The delivery.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DeliveryView"}}}},
+                    "202": {"description": "Still being carried out.", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/DeliveryView"}}}}
+                },
+            }}),
+            &[
+                ErrorCode::Forbidden,
+                ErrorCode::RateLimited,
+                ErrorCode::Busy,
+                ErrorCode::TransportOff,
+                ErrorCode::StageExpired,
+                ErrorCode::DeliveryBusy,
+                ErrorCode::DeliveryNotConfirmable,
+                ErrorCode::NeedsRecovery,
+            ],
+        ),
+    );
+}
+
 fn recovery_schemas() -> Value {
     let mut a = json!({
         "RecoveryCause": obj(&["code", "text"], json!({
-            "code": {"type": "string", "enum": ["accept_deadline", "accept_ceiling", "accept_failed", "accept_unreadable", "accept_not_recorded", "server_stopped", "other"]},
+            "code": {"type": "string", "enum": ["accept_deadline", "accept_ceiling", "accept_failed", "accept_unreadable", "accept_not_recorded", "server_stopped", "delivery_unfinished", "other"]},
             "text": string_prop()
         })),
         "RecoveryHolder": obj(&["holder_id", "class", "operation", "since_unix", "dead"], json!({
@@ -1324,6 +1470,7 @@ pub fn document(content_origin: &str) -> Value {
     paths_obj.insert(paths::RECOVERY.into(), recovery);
     proposal_paths(&mut paths_obj);
     creation_paths(&mut paths_obj);
+    delivery_paths(&mut paths_obj);
     paths_obj.insert(
         paths::OPENAPI.into(),
         json!({"get": {

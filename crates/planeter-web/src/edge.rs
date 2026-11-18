@@ -35,7 +35,15 @@ pub fn has_own_body_limit(method: &Method, path: &str) -> bool {
     *method == Method::POST
         && (path.ends_with("/transport/propose")
             || path == "/api/v1/repos/import"
-            || path == "/new/import")
+            || path == "/new/import"
+            || is_delivery_upload(path))
+}
+
+/// `/api/v1/repos/{owner}/{name}/deliveries`: the archive of a delivery, bounded by its own handler like creation's import.
+fn is_delivery_upload(path: &str) -> bool {
+    path.strip_prefix("/api/v1/repos/")
+        .and_then(|rest| rest.strip_suffix("/deliveries"))
+        .is_some_and(|mid| mid.split('/').count() == 2 && mid.split('/').all(|s| !s.is_empty()))
 }
 
 fn carries_a_body(method: &Method) -> bool {

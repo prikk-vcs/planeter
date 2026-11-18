@@ -269,7 +269,7 @@ async fn main() {
     // RFC 004 part 7: creating a repository. **The start-up sweep runs first of everything that reads the repositories or the
     // lease records**: a server that was killed while it was creating a repository left a `creating` record, perhaps a
     // directory, a grant and a lease record, and all of it is removed (and logged) before any of it is looked at.
-    let (creation_runtime, import_bound) = {
+    let (creation_runtime, import_bound, creation_cfg) = {
         let stage_store: Arc<dyn planeter_store::StageStore> =
             match planeter_store::SqliteStageStore::new(db.clone()) {
                 Ok(s) => Arc::new(s),
@@ -374,12 +374,14 @@ async fn main() {
                 ),
             }),
             bound,
+            cfg,
         )
     };
 
     // The configured size and object bounds of an accept (for the start-up message about the memory budget).
     let mut propose_cost: Option<(u64, u64)> = None;
     let mut recovery_service: Option<Arc<planeter_transport::RecoveryService>> = None;
+    let mut deliveries_service: Option<Arc<planeter_transport::DeliveryService>> = None;
     let mut proposals_service: Option<Arc<planeter_transport::ProposalService>> = None;
     let mut reviews_service: Option<Arc<planeter_transport::ReviewService>> = None;
     let mut changes_service: Option<Arc<planeter_transport::ChangesService>> = None;
@@ -612,16 +614,104 @@ async fn main() {
                         hosting.clone(),
                         artifacts.clone(),
                         leases.clone(),
-                        changes,
+                        changes.clone(),
                         export.clone(),
-                        pcfg,
-                        metrics,
+                        pcfg.clone(),
+                        metrics.clone(),
                     );
                     if unattended {
                         service = service.with_recovery(recovery.clone());
                     }
                     // A server that was killed in the middle of a write comes back with the repository flagged ...
                     service.reconcile_at_start();
+                    // RFC 008: landing by delivery, on exactly when proposals are (it re-accepts their retained files). A server that
+                    // was killed in the middle of one comes back with it finished (or its stage discarded) before the first request.
+                    let delivery_store: Arc<dyn planeter_store::DeliveryStore> =
+                        match planeter_store::SqliteDeliveryStore::new(db.clone()) {
+                            Ok(d) => Arc::new(d),
+                            Err(e) => {
+                                eprintln!("planeter: cannot initialise the delivery records: {e}");
+                                exit_releasing_lock(1);
+                            }
+                        };
+                    let dcfg = planeter_transport::DeliveryConfig {
+                        max_archive_bytes: creation_cfg.max_archive_bytes,
+                        deadline: creation_cfg.deadline,
+                        stage_ttl: creation_cfg.stage_ttl,
+                        stage_limits: creation_cfg.stage_limits,
+                        lease_wait: creation_cfg.lease_wait,
+                        max_concurrent: creation_cfg.max_concurrent,
+                        propose: pcfg.clone(),
+                        request_wait: std::time::Duration::from_secs(25),
+                    };
+                    let mut delivery = match planeter_transport::DeliveryService::new(
+                        hosting.clone(),
+                        delivery_store,
+                        changes.clone(),
+                        artifacts.clone(),
+                        export.clone(),
+                        leases.clone(),
+                        metrics.clone(),
+                        dcfg.clone(),
+                    ) {
+                        Ok(d) => d,
+                        Err(e) => {
+                            eprintln!("planeter: cannot set up deliveries: {e}");
+                            exit_releasing_lock(1);
+                        }
+                    };
+                    if unattended {
+                        delivery = delivery.with_recovery(recovery.clone());
+                    }
+                    #[cfg(debug_assertions)]
+                    if let Some(hook) = failpoint_from_env() {
+                        delivery = delivery.with_failpoint(hook);
+                    }
+                    let delivery = Arc::new(delivery);
+                    // A recovery run that clears the flag of an unfinished delivery completes the delivery (one place, the recovery's end).
+                    let completing = Arc::downgrade(&delivery);
+                    recovery.set_delivery_completion(Arc::new(move |record| {
+                        if let Some(d) = completing.upgrade()
+                            && let Err(e) = d.resume(record)
+                        {
+                            eprintln!(
+                                "planeter: delivery: not completed after a recovery run: {}",
+                                e.reason()
+                            );
+                        }
+                    }));
+                    eprintln!(
+                        "planeter: deliveries on: an archive of up to {} MiB, {} s deadline, {} MiB of staged archives, at most {} at once, one per repository; a delivery not confirmed in a day is removed",
+                        dcfg.max_archive_bytes >> 20,
+                        dcfg.deadline.as_secs(),
+                        dcfg.stage_limits.total_bytes >> 20,
+                        dcfg.stage_limits.per_principal
+                    );
+                    let at_start = delivery.reconcile_at_start();
+                    eprintln!(
+                        "planeter: start-up: {} delivery stage(s) discarded, {} confirmation(s) that had exchanged nothing abandoned, {} install(s) completed, {} left to an administrator, {} stray director(ies) removed",
+                        at_start.discarded.len(),
+                        at_start.abandoned.len(),
+                        at_start.completed.len(),
+                        at_start.left.len(),
+                        at_start.swept.len()
+                    );
+                    let sweeper = delivery.clone();
+                    if let Err(e) = std::thread::Builder::new()
+                        .name("delivery-sweep".to_owned())
+                        .spawn(move || {
+                            loop {
+                                std::thread::sleep(std::time::Duration::from_secs(3600));
+                                let n = sweeper.sweep_expired();
+                                if n > 0 {
+                                    eprintln!("planeter: removed {n} expired delivery(ies)");
+                                }
+                            }
+                        })
+                    {
+                        eprintln!("planeter: cannot start the delivery sweep: {e}");
+                    }
+                    deliveries_service = Some(delivery);
                     // ... and every flagged repository gets one unattended try, on a thread of its own so that the
                     // server is listening meanwhile (a flagged repository refuses writes and still answers reads).
                     let at_start = recovery.clone();
@@ -653,6 +743,7 @@ async fn main() {
                 proposals: proposals_service,
                 reviews: reviews_service,
                 changes: changes_service,
+                deliveries: deliveries_service,
                 ip_limit: planeter_web::RateLimiter::new(rate, std::time::Duration::from_secs(60)),
                 principal_limit: planeter_web::RateLimiter::new(
                     rate,
@@ -903,8 +994,39 @@ async fn main() {
     if !changes.is_empty() {
         eprintln!("planeter: the file-by-file view: {changes}");
     }
+    let deliveries = snapshot
+        .deliveries
+        .iter()
+        .filter(|(_, n)| **n > 0)
+        .map(|(k, n)| format!("{k}={n}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    if !deliveries.is_empty() {
+        eprintln!("planeter: deliveries: {deliveries}");
+    }
     eprintln!("planeter: stopped ({counters})");
     release_and_exit(&leases, 0);
+}
+
+/// **Debug builds only** (the release build has no such code, and the release gate looks for its name): `PLANETER_FAILPOINT=<point>=<file>`
+/// makes the delivery engine write `<file>` and then stop forever when it reaches the named point, so that a test can SIGKILL the real
+/// process exactly there (RFC 008 handoff 2, T5). The points are the engine's (`planeter_transport::delivery`, `with_failpoint`).
+#[cfg(debug_assertions)]
+type Failpoint = Arc<dyn Fn(&str) + Send + Sync>;
+
+#[cfg(debug_assertions)]
+fn failpoint_from_env() -> Option<Failpoint> {
+    let spec = std::env::var("PLANETER_FAILPOINT").ok()?;
+    let (point, file) = spec.split_once('=')?;
+    let (point, file) = (point.to_owned(), file.to_owned());
+    Some(Arc::new(move |name: &str| {
+        if name == point {
+            let _ = std::fs::write(&file, name);
+            loop {
+                std::thread::sleep(std::time::Duration::from_secs(3600));
+            }
+        }
+    }))
 }
 
 /// Remove this process's lease records and the lock file, then exit.

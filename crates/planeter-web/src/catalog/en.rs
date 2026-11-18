@@ -541,6 +541,10 @@ pub const CATALOG: &[Entry] = &[
         "The server stopped while a write was in progress.",
     ),
     msg(
+        "recovery.cause.delivery_unfinished",
+        "The server stopped while a delivery was being carried out.",
+    ),
+    msg(
         "recovery.cause.other",
         "The flag was set for a reason this server does not recognise.",
     ),
@@ -1792,4 +1796,239 @@ pub const CATALOG: &[Entry] = &[
         "page.payload_too_large.body",
         "What you sent is larger than this server accepts in one request, so nothing was done. Send less, or ask the person who runs this server.",
     ),
+    msg(
+        "error.delivery_busy.message",
+        "Another delivery to this repository is already in progress, or the repository is busy with another write.",
+    ),
+    msg(
+        "error.delivery_busy.hint",
+        "Wait a moment, then try again; if a delivery of yours is waiting to be confirmed, confirm it or cancel it first.",
+    ),
+    msg(
+        "error.delivery_not_confirmable.message",
+        "This delivery cannot be confirmed now.",
+    ),
+    msg(
+        "error.delivery_not_confirmable.hint",
+        "Look at the delivery to see where it stands, because only a delivery that was checked and accepted can be confirmed, and only once.",
+    ),
+    msg(
+        "error.forbidden_deliver.message",
+        "You may read this repository, but you may not deliver to it.",
+    ),
+    msg(
+        "error.forbidden_deliver.hint",
+        "Only a maintainer of the repository can deliver, so ask one, or use a token that is allowed to deliver.",
+    ),
+    msg(
+        "delivery.state.staged.message",
+        "Your archive is being checked.",
+    ),
+    msg(
+        "delivery.state.staged.hint",
+        "Wait a moment, then look at this delivery again.",
+    ),
+    msg(
+        "delivery.accepted.message",
+        "Delivering replaces this repository's branch {ref} with yours. It is accepted only if yours continues from the current one; nothing is signed by this server.",
+    ),
+    msg(
+        "delivery.accepted.hint",
+        "To carry it out, confirm it. To give it up, cancel it. A delivery that is not confirmed is removed after a day.",
+    ),
+    msg(
+        "delivery.state.confirmed.message",
+        "The delivery is being carried out.",
+    ),
+    msg(
+        "delivery.state.confirmed.hint",
+        "Wait a moment, then look at this delivery again. Do not send it again.",
+    ),
+    msg(
+        "delivery.state.exchanged.message",
+        "The new branch is in place. The open proposals are about to be put back on it.",
+    ),
+    msg(
+        "delivery.state.exchanged.hint",
+        "Wait a moment, then look at this delivery again.",
+    ),
+    msg(
+        "delivery.state.reaccepting.message",
+        "The open proposals are being put back on the new branch.",
+    ),
+    msg(
+        "delivery.state.reaccepting.hint",
+        "Wait a moment, then look at this delivery again.",
+    ),
+    msg(
+        "delivery.state.done.message",
+        "The delivery is done: this repository's branch is now yours.",
+    ),
+    msg(
+        "delivery.state.done.hint",
+        "Every proposal that was open stays open. A proposal whose work is in your branch will show as landed.",
+    ),
+    msg(
+        "delivery.state.failed.message",
+        "The delivery did not go through.",
+    ),
+    msg(
+        "delivery.state.failed.hint",
+        "Look at the reason, then deliver again.",
+    ),
+    msg(
+        "delivery.state.abandoned.message",
+        "This delivery was given up.",
+    ),
+    msg(
+        "delivery.state.abandoned.hint",
+        "Deliver again when you are ready.",
+    ),
+    msg(
+        "delivery.state.expired.message",
+        "This delivery waited for more than a day and was removed.",
+    ),
+    msg("delivery.state.expired.hint", "Deliver again."),
+    msg(
+        "delivery.needs_recovery.message",
+        "The server stopped while this delivery was being carried out.",
+    ),
+    msg(
+        "delivery.needs_recovery.hint",
+        "It finishes by itself when the server checks the repository. If it does not, ask an administrator of the repository to run the repository's recovery.",
+    ),
+    msg(
+        "delivery.reason.no_main.message",
+        "Your archive has no branch named {ref}.",
+    ),
+    msg(
+        "delivery.reason.no_main.hint",
+        "Deliver the archive of a repository that has the project's branch.",
+    ),
+    msg(
+        "delivery.reason.unadopted_key.message",
+        "Some of your history is signed by a key this repository does not trust.",
+    ),
+    msg(
+        "delivery.reason.unadopted_key.hint",
+        "Only the keys listed here can deliver.",
+    ),
+    msg(
+        "delivery.reason.not_a_successor.message",
+        "Your archive does not continue this repository's branch {ref}.",
+    ),
+    msg(
+        "delivery.reason.not_a_successor.hint",
+        "Update your repository from this one, then deliver again.",
+    ),
+    msg(
+        "delivery.reason.older_or_diverged.message",
+        "Your branch does not continue from this repository's branch.",
+    ),
+    msg(
+        "delivery.reason.older_or_diverged.hint",
+        "Update your repository from the project's branch, then deliver again.",
+    ),
+    msg(
+        "delivery.reason.unrelated.message",
+        "Your archive has nothing in common with this repository's history.",
+    ),
+    msg(
+        "delivery.reason.unrelated.hint",
+        "Deliver from a repository that was made from this one. A different history cannot replace it.",
+    ),
+    msg(
+        "delivery.reason.branch_missing.message",
+        "This repository has a branch your delivery does not have ({ref}).",
+    ),
+    msg(
+        "delivery.reason.branch_missing.hint",
+        "A delivery may add branches but never remove one.",
+    ),
+    msg(
+        "delivery.reason.nothing_to_deliver.message",
+        "Your archive changes nothing in this repository.",
+    ),
+    msg(
+        "delivery.reason.nothing_to_deliver.hint",
+        "There is nothing new to deliver.",
+    ),
+    msg(
+        "delivery.reason.damaged_archive.message",
+        "The archive could not be read, or it does not check out.",
+    ),
+    msg(
+        "delivery.reason.damaged_archive.hint",
+        "Make the archive again with prikk, and send it again.",
+    ),
+    msg(
+        "delivery.reason.moved.message",
+        "This repository changed while your delivery was waiting.",
+    ),
+    msg(
+        "delivery.reason.moved.hint",
+        "Update your repository from the project's branch, then deliver again.",
+    ),
+    msg(
+        "delivery.reason.exchange_failed.message",
+        "The delivery could not be put in place, and nothing was changed.",
+    ),
+    msg(
+        "delivery.reason.exchange_failed.hint",
+        "Tell the person who runs this server, then try again.",
+    ),
+    msg(
+        "delivery.reason.verify_failed.message",
+        "The branch was replaced, but the repository no longer passes its checks.",
+    ),
+    msg(
+        "delivery.reason.verify_failed.hint",
+        "The repository waits for an administrator of the repository. Do not deliver again until it has been looked at.",
+    ),
+    msg(
+        "delivery.reason.publication_trust.message",
+        "The branch was replaced, but one of its changes is signed by a key this repository does not trust.",
+    ),
+    msg(
+        "delivery.reason.publication_trust.hint",
+        "The repository waits for an administrator of the repository. Do not deliver again until it has been looked at.",
+    ),
+    msg(
+        "delivery.reason.timed_out.message",
+        "Checking your archive took longer than this server allows.",
+    ),
+    msg(
+        "delivery.reason.timed_out.hint",
+        "Try again later, or send a smaller archive.",
+    ),
+    msg(
+        "delivery.reason.ceiling.message",
+        "Your archive needs more memory to check than this server allows.",
+    ),
+    msg(
+        "delivery.reason.ceiling.hint",
+        "Send a smaller archive, or ask the person who runs this server.",
+    ),
+    msg(
+        "delivery.reason.unavailable.message",
+        "Your archive could not be checked right now.",
+    ),
+    msg(
+        "delivery.reason.unavailable.hint",
+        "Try again in a little while.",
+    ),
+    msg(
+        "delivery.reason.repository_gone.message",
+        "This repository no longer exists.",
+    ),
+    msg(
+        "delivery.reason.repository_gone.hint",
+        "Nothing was changed.",
+    ),
+    msg(
+        "repo.delivered_by",
+        "Delivered by {name} on {date}: signed by a key this repository trusts and checked by prikk.",
+    ),
+    msg("repo.project_branch", "The project's branch is {ref}."),
+    msg("repo.trusted_keys", "Keys this repository trusts"),
 ];

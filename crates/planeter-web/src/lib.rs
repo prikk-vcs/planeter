@@ -18,6 +18,7 @@ pub mod changes;
 pub mod client_ip;
 pub mod cookies;
 pub mod creation;
+pub mod deliveries;
 pub mod edge;
 pub mod errors;
 pub mod gate;

@@ -114,9 +114,15 @@ pub mod paths {
     pub const REPOS_IMPORT_STAGE: &str = "/api/v1/repos/import/{stage}";
     /// Confirm a stage with the typed fingerprints.
     pub const REPOS_IMPORT_CONFIRM: &str = "/api/v1/repos/import/{stage}/confirm";
+    /// Deliver an archive to a repository (RFC 008): the archive in, the checked delivery out.
+    pub const DELIVERIES: &str = "/api/v1/repos/{owner}/{name}/deliveries";
+    /// One delivery: look at it (`GET`) or give it up (`DELETE`).
+    pub const DELIVERY: &str = "/api/v1/repos/{owner}/{name}/deliveries/{id}";
+    /// Carry a checked delivery out.
+    pub const DELIVERY_CONFIRM: &str = "/api/v1/repos/{owner}/{name}/deliveries/{id}/confirm";
     pub const OPENAPI: &str = "/api/v1/openapi.json";
     /// Every route, in document order.
-    pub const ALL: [&str; 27] = [
+    pub const ALL: [&str; 30] = [
         HISTORY,
         CHANGE,
         FILE,
@@ -143,6 +149,9 @@ pub mod paths {
         REPOS_IMPORT,
         REPOS_IMPORT_STAGE,
         REPOS_IMPORT_CONFIRM,
+        DELIVERIES,
+        DELIVERY,
+        DELIVERY_CONFIRM,
         OPENAPI,
     ];
 }
@@ -198,6 +207,11 @@ pub fn routes() -> Routes {
         axum::routing::post(hide_handler),
         axum::routing::post(unhide_handler),
     );
+    // Landing by delivery (RFC 008): bearer only; `MergeSeal` on the repository, decided through the one read gate first.
+    let deliver = Class::Authorized(Action::MergeSeal);
+    let start = axum::routing::post(crate::deliveries::start_handler);
+    let one = get(crate::deliveries::view_handler).delete(crate::deliveries::cancel_handler);
+    let confirm_it = axum::routing::post(crate::deliveries::confirm_handler);
     Routes::new()
         .route(paths::HISTORY, read, &["GET"], get(history_handler))
         .route(paths::CHANGE, read, &["GET"], get(change_handler))
@@ -225,6 +239,9 @@ pub fn routes() -> Routes {
         .route(paths::REPOS_IMPORT, create, &["POST"], upload)
         .route(paths::REPOS_IMPORT_STAGE, create, &["GET"], staged)
         .route(paths::REPOS_IMPORT_CONFIRM, create, &["POST"], confirm)
+        .route(paths::DELIVERIES, deliver, &["POST"], start)
+        .route(paths::DELIVERY, deliver, &["GET", "DELETE"], one)
+        .route(paths::DELIVERY_CONFIRM, deliver, &["POST"], confirm_it)
         .route(paths::OPENAPI, description, &["GET"], get(openapi_handler))
 }
 
@@ -425,13 +442,47 @@ async fn refs_handler(
     };
     let principal = crate::principal::principal_from_request(&headers, &state).await;
     let subject = Subject::new(&principal, &owner, &name, &[ReadVerb::Refs]);
+    let (principal_again, owner_for_lookup, name_again) =
+        (principal.clone(), owner.clone(), name.clone());
     let result = read_blocking(&state, subject, move |read, adm| {
         try_both_owners(&owner, |o| {
             read.refs(&principal, o, &name, q.all, adm.limits(ReadVerb::Refs))
         })
     })
     .await;
+    // RFC 008: which branch is the project's, and the last delivery of this repository, when it has had one (additive fields).
+    let result = match result {
+        Ok(view) => {
+            let owner_handle = owner_for_lookup;
+            let last = match crate::transport::readable(
+                &state,
+                &principal_again,
+                &owner_handle,
+                &name_again,
+            )
+            .await
+            {
+                Ok(record) => crate::deliveries::last_delivery(&state, &record.repo_id).await,
+                Err(_) => None,
+            };
+            Ok(RefsAnswer {
+                refs: view,
+                followed_ref: planeter_transport::FOLLOWED_REF,
+                last_delivery: last,
+            })
+        }
+        Err(e) => Err(e),
+    };
     respond(&state, &headers, result)
+}
+
+/// The refs, and (RFC 008) the project's branch and the last delivery.
+#[derive(serde::Serialize)]
+struct RefsAnswer {
+    #[serde(flatten)]
+    refs: planeter_core::RefsView,
+    followed_ref: &'static str,
+    last_delivery: Option<crate::deliveries::LastDelivery>,
 }
 
 async fn verify_handler(

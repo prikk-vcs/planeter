@@ -143,11 +143,15 @@ pub enum ErrorCode {
     /// 409 for `claim_not_held`, 422 for `not_one_change` and `tree_too_large`, 503 (with `Retry-After` for `busy`) for the others; the message and the
     /// hint are the reason's own.
     ChangesUnavailable,
+    /// 409: another delivery to this repository is in flight, or the repository is busy with another write (RFC 008).
+    DeliveryBusy,
+    /// 409: the delivery is not in a state that can be confirmed (it was refused, finished, given up, or is being carried out).
+    DeliveryNotConfirmable,
 }
 
 impl ErrorCode {
     /// Every code, in a fixed order (the OpenAPI enum).
-    pub const ALL: [ErrorCode; 50] = [
+    pub const ALL: [ErrorCode; 52] = [
         ErrorCode::NotFound,
         ErrorCode::Unavailable,
         ErrorCode::Busy,
@@ -198,6 +202,8 @@ impl ErrorCode {
         ErrorCode::AdoptionRefused,
         ErrorCode::CreationVerifyFailed,
         ErrorCode::ChangesUnavailable,
+        ErrorCode::DeliveryBusy,
+        ErrorCode::DeliveryNotConfirmable,
     ];
 
     /// The stable snake_case code.
@@ -253,6 +259,8 @@ impl ErrorCode {
             ErrorCode::AdoptionRefused => "adoption_refused",
             ErrorCode::CreationVerifyFailed => "creation_verify_failed",
             ErrorCode::ChangesUnavailable => "changes_unavailable",
+            ErrorCode::DeliveryBusy => "delivery_busy",
+            ErrorCode::DeliveryNotConfirmable => "delivery_not_confirmable",
         }
     }
 
@@ -305,7 +313,10 @@ impl ErrorCode {
             | ErrorCode::CreationVerifyFailed => StatusCode::UNPROCESSABLE_ENTITY,
             // the default; the handler sets the status of the reason (409, 422 or 503)
             ErrorCode::ChangesUnavailable => StatusCode::SERVICE_UNAVAILABLE,
-            ErrorCode::NameTaken | ErrorCode::StageInUse => StatusCode::CONFLICT,
+            ErrorCode::NameTaken
+            | ErrorCode::StageInUse
+            | ErrorCode::DeliveryBusy
+            | ErrorCode::DeliveryNotConfirmable => StatusCode::CONFLICT,
             ErrorCode::StageExpired => StatusCode::GONE,
             ErrorCode::InvalidRequest => StatusCode::BAD_REQUEST,
             ErrorCode::Internal => StatusCode::INTERNAL_SERVER_ERROR,
@@ -407,6 +418,11 @@ impl ErrorCode {
             ErrorCode::ChangesUnavailable => {
                 (Key::ErrChangesFailedMessage, Key::ErrChangesFailedHint)
             }
+            ErrorCode::DeliveryBusy => (Key::ErrDeliveryBusyMessage, Key::ErrDeliveryBusyHint),
+            ErrorCode::DeliveryNotConfirmable => (
+                Key::ErrDeliveryNotConfirmableMessage,
+                Key::ErrDeliveryNotConfirmableHint,
+            ),
         };
         ErrorKeys { message, hint }
     }
@@ -435,6 +451,12 @@ impl ErrorCode {
     pub const FORBIDDEN_ADMIN: ErrorKeys = ErrorKeys {
         message: Key::ErrForbiddenAdminMessage,
         hint: Key::ErrForbiddenAdminHint,
+    };
+
+    /// `forbidden` on the delivery routes: the caller can read the repository but may not deliver to it (`MergeSeal`).
+    pub const FORBIDDEN_DELIVER: ErrorKeys = ErrorKeys {
+        message: Key::ErrForbiddenDeliverMessage,
+        hint: Key::ErrForbiddenDeliverHint,
     };
 
     /// `forbidden` on the download of an accepted artifact: the caller can read the repository but holds neither `review` nor
@@ -756,6 +778,12 @@ impl ErrorCode {
             }
             ErrorCode::StageExpired => "the archive was kept for a day and the day is over",
             ErrorCode::StageInUse => "a confirmation is running on that archive",
+            ErrorCode::DeliveryBusy => {
+                "another delivery to the repository is in flight, or the repository is busy with another write (nothing was changed; try again)"
+            }
+            ErrorCode::DeliveryNotConfirmable => {
+                "the delivery cannot be confirmed in its present state (the view says which)"
+            }
             ErrorCode::AdoptionRefused => {
                 "the typed fingerprints do not match the keys the archive carries (the body's `reason` and `key` say which; the expected value is never given)"
             }
