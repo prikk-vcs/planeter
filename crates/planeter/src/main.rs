@@ -11,6 +11,10 @@
 
 mod args;
 
+// The delivery engine's test hook: debug builds only, and not an operator's setting (so not in `USAGE`).
+#[cfg(debug_assertions)]
+mod failpoint;
+
 use std::sync::Arc;
 
 use planeter_auth::{
@@ -664,7 +668,7 @@ async fn main() {
                         delivery = delivery.with_recovery(recovery.clone());
                     }
                     #[cfg(debug_assertions)]
-                    if let Some(hook) = failpoint_from_env() {
+                    if let Some(hook) = failpoint::from_env() {
                         delivery = delivery.with_failpoint(hook);
                     }
                     let delivery = Arc::new(delivery);
@@ -1006,27 +1010,6 @@ async fn main() {
     }
     eprintln!("planeter: stopped ({counters})");
     release_and_exit(&leases, 0);
-}
-
-/// **Debug builds only** (the release build has no such code, and the release gate looks for its name): `PLANETER_FAILPOINT=<point>=<file>`
-/// makes the delivery engine write `<file>` and then stop forever when it reaches the named point, so that a test can SIGKILL the real
-/// process exactly there (RFC 008 handoff 2, T5). The points are the engine's (`planeter_transport::delivery`, `with_failpoint`).
-#[cfg(debug_assertions)]
-type Failpoint = Arc<dyn Fn(&str) + Send + Sync>;
-
-#[cfg(debug_assertions)]
-fn failpoint_from_env() -> Option<Failpoint> {
-    let spec = std::env::var("PLANETER_FAILPOINT").ok()?;
-    let (point, file) = spec.split_once('=')?;
-    let (point, file) = (point.to_owned(), file.to_owned());
-    Some(Arc::new(move |name: &str| {
-        if name == point {
-            let _ = std::fs::write(&file, name);
-            loop {
-                std::thread::sleep(std::time::Duration::from_secs(3600));
-            }
-        }
-    }))
 }
 
 /// Remove this process's lease records and the lock file, then exit.
