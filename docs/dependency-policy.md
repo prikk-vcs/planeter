@@ -138,5 +138,5 @@ labelled `rehearsal` in their subject name. Its run id is recorded with any chan
 
 ## Runtime prerequisites (not crates, but part of the supply chain)
 
-prikk ≥ 0.57.0 (checksum-verified release asset in the image; the version pin refuses older; raised from 0.54.0 at the 0.57 re-baseline, 2026-11-14: from 0.57.0 new repositories are format 8, which 0.56.0 and earlier refuse),
+prikk ≥ 0.58.0 (checksum-verified release asset in the image; the version pin refuses older; raised from 0.57.0 at the 0.58 re-baseline, 2026-11-19, and from 0.54.0 at the 0.57 one, 2026-11-14: from 0.57.0 new repositories are format 8, which 0.56.0 and earlier refuse),
 bubblewrap, curl (SSO only). Each is named in `build-info.txt`, the release notes and RELEASING.

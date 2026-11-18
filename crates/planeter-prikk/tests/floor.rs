@@ -1,5 +1,5 @@
-//! The version pin at the 0.57 floor (the 0.56/0.57 re-baseline; was 0.54 since RFC 005 T1): a prikk below 0.57.0 is refused with a sentence that says
-//! what was found and what is required; 0.57.0 and later are accepted. The binary is a stand-in that answers `--version`.
+//! The version pin at the 0.58 floor (the 0.58 re-baseline; was 0.57 from the 0.56/0.57 one and 0.54 since RFC 005 T1): a prikk below 0.58.0 is refused with a sentence that says
+//! what was found and what is required; 0.58.0 and later are accepted. The binary is a stand-in that answers `--version`.
 
 use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
@@ -33,14 +33,14 @@ fn checked(name: &str, version: &str) -> Result<CliPrikkRepo, PrikkError> {
 }
 
 #[test]
-fn the_floor_is_0_57_0() {
-    assert_eq!(MIN_PRIKK_VERSION, (0, 57, 0));
+fn the_floor_is_0_58_0() {
+    assert_eq!(MIN_PRIKK_VERSION, (0, 58, 0));
 }
 
 #[test]
-fn prikk_0_56_0_and_0_54_0_are_refused_with_a_sentence_that_says_what_was_found_and_what_is_required()
+fn prikk_0_57_0_and_older_are_refused_with_a_sentence_that_says_what_was_found_and_what_is_required()
  {
-    for found in ["0.56.0", "0.55.0", "0.54.0", "0.46.0"] {
+    for found in ["0.57.1", "0.57.0", "0.56.0", "0.55.0", "0.54.0", "0.46.0"] {
         let err = checked(&format!("old-{found}"), found).unwrap_err();
         assert!(
             matches!(err, PrikkError::UnsupportedVersion { .. }),
@@ -48,14 +48,14 @@ fn prikk_0_56_0_and_0_54_0_are_refused_with_a_sentence_that_says_what_was_found_
         );
         assert_eq!(
             err.to_string(),
-            format!("unsupported prikk version {found}; planeter requires >= 0.57.0")
+            format!("unsupported prikk version {found}; planeter requires >= 0.58.0")
         );
     }
 }
 
 #[test]
-fn prikk_0_57_0_and_0_57_1_and_later_are_accepted() {
-    for ok in ["0.57.0", "0.57.1", "0.58.0", "1.0.0"] {
+fn prikk_0_58_0_and_0_58_1_and_later_are_accepted() {
+    for ok in ["0.58.0", "0.58.1", "0.59.0", "1.0.0"] {
         checked(&format!("ok-{ok}"), ok).unwrap_or_else(|e| panic!("{ok}: {e}"));
     }
 }

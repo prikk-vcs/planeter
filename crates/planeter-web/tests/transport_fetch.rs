@@ -1000,7 +1000,7 @@ fn stand_in(dir: &Path, body: &str) -> PathBuf {
     let p = dir.join("prikk-stand-in");
     std::fs::write(
         &p,
-        format!("#!/bin/sh\ncase \"$1\" in --version) echo 'prikk 0.57.0';; *) {body};; esac\n"),
+        format!("#!/bin/sh\ncase \"$1\" in --version) echo 'prikk 0.58.0';; *) {body};; esac\n"),
     )
     .unwrap();
     use std::os::unix::fs::PermissionsExt;

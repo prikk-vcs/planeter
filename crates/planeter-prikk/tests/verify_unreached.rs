@@ -79,7 +79,7 @@ fn the_driver_reads_a_stand_in_verify_that_carries_the_new_array() {
     let bin = dir.join("prikk");
     std::fs::write(
         &bin,
-        format!("#!/bin/sh\ncase \"$1\" in --version) echo 'prikk 0.57.0';; verify) cat {}; exit 0;; esac\n", new.display()),
+        format!("#!/bin/sh\ncase \"$1\" in --version) echo 'prikk 0.58.0';; verify) cat {}; exit 0;; esac\n", new.display()),
     )
     .unwrap();
     std::fs::set_permissions(&bin, std::fs::Permissions::from_mode(0o755)).unwrap();

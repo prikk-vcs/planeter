@@ -1,6 +1,7 @@
-//! `unlock`: the driver clears a lock with `--force` and never with `--yes`. prikk 0.57.0 still lets `--yes` clear a lock whose holder is
-//! `unknown` (what a process in another PID namespace is, which is what the sandbox produces); the fix is in 0.58.0, where `--yes` is
-//! dropped for `--force`. planeter passes only `--force`, on every version, so that a lock is cleared on its own evidence
+//! `unlock`: the driver clears a lock with `--force` and never with `--yes`. prikk 0.57.0 lets `--yes` clear a lock whose holder is
+//! `unknown` (what a process in another PID namespace is, which is what the sandbox produces); **0.58.0 does not** (measured in the 0.58
+//! re-baseline, A6: a sandboxed accept killed with SIGKILL leaves `liveness: unknown`; `unlock --lock <path> --yes` exits 1 and leaves the
+//! lock, `--force` clears it; a holder that "does not appear to be running" is still cleared by `--yes` on both). planeter passes only `--force`, on every version, so that a lock is cleared on its own evidence
 //! (the witnesses of the recovery procedure) and not on prikk's liveness line. The argv is recorded by a stand-in prikk.
 
 use std::os::unix::fs::PermissionsExt;
@@ -18,7 +19,7 @@ fn stand_in(name: &str) -> (PathBuf, PathBuf, PathBuf) {
     std::fs::write(
         &bin,
         format!(
-            "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'prikk 0.57.0'; exit 0; fi\necho \"$*\" >> {}\nexit 0\n",
+            "#!/bin/sh\nif [ \"$1\" = --version ]; then echo 'prikk 0.58.0'; exit 0; fi\necho \"$*\" >> {}\nexit 0\n",
             log.display()
         ),
     )

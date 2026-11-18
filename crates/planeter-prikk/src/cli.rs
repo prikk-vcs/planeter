@@ -3,7 +3,7 @@
 //! It shells out to the prikk binary against one repository directory (the one holding `.prikk`),
 //! parses `--format json` output into the [`crate::model`] types after checking the `schema_version`,
 //! and maps a non-zero exit to a typed [`PrikkError`] (never a panic). The version pin (D-3) refuses a
-//! prikk older than planeter's floor (PK-26/PK-42: planeter requires prikk ≥ 0.57.0). Confinement of the
+//! prikk older than planeter's floor (PK-26/PK-42: planeter requires prikk ≥ 0.58.0). Confinement of the
 //! subprocess (sandbox) is layered on in T4 — this module invokes prikk directly.
 
 use std::ffi::OsString;
@@ -36,14 +36,18 @@ use crate::sandbox::{CallLimits, Run, Sandbox, TIMEOUT_EXIT_CODE};
 /// not work together; one floor for the server and `planeter-client`. 0.57.0 also carries what 0.56.0 changed for the driver: the delivery
 /// classification with default refusal of rollback, diverged and does-not-connect, `extract --claim` over chains of pending claims,
 /// `sync pending` by claim, unreached patches and blobs, and the four fixed `archive verify` key statuses.
-pub const MIN_PRIKK_VERSION: (u64, u64, u64) = (0, 57, 0);
+/// Raised to 0.58.0 (2026-11-18, the 0.58 re-baseline, decision D-97, ledger PK-85): `sync accept` takes 4 fsyncs a patch instead of 10 and its
+/// memory follows the largest object (4.0 × it, measured) instead of the artifact (7.0 ×); `sync seal` is linear in the claims; an import
+/// records the history it confirmed, so `extract` of such a repository is no longer provisional; `unlock --yes` no longer clears a lock whose
+/// holder is unknown (the driver never passes `--yes`). The server and `planeter-client` keep one floor.
+pub const MIN_PRIKK_VERSION: (u64, u64, u64) = (0, 58, 0);
 
 /// What the start-up probe of the prikk binary found ([`probe_binary`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum BinaryProbe {
     /// This version, at or above [`MIN_PRIKK_VERSION`].
     Supported(String),
-    /// Below the floor: the pin's own sentence (`unsupported prikk version X; planeter requires >= 0.57.0`).
+    /// Below the floor: the pin's own sentence (`unsupported prikk version X; planeter requires >= 0.58.0`).
     Unsupported(String),
     /// There is no such program. Reported as it always was: when a repository is first opened.
     Missing,
@@ -838,9 +842,11 @@ mod tests {
 
     #[test]
     fn version_ordering_meets_the_floor() {
-        assert!((0, 57, 0) >= MIN_PRIKK_VERSION);
-        assert!((0, 57, 1) >= MIN_PRIKK_VERSION);
+        assert!((0, 58, 0) >= MIN_PRIKK_VERSION);
+        assert!((0, 58, 1) >= MIN_PRIKK_VERSION);
         assert!((1, 0, 0) >= MIN_PRIKK_VERSION);
+        assert!((0, 57, 9) < MIN_PRIKK_VERSION);
+        assert!((0, 57, 0) < MIN_PRIKK_VERSION);
         assert!((0, 56, 9) < MIN_PRIKK_VERSION);
         assert!((0, 56, 0) < MIN_PRIKK_VERSION);
         assert!((0, 54, 0) < MIN_PRIKK_VERSION);

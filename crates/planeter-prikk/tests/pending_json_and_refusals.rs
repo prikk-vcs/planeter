@@ -5,7 +5,7 @@
 //!   repository-format-too-old, outside-version-rule, forged-publication-signature (0.57.0). The driver never passes
 //!   `--allow-non-fast-forward`.
 //!
-//! Fixtures are the real output of prikk 0.57.0; the real-prikk tests skip (printing why) without prikk 0.57.0 or later.
+//! Fixtures are the real output of prikk 0.57.0; the real-prikk tests skip (printing why) without prikk 0.58.0 or later.
 //! Convention of the crate for JSON readers: `schema_version` exact, every named field required, unknown fields tolerated.
 
 use std::path::Path;
@@ -208,11 +208,11 @@ fn a_real_prikk_refusal_of_a_rollback_is_read() {
                 .trim_start_matches("prikk ")
                 .split('.')
                 .map(|x| x.parse::<u32>().unwrap_or(0));
-            (p.next().unwrap_or(0), p.next().unwrap_or(0)) >= (0, 57)
+            (p.next().unwrap_or(0), p.next().unwrap_or(0)) >= (0, 58)
         })
         .unwrap_or(false);
     if !ok {
-        eprintln!("skipping: needs prikk >= 0.57.0 on PATH");
+        eprintln!("skipping: needs prikk >= 0.58.0 on PATH");
         return;
     }
     let base = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("delivery-refusal");
