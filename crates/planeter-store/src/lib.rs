@@ -6,6 +6,7 @@
 //! production **SQLite** backend ([`sqlite`], RFC 001 IQ-4) behind the same traits.
 
 pub mod change;
+pub mod delivery;
 pub mod lease;
 pub mod membership;
 pub mod memory;
@@ -21,6 +22,10 @@ pub use change::{
     ChangeRecord, ChangeState, ChangeStore, ClaimOutcome, FailPoint, InMemoryChangeStore,
     IntentRecord, IntentState, RepoFlags, RevisionRecord, SqliteChangeStore, Usage, pack_ids,
     unpack_ids,
+};
+pub use delivery::{
+    DELIVERY_SCHEMA, DeliveryRecord, DeliveryState, DeliveryStore, DeliveryUpdate,
+    InMemoryDeliveryStore, SqliteDeliveryStore, StartRefusal, TransitionError, transition,
 };
 pub use lease::{HolderRecord, InMemoryLeaseRecords, LeaseRecordStore, SqliteLeaseRecords};
 pub use membership::{
