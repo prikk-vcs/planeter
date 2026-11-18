@@ -208,3 +208,32 @@ fn no_message_of_the_feature_names_the_engines_words() {
         }
     }
 }
+
+/// The table the review request quotes: key → English → 日本語 (written to `target/tmp/delivery-messages.md`; the test holds that both
+/// languages have every key and that the placeholders of the two agree).
+#[test]
+fn the_message_table_is_written_for_the_review() {
+    let (en, ja) = (T::new(EN), T::new(Lang::from_tag("ja").unwrap()));
+    let mut out = String::from("| key | English | 日本語 |\n|---|---|---|\n");
+    for key in feature_keys() {
+        let (e, j) = (en.get(key), ja.get(key));
+        let holes = |t: &str| {
+            let mut v: Vec<String> = t
+                .split('{')
+                .skip(1)
+                .filter_map(|r| r.split('}').next().map(str::to_owned))
+                .collect();
+            v.sort();
+            v
+        };
+        assert_eq!(holes(&e), holes(&j), "{}", key.id());
+        out.push_str(&format!(
+            "| `{}` | {} | {} |\n",
+            key.id(),
+            e.replace('|', "\\|"),
+            j.replace('|', "\\|")
+        ));
+    }
+    let path = std::path::PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("delivery-messages.md");
+    std::fs::write(path, out).unwrap();
+}

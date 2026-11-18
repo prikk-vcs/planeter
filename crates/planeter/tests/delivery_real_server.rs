@@ -899,3 +899,135 @@ fn the_log_of_runs_that_deliver_refuse_and_are_killed_names_no_file_branch_key_o
     // the same for the page and the refs of an ordinary reader: no key id outside the delivery's own list
     let _ = DeliveryState::Done;
 }
+
+// ------------------------------------------------------------------------------------------------ real JSON of every state and every refusal
+
+fn save_sample(name: &str, v: &Value) {
+    let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("delivery-samples");
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(
+        dir.join(format!("{name}.json")),
+        serde_json::to_string_pretty(v).unwrap(),
+    )
+    .unwrap();
+}
+
+/// The delivery as the API shows it in a state that only a stopped process shows: the server is held at `point`, the view is read
+/// from a second connection, and the process is killed.
+fn sample_held_at(point: &str, state: &str, via_confirm: bool) {
+    let inst = instance(&format!("sample-{state}"));
+    let marker = inst.dir.join("marker");
+    let server = Server::start(&inst.dir, Some((point, &marker)));
+    let port = server.port;
+    let archive = inst.sc.d.clone();
+    let hung = std::thread::spawn(move || {
+        let s = Server {
+            child: dummy_child(),
+            port,
+        };
+        let r = deliver_req(&s, "tok-alice", &archive);
+        if via_confirm {
+            let id = r.json()["id"].as_str().unwrap().to_owned();
+            confirm_req(&s, &id);
+        }
+    });
+    wait_for(&marker, point);
+    let ids = SqliteDeliveryStore::new(db(&inst)).unwrap().all().unwrap();
+    let v = view(&server, &ids[0].delivery_id);
+    assert_eq!(v["state"], state);
+    save_sample(&format!("state-{state}"), &v);
+    server.kill();
+    let _ = hung.join();
+}
+
+#[test]
+fn the_view_of_every_state_and_every_refusal_is_saved_as_real_json() {
+    need_all!();
+    let fx = fixtures();
+    // the states a process shows only while it is held
+    sample_held_at("stage_before_import", "staged", false);
+    sample_held_at("after_intent", "confirmed", true);
+    sample_held_at("exchanged", "exchanged", true);
+    sample_held_at("reaccept_first", "reaccepting", true);
+    // the rest, on one server
+    let inst = instance("samples");
+    let server = Server::start(&inst.dir, None);
+    let doc = server.http("GET", "/api/v1/openapi.json", None, &[]).json();
+    save_sample("openapi", &doc);
+    for (name, archive) in [
+        ("refused-unadopted_key", &fx.x_archive),
+        ("refused-unrelated", &fx.unrelated),
+        ("refused-damaged_archive", &fx.truncated),
+        ("refused-nothing_to_deliver", &fx.h0),
+    ] {
+        let v = deliver_req(&server, "tok-alice", archive).json();
+        assert_eq!(v["state"], "failed", "{name}");
+        save_sample(name, &v);
+    }
+    // acceptable → abandoned
+    let v = deliver_req(&server, "tok-alice", &inst.sc.d).json();
+    save_sample("state-reported", &v);
+    let id = v["id"].as_str().unwrap().to_owned();
+    assert_eq!(
+        server
+            .http(
+                "DELETE",
+                &format!("{DELIVERIES}/{id}"),
+                Some("tok-alice"),
+                &[]
+            )
+            .status,
+        204
+    );
+    save_sample("state-abandoned", &view(&server, &id));
+    // acceptable → done
+    let id = deliver_req(&server, "tok-alice", &inst.sc.d).json()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let done = confirm_req(&server, &id).json();
+    save_sample("state-done", &done);
+    // after a delivery: older, and a branch missing (the delivery of a repository that lacks a branch the live one has is made from `dev`)
+    let v = deliver_req(&server, "tok-alice", &fx.h0).json();
+    assert_eq!(v["report"]["reason"], "older_or_diverged");
+    save_sample("refused-older_or_diverged", &v);
+    // a failed confirmation: the repository moved after the report
+    let id = deliver_req(&server, "tok-alice", &inst.sc.d2).json()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    SqliteDb::open(inst.dir.join("state.db"))
+        .unwrap()
+        .lock()
+        .unwrap()
+        .execute(
+            "UPDATE deliveries SET old_tip = 'not-the-live-tip' WHERE delivery_id = ?1",
+            [&id],
+        )
+        .unwrap();
+    let failed = confirm_req(&server, &id);
+    // the request worked; the delivery did not: 200, and the view says `failed` with its reason
+    assert_eq!(failed.status, 200, "{}", failed.text());
+    assert_eq!(failed.json()["failure"]["reason"], "moved");
+    save_sample("confirm-of-a-moved-repository", &failed.json());
+    save_sample("state-failed-moved", &view(&server, &id));
+    // a delivery whose day is over
+    let id = deliver_req(&server, "tok-alice", &inst.sc.d2).json()["id"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    SqliteDb::open(inst.dir.join("state.db"))
+        .unwrap()
+        .lock()
+        .unwrap()
+        .execute(
+            "UPDATE deliveries SET created_at = 1 WHERE delivery_id = ?1",
+            [&id],
+        )
+        .unwrap();
+    let gone = confirm_req(&server, &id);
+    assert_eq!(gone.status, 410, "{}", gone.text());
+    save_sample("error-confirm-of-an-expired-delivery", &gone.json());
+    save_sample("state-expired", &view(&server, &id));
+    server.stop();
+}
