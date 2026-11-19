@@ -735,6 +735,14 @@ pub const CATALOG: &[Entry] = &[
         "If they are still needed, ask the person who proposed them to send them again.",
     ),
     msg(
+        "error.changes_unavailable.partly_landed.message",
+        "Some of this revision's work has landed in the project's branch and some is still waiting here, so its changes cannot be shown as one change.",
+    ),
+    msg(
+        "error.changes_unavailable.partly_landed.hint",
+        "Look at the project's history for what landed. The rest is still held for review.",
+    ),
+    msg(
         "error.changes_unavailable.claim_not_held.message",
         "The changes of this revision cannot be shown here any more.",
     ),
@@ -858,6 +866,10 @@ pub const CATALOG: &[Entry] = &[
     msg(
         "changes.heading",
         "Changes in revision {seq} of proposal #{id}",
+    ),
+    msg(
+        "changes.statement.landed",
+        "These changes have landed: they are part of the project's branch.",
     ),
     msg(
         "changes.statement.rebuilt",
@@ -1011,6 +1023,14 @@ pub const CATALOG: &[Entry] = &[
     msg(
         "title.changes_unavailable",
         "{heading} · Revision {seq} of proposal #{id} · {repo} · {product}",
+    ),
+    msg(
+        "changes.unavailable.partly_landed.heading",
+        "These changes cannot be shown as one change",
+    ),
+    msg(
+        "changes.unavailable.partly_landed.body",
+        "Some of this revision's work has landed in the project's branch and some is still waiting here. Look at the project's history for what landed. The rest is still held for review.",
     ),
     msg(
         "changes.unavailable.claim_not_held.heading",

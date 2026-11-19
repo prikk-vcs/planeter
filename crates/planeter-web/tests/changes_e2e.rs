@@ -2348,6 +2348,7 @@ fn compared(before: Option<&str>, declared: Option<&str>, differs: bool) -> Comp
         after_block: "b".repeat(64),
         base_differs: differs,
         declared_base: declared.map(str::to_owned),
+        landed: false,
     }
 }
 

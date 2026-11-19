@@ -275,7 +275,7 @@ impl Metrics {
         self.with(|m| *m.refusals.entry(reason.to_owned()).or_insert(0) += 1);
     }
 
-    /// One answer of the review view, by outcome (or `cache_hit`, `extractions`).
+    /// One answer of the review view, by outcome (or `cache_hit`, `extractions`; `landed_ok` and `partly_landed` for a revision whose work has landed).
     pub fn changes(&self, outcome: &str) {
         self.with(|m| *m.changes.entry(outcome.to_owned()).or_insert(0) += 1);
     }

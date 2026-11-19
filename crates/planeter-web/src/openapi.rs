@@ -327,11 +327,12 @@ fn change_schemas() -> Value {
             "shown": {"type": "boolean", "description": "A diff is available for this file."},
             "not_shown_because": {"type": "string", "nullable": true, "enum": ["too_large", "not_utf8", "binary", "symlink", "directory", "unreadable", null]}
         })),
-        "ChangeCompared": obj(&["before_block", "after_block", "base_differs", "declared_base"], json!({
-            "before_block": {"type": "string", "nullable": true, "description": "The block whose files are the earlier side; null when the proposal starts a history (there are no earlier files)."},
-            "after_block": string_prop(),
-            "base_differs": {"type": "boolean", "description": "The revision's declared base is not the real parent; the real parent is what was compared."},
-            "declared_base": {"type": "string", "nullable": true}
+        "ChangeCompared": obj(&["before_block", "after_block", "base_differs", "declared_base", "landed"], json!({
+            "before_block": {"type": "string", "nullable": true, "description": "The block whose files are the earlier side; null when the proposal starts a history (there are no earlier files). For a landed revision: the parent, in the project's branch, of the first block that carries the revision's patches."},
+            "after_block": {"type": "string", "description": "The block whose files are the later side. For a landed revision: the last block of the project's branch that carries the revision's patches."},
+            "base_differs": {"type": "boolean", "description": "The revision's declared base is not the real parent; the real parent is what was compared. Always false for a landed revision (its parent is the sealed history's)."},
+            "declared_base": {"type": "string", "nullable": true},
+            "landed": {"type": "boolean", "description": "The revision's work has landed: it is part of the project's branch (`heads/main`), and both blocks are blocks of that branch, read from the sealed history. The files are still rebuilt by prikk from sealed patches, and nothing here is signed."}
         })),
         "ChangeTotals": obj(&["files_changed", "lines_added", "lines_removed", "unshown"], json!({
             "files_changed": {"type": "integer"}, "lines_added": {"type": "integer", "description": "Over the text files that are shown."},
@@ -632,7 +633,7 @@ fn proposal_paths(paths_obj: &mut serde_json::Map<String, Value>) {
         "The revision's number (1, 2, …).",
         json!({"type": "integer", "minimum": 1}),
     ));
-    let unavailable_note = "`changes_unavailable` with a closed `reason`: `claim_not_held` (409: the revision's work is no longer waiting here for review, for example because it arrived in a received history), `not_one_change` (422: the revision's claims are not one chain), `tree_too_large` (422: over 64 MiB or 10,000 files), `busy` (503, `Retry-After`), `timed_out` (503), `failed` (503).";
+    let unavailable_note = "`changes_unavailable` with a closed `reason`: `claim_not_held` (409: the revision's work is no longer waiting here for review and is not in the project's branch either, for example because it arrived in a received history), `partly_landed` (409: some of the revision's work has landed in the project's branch and some is still waiting here), `not_one_change` (422: the revision's claims are not one chain), `tree_too_large` (422: over 64 MiB or 10,000 files), `busy` (503, `Retry-After`), `timed_out` (503), `failed` (503).";
     let mut changes_list = with_errors(
         json!({"get": {
             "operationId": "getProposalRevisionChanges",
@@ -669,7 +670,10 @@ fn proposal_paths(paths_obj: &mut serde_json::Map<String, Value>) {
     for op in [&mut changes_list, &mut changes_file] {
         if let Some(r) = op["get"]["responses"].as_object_mut() {
             for (status, what) in [
-                ("409", "`changes_unavailable` / `claim_not_held`"),
+                (
+                    "409",
+                    "`changes_unavailable` / `claim_not_held` or `partly_landed`",
+                ),
                 (
                     "422",
                     "`changes_unavailable` / `not_one_change` or `tree_too_large`",

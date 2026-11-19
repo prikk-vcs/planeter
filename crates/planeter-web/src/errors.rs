@@ -139,8 +139,8 @@ pub enum ErrorCode {
     AdoptionRefused,
     /// 422: the repository the archive makes does not pass prikk's checks; nothing was kept (`conditions`).
     CreationVerifyFailed,
-    /// The file-by-file view of a revision cannot be shown (`reason`: `claim_not_held`, `not_one_change`, `tree_too_large`, `busy`, `timed_out`, `failed`).
-    /// 409 for `claim_not_held`, 422 for `not_one_change` and `tree_too_large`, 503 (with `Retry-After` for `busy`) for the others; the message and the
+    /// The file-by-file view of a revision cannot be shown (`reason`: `claim_not_held`, `partly_landed`, `not_one_change`, `tree_too_large`, `busy`, `timed_out`, `failed`).
+    /// 409 for `claim_not_held` and `partly_landed`, 422 for `not_one_change` and `tree_too_large`, 503 (with `Retry-After` for `busy`) for the others; the message and the
     /// hint are the reason's own.
     ChangesUnavailable,
     /// 409: another delivery to this repository is in flight, or the repository is busy with another write (RFC 008).
@@ -798,7 +798,7 @@ impl ErrorCode {
                 "the repository the archive makes does not pass prikk's checks and nothing was kept (the body's `conditions` lists what failed)"
             }
             ErrorCode::ChangesUnavailable => {
-                "the file-by-file view of a revision cannot be shown (the body's `reason` says why: claim_not_held, not_one_change, tree_too_large, busy, timed_out or failed)"
+                "the file-by-file view of a revision cannot be shown (the body's `reason` says why: claim_not_held, partly_landed, not_one_change, tree_too_large, busy, timed_out or failed)"
             }
         }
     }

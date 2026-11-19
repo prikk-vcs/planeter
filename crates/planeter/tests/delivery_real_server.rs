@@ -9,7 +9,7 @@
 //!   no flag, the delivery final — and **the API answers consistently** (the delivery, the proposals' pages);
 //! * the window: while a confirmation holds the write lease, the reads answer and a second delivery and a second confirmation are
 //!   refused cleanly;
-//! * the 0.7.0 changes view of a landed revision keeps its `409 claim_not_held`;
+//! * the changes view of a landed revision is its files (`landed: true`), a partly landed one is `409 partly_landed` (handoff 4);
 //! * the canary: the whole log of runs that deliver, refuse and are killed names no file, branch or key and no content.
 //!
 //! **How the process is stopped at a point:** a **debug build** of the server (the one `cargo test` builds) reads
@@ -429,7 +429,8 @@ fn the_whole_road_over_http_on_the_real_server_with_the_real_sandbox() {
         assert_eq!(page.status, 200, "{p}");
     }
 
-    // the changes view of a landed revision keeps its answer (handoff 4 improves it, not this one)
+    // RFC 008 D-11 (handoff 4): the changes view of a landed revision is the files of the sealed history, through the real sandbox; the partly
+    // landed one (P3: the delivery carries its first patch) is the new 409; and P1 still lists the one file it added
     let changes = server.http(
         "GET",
         &format!(
@@ -439,9 +440,22 @@ fn the_whole_road_over_http_on_the_real_server_with_the_real_sandbox() {
         None,
         &[],
     );
-    assert_eq!(changes.status, 409, "{}", changes.text());
-    assert_eq!(changes.json()["code"], "changes_unavailable");
-    assert_eq!(changes.json()["reason"], "claim_not_held");
+    assert_eq!(changes.status, 200, "{}", changes.text());
+    assert_eq!(changes.json()["compared"]["landed"], true);
+    assert_eq!(changes.json()["files"][0]["path"], "src/p1.txt");
+    assert_eq!(changes.json()["files"].as_array().unwrap().len(), 1);
+    let partly = server.http(
+        "GET",
+        &format!(
+            "/api/v1/repos/alice/forge/proposals/{}/revisions/1/changes",
+            inst.sc.p3
+        ),
+        None,
+        &[],
+    );
+    assert_eq!(partly.status, 409, "{}", partly.text());
+    assert_eq!(partly.json()["code"], "changes_unavailable");
+    assert_eq!(partly.json()["reason"], "partly_landed");
 
     // a second delivery: nothing new lands, the next one goes through the whole road
     let r2 = deliver_req(&server, "tok-alice", &inst.sc.d2);

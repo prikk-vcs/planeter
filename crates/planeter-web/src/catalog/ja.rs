@@ -768,6 +768,14 @@ pub const CATALOG: &[Entry] = &[
         "まだ必要な場合は、提案した人にもう一度送ってもらうよう依頼してください。",
     ),
     msg(
+        "error.changes_unavailable.partly_landed.message",
+        "このリビジョンの作業は、一部がプロジェクトのブランチに反映済みで、一部はまだここでレビューを待っているため、1 つの変更としては表示できません。",
+    ),
+    msg(
+        "error.changes_unavailable.partly_landed.hint",
+        "プロジェクトの履歴で、反映された内容をご覧ください。残りは、まだレビュー待ちです。",
+    ),
+    msg(
         "error.changes_unavailable.claim_not_held.message",
         "このリビジョンの変更点は、もうここでは表示できません。",
     ),
@@ -881,6 +889,10 @@ pub const CATALOG: &[Entry] = &[
         "提案 #{id} のリビジョン {seq} の変更点 · {repo} · {product}",
     ),
     msg("changes.heading", "提案 #{id} のリビジョン {seq} の変更点"),
+    msg(
+        "changes.statement.landed",
+        "この変更は反映済みです。プロジェクトのブランチの一部になっています。",
+    ),
     msg(
         "changes.statement.rebuilt",
         "ここに表示するファイルは、このリビジョンのパッチから再構築したものです。ここに表示した内容は、署名されたものではありません。",
@@ -1030,6 +1042,14 @@ pub const CATALOG: &[Entry] = &[
     msg(
         "title.changes_unavailable",
         "{heading} · 提案 #{id} のリビジョン {seq} · {repo} · {product}",
+    ),
+    msg(
+        "changes.unavailable.partly_landed.heading",
+        "この変更点は、1 つの変更としては表示できません",
+    ),
+    msg(
+        "changes.unavailable.partly_landed.body",
+        "このリビジョンの作業は、一部がプロジェクトのブランチに反映済みで、一部はまだここでレビューを待っています。反映された内容は、プロジェクトの履歴でご覧ください。残りは、まだレビュー待ちです。",
     ),
     msg(
         "changes.unavailable.claim_not_held.heading",

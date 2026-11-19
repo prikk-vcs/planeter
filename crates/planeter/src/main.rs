@@ -571,6 +571,8 @@ async fn main() {
                     // past 64 MiB); no new setting.
                     let changes_cfg = planeter_transport::ChangesConfig {
                         spool: Some(spool.root().to_path_buf()),
+                        // the same window as the proposals' observation: a revision that landed longer ago is answered the same "unknown" way
+                        observation_blocks,
                         ..planeter_transport::ChangesConfig::default()
                     };
                     eprintln!(

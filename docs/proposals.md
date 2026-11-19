@@ -275,10 +275,28 @@ The proposals list shows the review word of each open proposal. An anonymous rea
   ever; it is kept in the spool (`changes-cache/`, disposable, least recently used out past 64 MiB) and a cached answer needs no admission. Concurrent
   requests for one revision take turns *before* asking for memory, so the second finds the first's answer. A busy, timed-out or failed run is never
   kept; `not_one_change` and `tree_too_large` are. Without a spool nothing is kept.
-* **Errors** are the project's one shape with `code: changes_unavailable` and a closed `reason`: `claim_not_held` (409), `not_one_change` (422),
+* **Landed work** (RFC 008 D-11, 0.8.0). What a revision *is now* is asked first, from facts: while **all** its claims are still pending it is shown as
+  above; otherwise its patches (the ids it **declared** — what its artifact contains, held already or not — together with the ids it **added**) are asked
+  of the blocks of `heads/main`, read once per state of the repository by the proposals' own reader (`log_blocks`, the observation's window,
+  `PLANETER_OBSERVATION_BLOCKS`) and judged by the landing observation's own function (`observe_landing`; there is no second definition of landed).
+  * **All in `heads/main`, in one run** of consecutive blocks of the first-parent chain (each block carries only patches of this revision, none twice,
+    no merge): the *before* is the parent of the oldest block (none when it is the first block of the history: all files are added) and the *after* is
+    the newest; both are `extract --ref <block>`, and everything after the extraction is the code above. The answer has `compared.landed: true`;
+    `base_differs` is `false` (the parent is the sealed history's). The cache key is the two block ids (`v2-` + the hash of `landed`, after, before),
+    content-addressed, so a later delivery never makes it stale; the pointer written while the claims were pending (`rev-<id>.json`) is **never read for
+    a revision that has landed**.
+  * **Some in `heads/main`, the rest not** (and the log was read whole): `partly_landed` (409). When the window cut the log short, what is absent cannot
+    be told from "older than the window", so it is **not claimed**: `claim_not_held`.
+  * **All in `heads/main`, in no single run** (another block between, a patch in two blocks, a merge, a block that carries other work too):
+    `not_one_change` (422).
+  * **None in `heads/main`** (an extra branch or a received ref does not count), or no patch to ask about: `claim_not_held`. Its sentence still says "for
+    example because it arrived as signed history": the work of a received history is exactly this case.
+  * A proposal **stacked** on another (its artifact carries the other's block) whose base has landed has a claim that is no longer pending and a patch
+    of its own that is not in `heads/main`: `claim_not_held`, as in 0.7.0.
+* **Errors** are the project's one shape with `code: changes_unavailable` and a closed `reason`: `claim_not_held` (409), `partly_landed` (409), `not_one_change` (422),
   `tree_too_large` (422), `busy` (503, `Retry-After`), `timed_out` (503), `failed` (503). A hidden repository, an unknown proposal, revision or file
   are the same `404`.
-* **Counters** (one per outcome, `cache_hit`, `extractions`) are in the metrics; no file name, path or content is ever logged or counted.
+* **Counters** (one per outcome, `cache_hit`, `extractions`, and `landed_ok`, `partly_landed` for the landed revisions) are in the metrics; no file name, path or content is ever logged or counted.
 
 ### The pages of the file-by-file view (0.7.0, handoff 2)
 
@@ -292,7 +310,7 @@ so the two cost the same.
   added, 2 lines removed"; the count of files that cannot be shown as text), one table (File, Change, Lines, Notes; a change is a word, never a colour;
   the lines are "+3 −1" with the words hidden for assistive technology; a file with no diff is a name, not a link, with its reason in Notes), "Earlier
   files" / "More files" (100 a page, by cursor), a way back and the download when the viewer may use it. A revision that changes no file says so.
-* **The statements** are always: "These files are rebuilt from the patches in this revision. Nothing here is signed."; when the answer is
+* **The statements** are, first when the answer is `landed`: "These changes have landed: they are part of the project's branch."; then always: "These files are rebuilt from the patches in this revision. Nothing here is signed."; when the answer is
   `provisional`: no earlier check of the history was available, so the files were replayed from the start (they match the patches, the history has not
   been checked); when `base_differs`: what the revision says and what it was compared with; when there is no earlier file: that the revision starts the
   history; and what it was compared with (the block as twelve characters in code, the full ids under one `<details>`). No signature outcome is shown.

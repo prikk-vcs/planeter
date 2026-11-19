@@ -116,6 +116,11 @@ pub(crate) fn unavailable(state: &AppState, reason: ChangesReason) -> Response {
             Key::ErrChangesClaimNotHeldHint,
             axum::http::StatusCode::CONFLICT,
         ),
+        ChangesReason::PartlyLanded => (
+            Key::ErrChangesPartlyLandedMessage,
+            Key::ErrChangesPartlyLandedHint,
+            axum::http::StatusCode::CONFLICT,
+        ),
         ChangesReason::NotOneChange => (
             Key::ErrChangesNotOneChangeMessage,
             Key::ErrChangesNotOneChangeHint,
@@ -270,8 +275,8 @@ async fn list_under_turn(
     rev: &RevisionRecord,
 ) -> Result<ChangeSet, Fail> {
     let cached = {
-        let (svc, rev) = (Arc::clone(svc), rev.clone());
-        offload(move || svc.cached_list(&rev))
+        let (svc, record, rev) = (Arc::clone(svc), record.clone(), rev.clone());
+        offload(move || svc.cached_list(&record, &rev))
             .await
             .map_err(|_| Fail::Internal)?
     };
@@ -296,8 +301,13 @@ async fn file_under_turn(
     file_id: &str,
 ) -> Result<FileDiff, Fail> {
     let cached = {
-        let (svc, rev, fid) = (Arc::clone(svc), rev.clone(), file_id.to_owned());
-        offload(move || svc.cached_file(&rev, &fid))
+        let (svc, record, rev, fid) = (
+            Arc::clone(svc),
+            record.clone(),
+            rev.clone(),
+            file_id.to_owned(),
+        );
+        offload(move || svc.cached_file(&record, &rev, &fid))
             .await
             .map_err(|_| Fail::Internal)?
     };

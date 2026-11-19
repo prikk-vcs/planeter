@@ -115,13 +115,19 @@ pub struct FileDiff {
 /// What was compared with what, and how much to trust it.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Compared {
-    /// The block whose files are the "before" tree; `None`: the proposal starts a history, so there is no earlier file.
+    /// The block whose files are the "before" tree; `None`: the proposal starts a history, so there is no earlier file. For a landed revision: the
+    /// parent, in the project's branch, of the first block that carries the revision's patches.
     pub before_block: Option<String>,
     /// The foot claim's target block (the "after" tree is `extract --claim` of the foot claim).
     pub after_block: String,
     /// The revision's declared base is not the real parent; the real parent is what was compared.
     pub base_differs: bool,
     pub declared_base: Option<String>,
+    /// The revision's work has **landed**: it is part of the project's branch (`heads/main`), and `before_block`/`after_block` are blocks of
+    /// that branch, read from the sealed history (RFC 008 D-11). `false` (and absent from an entry written before this field) for a revision whose
+    /// claims are still held here.
+    #[serde(default)]
+    pub landed: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

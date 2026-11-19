@@ -148,6 +148,11 @@ fn reason_keys(r: ChangesReason) -> (Key, Key, StatusCode) {
             Key::ChangesUnavailableClaimNotHeldBody,
             StatusCode::CONFLICT,
         ),
+        ChangesReason::PartlyLanded => (
+            Key::ChangesUnavailablePartlyLandedHeading,
+            Key::ChangesUnavailablePartlyLandedBody,
+            StatusCode::CONFLICT,
+        ),
         ChangesReason::NotOneChange => (
             Key::ChangesUnavailableNotOneChangeHeading,
             Key::ChangesUnavailableNotOneChangeBody,
@@ -319,7 +324,12 @@ struct ChangesTpl {
 /// compared with. Each is a plain sentence; the block ids are short forms in code (the full ids are under one `<details>`).
 fn statements(t: &T, set: &ChangeSet) -> Vec<Rich> {
     let c = &set.compared;
-    let mut out = vec![t.msg(Key::ChangesStatementRebuilt).html()];
+    let mut out = Vec::new();
+    // RFC 008 D-11: the work has landed, so these are the project's own changes: said before anything else
+    if c.landed {
+        out.push(t.msg(Key::ChangesStatementLanded).html());
+    }
+    out.push(t.msg(Key::ChangesStatementRebuilt).html());
     if set.provisional {
         out.push(t.msg(Key::ChangesStatementProvisional).html());
     }

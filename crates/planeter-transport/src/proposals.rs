@@ -43,6 +43,20 @@ use crate::metrics::Metrics;
 /// The one ref whose blocks make a patch *landed* (RFC 008 D-6). The delivery report counts landing against the same constant.
 pub const FOLLOWED_REF: &str = "heads/main";
 
+/// The blocks `log` lists for `ref_name` (the newest `limit`, with the parents and the patch ids of each), and whether the log filled the limit.
+/// **The one reading of a ref's blocks** that landing is observed from: [`ProposalService`] takes the patch ids of it (for [`FOLLOWED_REF`]), and the
+/// review view of a landed revision (`changes::engine`) takes the blocks themselves, so that "landed" is defined once ([`observe_landing`]) and
+/// read once, with the same window. Positive evidence suffices; absence under truncation is unknown.
+pub fn log_blocks(
+    driver: &planeter_prikk::CliPrikkRepo,
+    ref_name: &str,
+    limit: usize,
+) -> Result<(Vec<planeter_prikk::model::LogBlock>, bool), planeter_prikk::PrikkError> {
+    let log = driver.log(Some(ref_name), Some(limit))?;
+    let truncated = log.blocks.len() >= limit;
+    Ok((log.blocks, truncated))
+}
+
 pub const LIST_LIMIT_DEFAULT: usize = 50;
 pub const LIST_LIMIT_MAX: usize = 100;
 /// The most patches the detail lists (a proposal cannot make the page unbounded); `truncated` says when there are more.
@@ -407,12 +421,9 @@ impl ProposalService {
         ref_name: &str,
         limit: usize,
     ) -> Result<(BTreeSet<String>, bool), ProposalError> {
-        let log = driver
-            .log(Some(ref_name), Some(limit))
-            .map_err(|e| unavailable("cannot read a log", e))?;
-        let truncated = log.blocks.len() >= limit;
-        let ids = log
-            .blocks
+        let (blocks, truncated) =
+            log_blocks(driver, ref_name, limit).map_err(|e| unavailable("cannot read a log", e))?;
+        let ids = blocks
             .into_iter()
             .flat_map(|b| b.patch_messages.into_iter().map(|p| p.patch_id))
             .collect();
