@@ -1376,3 +1376,287 @@ fn the_reason_of_a_refused_request_reaches_the_verbose_detail_and_only_there() {
         loud.err
     );
 }
+
+// ------------------------------------------------------------------------------------------------ IS-62 and RFC 008 D-10 (0.8.0)
+
+/// A second clone of the same repository on the same machine (the same home, the same state directory).
+fn second_clone(f: &Fetching, name: &str) -> PathBuf {
+    let dest = f.w.dir.join(name);
+    let r = client(
+        &[
+            "clone",
+            &url(&f.server),
+            dest.to_str().unwrap(),
+            "--trust-key",
+            &f.w.key,
+        ],
+        &f.w.dir,
+        &f.home,
+        &f.state,
+        "",
+        false,
+        &[],
+    );
+    assert_eq!(r.code, 0, "{}{}", r.out, r.err);
+    dest
+}
+
+fn fetch_in(f: &Fetching, dir: &Path, extra: &[&str]) -> Run {
+    let mut args = vec!["fetch"];
+    args.extend_from_slice(extra);
+    client(&args, dir, &f.home, &f.state, "", false, &[])
+}
+
+/// IS-62, the measurement's `r5c` case: two clones of one repository. The first fetches the new state; the second's first fetch must
+/// fetch it too — before 0.8.0 the record of the address was shared, so it said "Nothing changed" about a state it had never seen.
+#[test]
+fn a_second_clone_of_one_repository_fetches_its_own_state_and_is_not_told_nothing_changed() {
+    if !have_prikk() {
+        eprintln!("skipping: needs prikk on PATH");
+        return;
+    }
+    let f = fetching("is62-two", Some(1));
+    let b = second_clone(&f, "clone-b");
+    f.move_on(2, "\"a2\"");
+    *f.knobs.seq.lock().unwrap() = Some(3);
+    *f.knobs.ref_state.lock().unwrap() = "rs-3".into();
+    // clone A fetches: it lands
+    let asked = archive_requests(&f.server);
+    let a = f.fetch();
+    assert_eq!(a.code, 0, "{}{}", a.out, a.err);
+    assert_eq!(archive_requests(&f.server), asked + 1);
+    // clone B's first fetch: it fetches too (the archive is asked for, and it lands)
+    let r = fetch_in(&f, &b, &[]);
+    assert_eq!(r.code, 0, "{}{}", r.out, r.err);
+    assert!(
+        !r.out.contains("Nothing changed on the server"),
+        "B was told nothing changed about a state it never saw: {}",
+        r.out
+    );
+    assert_eq!(
+        archive_requests(&f.server),
+        asked + 2,
+        "B asked for the archive"
+    );
+    let received = prikk(
+        &b,
+        &f.home,
+        &[
+            "log",
+            "--format",
+            "json",
+            "--ref",
+            "remotes/heads/main",
+            "--limit",
+            "1",
+        ],
+    );
+    let want = f.w.tip(&f.w.maintainer, &f.w.keys);
+    assert!(
+        received.contains(&want),
+        "B has the new state as a received copy"
+    );
+    // and now both are up to date: the next fetch of each is a 304
+    assert!(
+        fetch_in(&f, &b, &[])
+            .out
+            .contains("Nothing changed on the server")
+    );
+    assert!(f.fetch().out.contains("Nothing changed on the server"));
+}
+
+/// The state directory after a clone: the freshness records are per clone (one file each), `clones.json` is the map.
+fn record_files(state: &Path) -> Vec<PathBuf> {
+    let mut v: Vec<PathBuf> = std::fs::read_dir(state)
+        .unwrap()
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.file_name().is_some_and(|n| n != "clones.json"))
+        .collect();
+    v.sort();
+    v
+}
+
+#[test]
+fn each_clone_has_its_own_record_and_the_old_record_of_the_address_is_used_only_by_the_one_clone_that_can_have_written_it()
+ {
+    if !have_prikk() {
+        eprintln!("skipping: needs prikk on PATH");
+        return;
+    }
+    let f = fetching("is62-legacy", Some(1));
+    // after one clone: one record, named for the clone as well as the address
+    let files = record_files(&f.state);
+    assert_eq!(files.len(), 1, "{files:?}");
+    let new_name = files[0].file_name().unwrap().to_string_lossy().into_owned();
+    // the old form: `<address>.json`, keyed by the address alone (what 0.7.0 and before wrote)
+    let url_text = url(&f.server);
+    let legacy_name = format!(
+        "{}.json",
+        url_text
+            .trim_start_matches("https://")
+            .chars()
+            .map(|c| if c.is_ascii_alphanumeric() || matches!(c, '.' | '-') {
+                c
+            } else {
+                '_'
+            })
+            .collect::<String>()
+    );
+    assert_ne!(
+        new_name, legacy_name,
+        "the clone's record is not the address's"
+    );
+    let record = std::fs::read_to_string(&files[0]).unwrap();
+    let mut v: serde_json::Value = serde_json::from_str(&record).unwrap();
+    v["key"] = serde_json::json!(url_text);
+    let legacy = serde_json::to_string_pretty(&v).unwrap();
+
+    // 1. Exactly one clone made from the address, and it is this one: the old record is read, as it always was (a 304).
+    std::fs::remove_file(&files[0]).unwrap();
+    std::fs::write(f.state.join(&legacy_name), &legacy).unwrap();
+    let r = f.fetch();
+    assert_eq!(r.code, 0, "{}{}", r.out, r.err);
+    assert!(r.out.contains("Nothing changed on the server"), "{}", r.out);
+    // and from here it has a record of its own again
+    assert_eq!(
+        record_files(&f.state).len(),
+        2,
+        "{:?}",
+        record_files(&f.state)
+    );
+
+    // 2. Two clones made from the address: the old record is the last writer's, which one is not known, so neither uses it: each does a
+    // full fetch, which is always safe (and says what a fetch says).
+    let b = second_clone(&f, "clone-b");
+    for p in record_files(&f.state) {
+        if p.file_name().unwrap() != legacy_name.as_str() {
+            std::fs::remove_file(p).unwrap();
+        }
+    }
+    let asked = archive_requests(&f.server);
+    let r = f.fetch();
+    assert_eq!(r.code, 0, "{}{}", r.out, r.err);
+    assert!(
+        !r.out.contains("Nothing changed on the server"),
+        "{}",
+        r.out
+    );
+    let r = fetch_in(&f, &b, &[]);
+    assert_eq!(r.code, 0, "{}{}", r.out, r.err);
+    assert!(
+        !r.out.contains("Nothing changed on the server"),
+        "{}",
+        r.out
+    );
+    assert_eq!(archive_requests(&f.server), asked + 2, "a full fetch each");
+    // the old file is never rewritten and never deleted by a fetch
+    assert_eq!(
+        std::fs::read_to_string(f.state.join(&legacy_name)).unwrap(),
+        legacy
+    );
+}
+
+#[test]
+fn a_directory_that_was_moved_is_not_a_clone_this_program_knows_and_nothing_is_skipped() {
+    if !have_prikk() {
+        eprintln!("skipping: needs prikk on PATH");
+        return;
+    }
+    let f = fetching("is62-moved", Some(1));
+    let moved = f.w.dir.join("clone-moved");
+    std::fs::rename(&f.dest, &moved).unwrap();
+    let r = fetch_in(&f, &moved, &[]);
+    // the program remembers clones by their directory: a moved one is refused with the usual sentence, never "nothing changed"
+    assert_eq!(r.code, 2, "{}{}", r.out, r.err);
+    assert!(!r.out.contains("Nothing changed"), "{}", r.out);
+    // a new clone made at the new place has its own record and fetches
+    let again = second_clone(&f, "clone-again");
+    f.move_on(1, "\"a2\"");
+    *f.knobs.seq.lock().unwrap() = Some(2);
+    let r = fetch_in(&f, &again, &[]);
+    assert_eq!(r.code, 0, "{}{}", r.out, r.err);
+    assert!(!r.out.contains("Nothing changed"), "{}", r.out);
+}
+
+const MOVED_EN: &str = "The project's branch moved on the server. A fresh clone has it exactly; to follow it in this clone, merge it yourself with prikk (this makes your own commit, not the server's).";
+
+/// RFC 008 D-10: after a fetch that landed a project branch that moved, one sentence says what a person does.
+#[test]
+fn after_a_fetch_that_landed_a_moved_branch_the_sentence_is_said_in_both_languages_and_never_when_nothing_moved()
+ {
+    if !have_prikk() {
+        eprintln!("skipping: needs prikk on PATH");
+        return;
+    }
+    let f = fetching("d10", Some(1));
+    // nothing moved: a 304, no sentence
+    let r = f.fetch();
+    assert!(r.out.contains("Nothing changed on the server"), "{}", r.out);
+    assert!(!r.out.contains("moved on the server"), "{}", r.out);
+    // the person has work of their own on heads/main, so their tip is not the project's: still, when the project's branch did not move,
+    // the sentence is not said (the same tip, another validator: something else changed, and it is landed)
+    std::fs::write(f.dest.join("mine.txt"), "my own work\n").unwrap();
+    prikk(
+        &f.dest,
+        &f.w.keys,
+        &["commit", "--from-worktree", "-m", "mine"],
+    );
+    prikk(&f.dest, &f.w.keys, &["seal", "--allow-no-audit"]);
+    *f.etag.lock().unwrap() = "\"a1b\"".into();
+    *f.knobs.seq.lock().unwrap() = Some(2);
+    let r = f.fetch();
+    assert_eq!(r.code, 0, "{}{}", r.out, r.err);
+    assert!(
+        !r.out.contains("moved on the server"),
+        "the branch did not move: {}",
+        r.out
+    );
+    // a delivery replaced the branch: a new state with a new tip. English first
+    let b = second_clone(&f, "clone-b");
+    f.move_on(2, "\"a2\"");
+    *f.knobs.seq.lock().unwrap() = Some(4);
+    *f.knobs.ref_state.lock().unwrap() = "rs-4".into();
+    let r = f.fetch();
+    assert_eq!(r.code, 0, "{}{}", r.out, r.err);
+    assert!(r.out.contains(MOVED_EN), "{}", r.out);
+    // the sentence stands before "Next: …" and after what was landed
+    let at = |needle: &str| {
+        r.out
+            .find(needle)
+            .unwrap_or_else(|| panic!("{needle}: {}", r.out))
+    };
+    assert!(
+        at("Fetched the server's state") < at(MOVED_EN)
+            && at(MOVED_EN) < at("Next: review what came")
+    );
+    // the other clone, in Japanese
+    let r = client(
+        &["fetch", "--lang", "ja"],
+        &b,
+        &f.home,
+        &f.state,
+        "",
+        false,
+        &[],
+    );
+    assert_eq!(r.code, 0, "{}{}", r.out, r.err);
+    assert!(
+        r.out
+            .contains("サーバーのプロジェクトのブランチが進みました。"),
+        "{}",
+        r.out
+    );
+    assert!(
+        !r.out.contains("moved on the server"),
+        "one language at a time: {}",
+        r.out
+    );
+    // and the next fetch: nothing moved, no sentence
+    let r = f.fetch();
+    assert!(
+        r.out.contains("Nothing changed on the server") && !r.out.contains("moved on the server"),
+        "{}",
+        r.out
+    );
+}

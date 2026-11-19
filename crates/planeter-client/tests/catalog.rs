@@ -162,10 +162,15 @@ fn no_message_carries_markup_or_colour() {
 
 #[test]
 fn a_sentence_the_person_reads_ends_like_a_sentence() {
-    // Help texts, progress lines and the key prompts are not single sentences; every other English message ends with a full stop,
+    // Help texts, progress lines, the key prompts and the delivery prompt are not single sentences; every other English message ends with a full stop,
     // a question mark, a colon or an ellipsis.
-    let exempt =
-        |id: &str| id.starts_with("help.") || id.starts_with("progress.") || id == "version.line";
+    let exempt = |id: &str| {
+        id.starts_with("help.")
+            || id.starts_with("progress.")
+            || id == "version.line"
+            // the question `Deliver it? [y/N] ` is a prompt, like the key prompts
+            || id == "deliver.prompt"
+    };
     for e in Lang::SOURCE.entries().iter().filter(|e| !exempt(e.key)) {
         let last = e.other().trim_end().chars().last().unwrap();
         assert!(

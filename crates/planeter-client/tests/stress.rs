@@ -1,11 +1,11 @@
-//! A stress run of the `flows` suite (part 11, T3): it is ignored by default and run by hand, because it takes minutes and burns CPU.
+//! A stress run of the `flows` and `deliver` suites (part 11, T3): it is ignored by default and run by hand, because it takes minutes and burns CPU.
 //!
 //! ```text
 //! cargo test -p planeter-client --test stress -- --ignored --nocapture
 //! PLANETER_STRESS_RUNS=50 PLANETER_STRESS_CPUS=0,1 cargo test -p planeter-client --test stress -- --ignored --nocapture
 //! ```
 //!
-//! It runs `cargo test -p planeter-client --test flows` `PLANETER_STRESS_RUNS` times (default 10), one after the other (the suites keep
+//! It runs `cargo test -p planeter-client --test flows --test deliver` (the commands against a stub server: `clone`, `fetch`, `propose`, and since 0.8.0 `deliver`) `PLANETER_STRESS_RUNS` times (default 10), one after the other (the suites keep
 //! their scratch directories by name), and fails on the first run that fails, printing the failing tests and their texts. With
 //! `PLANETER_STRESS_CPUS` (a CPU list such as `0,1`; Linux, needs `taskset`) every run is confined to those CPUs and one busy loop per
 //! CPU is started on them; the busy loops are children of this test, stopped through their handles (never by name), also when the
@@ -68,6 +68,8 @@ fn the_flows_suite_passes_every_time_under_load() {
                 "planeter-client",
                 "--test",
                 "flows",
+                "--test",
+                "deliver",
             ])
             .output()
             .expect("cargo test");
