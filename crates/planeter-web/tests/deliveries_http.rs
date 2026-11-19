@@ -654,6 +654,51 @@ async fn the_edge_answers_before_a_byte_of_the_archive_is_read() {
     let r = send(&s.router, huge).await;
     assert_eq!(code(&r), (413, "payload_too_large".into()));
     assert_eq!(r.json()["limit"], limit);
+    // the archive's own words, and the limit in the hint (RFC 008 handoff 4, T0.2): never the proposals' sentence
+    let body = r.json();
+    assert_eq!(
+        body["message"],
+        "That archive is larger than this server accepts."
+    );
+    let mib = limit >> 20;
+    assert_eq!(
+        body["hint"],
+        format!(
+            "Deliver a repository of at most {mib} MiB, or ask the person who runs this server to raise PLANETER_IMPORT_MAX_MB."
+        )
+    );
+    assert!(!body.to_string().contains("proposal"), "{body}");
+    // in Japanese: the number, and not the operator's variable name
+    let huge_ja = Request::builder()
+        .method("POST")
+        .uri("/api/v1/repos/alice/forge/deliveries")
+        .header("authorization", "Bearer tok-alice")
+        .header("accept-language", "ja")
+        .header("content-type", "application/octet-stream")
+        .header("content-length", (limit + (1 << 20)).to_string())
+        .body(Body::empty())
+        .unwrap();
+    let r = send(&s.router, huge_ja).await;
+    assert_eq!(code(&r), (413, "payload_too_large".into()));
+    let body = r.json();
+    assert_eq!(
+        body["message"],
+        "そのアーカイブは、このサーバーが受け付ける大きさを超えています。"
+    );
+    assert!(
+        body["hint"]
+            .as_str()
+            .unwrap()
+            .contains(&format!("{mib} MiB")),
+        "{body}"
+    );
+    assert!(
+        !body["hint"]
+            .as_str()
+            .unwrap()
+            .contains("PLANETER_IMPORT_MAX_MB"),
+        "{body}"
+    );
     // nothing was begun by any of them
     assert!(s.svc.deliveries.non_final().unwrap().is_empty());
     // a repository that waits for recovery refuses before the body

@@ -1557,6 +1557,14 @@ pub const CATALOG: &[Entry] = &[
         "もっと小さいアーカイブをメンテナーに頼むか、上限を上げるようサーバーを運用している人に頼んでください。",
     ),
     msg(
+        "error.delivery_too_large.message",
+        "そのアーカイブは、このサーバーが受け付ける大きさを超えています。",
+    ),
+    msg(
+        "error.delivery_too_large.hint",
+        "引き渡せるリポジトリは {limit} MiB までです。もっと小さいリポジトリを引き渡すか、上限を上げるようこのサーバーを運用している人に頼んでください。",
+    ),
+    msg(
         "error.import_length.message",
         "リクエストの長さが示されていません。",
     ),

@@ -881,6 +881,8 @@ keys! {
     ErrCreateTooBigHint => "error.create_too_big.hint",
     ErrImportTooLargeMessage => "error.import_too_large.message",
     ErrImportTooLargeHint => "error.import_too_large.hint",
+    ErrDeliveryTooLargeMessage => "error.delivery_too_large.message",
+    ErrDeliveryTooLargeHint => "error.delivery_too_large.hint",
     ErrImportLengthMessage => "error.import_length.message",
     ErrImportLengthHint => "error.import_length.hint",
     ErrInvalidRequestImportFramingHint => "error.invalid_request.import_framing_hint",

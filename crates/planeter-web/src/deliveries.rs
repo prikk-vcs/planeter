@@ -327,6 +327,11 @@ fn view_response(
 
 // ------------------------------------------------------------------------------------------------ refusals
 
+/// The limit in whole MiB (rounded down: "at most"), for a sentence.
+fn mib(bytes: u64) -> String {
+    (bytes >> 20).to_string()
+}
+
 /// An engine refusal as the API's error body.
 fn failure_response(state: &AppState, e: &DeliveryError, max_archive: u64) -> Response {
     match e {
@@ -337,8 +342,8 @@ fn failure_response(state: &AppState, e: &DeliveryError, max_archive: u64) -> Re
         DeliveryError::TooLarge { limit } => detail(
             state,
             ErrorCode::PayloadTooLarge,
-            ErrorCode::IMPORT_TOO_LARGE,
-            vec![],
+            ErrorCode::DELIVERY_TOO_LARGE,
+            vec![("limit", mib(*limit))],
             vec![("limit", (*limit).into())],
         ),
         DeliveryError::StageLimit(StartRefusal::TooManyForPrincipal { limit }) => detail(
@@ -579,8 +584,8 @@ pub(crate) async fn start_handler(
         detail(
             &state,
             ErrorCode::PayloadTooLarge,
-            ErrorCode::IMPORT_TOO_LARGE,
-            vec![],
+            ErrorCode::DELIVERY_TOO_LARGE,
+            vec![("limit", mib(max))],
             vec![("limit", max.into())],
         )
     };

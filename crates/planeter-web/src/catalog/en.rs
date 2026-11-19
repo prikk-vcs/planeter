@@ -1548,6 +1548,14 @@ pub const CATALOG: &[Entry] = &[
         "Ask the maintainer for a smaller archive, or ask the person who runs this server to raise the limit.",
     ),
     msg(
+        "error.delivery_too_large.message",
+        "That archive is larger than this server accepts.",
+    ),
+    msg(
+        "error.delivery_too_large.hint",
+        "Deliver a repository of at most {limit} MiB, or ask the person who runs this server to raise PLANETER_IMPORT_MAX_MB.",
+    ),
+    msg(
         "error.import_length.message",
         "The request did not say how long it is.",
     ),

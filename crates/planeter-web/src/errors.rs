@@ -635,6 +635,13 @@ impl ErrorCode {
         hint: Key::ErrImportTooLargeHint,
     };
 
+    /// `payload_too_large` for the archive of a **delivery**: the same status and code as the import's, its own words, and the limit in the hint
+    /// (`{limit}`, in MiB). The hint names the operator's setting in English (the API's hints are for developers and operators); the Japanese does not.
+    pub const DELIVERY_TOO_LARGE: ErrorKeys = ErrorKeys {
+        message: Key::ErrDeliveryTooLargeMessage,
+        hint: Key::ErrDeliveryTooLargeHint,
+    };
+
     /// `length_required` for an archive.
     pub const IMPORT_LENGTH: ErrorKeys = ErrorKeys {
         message: Key::ErrImportLengthMessage,
