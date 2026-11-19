@@ -341,6 +341,9 @@ fn a_maintainer_delivers_with_the_real_client_and_everything_after_it_works() {
     };
     let (older, older_keys) = copy_of("older", &fx.m1_at_h0, &fx.m1_at_h0_keys);
     let (div, div_keys) = copy_of("div", &fx.dir.join("div"), &fx.dir.join("div-keys"));
+    let (dev, dev_keys) = copy_of("dev", &fx.dir.join("dev"), &fx.dir.join("dev-keys"));
+    let (unrelated, unrelated_keys) =
+        copy_of("unrelated", &fx.dir.join("u"), &fx.dir.join("u-keys"));
     let (unadopted, unadopted_keys) =
         copy_of("unadopted", &fx.dir.join("xb"), &fx.dir.join("xb-keys"));
 
@@ -493,6 +496,70 @@ fn a_maintainer_delivers_with_the_real_client_and_everything_after_it_works() {
     );
     assert_eq!(r.code, Some(0), "{}", r.all());
     assert!(r.stdout.contains("試行のみです。"), "{}", r.stdout);
+
+    // ---- a delivery that adds a branch (the measurement's `dev`): the report says which branch it adds
+    let r = run(
+        "dry-run-adds-a-branch.en",
+        &["deliver", &url, "--dry-run"],
+        &dev,
+        &dev_keys,
+        "tok-alice",
+        None,
+    );
+    assert_eq!(r.code, Some(0), "{}", r.all());
+    assert!(
+        r.stdout.contains("Branches it adds: heads/dev."),
+        "{}",
+        r.stdout
+    );
+    let r = run(
+        "dry-run-adds-a-branch.ja",
+        &["deliver", &url, "--dry-run"],
+        &dev,
+        &dev_keys,
+        "tok-alice",
+        Some("ja"),
+    );
+    assert_eq!(r.code, Some(0), "{}", r.all());
+    assert!(
+        r.stdout.contains("加わるブランチ：heads/dev。"),
+        "{}",
+        r.stdout
+    );
+    assert_eq!(forge_tip(), old_tip);
+
+    // ---- a repository with nothing in common with the forge's history
+    let r = run(
+        "refused-unrelated.en",
+        &["deliver", &url, "--yes"],
+        &unrelated,
+        &unrelated_keys,
+        "tok-alice",
+        None,
+    );
+    assert_eq!(r.code, Some(1), "{}", r.all());
+    assert!(
+        r.stderr
+            .contains("Your archive has nothing in common with this repository's history."),
+        "{}",
+        r.stderr
+    );
+    let r = run(
+        "refused-unrelated.ja",
+        &["deliver", &url, "--yes"],
+        &unrelated,
+        &unrelated_keys,
+        "tok-alice",
+        Some("ja"),
+    );
+    assert_eq!(r.code, Some(1), "{}", r.all());
+    assert!(
+        r.stderr
+            .contains("アーカイブの履歴には、このリポジトリの履歴と共通するものがありません。"),
+        "{}",
+        r.stderr
+    );
+    assert_eq!(forge_tip(), old_tip);
 
     // ---- the refusals, while the forge is still at its first state: an unadopted key; the others after the delivery
     let r = run(
