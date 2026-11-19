@@ -86,6 +86,7 @@ client	usage.*	C	Mistakes in the command line	a refused command line
 client	clone.*	C	clone	the steps and sentences of `planeter-client clone`
 client	fetch.*	C	fetch	the steps and sentences of `planeter-client fetch`
 client	propose.*	C	propose	the steps and sentences of `planeter-client propose`
+client	deliver.*	C	deliver	the steps and sentences of `planeter-client deliver`: export, report, the question, the end, and what the server refused
 client	token.*	C	The token	a problem with the token
 client	tls.*	C	Connecting: certificates and the network	a TLS problem, as one sentence with the next step
 client	net.*	C	Connecting: certificates and the network	a network problem

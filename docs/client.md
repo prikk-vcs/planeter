@@ -6,14 +6,15 @@
 | Where | `crates/planeter-client` (the program), `crates/planeter-client/tests/` (its tests: the HTTP core, the command line, the messages, the commands against a stub server, and `crates/planeter/tests/client_e2e.rs` against the real server behind a TLS terminator). |
 | Needs | prikk 0.58.0 or later on your `PATH` (your own prikk and your own keys); a planeter server reachable over **https**. |
 
-`planeter-client` does three things with a repository on a planeter server, and nothing else:
+`planeter-client` does four things with a repository on a planeter server, and nothing else:
 
 * **`clone`** downloads it, checks it with your prikk, shows you the maintainer keys it carries, and trusts **only the keys you type**.
 * **`fetch`** asks whether the server's state changed; if it did, downloads it, checks it, and lands it as **received copies**. Your own branches are never touched.
 * **`propose`** builds your work against what the server already holds, with your prikk and your keys, and sends it as a **proposal**. The server holds it for review; no branch changes.
+* **`deliver`** (for a **maintainer**) exports your whole repository with your own prikk and asks the server to check it; if it continues the project's branch, the server says what would happen, and **only when you confirm** it becomes the project's branch. The server signs nothing.
 
 It holds **no key**, links no prikk code, and signs nothing: every history operation is your own prikk. There is no `merge`, `seal`
-or `publish` command, no SSH, no auto-update and no telemetry.
+or `publish` command (`deliver` sends your repository to be checked; the sealing was yours, with your key, before it), no SSH, no auto-update and no telemetry.
 
 ## Trust, in four sentences
 
@@ -30,6 +31,7 @@ planeter-client propose <https://host/owner/name> [--ref heads/NAME] [--proposal
                         [--description-file FILE] [--dry-run] [--retry]
 planeter-client clone   <https://host/owner/name> [DIR] [--trust-key KEY]... [--no-adopt]
 planeter-client fetch   [DIR]
+planeter-client deliver <https://host/owner/name> [--repo DIR] [--yes] [--dry-run]
 every command:          [--token-file FILE] [--cacert FILE] [--lang en|ja] [--verbose]
 ```
 
@@ -55,6 +57,53 @@ branch**: a revision keeps them, so the program sends none of the three with `--
 reason and one for what to do**; the server's own words (`code`, `message`, `hint`, and the `reason` of a refused request) appear only under `--verbose`. If the server did
 not finish taking the work in (`incomplete`), the same work is sent again only with `--retry`: the program never repeats a send by
 itself, and the record of an unfinished send is the only thing it keeps about a proposal.
+
+**`deliver`** (RFC 008) is the maintainer's command: run it inside your own prikk repository (or name it with `--repo DIR`) once your branch
+`heads/main` continues the project's branch on the forge. Its steps, each with its own sentence in both languages:
+
+1. **Local checks, before anything is sent:** the directory is a prikk repository, prikk is at the floor, `heads/main` exists here, and — when
+   there is no terminal to ask at — `--yes` was given (said at once, before a byte is exported or sent; a `--dry-run` asks nothing).
+2. **Export:** `prikk archive export` of the whole repository into a **private** scratch file (a directory of mode `0700`, the file `0600`),
+   with a line for the size. If prikk refuses (unfinished work in the repository, say) its first line is in the sentence, all of it under `--verbose`.
+3. **Upload:** the framing of repository creation's import (`PLANETER-IMPORT-1`, the metadata `{}`, the archive) with your token only, over https
+   only, no redirect followed, no silent retry. The server is asked to answer in your language (`Accept-Language`).
+4. **The report:** the server's own sentence first — including the owner's wording "Delivering replaces this repository's branch heads/main with
+   yours. It is accepted only if yours continues from the current one; nothing is signed by this server." — then, from the report, how the
+   project's branch would move, how many changes your delivery adds, the branches it adds, and the open proposals: those that **stay**, those that
+   **land** (their work is already in your branch), and those that **cannot be kept** (their files were removed). A proposal's title is shown with
+   control characters made visible, never obeyed. A refused report prints the server's reason and what to do (and, for a key it does not
+   trust, the keys that can deliver) and exits 1; "nothing to deliver" exits 0.
+5. **Confirm:** `Deliver it? [y/N]` (no default yes; `--yes` skips the question). The delivery is carried out by the server, not by the
+   request: if you stop the program (Ctrl-C included) it goes on, and the program says its id and the address to look at (`GET …/deliveries/{id}`)
+   before it starts waiting. It looks every 2 s (a line every 30 s, 15 minutes at most) until the delivery is `done` or `failed`, or the server says
+   it needs its own recovery. `--dry-run` stops after the report and **cancels** the delivery on the server.
+6. **Exit codes** are the table's: 0 done (or nothing to deliver, or a dry run), 1 the server refused or the delivery did not go through,
+   2 the command line, 3 the network, 4 your prikk, 5 local files.
+
+A `403` means the token cannot deliver: delivering needs a token with **full access** to the repository, from a **maintainer** (a `write` token is
+not enough). A `404` is the one sentence every command uses for "no such repository, or you may not read it". **If the connection breaks while the
+archive is sent, a run again is safe**: the server journals the upload, nothing is carried out without your confirmation, and an unconfirmed
+delivery is removed after a day. **The scratch file is removed on every exit path**, a panic included; after a kill (`SIGKILL`) the run's lock
+(held for as long as it lives, released by the system when it dies) tells the next `deliver` that the directory is nobody's, and it removes it.
+
+## When the project's branch moves
+
+A delivery **replaces** the forge's `heads/main` with the maintainer's. What that means for you:
+
+* **A fresh `clone` has the project's branch exactly** (its `heads/main` is the delivered tip, and there is no received copy of it).
+* **`fetch` lands a received copy and never touches your branches.** After a fetch that landed a project branch that **moved** (the server's tip
+  is not the one your clone was shown before) and your own `heads/main` is not at it, the program says one sentence: *"The project's branch moved
+  on the server. A fresh clone has it exactly; to follow it in this clone, merge it yourself with prikk (this makes your own commit, not the
+  server's)."* It says nothing when nothing moved.
+* **`prikk merge --from` makes your own block**, with your key, not the server's (measured in the dependency ledger, PK-83 and PK-84).
+
+**One record per clone (IS-62, 0.8.0).** What a clone was shown (the tip, the RefState id, the `update_seq` of each branch, the archive's
+validator) is kept **per clone** — keyed by the clone's directory as well as the server's address. Before 0.8.0 the record was per address, so a
+second clone of one repository on one machine was told "nothing changed" about a state it had never seen. An old per-address record is used only
+by the one clone that can have written it (the program remembers which clones it made; exactly one came from that address, and it is the one
+being fetched into); with two or more, or none, the clone starts without a record and its first fetch is a full one, which is always safe. The old
+file is never rewritten. A clone directory that was **moved** is not a clone this program knows (it remembers them by directory): `fetch` says so;
+nothing is skipped.
 
 **`clone`** needs the keys typed at a terminal, or `--trust-key` for each key you trust when there is none (a pipe, a script). With
 neither, it stops before downloading anything and says how. A `--trust-key` the repository does not carry stops the clone: nothing is
@@ -110,7 +159,7 @@ your user profile, whose access list is private by default. The token is added t
 `PLANETER_TOKEN` (the token); `HTTPS_PROXY`, `NO_PROXY` and their lower-case forms; `LC_ALL`, `LC_MESSAGES`, `LANG` (the language);
 `PLANETER_CLIENT_STATE_DIR` (where the program keeps its two small records — the tips it was shown, and which directory came from which
 server — default: the platform's usual state directory); `PLANETER_CLIENT_PRIKK` (the path of the prikk program to run instead of the one
-on `PATH`). **Why it exists:** a test runs a stand-in prikk through it, and a person with prikk in an unusual place can name it. **What it
+on `PATH`); for the tests of `deliver`, `PLANETER_CLIENT_POLL_MS`, `PLANETER_CLIENT_STILL_MS` and `PLANETER_CLIENT_WAIT_MS` (how often it looks at a delivery, how often it says "still working", how long it waits: 2 000, 30 000 and 900 000 by default). **Why it exists:** a test runs a stand-in prikk through it, and a person with prikk in an unusual place can name it. **What it
 is not:** a way to choose another version-control tool (the program speaks prikk's commands and reads prikk's reports), and not a secret —
 whatever it names runs with your own rights, exactly as the `prikk` on your `PATH` would. It is deliberately not in `--help`. prikk finds
 your keys by its own rules (your home directory); the program never reads them: it passes `HOME` and `XDG_CONFIG_HOME` on to the prikk it
@@ -151,9 +200,10 @@ own `.sha256` (prikk publishes Linux, macOS arm64 and Windows x86_64 builds). Wh
 |---|---|---|---|
 | the HTTP/TLS core, the command line, the messages, the freshness comparison, the floor, `--version` (`http`, `cli`, `catalog`, `freshness`, `floor`, `version`) | yes | yes | yes |
 | the prikk runner against the real prikk (`prikk_runner`) | yes | yes | yes |
-| `clone`, `fetch`, `propose` against a stub server with the real prikk (`flows`), and the proxy variables (`proxy`) | yes | yes | **no** — they give each person their own `HOME` for prikk's keys and use POSIX file modes; prikk's key location on Windows differs, and a test must not write to a developer's real keys |
+| `clone`, `fetch`, `propose` against a stub server with the real prikk (`flows`, with the per-clone record and the moved-branch sentence), and the proxy variables (`proxy`) | yes | yes | **no** — they give each person their own `HOME` for prikk's keys and use POSIX file modes; prikk's key location on Windows differs, and a test must not write to a developer's real keys |
+| `deliver` against a stub server with a stand-in prikk (`deliver`: the road, every refusal, the prompt, the waits, the private scratch and a `SIGKILL` of the real client) | yes | yes | **no** (a shell script, POSIX modes) |
 | a prikk that is there but cannot be started, told as that and not as "not found" (`prikk_start`) | yes | yes | no (modes and scripts) |
-| the real planeter server behind TLS, with the real client (`crates/planeter/tests/client_e2e.rs`, in the `build` job) | where the server's sandbox works (Linux) | no (the server is Linux only) | no |
+| the real planeter server behind TLS, with the real client (`crates/planeter/tests/client_e2e.rs` and, for `deliver`, `client_deliver_e2e.rs`, in the `build` job) | where the server's sandbox works (Linux) | no (the server is Linux only) | no |
 
 So the three commands are exercised on Linux and macOS; on Windows the program is built and its stack, command line, messages and prikk
 runner are tested.
