@@ -1,0 +1,14 @@
+{
+  "schema_version": "patch-plan-content-v1",
+  "ref": "heads/main",
+  "target_block_id": "ff05a89e6d82aae0c7b2063525549aaece1dd58352313f0d2c29af895b55a217",
+  "coverage": {
+    "applied_operation_kinds": ["create-file","edit-text"],
+    "walk": "single-parent"
+  },
+  "content": [
+    {"path": "a.txt", "mode": 33188, "content": {"kind": "text", "text": "hello\nmore\n"}},
+    {"path": "b.bin", "mode": 33188, "content": {"kind": "text", "text": "bin\u0000data"}}
+  ],
+  "not_found": ["missing"]
+}

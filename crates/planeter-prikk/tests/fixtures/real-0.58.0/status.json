@@ -1,0 +1,20 @@
+{
+  "schema_version": "status-report-v1",
+  "repository": "/srv/r/w/.prikk",
+  "active_wal_records": 0,
+  "trailing_partial_wal_bytes": 0,
+  "heads_main_ref_state": "ea655434f02311c62c2e87a0dd9fa185893e28a4292d6f3f761b150d53b06bab",
+  "current_branch": "heads/main",
+  "provisional_worktree": null,
+  "interrupted_materialization": null,
+  "queue": {
+    "count": 0,
+    "target_ref": null,
+    "target_ref_status": null,
+    "threshold_status": null,
+    "warn_threshold": null,
+    "hard_limit": null,
+    "already_sealed": null,
+    "patches": []
+  }
+}

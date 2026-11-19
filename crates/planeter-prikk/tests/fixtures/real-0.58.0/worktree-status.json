@@ -1,0 +1,17 @@
+{
+  "schema_version": "worktree-status-report-v1",
+  "repository": "/srv/r/w/.prikk",
+  "ref": "heads/main",
+  "current_branch": "heads/main",
+  "tracked_files": 2,
+  "unchanged_files": 1,
+  "clean": false,
+  "refused_count": 0,
+  "refused_declaration_count": 0,
+  "queued_elsewhere": null,
+  "behind_ref": null,
+  "changes": [
+    {"path": "a.txt", "kind": "modified", "detail": "tracked file bytes differ from the baseline", "authoring": "authored", "refusal": null}
+  ],
+  "declarations": []
+}

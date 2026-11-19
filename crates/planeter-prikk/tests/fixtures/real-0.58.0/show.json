@@ -1,0 +1,8 @@
+{
+  "schema_version": "show-report-v1",
+  "patches": [
+    {"patch_id": "0f8319e214fa1721d360705e54d490eeb50c3100763603eef371275b89ad672b", "queued": false, "state": "sealed", "resolved_through_claim_id": null, "operations": [
+      {"kind": "edit-text", "paths": [{"unresolved_node_id": "4e75641fe1a2c92525f7d5ce734b88a8833ed74eae5dd0a9323efd3afd77d4c2", "reason": "`show` does not search for the block that sealed a patch shown by its own id; `prikk log` or `prikk tree` finds it"}], "content": {"kind": "edit-text", "old_span_text": "", "replacement_text": "more\n"}}
+    ]}
+  ]
+}

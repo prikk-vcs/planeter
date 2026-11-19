@@ -1,0 +1,1 @@
+{"schema_version": "refusal-v1", "command": "extract", "refusal": "point-not-found", "reason": null, "message": "precondition not met: ref heads/nope does not exist in this repository"}

@@ -1,0 +1,32 @@
+{
+  "schema_version": "prepo-import-report-v1",
+  "ok": true,
+  "resumed": false,
+  "written_objects": {
+    "patch": 0,
+    "blob": 0,
+    "block": 0,
+    "attestation": 0,
+    "ref-state": 0,
+    "tag": 0,
+    "recognition-claim": 0
+  },
+  "merged_objects": {
+    "patch": 0,
+    "blob": 0,
+    "block": 0,
+    "attestation": 0,
+    "ref-state": 0,
+    "tag": 0,
+    "recognition-claim": 0
+  },
+  "dropped_signatures": [],
+  "recorded_author_key_count": 1,
+  "landings": [{ "ref_name": "heads/main", "landed_as": "remotes/heads/main", "adopted": false, "remote_reason": "a local branch heads/main already exists (at RefState ea655434f02311c62c2e87a0dd9fa185893e28a4292d6f3f761b150d53b06bab), and adopting onto an existing ref is not done; the history is kept as remotes/heads/main. If the two histories share a root, bring it in with `prikk merge --from remotes/heads/main`; if they are unrelated, the only route today is a new repository: `prikk setup <new-dir>`, then `prikk archive import --adopt` there", "landed": true, "collision_target": null, "publication_trusted": true, "class": "no-local-history", "ref_state_chain": null, "completed_by_interrupted_run": false }, { "ref_name": "tags/v1", "landed_as": "remotes/tags/v1", "adopted": false, "remote_reason": "a local branch tags/v1 already exists (at RefState 958881bb00130003c3bbc6fe74b51002bf0c0c4f49ff5fa7ac73bf311742b503), and adopting onto an existing ref is not done; the history is kept as remotes/tags/v1. If the two histories share a root, bring it in with `prikk merge --from remotes/tags/v1`; if they are unrelated, the only route today is a new repository: `prikk setup <new-dir>`, then `prikk archive import --adopt` there", "landed": true, "collision_target": null, "publication_trusted": true, "class": "no-local-history", "ref_state_chain": null, "completed_by_interrupted_run": false }],
+  "note": null,
+  "already_imported": false,
+  "materialized_into_worktree": false,
+  "materialized_written_files": 0,
+  "materialized_unchanged_files": 0,
+  "materialized_deleted_files": 0
+}

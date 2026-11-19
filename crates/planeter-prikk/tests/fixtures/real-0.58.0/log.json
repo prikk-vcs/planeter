@@ -1,0 +1,42 @@
+{
+  "schema_version": "log-report-v1",
+  "repository": "/srv/r/w/.prikk",
+  "ref": "heads/main",
+  "current_branch": "heads/main",
+  "blocks": [
+    {
+      "block_id": "ff05a89e6d82aae0c7b2063525549aaece1dd58352313f0d2c29af895b55a217",
+      "ref_state_id": "ea655434f02311c62c2e87a0dd9fa185893e28a4292d6f3f761b150d53b06bab",
+      "update_seq": 2,
+      "kind": "Normal",
+      "rollback_block": false,
+      "parent_count": 1,
+      "parent_block_ids": ["b6642366496b3b361d8c047653e56332b67626c44f304c69561ec7811bdb717e"],
+      "sealed_by": ["maintainer"],
+      "patch_count": 1,
+      "rollback_patch_count": 0,
+      "required_attestation_count": 0,
+      "patch_messages": [
+        {"patch_id": "0f8319e214fa1721d360705e54d490eeb50c3100763603eef371275b89ad672b", "message": "second"}
+      ],
+      "previous_ref_state_id": "1dc9036250cf05f33b40272db0680e2cc3938f3797ef0730c235d6493c9df764"
+    },
+    {
+      "block_id": "b6642366496b3b361d8c047653e56332b67626c44f304c69561ec7811bdb717e",
+      "ref_state_id": "1dc9036250cf05f33b40272db0680e2cc3938f3797ef0730c235d6493c9df764",
+      "update_seq": 1,
+      "kind": "Root",
+      "rollback_block": false,
+      "parent_count": 0,
+      "parent_block_ids": [],
+      "sealed_by": ["maintainer"],
+      "patch_count": 1,
+      "rollback_patch_count": 0,
+      "required_attestation_count": 0,
+      "patch_messages": [
+        {"patch_id": "b53993fc5a7de29fe92f4e7b5a0a7b95745ac1cffc6dc106140db6a6a313390d", "message": "first"}
+      ],
+      "previous_ref_state_id": null
+    }
+  ]
+}

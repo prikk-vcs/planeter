@@ -1,0 +1,6 @@
+{
+  "schema_version": "path-content-v1",
+  "point": "heads/main",
+  "target_block_id": "ff05a89e6d82aae0c7b2063525549aaece1dd58352313f0d2c29af895b55a217",
+  "path": "b.bin", "kind": "file", "encoding": "text", "mode": 33188, "size": 8
+}

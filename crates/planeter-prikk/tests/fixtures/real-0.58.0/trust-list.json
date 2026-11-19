@@ -1,0 +1,6 @@
+{
+  "schema_version": "trust-list-v1",
+  "keys": [
+    {"key_id": "maintainer", "public_key": "c94275a84a47abda3c7ad97a72f5f893529c4c5e28f49ca88514fae21531a3f0"}
+  ]
+}

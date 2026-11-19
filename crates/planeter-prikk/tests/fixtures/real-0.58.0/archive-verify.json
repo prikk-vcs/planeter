@@ -1,0 +1,15 @@
+{
+  "schema_version": "prepo-verify-report-v1",
+  "ok": true,
+  "repository_format": 8,
+  "tool_version": "0.58.0",
+  "structure": { "ok": true },
+  "closure": { "ok": true },
+  "signatures": { "checked": 8, "not_checked_count": 0, "unresolvable": [], "not_checked": [], "note": null },
+  "damaged": [],
+  "interrupted_appends": [],
+  "unreferenced_remnants": [],
+  "unreached_outside_version_rule": [],
+  "maintainer_keys": [{ "key_id": "maintainer", "public_key": "c94275a84a47abda3c7ad97a72f5f893529c4c5e28f49ca88514fae21531a3f0", "status": "adopted" }],
+  "note": "internally consistent -- not trusted; trust comes only from a receiver's own adopted set, checked after import, never from this archive's own carried record"
+}

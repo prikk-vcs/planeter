@@ -1,0 +1,15 @@
+{
+  "schema_version": "extract-report-v1",
+  "extract_repository": "/srv/r/w/.prikk",
+  "point": "heads/main",
+  "point_kind": "ref",
+  "target_block_id": "ff05a89e6d82aae0c7b2063525549aaece1dd58352313f0d2c29af895b55a217",
+  "claim_parent_block_id": null,
+  "chain": [],
+  "chain_signature": null,
+  "provisional": false,
+  "written": true,
+  "file_count": 2,
+  "total_bytes": 19,
+  "largest_file_bytes": 11
+}

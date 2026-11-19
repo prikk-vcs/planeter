@@ -1,0 +1,8 @@
+{
+  "schema_version": "branch-list-v1",
+  "branches": [
+    {"ref_name": "heads/main", "ref_state_id": "ea655434f02311c62c2e87a0dd9fa185893e28a4292d6f3f761b150d53b06bab", "closed": false, "current": true}
+  ],
+  "received": [],
+  "unpublished_current_branch": null
+}

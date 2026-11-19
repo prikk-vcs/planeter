@@ -1,0 +1,8 @@
+{
+  "schema_version": "sync-pending-v1",
+  "patches": [
+    {"patch_id": "6cb5fed537b13140b5c6524e69cb2ee0ba233a2ca7173e86cc8d47ad5b22ad0d", "claims": [
+      {"claim_id": "94d18a0a4929a0e18ee0dc7008c698eacae69a47b65b3f20961a2323c1ade1a8", "target_block_id": "5d3bcf1848530b81f4774dd585e538720e7062a6ba617268fe5adb3f3d3e3379", "parent_block_ids": ["ff05a89e6d82aae0c7b2063525549aaece1dd58352313f0d2c29af895b55a217"], "signature": {"outcome": "sound", "key_id": "maintainer"}}
+    ]}
+  ]
+}

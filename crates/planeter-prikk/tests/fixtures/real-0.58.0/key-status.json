@@ -1,0 +1,27 @@
+{
+  "schema_version": "key-status-v1",
+  "roles": [
+    {
+      "role": "author",
+      "source": "key-directory",
+      "path": "/srv/r/k/prikk/author.seed",
+      "usable": true,
+      "reason": null,
+      "key_id": "author",
+      "key_id_source": "default",
+      "public_key": "5e387cba27d769e28683194da22991953dc3a1d78f9ccf3a6f2e71d2685f7e1f",
+      "binding": "matches"
+    },
+    {
+      "role": "maintainer",
+      "source": "key-directory",
+      "path": "/srv/r/k/prikk/maintainer.seed",
+      "usable": true,
+      "reason": null,
+      "key_id": "maintainer",
+      "key_id_source": "default",
+      "public_key": "c94275a84a47abda3c7ad97a72f5f893529c4c5e28f49ca88514fae21531a3f0",
+      "binding": "matches"
+    }
+  ]
+}
