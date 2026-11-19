@@ -289,10 +289,10 @@ The proposals list shows the review word of each open proposal. An anonymous rea
     be told from "older than the window", so it is **not claimed**: `claim_not_held`.
   * **All in `heads/main`, in no single run** (another block between, a patch in two blocks, a merge, a block that carries other work too):
     `not_one_change` (422).
-  * **None in `heads/main`** (an extra branch or a received ref does not count), or no patch to ask about: `claim_not_held`. Its sentence still says "for
+  * **None in `heads/main`** (an extra branch or a received ref does not count), or no patch to ask about: `claim_not_held` — but what was cached while its claims waited is still served, as in 0.7.0. Its sentence still says "for
     example because it arrived as signed history": the work of a received history is exactly this case.
   * A proposal **stacked** on another (its artifact carries the other's block) whose base has landed has a claim that is no longer pending and a patch
-    of its own that is not in `heads/main`: `claim_not_held`, as in 0.7.0.
+    of its own that is not in `heads/main`: what was cached while it waited is served (not landed); with nothing cached it is `claim_not_held`, as in 0.7.0.
 * **Errors** are the project's one shape with `code: changes_unavailable` and a closed `reason`: `claim_not_held` (409), `partly_landed` (409), `not_one_change` (422),
   `tree_too_large` (422), `busy` (503, `Retry-After`), `timed_out` (503), `failed` (503). A hidden repository, an unknown proposal, revision or file
   are the same `404`.

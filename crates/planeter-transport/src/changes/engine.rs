@@ -423,7 +423,7 @@ impl ChangesService {
 
     /// What is already known about the list of a revision without extracting anything: a cached change set, or an answer the facts decide
     /// (`partly_landed`, `claim_not_held`, `not_one_change`). `None`: compute it. **Which cache entry may be read depends on what the revision is
-    /// now** ([`Self::status`]): a revision that has landed is looked for under the key of the two blocks of the project's branch, never under
+    /// now** (`Self::status`): a revision that has landed is looked for under the key of the two blocks of the project's branch, never under
     /// the pointer written while its claims were pending.
     pub fn cached_list(
         &self,

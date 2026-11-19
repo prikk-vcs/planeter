@@ -464,12 +464,19 @@ async fn the_landed_view_of_the_measurements_scenario_equals_a_diff_r_and_the_ot
     assert_eq!(counter(&s, "landed_ok"), 1);
 
     // ---- P2 is stacked on P1 (its artifact carries P1's block, so its claims are P1's and its own): P1's claim is sealed now, its own is
-    // still pending, and its own patch is in no block. 0.7.0 answered `claim_not_held` for it and so does this: the facts do not make it a landed
-    // view and do not make it a pending one either (said in the report: question Q2)
+    // still pending, and its own patch is in no block of the branch. It is not a landed view and not a pending one; what was cached while its claims
+    // waited is still right and is served (as in 0.7.0: a pure function of immutable inputs), and it says it has not landed
+    let hits = counter(&s, "cache_hit");
     let r = changes_of(&s, &sc.p2).await;
+    assert_eq!(r.status, StatusCode::OK, "{}", r.text());
+    assert_eq!(r.json()["compared"]["landed"], false);
+    assert_eq!(counter(&s, "cache_hit"), hits + 1);
+    // the same revision with nothing cached is `claim_not_held`: the facts do not make it either
+    let stacked = fabricate(&s, &sc.p2, "stacked-uncached", &patches_of(&s.svc, &sc.p2));
+    let r = changes_of(&s, &stacked).await;
     assert_eq!(r.status, StatusCode::CONFLICT, "{}", r.text());
     assert_eq!(r.json()["reason"], "claim_not_held");
-    dump("stacked-claim-not-held.json", &r.body);
+    dump("claim-not-held.json", &r.body);
 
     // ---- P2b is independent of P1 and still open: its ordinary view, not landed
     let r = changes_of(&s, &p2b).await;
