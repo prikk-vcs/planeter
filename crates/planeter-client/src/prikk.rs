@@ -164,6 +164,29 @@ impl Prikk {
     }
 
     /// Run prikk with `--format json` and parse its output.
+    /// Like [`Prikk::run`], but a **refusal** (a non-zero exit) is worded by `explain` (`{reason}` is prikk's first line), with prikk's
+    /// whole text as the detail. A prikk that cannot be started is still the usual sentence.
+    pub fn run_explained(
+        &self,
+        _step: &str,
+        args: &[&str],
+        explain: Key,
+    ) -> Result<Output, Failure> {
+        let out = self
+            .command(args)
+            .output()
+            .map_err(|e| self.not_started(&e))?;
+        if out.status.success() {
+            return Ok(out);
+        }
+        let stderr = String::from_utf8_lossy(&out.stderr).trim().to_owned();
+        let first = stderr.lines().next().unwrap_or("").to_owned();
+        Err(
+            Failure::new(PRIKK, t(self.lang, explain).with("reason", first).text())
+                .with_detail(stderr),
+        )
+    }
+
     pub fn json(&self, step: &str, args: &[&str]) -> Result<serde_json::Value, Failure> {
         let out = self.run(step, args)?;
         serde_json::from_slice(&out.stdout).map_err(|e| {

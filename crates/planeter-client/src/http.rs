@@ -115,6 +115,8 @@ pub struct Http {
     lang: Lang,
     verbose: bool,
     host: String,
+    /// The language the server is asked to answer in (`Accept-Language`), for the commands that print the server's own sentences.
+    ask_language: bool,
 }
 
 fn chain(e: &dyn std::error::Error) -> String {
@@ -264,6 +266,7 @@ impl Http {
             lang,
             verbose,
             host: host.to_owned(),
+            ask_language: false,
         })
     }
 
@@ -271,10 +274,21 @@ impl Http {
         self.lang
     }
 
+    /// Ask the server to answer in this client's language (`Accept-Language`) on every request: for a command that prints the
+    /// server's own `message` and `hint` (`deliver`). The other commands never print them, and do not ask.
+    #[must_use]
+    pub fn asking_in_language(mut self) -> Http {
+        self.ask_language = true;
+        self
+    }
+
     fn get(&self, url: &str) -> ureq::RequestBuilder<ureq::typestate::WithoutBody> {
         let mut req = self.agent.get(url);
         if let Some(tok) = &self.token {
             req = req.header("Authorization", format!("Bearer {}", tok.expose()));
+        }
+        if self.ask_language {
+            req = req.header("Accept-Language", self.lang.tag());
         }
         req
     }
@@ -508,6 +522,9 @@ impl Http {
         if let Some(tok) = &self.token {
             req = req.header("Authorization", format!("Bearer {}", tok.expose()));
         }
+        if self.ask_language {
+            req = req.header("Accept-Language", self.lang.tag());
+        }
         let resp = req
             .send(ureq::SendBody::from_reader(&mut body))
             .map_err(|e| HttpError::Net(classify(&e)))?;
@@ -526,6 +543,47 @@ impl Http {
             status,
             body: bytes,
         })
+    }
+
+    /// `POST` with no body (a confirmation). Any 2xx is returned with its (bounded) body; anything else is the refusal it is.
+    pub fn post_empty(&self, url: &str) -> Result<Posted, HttpError> {
+        let mut req = self.agent.post(url).header("Accept", "application/json");
+        if let Some(tok) = &self.token {
+            req = req.header("Authorization", format!("Bearer {}", tok.expose()));
+        }
+        if self.ask_language {
+            req = req.header("Accept-Language", self.lang.tag());
+        }
+        let resp = req.send_empty().map_err(|e| HttpError::Net(classify(&e)))?;
+        self.finish(resp)
+    }
+
+    /// `DELETE` (a cancellation). Any 2xx is returned (a `204` has an empty body); anything else is the refusal it is.
+    pub fn delete(&self, url: &str) -> Result<Posted, HttpError> {
+        let mut req = self.agent.delete(url).header("Accept", "application/json");
+        if let Some(tok) = &self.token {
+            req = req.header("Authorization", format!("Bearer {}", tok.expose()));
+        }
+        if self.ask_language {
+            req = req.header("Accept-Language", self.lang.tag());
+        }
+        let resp = req.call().map_err(|e| HttpError::Net(classify(&e)))?;
+        self.finish(resp)
+    }
+
+    fn finish(&self, resp: ureq::http::Response<ureq::Body>) -> Result<Posted, HttpError> {
+        let status = resp.status().as_u16();
+        if !(200..300).contains(&status) {
+            return Err(self.refusal(resp));
+        }
+        let mut resp = resp;
+        let body = resp
+            .body_mut()
+            .with_config()
+            .limit(MAX_JSON_BYTES)
+            .read_to_vec()
+            .map_err(|e| HttpError::Net(classify(&e)))?;
+        Ok(Posted { status, body })
     }
 
     /// The sentence(s) for an error, in the person's language, with the raw cause kept as the detail.

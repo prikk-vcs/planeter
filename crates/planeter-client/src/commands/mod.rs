@@ -1,6 +1,7 @@
-//! The three commands, and what they share.
+//! The commands, and what they share.
 
 pub mod clone;
+pub mod deliver;
 pub mod fetch;
 pub mod propose;
 

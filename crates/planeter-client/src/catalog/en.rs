@@ -10,7 +10,7 @@ pub static CATALOG: &[Entry] = &[
     // ---- usage and help
     msg(
         "help.main",
-        "planeter-client works with a planeter server using your own prikk and your own keys. It never holds a key and never changes a branch on the server.\n\nUsage:\n  planeter-client propose <https://host/owner/name> [--ref heads/NAME] [--proposal ID] [--title TITLE] [--description-file FILE] [--dry-run] [--retry]\n  planeter-client clone <https://host/owner/name> [DIR] [--trust-key KEY]... [--no-adopt]\n  planeter-client fetch [DIR]\n\nFor every command:\n  --token-file FILE   read the token from FILE (or set PLANETER_TOKEN); a token is never taken from the command line\n  --cacert FILE       trust only the certificate authorities in FILE; this replaces the built-in list\n  --lang {languages}        the language of the messages\n  --verbose           also show the raw reasons behind a message\n  --help, --version\n\nExit codes: 0 done, 1 the server refused, 2 wrong command line, 3 network or TLS, 4 your prikk failed, 5 local files or keys.\n\nExample:\n  planeter-client propose https://forge.example/alice/app --title \"Fix the parser\" --dry-run",
+        "planeter-client works with a planeter server using your own prikk and your own keys. It never holds a key, and it never changes a branch on the server by itself: only a delivery that you confirm replaces the project's branch.\n\nUsage:\n  planeter-client propose <https://host/owner/name> [--ref heads/NAME] [--proposal ID] [--title TITLE] [--description-file FILE] [--dry-run] [--retry]\n  planeter-client clone <https://host/owner/name> [DIR] [--trust-key KEY]... [--no-adopt]\n  planeter-client fetch [DIR]\n  planeter-client deliver <https://host/owner/name> [--repo DIR] [--yes] [--dry-run]\n\nFor every command:\n  --token-file FILE   read the token from FILE (or set PLANETER_TOKEN); a token is never taken from the command line\n  --cacert FILE       trust only the certificate authorities in FILE; this replaces the built-in list\n  --lang {languages}        the language of the messages\n  --verbose           also show the raw reasons behind a message\n  --help, --version\n\nExit codes: 0 done, 1 the server refused, 2 wrong command line, 3 network or TLS, 4 your prikk failed, 5 local files or keys.\n\nExample:\n  planeter-client propose https://forge.example/alice/app --title \"Fix the parser\" --dry-run",
     ),
     msg(
         "help.propose",
@@ -413,6 +413,128 @@ pub static CATALOG: &[Entry] = &[
     msg(
         "local.state",
         "This program's own record of the server could not be read or written ({path}). Remove the file to start it afresh.",
+    ),
+    // ---- deliver
+    msg(
+        "help.deliver",
+        "planeter-client deliver <https://host/owner/name> [options]\n\nFor a maintainer. Exports your whole repository with your own prikk and asks the server to check it. If your branch continues the project's branch on the server, the server says what would happen, and nothing is changed until you confirm. Delivering replaces the project's branch with yours; the server signs nothing.\n\n  --repo DIR        your repository (default: the current directory)\n  --yes             deliver without asking; needed when there is no terminal to ask at\n  --dry-run         have the server check it, say what would happen, then cancel: nothing is delivered\n  --token-file FILE, --cacert FILE, --lang, --verbose\n\nThe token must belong to a maintainer and allow full access to the repository.\n\nExample:\n  planeter-client deliver https://forge.example/alice/app --dry-run",
+    ),
+    msg("deliver.step.export", "Exporting your repository…"),
+    msg("deliver.exported", "Exported your repository ({size})."),
+    msg(
+        "deliver.step.send",
+        "Sending {size} to {server} to be checked…",
+    ),
+    msg(
+        "deliver.step.checking",
+        "{server} is checking your archive…",
+    ),
+    msg(
+        "deliver.still_working",
+        "Still working… {seconds} seconds so far.",
+    ),
+    msg(
+        "deliver.report.moves",
+        "The project's branch would go from {old} to {new}.",
+    ),
+    msg(
+        "deliver.report.adds",
+        "Your delivery adds {count} changes to this repository's history.",
+    ),
+    msg("deliver.report.refs_added", "Branches it adds: {refs}."),
+    msg(
+        "deliver.report.stay",
+        "Open proposals that stay as they are: {count} ({list}).",
+    ),
+    msg(
+        "deliver.report.land",
+        "Proposals whose work is already in your branch, so they will show as landed: {count} ({list}).",
+    ),
+    msg(
+        "deliver.report.cannot_keep",
+        "Proposals that cannot be kept, because their files were removed: {count} ({list}).",
+    ),
+    msg(
+        "deliver.keys.header",
+        "Only the keys this repository trusts can deliver to it:",
+    ),
+    msg("deliver.keys.line", "{key_id}  {fingerprint}"),
+    msg("deliver.refused", "Your delivery was not accepted."),
+    msg("deliver.nothing", "Nothing to deliver: {message}"),
+    msg("deliver.prompt", "Deliver it? [y/N]"),
+    msg("deliver.step.confirm", "Delivering…"),
+    msg(
+        "deliver.watch",
+        "The delivery is {id}. If you stop here, it goes on without you. To look at it: GET {url}",
+    ),
+    msg(
+        "deliver.done",
+        "Delivered: the project's branch of {name} on {server} is now yours, ending at {new}.",
+    ),
+    msg(
+        "deliver.dry_run",
+        "Dry run: nothing was delivered, and the check was cancelled on the server.",
+    ),
+    msg(
+        "deliver.declined",
+        "Not delivered. The check was cancelled on the server.",
+    ),
+    msg(
+        "deliver.no_terminal",
+        "There is nobody here to ask, because the input is not a terminal. Run the command again with --yes to deliver without being asked.",
+    ),
+    msg(
+        "deliver.cancel_failed",
+        "The check could not be cancelled just now; the server removes it after a day.",
+    ),
+    msg(
+        "deliver.no_main",
+        "Your repository has no branch {ref}, so there is nothing to deliver. Run the command inside your repository, or name it with --repo DIR.",
+    ),
+    msg(
+        "deliver.export_failed",
+        "prikk could not export your repository: {reason} If that speaks of unfinished work, finish or discard it, then run the command again.",
+    ),
+    msg(
+        "deliver.forbidden",
+        "Delivering needs a token with full access to this repository, from a maintainer. This token cannot deliver.",
+    ),
+    msg(
+        "deliver.too_large",
+        "The server will not take an archive of {size}. Ask the person who runs the server to raise its limit, or deliver a smaller repository.",
+    ),
+    msg(
+        "deliver.busy",
+        "Another delivery or another write is in progress on this repository. Nothing was changed, and your check was cancelled. Run the command again in a moment.",
+    ),
+    msg(
+        "deliver.not_confirmable",
+        "This delivery cannot be confirmed now. Look at it to see where it stands: {url}",
+    ),
+    msg(
+        "deliver.expired",
+        "That delivery waited more than a day and was removed. Run the command again.",
+    ),
+    msg(
+        "deliver.needs_recovery",
+        "The server stopped while your delivery was being carried out. It finishes by itself when the server checks the repository; if it does not, tell the person who runs this server. Wait, and do not deliver again meanwhile.",
+    ),
+    msg("deliver.failed", "The delivery did not go through."),
+    msg(
+        "deliver.may_have_arrived",
+        "Part of your archive may have reached the server. Nothing is carried out without your confirmation, so running the command again is safe.",
+    ),
+    msg(
+        "deliver.confirm_unknown",
+        "Your confirmation may or may not have reached the server. Look at the delivery before you run the command again: {url}",
+    ),
+    msg(
+        "deliver.wait_over",
+        "The delivery is still going after {minutes} minutes. It continues on the server; look at it here: {url}",
+    ),
+    msg(
+        "fetch.branch_moved",
+        "The project's branch moved on the server. A fresh clone has it exactly; to follow it in this clone, merge it yourself with prikk (this makes your own commit, not the server's).",
     ),
     // ---- progress
     msg("progress.downloaded", "…{size} of {total} downloaded"),

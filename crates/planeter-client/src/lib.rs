@@ -1,6 +1,6 @@
 //! `planeter-client`: a person's own prikk, talking to a planeter server over https (RFC 004 part 9, D-10).
 //!
-//! It **clones** a repository (and shows the maintainer keys it carries, so that only keys the person types are trusted),
+//! A maintainer **delivers** their own repository to the forge (`deliver`: RFC 008); everyone else **clones** a repository (and shows the maintainer keys it carries, so that only keys the person types are trusted),
 //! **fetches** newer state (landing it as received copies, never touching the person's branches) and **proposes** work (builds an
 //! artifact against what the server already holds and sends it as a proposal). It holds no key, links no prikk code and signs
 //! nothing: every history operation is the user's own prikk. It never follows a redirect, never speaks plain http and has no
@@ -70,6 +70,7 @@ pub fn run(args: &[String], ctx: &mut Ctx<'_>) -> i32 {
                 cli::Topic::Propose => Key::HelpPropose,
                 cli::Topic::Clone => Key::HelpClone,
                 cli::Topic::Fetch => Key::HelpFetch,
+                cli::Topic::Deliver => Key::HelpDeliver,
             };
             let text = t(ctx.lang, key)
                 .with("languages", catalog::Lang::shipped_tags("|"))
@@ -97,6 +98,10 @@ pub fn run(args: &[String], ctx: &mut Ctx<'_>) -> i32 {
         Command::Fetch(a) => {
             ctx.verbose = a.common.verbose;
             commands::fetch::run(ctx, &a)
+        }
+        Command::Deliver(a) => {
+            ctx.verbose = a.common.verbose;
+            commands::deliver::run(ctx, &a)
         }
     };
     match result {

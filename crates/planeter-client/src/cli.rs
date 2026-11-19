@@ -36,6 +36,18 @@ pub struct CloneArgs {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct DeliverArgs {
+    pub url: String,
+    /// The maintainer's repository (default: the current directory).
+    pub repo: Option<PathBuf>,
+    /// Deliver without asking.
+    pub yes: bool,
+    /// Check with the server and say what would happen; deliver nothing.
+    pub dry_run: bool,
+    pub common: Common,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FetchArgs {
     pub dir: Option<PathBuf>,
     pub common: Common,
@@ -47,6 +59,7 @@ pub enum Topic {
     Propose,
     Clone,
     Fetch,
+    Deliver,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -56,6 +69,7 @@ pub enum Command {
     Propose(ProposeArgs),
     Clone(CloneArgs),
     Fetch(FetchArgs),
+    Deliver(DeliverArgs),
 }
 
 /// What was parsed: the language is known before the command is, so that a usage error can be worded.
@@ -142,6 +156,7 @@ pub fn parse(args: &[String], lang_hint: Lang) -> Result<Parsed, Failure> {
         "propose" => Some(Topic::Propose),
         "clone" => Some(Topic::Clone),
         "fetch" => Some(Topic::Fetch),
+        "deliver" => Some(Topic::Deliver),
         _ => None,
     };
     if wants_version && command_name.is_none() {
@@ -182,6 +197,7 @@ pub fn parse(args: &[String], lang_hint: Lang) -> Result<Parsed, Failure> {
         Topic::Propose => Command::Propose(parse_propose(&rest, l)?),
         Topic::Clone => Command::Clone(parse_clone(&rest, l)?),
         Topic::Fetch => Command::Fetch(parse_fetch(&rest, l)?),
+        Topic::Deliver => Command::Deliver(parse_deliver(&rest, l)?),
         Topic::Main => unreachable!("main is not a command"),
     };
     Ok(Parsed { lang, command })
@@ -377,6 +393,49 @@ fn parse_clone(args: &[String], lang: Lang) -> Result<CloneArgs, Failure> {
             },
             Item::Flag(n) => match n.as_str() {
                 "--no-adopt" => out.no_adopt = true,
+                _ => {
+                    if !common_item(&mut out.common, &n, None) {
+                        return Err(o.unknown(&n));
+                    }
+                }
+            },
+        }
+    }
+    out.url = url.ok_or_else(|| o.missing("the address of the repository"))?;
+    Ok(out)
+}
+
+fn parse_deliver(args: &[String], lang: Lang) -> Result<DeliverArgs, Failure> {
+    let values: Vec<&str> = COMMON_VALUES.iter().copied().chain(["--repo"]).collect();
+    let mut o = Opts::new(args, lang, "deliver");
+    let mut out = DeliverArgs {
+        url: String::new(),
+        repo: None,
+        yes: false,
+        dry_run: false,
+        common: Common::default(),
+    };
+    let mut url: Option<String> = None;
+    while let Some(item) = o.next(&values) {
+        match item? {
+            Item::Positional(p) => {
+                if url.is_none() {
+                    url = Some(p);
+                } else {
+                    return Err(o.too_many(&p));
+                }
+            }
+            Item::Value(n, v) => match n.as_str() {
+                "--repo" => out.repo = Some(PathBuf::from(v)),
+                _ => {
+                    if !common_item(&mut out.common, &n, Some(&v)) {
+                        return Err(o.unknown(&n));
+                    }
+                }
+            },
+            Item::Flag(n) => match n.as_str() {
+                "--yes" => out.yes = true,
+                "--dry-run" => out.dry_run = true,
                 _ => {
                     if !common_item(&mut out.common, &n, None) {
                         return Err(o.unknown(&n));

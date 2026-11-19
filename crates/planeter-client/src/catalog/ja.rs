@@ -10,7 +10,7 @@ pub static DEF: super::LangDef = super::LangDef::new(&planeter_i18n::languages::
 pub static CATALOG: &[Entry] = &[
     msg(
         "help.main",
-        "planeter-client は、あなた自身の prikk と鍵を使って planeter サーバーとやり取りします。鍵を持つことはなく、サーバー上のブランチを変えることもありません。\n\n使い方:\n  planeter-client propose <https://host/owner/name> [--ref heads/NAME] [--proposal ID] [--title TITLE] [--description-file FILE] [--dry-run] [--retry]\n  planeter-client clone <https://host/owner/name> [DIR] [--trust-key KEY]... [--no-adopt]\n  planeter-client fetch [DIR]\n\nすべてのコマンドに共通:\n  --token-file FILE   トークンを FILE から読みます（または PLANETER_TOKEN を設定）。コマンドラインからトークンを受け取ることはありません\n  --cacert FILE       FILE にある認証局だけを信頼します。内蔵の一覧は置き換えられます\n  --lang {languages}        メッセージの言語\n  --verbose           メッセージの背後にある元の理由も表示します\n  --help, --version\n\n終了コード: 0 完了、1 サーバーが断った、2 コマンドラインの誤り、3 ネットワークまたは TLS、4 prikk の失敗、5 ローカルのファイルまたは鍵。\n\n例:\n  planeter-client propose https://forge.example/alice/app --title \"パーサーを直す\" --dry-run",
+        "planeter-client は、あなた自身の prikk と鍵を使って planeter サーバーとやり取りします。鍵を持つことはありません。また、サーバー上のブランチを自分で変えることもなく、プロジェクトのブランチが置き換わるのは、あなたが確定した引き渡しだけです。\n\n使い方:\n  planeter-client propose <https://host/owner/name> [--ref heads/NAME] [--proposal ID] [--title TITLE] [--description-file FILE] [--dry-run] [--retry]\n  planeter-client clone <https://host/owner/name> [DIR] [--trust-key KEY]... [--no-adopt]\n  planeter-client fetch [DIR]\n  planeter-client deliver <https://host/owner/name> [--repo DIR] [--yes] [--dry-run]\n\nすべてのコマンドに共通:\n  --token-file FILE   トークンを FILE から読みます（または PLANETER_TOKEN を設定）。コマンドラインからトークンを受け取ることはありません\n  --cacert FILE       FILE にある認証局だけを信頼します。内蔵の一覧は置き換えられます\n  --lang {languages}        メッセージの言語\n  --verbose           メッセージの背後にある元の理由も表示します\n  --help, --version\n\n終了コード: 0 完了、1 サーバーが断った、2 コマンドラインの誤り、3 ネットワークまたは TLS、4 prikk の失敗、5 ローカルのファイルまたは鍵。\n\n例:\n  planeter-client propose https://forge.example/alice/app --title \"パーサーを直す\" --dry-run",
     ),
     msg(
         "help.propose",
@@ -415,6 +415,131 @@ pub static CATALOG: &[Entry] = &[
     msg(
         "local.state",
         "このプログラム自身のサーバー記録を読み書きできませんでした（{path}）。ファイルを削除すると、最初からやり直します。",
+    ),
+    // ---- deliver
+    msg(
+        "help.deliver",
+        "planeter-client deliver <https://host/owner/name> [オプション]\n\nメンテナー向けです。あなたの prikk でリポジトリ全体をエクスポートし、サーバーにチェックを依頼します。あなたのブランチがサーバーにあるプロジェクトのブランチの続きであれば、サーバーが何が起こるかを示し、あなたが確定するまでは何も変わりません。引き渡すと、プロジェクトのブランチがあなたのブランチに置き換わります。サーバーは何にも署名しません。\n\n  --repo DIR        あなたのリポジトリ（既定は現在のディレクトリ）\n  --yes             たずねずに引き渡します。たずねる端末がないときは必須です\n  --dry-run         サーバーにチェックさせ、何が起こるかを表示して、取り消します。何も引き渡しません\n  --token-file FILE, --cacert FILE, --lang, --verbose\n\nトークンは、メンテナーのもので、リポジトリへの完全なアクセスを許可するものが必要です。\n\n例:\n  planeter-client deliver https://forge.example/alice/app --dry-run",
+    ),
+    msg("deliver.step.export", "リポジトリをエクスポートしています…"),
+    msg(
+        "deliver.exported",
+        "リポジトリをエクスポートしました（{size}）。",
+    ),
+    msg(
+        "deliver.step.send",
+        "{size} を {server} に送って、チェックしてもらっています…",
+    ),
+    msg(
+        "deliver.step.checking",
+        "{server} がアーカイブをチェックしています…",
+    ),
+    msg(
+        "deliver.still_working",
+        "処理中です…{seconds} 秒経過しました。",
+    ),
+    msg(
+        "deliver.report.moves",
+        "プロジェクトのブランチは {old} から {new} に進みます。",
+    ),
+    msg(
+        "deliver.report.adds",
+        "この引き渡しで、このリポジトリの履歴に変更が {count} 件加わります。",
+    ),
+    msg("deliver.report.refs_added", "加わるブランチ：{refs}。"),
+    msg(
+        "deliver.report.stay",
+        "そのまま開いている提案：{count} 件（{list}）。",
+    ),
+    msg(
+        "deliver.report.land",
+        "作業がすでにあなたのブランチに入っていて、反映済みと表示される提案：{count} 件（{list}）。",
+    ),
+    msg(
+        "deliver.report.cannot_keep",
+        "ファイルが削除されたため、残せない提案：{count} 件（{list}）。",
+    ),
+    msg(
+        "deliver.keys.header",
+        "このリポジトリに引き渡せるのは、このリポジトリが信頼している鍵だけです。",
+    ),
+    msg("deliver.keys.line", "{key_id}  {fingerprint}"),
+    msg("deliver.refused", "引き渡しは受け付けられませんでした。"),
+    msg("deliver.nothing", "引き渡すものはありません：{message}"),
+    msg("deliver.prompt", "引き渡しますか？ [y/N]"),
+    msg("deliver.step.confirm", "引き渡しています…"),
+    msg(
+        "deliver.watch",
+        "引き渡しの ID は {id} です。ここで止めても、引き渡しはあなたがいなくても続きます。状態を見るには、次を GET してください：{url}",
+    ),
+    msg(
+        "deliver.done",
+        "引き渡しました。{server} の {name} のプロジェクトのブランチは、あなたのブランチになりました（{new} まで）。",
+    ),
+    msg(
+        "deliver.dry_run",
+        "試行のみです。何も引き渡されておらず、サーバーでのチェックは取り消しました。",
+    ),
+    msg(
+        "deliver.declined",
+        "引き渡していません。サーバーでのチェックは取り消しました。",
+    ),
+    msg(
+        "deliver.no_terminal",
+        "入力が端末ではないため、ここにはたずねる相手がいません。たずねずに引き渡すには、--yes を付けてコマンドをもう一度実行してください。",
+    ),
+    msg(
+        "deliver.cancel_failed",
+        "チェックを今は取り消せませんでした。サーバーが 1 日後に削除します。",
+    ),
+    msg(
+        "deliver.no_main",
+        "あなたのリポジトリにはブランチ {ref} がないため、引き渡すものがありません。リポジトリの中で実行するか、--repo DIR で指定してください。",
+    ),
+    msg(
+        "deliver.export_failed",
+        "prikk がリポジトリをエクスポートできませんでした：{reason} 作業が終わっていないという内容であれば、その作業を終えるか破棄してから、コマンドをもう一度実行してください。",
+    ),
+    msg(
+        "deliver.forbidden",
+        "引き渡すには、メンテナーの、このリポジトリへの完全なアクセスを許可するトークンが必要です。このトークンでは引き渡せません。",
+    ),
+    msg(
+        "deliver.too_large",
+        "サーバーは {size} のアーカイブを受け取りません。このサーバーを運用している人に上限の引き上げを依頼するか、小さいリポジトリを引き渡してください。",
+    ),
+    msg(
+        "deliver.busy",
+        "このリポジトリでは、ほかの引き渡しか、ほかの書き込みが進行中です。何も変わっておらず、あなたのチェックは取り消しました。少し待ってから、コマンドをもう一度実行してください。",
+    ),
+    msg(
+        "deliver.not_confirmable",
+        "この引き渡しは今は確定できません。状態を確認してください：{url}",
+    ),
+    msg(
+        "deliver.expired",
+        "その引き渡しは 1 日以上待たれたため、削除されました。コマンドをもう一度実行してください。",
+    ),
+    msg(
+        "deliver.needs_recovery",
+        "引き渡しの実行中にサーバーが停止しました。サーバーがリポジトリを確認すると自動的に完了します。完了しない場合は、このサーバーを運用している人に伝えてください。待ってください。その間は、もう一度引き渡さないでください。",
+    ),
+    msg("deliver.failed", "引き渡しは完了しませんでした。"),
+    msg(
+        "deliver.may_have_arrived",
+        "アーカイブの一部がサーバーに届いている可能性があります。あなたが確定するまで何も実行されないので、コマンドをもう一度実行しても安全です。",
+    ),
+    msg(
+        "deliver.confirm_unknown",
+        "あなたの確定がサーバーに届いたかどうかは分かりません。コマンドをもう一度実行する前に、引き渡しの状態を確認してください：{url}",
+    ),
+    msg(
+        "deliver.wait_over",
+        "{minutes} 分たっても引き渡しが続いています。サーバーで続いていますので、状態はこちらで確認してください：{url}",
+    ),
+    msg(
+        "fetch.branch_moved",
+        "サーバーのプロジェクトのブランチが進みました。新しくクローンすれば、そのままの状態で手に入ります。このクローンで追いかけるには、prikk で自分でマージしてください（作るのは、サーバーのものではなく、あなた自身のコミットです）。",
     ),
     msg(
         "progress.downloaded",
