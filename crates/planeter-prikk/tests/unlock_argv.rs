@@ -73,7 +73,14 @@ fn no_source_file_of_the_workspace_passes_yes_to_unlock() {
                 let text = std::fs::read_to_string(&p).unwrap();
                 for (i, line) in text.lines().enumerate() {
                     let code = line.split("//").next().unwrap_or("");
-                    if code.contains("\"--yes\"") || code.contains("\"-y\"") {
+                    // The one legitimate `"--yes"`: `planeter-client deliver --yes`, the client's own command-line option ("deliver
+                    // without asking"), parsed in its `cli.rs`. It is never an argument of a prikk call (the deliver module's own scan,
+                    // `deliver.rs`: `the_deliver_module_never_calls_…_yes_on_prikk`, forbids the literal in the command's source).
+                    let clients_own_option = p.ends_with("planeter-client/src/cli.rs")
+                        && code.trim() == "\"--yes\" => out.yes = true,";
+                    if !clients_own_option
+                        && (code.contains("\"--yes\"") || code.contains("\"-y\""))
+                    {
                         found.push(format!("{}:{}: {}", p.display(), i + 1, line.trim()));
                     }
                 }
