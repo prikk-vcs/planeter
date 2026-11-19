@@ -73,7 +73,7 @@ pub fn run(ctx: &mut Ctx<'_>, args: &FetchArgs) -> Result<(), Failure> {
     let mine = Prikk::in_ctx(ctx, &dir);
     mine.check()?;
     let http = client(ctx, &url, &args.common, false)?;
-    let mut rec = state::load(&state_dir, &url.display(), ctx.lang)?;
+    let mut rec = state::load_for_clone(&state_dir, &url.display(), &dir, ctx.lang)?;
 
     ctx.say(
         t(ctx.lang, Key::FetchStepAsk)
@@ -123,6 +123,8 @@ pub fn run(ctx: &mut Ctx<'_>, args: &FetchArgs) -> Result<(), Failure> {
         .map_err(|e: HttpError| http.failure(&e))?;
     let etag = match saved {
         Saved::NotModified => {
+            // A record read from the old per-address file (IS-62) becomes this clone's own from here on.
+            state::save(&state_dir, &rec, ctx.lang)?;
             ctx.say(t(ctx.lang, Key::FetchUnchanged).text());
             return Ok(());
         }
@@ -194,12 +196,47 @@ pub fn run(ctx: &mut Ctx<'_>, args: &FetchArgs) -> Result<(), Failure> {
     if ctx.verbose && !said.is_empty() {
         ctx.say(said);
     }
+    // What this clone had been shown of the project's branch before this fetch (for the sentence at the end).
+    let before_tip = rec.refs.get("heads/main").and_then(|r| r.tip_block.clone());
     land_state(&mut rec, &advert, etag);
     state::save(&state_dir, &rec, ctx.lang)?;
     let count = advert.refs.len();
     ctx.say(t(ctx.lang, Key::FetchDone).with("refs", count).text());
+    // RFC 008 D-10: the forge's branch moved (a delivery replaced it) and this clone's own branch is not at it: say what a person does.
+    // Said only when the server's tip is not the one this clone was shown before, and the clone's own tip is not the received one; a fetch
+    // that found nothing new returned above and never gets here.
+    let shown_tip = advert
+        .find("heads/main")
+        .filter(|r| r.published)
+        .and_then(|r| r.tip_block.clone());
+    if shown_tip.is_some()
+        && before_tip != shown_tip
+        && let (Some(own), Some(received)) = (
+            tip_of(&mine, "heads/main"),
+            tip_of(&mine, "remotes/heads/main"),
+        )
+        && own != received
+    {
+        ctx.say(t(ctx.lang, Key::FetchBranchMoved).text());
+    }
     ctx.say(t(ctx.lang, Key::FetchDoneNext).text());
     Ok(())
+}
+
+/// The tip of `git_ref` in the person's repository, or `None` when it cannot be read (no such branch yet, say).
+fn tip_of(prikk: &Prikk, git_ref: &str) -> Option<String> {
+    let v = prikk
+        .json(
+            "read a branch",
+            &["log", "--format", "json", "--ref", git_ref, "--limit", "1"],
+        )
+        .ok()?;
+    v.get("blocks")?
+        .as_array()?
+        .first()?
+        .get("block_id")?
+        .as_str()
+        .map(str::to_owned)
 }
 
 fn land_state(rec: &mut state::Record, advert: &Advert, etag: Option<String>) {

@@ -212,7 +212,11 @@ pub fn run(ctx: &mut Ctx<'_>, args: &CloneArgs) -> Result<(), Failure> {
     // What this program remembers: where the clone came from, and what the server showed.
     let state_dir = state::state_dir(ctx.env);
     state::remember_origin(&state_dir, &dir, &url.display(), ctx.lang)?;
-    let mut rec = state::load(&state_dir, &url.display(), ctx.lang)?;
+    // The record of this clone alone (IS-62): never the old record of the address, which is another clone's.
+    let mut rec = state::Record {
+        key: state::clone_key(&url.display(), &dir),
+        ..state::Record::default()
+    };
     rec.etag = etag;
     rec.refs.clear();
     state::record_refs(&mut rec, &advert);

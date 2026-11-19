@@ -60,9 +60,24 @@ pub fn state_dir(env: &dyn Fn(&str) -> Option<String>) -> PathBuf {
     PathBuf::from(".planeter-client-state")
 }
 
-fn file_for(dir: &Path, key: &str) -> PathBuf {
-    let clean: String = key
-        .trim_start_matches("https://")
+/// The record key of **one clone of one repository** (IS-62): the address and the clone's canonical directory. A record keyed by the address
+/// alone (what every version before 0.8.0 wrote) is shared by every clone of that repository on the machine, so the second clone's first
+/// `fetch` was told "nothing changed" about a state it had never seen.
+pub fn clone_key(url: &str, clone: &Path) -> String {
+    format!("{url}\n{}", canonical(clone))
+}
+
+fn fnv(text: &str) -> u64 {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in text.bytes() {
+        h ^= u64::from(b);
+        h = h.wrapping_mul(0x0000_0100_0000_01b3);
+    }
+    h
+}
+
+fn sanitize(url: &str) -> String {
+    url.trim_start_matches("https://")
         .chars()
         .map(|c| {
             if c.is_ascii_alphanumeric() || matches!(c, '.' | '-') {
@@ -71,8 +86,51 @@ fn file_for(dir: &Path, key: &str) -> PathBuf {
                 '_'
             }
         })
-        .collect();
-    dir.join(format!("{clean}.json"))
+        .collect()
+}
+
+/// The file of a record: `<address>.json` for a record of an address (the old form, and what `propose` keeps its unfinished send in),
+/// `<address>.<digest of address and directory>.json` for a record of one clone.
+fn file_for(dir: &Path, key: &str) -> PathBuf {
+    match key.split_once('\n') {
+        Some((url, _)) => dir.join(format!("{}.{:016x}.json", sanitize(url), fnv(key))),
+        None => dir.join(format!("{}.json", sanitize(key))),
+    }
+}
+
+/// The record of **this clone** of `url` (IS-62): its own file when it has one; otherwise the old record of the address **only if** it can
+/// only be this clone's: this program remembers which clones it made (`clones.json`), and the old record is taken when exactly one of them
+/// came from `url` and it is `clone`. With two or more (the old record is the last writer's, which one is not known), or none, the clone
+/// starts without a record: its next `fetch` is a full one, which is always safe.
+pub fn load_for_clone(dir: &Path, url: &str, clone: &Path, lang: Lang) -> Result<Record, Failure> {
+    let key = clone_key(url, clone);
+    if file_for(dir, &key).exists() {
+        return load(dir, &key, lang);
+    }
+    let sole = clones_of(dir, url);
+    if sole.len() == 1 && sole[0] == canonical(clone) && file_for(dir, url).exists() {
+        let mut old = load(dir, url, lang)?;
+        old.key = key;
+        return Ok(old);
+    }
+    Ok(Record {
+        key,
+        ..Record::default()
+    })
+}
+
+/// The canonical directories of the clones this program made from `url`.
+fn clones_of(dir: &Path, url: &str) -> Vec<String> {
+    std::fs::read(dir.join("clones.json"))
+        .ok()
+        .and_then(|b| serde_json::from_slice::<BTreeMap<String, String>>(&b).ok())
+        .map(|m| {
+            m.into_iter()
+                .filter(|(_, u)| u == url)
+                .map(|(d, _)| d)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// The record for `key`, or an empty one if there is none yet.
