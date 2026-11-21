@@ -668,12 +668,22 @@ fn kill_at(point: &str, want: After, report: &mut Vec<String>) {
             assert_eq!(pending(&inst.live, &keys), inst.sc.stays, "{point}");
         }
     }
+    // The server's unattended recovery of a flagged repository runs on a thread of its own after it listens (main.rs), so the flag and the
+    // stale locks of a killed write go away a moment after the first answer. Under load that moment is long: wait for it, up to a minute.
+    let flag_store = SqliteChangeStore::new(db(&inst)).unwrap();
+    for _ in 0..600 {
+        let flagged = flag_store
+            .repo_flags(&RepoId::new(world::REPO))
+            .unwrap()
+            .needs_recovery;
+        if !flagged {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(100));
+    }
     healthy(&inst);
     assert!(deliveries_dir_is_empty(&inst), "{point}");
-    let flags = SqliteChangeStore::new(db(&inst))
-        .unwrap()
-        .repo_flags(&RepoId::new(world::REPO))
-        .unwrap();
+    let flags = flag_store.repo_flags(&RepoId::new(world::REPO)).unwrap();
     assert!(!flags.needs_recovery, "{point}: {flags:?}");
     // every open proposal intact: their pages answer, still open
     for p in [&inst.sc.p1, &inst.sc.p2, &inst.sc.p3] {
