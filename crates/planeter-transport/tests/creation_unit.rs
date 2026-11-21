@@ -1341,3 +1341,157 @@ fn a_report_over_the_output_cap_refuses_the_stage_and_removes_the_repository_who
     nothing_left(&fix);
     assert!(stage_dirs(&fix).is_empty());
 }
+
+// ---------------------------------------------------------------------------------------------------- RFC 013 D-4: the record of where each key came from
+
+/// A key-event store that fails its first `n` records: a stand-in for a database that is not there at that moment.
+struct FailsFirst {
+    inner: planeter_store::InMemoryKeyEventStore,
+    left: std::sync::Mutex<usize>,
+}
+
+impl planeter_store::KeyEventStore for FailsFirst {
+    fn record(&self, e: &planeter_store::KeyEvent) -> Result<bool, StoreError> {
+        {
+            let mut left = self.left.lock().unwrap();
+            if *left > 0 {
+                *left -= 1;
+                return Err(StoreError::Backend("injected: the record failed".into()));
+            }
+        }
+        self.inner.record(e)
+    }
+    fn record_all_if_none(
+        &self,
+        r: &RepoId,
+        e: &[planeter_store::KeyEvent],
+    ) -> Result<bool, StoreError> {
+        self.inner.record_all_if_none(r, e)
+    }
+    fn events(&self, r: &RepoId) -> Result<Vec<planeter_store::KeyEvent>, StoreError> {
+        self.inner.events(r)
+    }
+    fn has_any(&self, r: &RepoId) -> Result<bool, StoreError> {
+        self.inner.has_any(r)
+    }
+}
+
+fn with_events(
+    fix: Fix,
+    store: Arc<dyn planeter_store::KeyEventStore>,
+) -> (Fix, Arc<planeter_transport::Metrics>) {
+    let metrics = Arc::new(planeter_transport::Metrics::new());
+    let svc = fix.svc.with_key_events(store, metrics.clone());
+    (Fix { svc, ..fix }, metrics)
+}
+
+#[test]
+fn a_created_repository_has_exactly_its_adopted_keys_recorded_as_creation_and_none_for_a_key_left_out()
+ {
+    need_prikk!();
+    let (archive, keys) = two_key_archive(
+        &PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("keyev-two"),
+        "two",
+    );
+    let store = Arc::new(planeter_store::InMemoryKeyEventStore::new());
+    let (fix, metrics) = with_events(fixture("keyev-partial"), store.clone());
+    let s = stage(&fix, &archive, "app").unwrap();
+    // adopt the first key, leave the second out
+    let req = AdoptionRequest {
+        adopt: vec![(keys[0].key_id.clone(), keys[0].public_key.clone())],
+        leave_out: vec![keys[1].key_id.clone()],
+        no_adopt: false,
+    };
+    let done = fix
+        .svc
+        .confirm(&alice_p(), &alice(), &s.stage_id, &req)
+        .unwrap();
+    let rows = planeter_store::KeyEventStore::events(&*store, &done.record.repo_id).unwrap();
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert_eq!(rows[0].key_id, keys[0].key_id);
+    assert_eq!(rows[0].public_key, keys[0].public_key);
+    assert_eq!(rows[0].source, planeter_store::KeySource::Creation);
+    assert!(!rows[0].backfilled, "recorded at the moment it was adopted");
+    assert_eq!(rows[0].detail, "");
+    assert_eq!(rows[0].delivery_id, None);
+    // prikk's list is the truth: it has the same one key, and the join says "creation, not backfilled"
+    let svc_keys = planeter_transport::repo_keys(
+        &fix.hosting.open_record(&done.record).unwrap(),
+        &*store,
+        &done.record.repo_id,
+    )
+    .unwrap();
+    assert_eq!(svc_keys.len(), 1);
+    assert_eq!(
+        svc_keys[0].source,
+        planeter_transport::KeySourceView::Creation { backfilled: false }
+    );
+    assert!(metrics.snapshot().key_events.is_empty(), "nothing failed");
+
+    // Both typed: both recorded, and the order is the store's (same instant: by key id)
+    let store2 = Arc::new(planeter_store::InMemoryKeyEventStore::new());
+    let (fix2, _) = with_events(fixture("keyev-both"), store2.clone());
+    let s2 = stage(&fix2, &archive, "app").unwrap();
+    // (the first one typed as a person pastes it: grouped, in capitals: the row still holds the key as prikk writes it)
+    let pasted_both = AdoptionRequest {
+        adopt: vec![
+            (
+                keys[0].key_id.clone(),
+                planeter_core::creation::group_fingerprint(&keys[0].public_key).to_uppercase(),
+            ),
+            (keys[1].key_id.clone(), keys[1].public_key.clone()),
+        ],
+        ..AdoptionRequest::default()
+    };
+    let done2 = fix2
+        .svc
+        .confirm(&alice_p(), &alice(), &s2.stage_id, &pasted_both)
+        .unwrap();
+    let rows2 = planeter_store::KeyEventStore::events(&*store2, &done2.record.repo_id).unwrap();
+    assert_eq!(rows2.len(), 2);
+    let mut want: Vec<&str> = keys.iter().map(|k| k.key_id.as_str()).collect();
+    want.sort_unstable();
+    assert_eq!(
+        rows2.iter().map(|r| r.key_id.as_str()).collect::<Vec<_>>(),
+        want
+    );
+    for r in &rows2 {
+        assert!(keys.iter().any(|k| k.public_key == r.public_key), "{r:?}");
+    }
+}
+
+#[test]
+fn a_store_that_cannot_record_does_not_fail_the_creation_and_the_failure_is_counted() {
+    need_prikk!();
+    let (archive, keys) = simple_archive(
+        &PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("keyev-fail"),
+        "maint",
+        4,
+        0,
+    );
+    let store = Arc::new(FailsFirst {
+        inner: planeter_store::InMemoryKeyEventStore::new(),
+        left: std::sync::Mutex::new(1),
+    });
+    let (fix, metrics) = with_events(fixture("keyev-failing"), store.clone());
+    let s = stage(&fix, &archive, "app").unwrap();
+    let done = fix
+        .svc
+        .confirm(&alice_p(), &alice(), &s.stage_id, &typed(&keys))
+        .expect("the repository is created although the record failed");
+    assert!(done.verified);
+    assert_eq!(verify_exit(&fix, &done.record), 0);
+    assert!(
+        fix.hosting.record_by_name(&own(), "app").unwrap().is_some(),
+        "visible"
+    );
+    // nothing was recorded (the one key's write failed), and the failure was counted once, without a key
+    assert!(!planeter_store::KeyEventStore::has_any(&*store, &done.record.repo_id).unwrap());
+    assert_eq!(
+        metrics
+            .snapshot()
+            .key_events
+            .get("key_events_creation_failed"),
+        Some(&1)
+    );
+}

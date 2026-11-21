@@ -553,6 +553,11 @@ pub struct CreationService {
     config: CreationConfig,
     slots: Arc<Slots>,
     now_unix: fn() -> u64,
+    /// Where the keys a creation adopts are recorded (RFC 013 D-4): `None` records nothing (tests of the older shape).
+    key_events: Option<(
+        Arc<dyn planeter_store::KeyEventStore>,
+        Arc<crate::metrics::Metrics>,
+    )>,
 }
 
 fn system_now() -> u64 {
@@ -592,7 +597,19 @@ impl CreationService {
             config,
             slots,
             now_unix: system_now,
+            key_events: None,
         })
+    }
+
+    /// Record, at the end of every successful creation, how each adopted key came to be trusted (source `creation`; RFC 013 D-4). A failing store
+    /// never fails a creation: it is logged without naming a key and counted, and the start-up backfill covers the keys.
+    pub fn with_key_events(
+        mut self,
+        store: Arc<dyn planeter_store::KeyEventStore>,
+        metrics: Arc<crate::metrics::Metrics>,
+    ) -> Self {
+        self.key_events = Some((store, metrics));
+        self
     }
 
     /// Test seam: the clock.
@@ -1105,6 +1122,15 @@ impl CreationService {
                 return Err(log_unavailable("cannot mark the repository ready", e));
             }
         };
+        // The end of the success path (the final `verify` was inside): record where each adopted key came from. Never fails the creation.
+        if let Some((store, metrics)) = &self.key_events {
+            let adopted: Vec<(String, String)> = adoption
+                .adopted
+                .iter()
+                .map(|c| (c.key_id.clone(), c.fingerprint.clone()))
+                .collect();
+            crate::keys::record_creation(&**store, metrics, &id, &adopted, (self.now_unix)());
+        }
         let found = |c: &Carried| FoundKey {
             key_id: c.key_id.clone(),
             public_key: c.fingerprint.clone(),
