@@ -32,3 +32,6 @@ Commits (hash → what, by task; T0 first); the T0 record (old/new tag and diges
 
 ## Addendum (2026-11-21, SCHEDULE D-101) — one change to T4
 The `sync seal` figures in `docs/deliveries.md` (and wherever the CHANGELOG states them) carry **their shape and storage**: "each claim adds one new file, so the tree ends with N paths; measured on an encrypted btrfs disk: 100 claims 1.0 MiB; 1,000 claims 7.1 MiB; 10,000 claims 183.6 MiB and 670 s; read about 23 KB a claim"; and these three sentences, as measured by the architect on 2026-11-21 (ledger PK-88): *the memory of `sync seal` grows with the number of claims*; *with a tree that stays the same size it grows linearly (68 MiB at 10,000 claims)*; *with a tree that gains a file per claim it grows faster than linearly (181 MiB at 10,000 claims)*. No other claim about memory or speed. The time depends on the disk (about 90 s on tmpfs, 670 s on an encrypted btrfs disk for the same work).
+
+## Addendum 2 (2026-11-21, SCHEDULE D-102) — one line
+Nowhere in the documents, the CHANGELOG or a message may it say or hint that a `sync seal` batch can be split into parts: prikk measured it and a part is refused (the claims file is in id order, not chain order; ledger PK-89). Nothing else changes in T4. The `grep` of the finished text for "batch", "parts", "smaller" is part of your evidence.
