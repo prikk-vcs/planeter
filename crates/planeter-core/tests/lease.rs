@@ -230,6 +230,9 @@ fn a_stream_of_readers_cannot_starve_a_writer() {
         .collect();
     thread::sleep(Duration::from_millis(50));
     for _ in 0..20 {
+        // the stream is running around every writer: it has made progress since the last one (a count of reads over a fixed time would
+        // depend on how loaded the machine is; this does not)
+        let seen = reads.load(Ordering::Relaxed);
         let t = Instant::now();
         let w = m
             .acquire(&r, W, "write", Duration::from_secs(2))
@@ -240,15 +243,19 @@ fn a_stream_of_readers_cannot_starve_a_writer() {
             t.elapsed()
         );
         drop(w);
+        let end = Instant::now() + Duration::from_secs(20);
+        while reads.load(Ordering::Relaxed) <= seen && Instant::now() < end {
+            thread::sleep(Duration::from_millis(1));
+        }
+        assert!(
+            reads.load(Ordering::Relaxed) > seen,
+            "the readers ran the whole time"
+        );
     }
     stop.store(true, Ordering::Relaxed);
     for h in readers {
         h.join().unwrap();
     }
-    assert!(
-        reads.load(Ordering::Relaxed) > 100,
-        "the readers ran the whole time"
-    );
 }
 
 /// A writer waiting behind a long run of exports is served once the running one finishes, not after all of them.
