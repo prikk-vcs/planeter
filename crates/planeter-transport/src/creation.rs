@@ -48,7 +48,7 @@ use planeter_core::creation::{
 use planeter_core::{
     CallLimits, HostingError, HostingService, LeaseClass, LeaseError, LeaseManager, Principal,
 };
-use planeter_prikk::findings::{ArchiveFindings, FoundKey, FoundRef, KEYS_MAX, REFS_LISTED_MAX};
+use planeter_prikk::findings::{ArchiveFindings, FoundKey, FoundRef, REFS_LISTED_MAX};
 use planeter_prikk::model::ArchiveImportReport;
 use planeter_prikk::{PrikkError, PrikkRepo, Sandbox};
 use planeter_store::{
@@ -839,7 +839,8 @@ impl CreationService {
                 public_key: k.public_key.clone(),
             });
         }
-        if keys.len() > KEYS_MAX {
+        // RFC 013 D-6: the one bound on trusted keys; a new repository trusts none yet, so every carried key is "added".
+        if planeter_prikk::keys::room_for(0, keys.len()).is_err() {
             return Err(CreateError::Keys {
                 carried: keys.len(),
             });

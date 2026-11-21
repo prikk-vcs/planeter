@@ -8,8 +8,8 @@ use serde::{Deserialize, Serialize};
 
 /// The most refs a record lists (a hostile archive may carry a great many; the count is kept in full).
 pub const REFS_LISTED_MAX: usize = 200;
-/// The most maintainer keys an archive may carry for a stage to be kept.
-pub const KEYS_MAX: usize = 64;
+/// The most maintainer keys an archive may carry for a stage to be kept: **the one bound on trusted keys** (RFC 013 D-6), defined in [`crate::keys`].
+pub use crate::keys::KEYS_MAX;
 
 /// One carried maintainer key.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

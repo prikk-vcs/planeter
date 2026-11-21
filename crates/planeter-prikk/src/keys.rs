@@ -1,0 +1,116 @@
+//! The one bound on the maintainer keys a repository may trust (RFC 013 D-6).
+//!
+//! **64**, and it is the same number on every path (creation, a delivery, the operator's add), so that a person never meets two rules.
+//! It is not a guess. Creation already keeps an archive's findings only up to 64 carried keys, a repository made with 40 would have been
+//! over any lower bound on its first addition, and — because planeter never removes a key (RFC 013 D-1, ledger PK-90: removing a key that
+//! signed anything makes `verify` fail) — every addition uses a slot for the repository's whole life, so a low bound is a cliff with no way
+//! down. The cost at 64 was measured on prikk 0.58.0 (ledger PK-92): trusted keys 17 / 65 / 257 / 1,025 → `verify` 7 / 10 / 29 / 553 ms,
+//! the trust list 2.2 / 8.2 / 32 / 129 KB, an archive of the repository 10 KB / 70 KB / 0.9 MB / 13.8 MB (every key added leaves a stale
+//! trust record the size of the whole list, so the archive grows with the square of the number of additions until `prikk compact
+//! --trust-policy` reclaims it). At 64 nothing is noticeable and no compaction is needed; far beyond it the cost leaves the linear. The
+//! output cap of `trust maintainer list` was measured for 64 keys (6.9 KB) too.
+
+use std::fmt;
+
+/// The most maintainer keys a repository may trust, and the most an archive may carry for creation to keep its findings.
+pub const KEYS_MAX: usize = 64;
+
+/// Adding would take a repository over [`KEYS_MAX`].
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct KeysBound {
+    /// How many keys the repository trusts now.
+    pub trusted: usize,
+    /// How many were to be added.
+    pub adding: usize,
+    /// The bound, [`KEYS_MAX`].
+    pub max: usize,
+}
+
+impl fmt::Display for KeysBound {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "{} keys are trusted and {} were to be added; at most {} are allowed",
+            self.trusted, self.adding, self.max
+        )
+    }
+}
+
+impl std::error::Error for KeysBound {}
+
+/// Whether `adding` more keys fit beside the `trusted` ones: `Ok` when the total is at most [`KEYS_MAX`]. The arithmetic cannot overflow
+/// (a total that does not fit a `usize` does not fit the bound either).
+pub fn room_for(trusted: usize, adding: usize) -> Result<(), KeysBound> {
+    match trusted.checked_add(adding) {
+        Some(total) if total <= KEYS_MAX => Ok(()),
+        _ => Err(KeysBound {
+            trusted,
+            adding,
+            max: KEYS_MAX,
+        }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_bound_is_sixty_four() {
+        assert_eq!(KEYS_MAX, 64);
+    }
+
+    #[test]
+    fn the_boundaries_are_zero_sixty_four_and_sixty_five() {
+        assert_eq!(room_for(0, 0), Ok(()));
+        assert_eq!(room_for(0, 64), Ok(()));
+        assert_eq!(room_for(64, 0), Ok(()));
+        assert_eq!(room_for(63, 1), Ok(()));
+        assert_eq!(
+            room_for(0, 65),
+            Err(KeysBound {
+                trusted: 0,
+                adding: 65,
+                max: 64
+            })
+        );
+        assert_eq!(
+            room_for(64, 1),
+            Err(KeysBound {
+                trusted: 64,
+                adding: 1,
+                max: 64
+            })
+        );
+        assert_eq!(
+            room_for(65, 0),
+            Err(KeysBound {
+                trusted: 65,
+                adding: 0,
+                max: 64
+            }),
+            "a repository already over the bound has no room even for nothing"
+        );
+    }
+
+    #[test]
+    fn adding_nothing_to_a_full_repository_is_fine() {
+        assert!(room_for(KEYS_MAX, 0).is_ok());
+    }
+
+    #[test]
+    fn the_arithmetic_cannot_overflow() {
+        assert!(room_for(usize::MAX, 1).is_err());
+        assert!(room_for(1, usize::MAX).is_err());
+        assert!(room_for(usize::MAX, usize::MAX).is_err());
+    }
+
+    #[test]
+    fn the_bound_says_its_numbers() {
+        let e = room_for(60, 10).unwrap_err();
+        assert_eq!(
+            e.to_string(),
+            "60 keys are trusted and 10 were to be added; at most 64 are allowed"
+        );
+    }
+}

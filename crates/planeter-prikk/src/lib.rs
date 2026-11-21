@@ -15,6 +15,7 @@ pub mod error;
 pub mod exchange;
 pub mod extract;
 pub mod findings;
+pub mod keys;
 pub mod maintenance;
 pub mod model;
 pub mod output_cap;
