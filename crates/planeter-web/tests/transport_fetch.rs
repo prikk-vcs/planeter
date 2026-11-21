@@ -2,6 +2,9 @@
 //! it). The router is driven directly; the export runs prikk for real (unconfined, except the one test that
 //! needs bubblewrap and the real sandbox with the spool-out mount).
 
+#[allow(dead_code)]
+#[path = "common/exec_wait.rs"]
+mod exec_wait;
 use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -1005,6 +1008,7 @@ fn stand_in(dir: &Path, body: &str) -> PathBuf {
     .unwrap();
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+    exec_wait::wait_until_runs(&p);
     p
 }
 
@@ -1197,6 +1201,7 @@ fn slow_prikk(dir: &Path, secs: u32) -> (PathBuf, PathBuf) {
     .unwrap();
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(&p, std::fs::Permissions::from_mode(0o755)).unwrap();
+    exec_wait::wait_until_runs(&p);
     (p, counter)
 }
 

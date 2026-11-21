@@ -4,6 +4,9 @@
 //! The in-flight cases need bubblewrap (the slow request is a read in the production sandbox) and self-skip
 //! with a printed reason without it.
 
+#[allow(dead_code)]
+#[path = "common/exec_wait.rs"]
+mod exec_wait;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
@@ -70,6 +73,7 @@ fn stand_in(dir: &Path, secs: u32) -> PathBuf {
     .unwrap();
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    exec_wait::wait_until_runs(&script);
     bin_dir
 }
 

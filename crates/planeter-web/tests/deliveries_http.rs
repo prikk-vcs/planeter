@@ -1048,6 +1048,7 @@ fn failing_accepts(base: &Path, from: u32) -> PathBuf {
     )
     .unwrap();
     std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    wait_until_runs(&script);
     script
 }
 

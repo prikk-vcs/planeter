@@ -4,6 +4,9 @@
 //!
 //! Self-skips (printed reason) where `prlimit` cannot run.
 
+#[allow(dead_code)]
+#[path = "common/exec_wait.rs"]
+mod exec_wait;
 use std::io::{BufRead, BufReader};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
@@ -33,6 +36,7 @@ fn stand_in_bin(dir: &Path) -> PathBuf {
     std::fs::write(&script, "#!/bin/sh\necho 'prikk 0.58.0'\n").unwrap();
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    exec_wait::wait_until_runs(&script);
     bin_dir
 }
 

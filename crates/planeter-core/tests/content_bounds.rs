@@ -185,6 +185,19 @@ fn a_timeout_on_raws_metadata_read_is_unavailable_not_notfound() {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
     }
+    // another test thread's fork can hold the write handle for a moment (ETXTBSY): run it until it runs
+    for _ in 0..200 {
+        match std::process::Command::new(&script)
+            .arg("--version")
+            .output()
+        {
+            Err(e) if e.raw_os_error() == Some(26) => {
+                std::thread::sleep(std::time::Duration::from_millis(10))
+            }
+            Err(e) => panic!("{}: {e}", script.display()),
+            Ok(_) => break,
+        }
+    }
     let repo = dir.join("repo");
     std::fs::create_dir_all(&repo).unwrap();
     let (svc, owner) = service(repo, sandbox, Some(script));

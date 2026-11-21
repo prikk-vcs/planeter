@@ -4,6 +4,9 @@
 //! Stand-in repositories (a `.prikk` directory of a chosen size, no prikk) drive the admission tests;
 //! the content and page tests build a sealed repository with real prikk and self-skip without it.
 
+#[allow(dead_code)]
+#[path = "common/exec_wait.rs"]
+mod exec_wait;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
@@ -472,6 +475,7 @@ async fn each_call_runs_under_the_documented_ceiling() {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
     }
+    exec_wait::wait_until_runs(&script);
     let budget = 1000 * MIB;
     let repos = vec![Repo {
         name: "open",

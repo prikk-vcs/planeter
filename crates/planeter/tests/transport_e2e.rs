@@ -3,6 +3,9 @@
 //! `206` for a range, and exports nothing for a stranger. Self-skips (printed reason) without prikk, bubblewrap
 //! or prlimit.
 
+#[allow(dead_code)]
+#[path = "common/exec_wait.rs"]
+mod exec_wait;
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
@@ -300,6 +303,7 @@ fn without_a_spool_the_routes_say_so() {
     std::fs::write(bin.join("prikk"), "#!/bin/sh\necho 'prikk 0.58.0'\n").unwrap();
     use std::os::unix::fs::PermissionsExt;
     std::fs::set_permissions(bin.join("prikk"), std::fs::Permissions::from_mode(0o755)).unwrap();
+    exec_wait::wait_until_runs(&bin.join("prikk"));
     let port = std::net::TcpListener::bind("127.0.0.1:0")
         .unwrap()
         .local_addr()

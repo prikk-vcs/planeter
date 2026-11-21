@@ -254,6 +254,19 @@ fn the_driver_reports_a_deadline_kill_as_the_status_timeout_used_to() {
         use std::os::unix::fs::PermissionsExt;
         std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
     }
+    // another test thread's fork can hold the write handle for a moment (ETXTBSY): run it until it runs
+    for _ in 0..200 {
+        match std::process::Command::new(&script)
+            .arg("--version")
+            .output()
+        {
+            Err(e) if e.raw_os_error() == Some(26) => {
+                std::thread::sleep(std::time::Duration::from_millis(10))
+            }
+            Err(e) => panic!("{}: {e}", script.display()),
+            Ok(_) => break,
+        }
+    }
     let root = scratch("standin-root");
     let repo =
         CliPrikkRepo::with_binary(&root, &script).with_sandbox(Sandbox::Bwrap(BwrapConfig {

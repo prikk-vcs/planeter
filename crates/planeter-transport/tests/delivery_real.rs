@@ -713,6 +713,7 @@ fn wrapper(base: &Path, pattern: &str, body: &str) -> std::path::PathBuf {
     )
     .unwrap();
     std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    wait_until_runs(&script);
     script
 }
 
@@ -802,6 +803,7 @@ fn counting_wrapper(base: &Path, pattern: &str, from: u32, body: &str) -> std::p
     )
     .unwrap();
     std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    wait_until_runs(&script);
     script
 }
 
