@@ -7,6 +7,7 @@
 
 pub mod change;
 pub mod delivery;
+pub mod key_events;
 pub mod lease;
 pub mod membership;
 pub mod memory;
@@ -26,6 +27,10 @@ pub use change::{
 pub use delivery::{
     DELIVERY_SCHEMA, DeliveryRecord, DeliveryState, DeliveryStore, DeliveryUpdate,
     InMemoryDeliveryStore, SqliteDeliveryStore, StartRefusal, TransitionError, transition,
+};
+pub use key_events::{
+    DETAIL_MAX_CHARS, InMemoryKeyEventStore, KEY_EVENT_SCHEMA, KeyEvent, KeyEventStore, KeySource,
+    SqliteKeyEventStore,
 };
 pub use lease::{HolderRecord, InMemoryLeaseRecords, LeaseRecordStore, SqliteLeaseRecords};
 pub use membership::{
