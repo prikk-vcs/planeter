@@ -270,6 +270,27 @@ async fn main() {
         Arc::new(NullAuditSink),
     ));
 
+    // The counters of the process (printed at stop) and the record of where each trusted key came from (RFC 013 D-4): both are needed by
+    // creation, which is made before the transport. The table is created idempotently; nothing existing changes.
+    let shared_metrics = Arc::new(planeter_transport::Metrics::new());
+    let key_events: Arc<dyn planeter_store::KeyEventStore> =
+        match planeter_store::SqliteKeyEventStore::new(db.clone()) {
+            Ok(s) => Arc::new(s),
+            Err(e) => {
+                eprintln!("planeter: cannot initialise the key records: {e}");
+                exit_releasing_lock(1);
+            }
+        };
+
+    let changes_for_keys: Arc<dyn planeter_store::ChangeStore> =
+        match planeter_store::SqliteChangeStore::new(db.clone()) {
+            Ok(c) => Arc::new(c),
+            Err(e) => {
+                eprintln!("planeter: cannot initialise the change records: {e}");
+                exit_releasing_lock(1);
+            }
+        };
+
     // RFC 004 part 7: creating a repository. **The start-up sweep runs first of everything that reads the repositories or the
     // lease records**: a server that was killed while it was creating a repository left a `creating` record, perhaps a
     // directory, a grant and a lease record, and all of it is removed (and logged) before any of it is looked at.
@@ -323,6 +344,11 @@ async fn main() {
                 exit_releasing_lock(1);
             }
         };
+        let service = Arc::new(
+            Arc::try_unwrap(service)
+                .unwrap_or_else(|_| unreachable!("the creation service is not shared yet"))
+                .with_key_events(key_events.clone(), shared_metrics.clone()),
+        );
         let swept = service.sweep_at_start();
         eprintln!(
             "planeter: start-up sweep: {} unfinished creation(s) and {} stray director(ies) removed, {} stage(s) removed",
@@ -390,7 +416,8 @@ async fn main() {
     let mut reviews_service: Option<Arc<planeter_transport::ReviewService>> = None;
     let mut changes_service: Option<Arc<planeter_transport::ChangesService>> = None;
     // The counters of IS-55 (a prikk call over its output limit, a hidden failure to read sightings) are printed at shutdown.
-    let mut shutdown_metrics: Option<Arc<planeter_transport::Metrics>> = None;
+    let mut shutdown_metrics: Option<Arc<planeter_transport::Metrics>> =
+        Some(shared_metrics.clone());
     // RFC 004 part 2: advertise and fetch need the export spool; without it the routes answer `transport_off`
     // to a reader of the repository. Every setting is a positive whole number, refused at start otherwise.
     let transport = match &dirs.spool {
@@ -426,7 +453,7 @@ async fn main() {
                 cfg.data_ceiling >> 20,
                 rate
             );
-            let metrics = Arc::new(planeter_transport::Metrics::new());
+            let metrics = shared_metrics.clone();
             shutdown_metrics = Some(metrics.clone());
             let export = Arc::new(planeter_transport::ExportService::new(
                 hosting.clone(),
@@ -982,6 +1009,40 @@ async fn main() {
         release_and_exit(&for_signals, 1);
     });
 
+    // RFC 013 D-4: the one-time backfill of the record of where each trusted key came from, for the repositories that existed before it. **On a
+    // thread of its own, so that the server is listening meanwhile** (as the unattended recovery above), one repository at a time, each read
+    // admitted by the heavy pool's gate like any prikk work. It never changes a repository; it logs one line of counts when it ends.
+    {
+        let key_service = planeter_transport::KeyService::new(
+            hosting.clone(),
+            leases.clone(),
+            key_events.clone(),
+            repo_store.clone(),
+            changes_for_keys,
+            shared_metrics.clone(),
+        );
+        let gate_for_keys = state.gate.clone();
+        let runtime = tokio::runtime::Handle::current();
+        if let Err(e) = std::thread::Builder::new()
+            .name("key-records".to_owned())
+            .spawn(move || {
+                let mut outcomes = Vec::new();
+                for record in key_service.unrecorded() {
+                    let svc = key_service.clone();
+                    let admitted = runtime.block_on(gate_for_keys.run_weighted(
+                        planeter_core::admission::COST_FLOOR,
+                        "key-records",
+                        move || svc.backfill_one(&record),
+                    ));
+                    outcomes.push(admitted.unwrap_or(planeter_transport::Backfilled::Skipped));
+                }
+                key_service.finish_pass(&outcomes);
+            })
+        {
+            eprintln!("planeter: cannot start the key records pass: {e}");
+        }
+    }
+
     eprintln!("planeter listening on http://{addr} (db: {db_path})");
     let served = planeter_web::serve_until(state, addr, async {
         let _ = stop_rx.await;
@@ -1009,6 +1070,17 @@ async fn main() {
         .join(" ");
     if !deliveries.is_empty() {
         eprintln!("planeter: deliveries: {deliveries}");
+    }
+    // The record of where each trusted key came from (RFC 013 D-4): counts only, never a repository or a key.
+    let key_records = snapshot
+        .key_events
+        .iter()
+        .filter(|(_, n)| **n > 0)
+        .map(|(k, n)| format!("{k}={n}"))
+        .collect::<Vec<_>>()
+        .join(" ");
+    if !key_records.is_empty() {
+        eprintln!("planeter: key records: {key_records}");
     }
     eprintln!("planeter: stopped ({counters})");
     release_and_exit(&leases, 0);
