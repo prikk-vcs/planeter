@@ -13,6 +13,7 @@ pub mod delivery;
 mod exec_wait;
 pub mod export;
 pub mod fingerprint;
+pub mod keys;
 pub mod metrics;
 pub mod proposals;
 pub mod propose;
@@ -38,6 +39,10 @@ pub use delivery::{
 pub use export::{
     Advertisement, Artifact, ExportConfig, ExportService, FetchError, Kind, Offer, RefClass,
     RefInfo,
+};
+pub use keys::{
+    BackfillReport, Backfilled, KeyService, KeysError, RepoKey, Source as KeySourceView,
+    detail_for_record, join_keys, record_creation as record_creation_keys, repo_keys,
 };
 pub use metrics::{CacheStatus, FetchRecord, Metrics, Outcome, ProposeOutcome, ProposeRecord};
 pub use planeter_prikk::findings::{ArchiveFindings, FoundKey, FoundRef};

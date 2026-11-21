@@ -122,6 +122,9 @@ pub struct Snapshot {
     /// Deliveries (RFC 008): one count per outcome (`accepted_reports`, each refusal reason, `confirmed`, `done`, `failed`, `abandoned`,
     /// `recovered`, `exchange_window`). No file, branch or key name is ever counted or logged.
     pub deliveries: BTreeMap<String, u64>,
+    /// The record of where each trusted key came from (RFC 013 D-4): `key_events_backfilled` and `key_events_skipped` (repositories, by the start-up
+    /// pass) and `key_events_creation_failed`. Counts only: no repository or key is ever named.
+    pub key_events: BTreeMap<String, u64>,
 }
 
 impl Snapshot {
@@ -283,6 +286,11 @@ impl Metrics {
     /// One outcome of the delivery engine (see [`Snapshot::deliveries`]).
     pub fn delivery(&self, outcome: &str) {
         self.with(|m| *m.deliveries.entry(outcome.to_owned()).or_insert(0) += 1);
+    }
+
+    /// One outcome of the key records (see [`Snapshot::key_events`]).
+    pub fn key_event(&self, outcome: &str) {
+        self.with(|m| *m.key_events.entry(outcome.to_owned()).or_insert(0) += 1);
     }
 
     /// One failed read of the received logs; returns the count since start.
