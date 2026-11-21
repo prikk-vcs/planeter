@@ -3,7 +3,7 @@
 Releases are bare version tags; each section is the release's notes (assembled into the GitHub
 release by `release.yml`). Kept by hand, per release, so nothing here goes stale by templating.
 
-## [0.8.0] — unreleased until tagged — landing by delivery, and prikk 0.58.0
+## [0.8.0] — 2026-11-21 — landing by delivery, and prikk 0.58.0
 
 0.8.0 lets reviewed work **become the project's branch without the forge holding a key** (RFC 008). A maintainer seals the work with their own prikk and their own key, runs **`planeter-client deliver`**, and the server checks the repository they send against a written rule, says in plain words what would change, and — only when the maintainer confirms — makes the maintainer's branch the repository's `heads/main`. The open proposals stay open (their pending work is made again from the artifacts the server kept), the ones whose work is now in the project's branch show as **landed**, and a landed proposal's revision can be looked at file by file. The server signs, seals, merges and closes nothing at any step. The release also moves the prikk floor to **0.58.0** (a breaking prerequisite, said first below), fixes the per-clone freshness record of `planeter-client` (IS-62), and pins the container build's BuildKit image to v0.34.2 (IS-60).
 

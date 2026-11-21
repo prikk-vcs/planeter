@@ -4,7 +4,7 @@
 service that hosts prikk repositories and the collaboration around them: repositories, review, issues,
 CI, and packages.
 
-> **Status: v0 — 0.8.0 (release candidate) builds on 0.5.0, the first release in which a person can propose work, have it reviewed, and create a
+> **Status: v0 — 0.8.0 builds on 0.5.0, the first release in which a person can propose work, have it reviewed, and create a
 > repository; the forge still holds no key.** planeter hosts and serves prikk repositories (multi-repository
 > hosting, a browse UI and a read API, sign-in with local passwords or SSO, scoped tokens, per-repository
 > authorization), and lets a signed-in person **propose** a change (held for review; no branch moves),
