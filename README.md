@@ -13,7 +13,7 @@ CI, and packages.
 > 0.8.0 adds **landing by delivery** (RFC 008): a maintainer seals work with their own key and runs `planeter-client deliver`; the server checks the repository
 > against a written rule, says what would change, and — only when the maintainer confirms — makes it the project's branch (`heads/main`). The forge signs nothing.
 > Proposals whose work is in that branch show as **landed**, and their changes can be looked at. It **requires prikk 0.58.0** (a breaking prerequisite; the 0.7.0 file-by-file view
-> is unchanged). The Japanese of this release has not yet been read by a reviewer and is shown as it is, English complete (`CHANGELOG.md` says how many messages).
+> is unchanged). The Japanese of this release was read and accepted by the owner on 2026-11-21.
 > **1.0 is an explicit owner gate.**
 > Releases: [`CHANGELOG.md`](CHANGELOG.md) · plan: [`ROADMAP.md`](ROADMAP.md).
 
@@ -103,7 +103,7 @@ deployment notes are in [`docs/RELEASING.md`](docs/RELEASING.md).
   continues the project's branch and is signed only by keys the repository already trusts, the report says what would change (the open proposals that stay, those that
   land, those that cannot be kept), and **after the maintainer confirms** it becomes `heads/main`, with the open proposals made again from the artifacts the server kept. A refusal changes nothing and
   says what to do. The repository's pages say who delivered; a landed proposal's changes are shown from the sealed history. A fresh clone has the delivered branch exactly.
-- **Languages** (RFC 012): English and Japanese (signed off by the owner on 2026-10-31, and read again on 2026-11-14 and on 2026-11-17; the messages written since, for delivery and the landed view, are shown flagged until a reviewer has read them) — the pages, the API's error messages and `planeter-client`; a caller who does not ask is English.
+- **Languages** (RFC 012): English and Japanese (signed off by the owner on 2026-10-31, and read again on 2026-11-14, on 2026-11-17 and on 2026-11-21, the last time with the messages of delivery and the landed view) — the pages, the API's error messages and `planeter-client`; a caller who does not ask is English.
 - **Not yet:** adding or rotating a repository's maintainer keys after creation, required approvals, several followed branches, a delta delivery (the whole history is sent each time, up to
   `PLANETER_IMPORT_MAX_MB`), a web form for delivering (a browser cannot sign), issues, checks and CI, packages. SSH is not planned: transport is https behind your
   reverse proxy. The [roadmap](ROADMAP.md) has the order and the reasons.

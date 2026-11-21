@@ -120,8 +120,11 @@ of one of them (the legend of the badge 「一覧にありません」, `proposa
 view (79 page messages and 12 API messages), its two cut-marker messages, and the client's `help.propose` (changed) and `propose.revision_keeps` (new) — and
 accepted them all as the sheet had them. (4) **2026-11-17**, the second part of the day (commit `1392a1e`, sheet fingerprint `efb56f1b6f72541a`, 754 messages): after
 the architect's second reading for consistency and naturalness, 24 of those messages were reworded (23 in the server's catalog, 1 in the client's); the owner read the 24 and
-passed them. The record in `crates/planeter-i18n/src/languages/ja.rs` and both `locales/ja.signed` baselines (written by `planeter-i18n-sheet --baseline ja web|client`)
-are those of this fourth record, which replaces the one made at `5c724f4`; the sheet reads "754 unchanged, 0 changed, 0 new — 0 message(s) to read" and the server
+passed them. (5) **2026-11-21**, the fifth reading (commit `17e7aae`, sheet fingerprint `7fab73d0fe483542`, 860 messages): the owner read the 107 messages that were newer than the
+sign-off of 2026-11-17 — the delivery's messages of `planeter-client` and of the pages and the API, the refusals and their hints, the repository page's lines, the landed view's five,
+the states and recovery words, the words of the delivery route's `413`, `fetch.branch_moved` and the changed `help.main` — in the order of a reading-order file, and accepted them without
+change. The record in `crates/planeter-i18n/src/languages/ja.rs` and both `locales/ja.signed` baselines (written by `planeter-i18n-sheet --baseline ja web|client`)
+are those of this fifth record, which replaces the fourth; the sheet reads "860 unchanged, 0 changed, 0 new — 0 message(s) to read" and the server
 logs no count of messages newer than the sign-off.
 
 ## What is deliberately not in the catalog (`tests/literals.allow`)
