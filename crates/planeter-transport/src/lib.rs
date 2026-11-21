@@ -9,6 +9,8 @@ pub mod artifacts;
 pub mod changes;
 pub mod creation;
 pub mod delivery;
+#[cfg(test)]
+mod exec_wait;
 pub mod export;
 pub mod fingerprint;
 pub mod metrics;
