@@ -4,15 +4,17 @@
 service that hosts prikk repositories and the collaboration around them: repositories, review, issues,
 CI, and packages.
 
-> **Status: v0 — 0.7.0 (release candidate) builds on 0.5.0, the first release in which a person can propose work, have it reviewed, and create a
+> **Status: v0 — 0.8.0 (release candidate) builds on 0.5.0, the first release in which a person can propose work, have it reviewed, and create a
 > repository; the forge still holds no key.** planeter hosts and serves prikk repositories (multi-repository
 > hosting, a browse UI and a read API, sign-in with local passwords or SSO, scoped tokens, per-repository
 > authorization), and lets a signed-in person **propose** a change (held for review; no branch moves),
 > **review** it (comments and decisions), and **create** a repository (empty, or from a maintainer's archive, trusting
 > only the keys the person types). `planeter-client` is the separate program for a person's own computer.
-> 0.7.0 still requires **prikk 0.57.0** and adds the **file-by-file view** of a proposal's revision (the files a revision changes and how, rebuilt from its patches;
-> nothing in it is signed), in English and in Japanese (both read and accepted by the owner).
-> Merging into a branch is next and builds on prikk 0.58.0 (the next release raises the floor to it); **1.0 is an explicit owner gate.**
+> 0.8.0 adds **landing by delivery** (RFC 008): a maintainer seals work with their own key and runs `planeter-client deliver`; the server checks the repository
+> against a written rule, says what would change, and — only when the maintainer confirms — makes it the project's branch (`heads/main`). The forge signs nothing.
+> Proposals whose work is in that branch show as **landed**, and their changes can be looked at. It **requires prikk 0.58.0** (a breaking prerequisite; the 0.7.0 file-by-file view
+> is unchanged). The Japanese of this release has not yet been read by a reviewer and is shown as it is, English complete (`CHANGELOG.md` says how many messages).
+> **1.0 is an explicit owner gate.**
 > Releases: [`CHANGELOG.md`](CHANGELOG.md) · plan: [`ROADMAP.md`](ROADMAP.md).
 
 ## Overview
@@ -64,7 +66,7 @@ Install one of:
   cannot carry the prerequisites above).
 
 **On your own computer** (a person with their own prikk and keys): `cargo install planeter-client --locked`, or build it from source
-(`cargo build -p planeter-client --release --locked`). 0.5.0, 0.6.0 and 0.7.0 ship the client through crates.io and as source; release-asset binaries of it
+(`cargo build -p planeter-client --release --locked`). 0.5.0, 0.6.0, 0.7.0 and 0.8.0 ship the client through crates.io and as source; release-asset binaries of it
 are not part of this release. See [`docs/client.md`](docs/client.md).
 
 Run it:
@@ -97,9 +99,13 @@ deployment notes are in [`docs/RELEASING.md`](docs/RELEASING.md).
 - **Clone, fetch, propose from your computer** (RFC 004): `planeter-client` ([`docs/client.md`](docs/client.md)) — separate from the
   server, holds no key and signs nothing, https only; **only the maintainer keys you type are trusted**.
 - **The file-by-file view** (RFC 005 part 6): each revision of a proposal links to a page of the files it changes and a page of each file's diff (and the same as JSON under `…/revisions/{seq}/changes`), compared with the revision's own base and rebuilt by prikk from the patches; names and text are shown display-safe, a view is bounded in time, memory and size, and nothing in it is signed ([`docs/proposals.md`](docs/proposals.md)).
-- **Languages** (RFC 012): English and Japanese (signed off by the owner on 2026-10-31, and read again on 2026-11-14 and on 2026-11-17, the last time with the messages of the file-by-file view) — the pages, the API's error messages and `planeter-client`; a caller who does not ask is English.
-- **Not yet:** merging a proposal into a branch (the maintainer seals with their own prikk and the forge adopts the result: **model B of RFC 004 D-8**,
-  now buildable on prikk 0.57.0's guard against older or diverged deliveries, which the driver already reads, and on 0.58.0, which streams `accept` and makes `sync seal` linear: ledger PK-85), issues, checks and CI, packages. SSH is not planned: transport is https behind your
+- **Landing by delivery** (RFC 008, [`docs/deliveries.md`](docs/deliveries.md)): `planeter-client deliver` sends a maintainer's own sealed repository to be checked; if it
+  continues the project's branch and is signed only by keys the repository already trusts, the report says what would change (the open proposals that stay, those that
+  land, those that cannot be kept), and **after the maintainer confirms** it becomes `heads/main`, with the open proposals made again from the artifacts the server kept. A refusal changes nothing and
+  says what to do. The repository's pages say who delivered; a landed proposal's changes are shown from the sealed history. A fresh clone has the delivered branch exactly.
+- **Languages** (RFC 012): English and Japanese (signed off by the owner on 2026-10-31, and read again on 2026-11-14 and on 2026-11-17; the messages written since, for delivery and the landed view, are shown flagged until a reviewer has read them) — the pages, the API's error messages and `planeter-client`; a caller who does not ask is English.
+- **Not yet:** adding or rotating a repository's maintainer keys after creation, required approvals, several followed branches, a delta delivery (the whole history is sent each time, up to
+  `PLANETER_IMPORT_MAX_MB`), a web form for delivering (a browser cannot sign), issues, checks and CI, packages. SSH is not planned: transport is https behind your
   reverse proxy. The [roadmap](ROADMAP.md) has the order and the reasons.
 
 ## Following the design

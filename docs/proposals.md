@@ -72,14 +72,15 @@ recover.
 A proposal moves from `open` to `landed` only because the repository says so. The rule (RFC 005 D-6 as amended by D-40, applied to
 the proposal's current patch set, rule 5 above):
 
-* **every patch is present in a block that `log` lists for a published ref** — `heads/*`, as `branch --all` reports them as
-  branches (closed ones too) — and nothing else.
+* **every patch is present in a block that `log` lists for the project's branch, `heads/main`** (RFC 008 D-6, 0.8.0; the constant `FOLLOWED_REF`) —
+  and nothing else. A patch in another published branch (a delivery may add one) lands nothing. (Until 0.7.0 any published `heads/*` counted.)
 
 Why only that. `sync pending` is **not consulted**: a patch can be at once in the queue and in an imported published block, and a patch
 that merely left the queue (discarded, or the repository was restored) is not in the history. A **received** ref (`remotes/*`) is
 **not evidence**: it is last-writer-wins and unverified (PK-67), and a landed proposal never changes again, so history that was merely
-*received* here cannot make a state final. On this forge a published ref advances only when a key-holding action puts history there
-(which D-8 will define), so until then **a proposal usually stays open**, and the page says only what is true.
+*received* here cannot make a state final. On this forge `heads/main` advances only when a maintainer's own sealed history is **delivered** and
+confirmed (RFC 008, `docs/deliveries.md`; the forge signs nothing), so **a proposal stays open until somebody delivers a branch that carries its
+patches**, and the page says only what is true.
 
 A patch in a block of a published ref is shown as signed in (*Sealed*), even if `sync pending` still lists it; a patch that
 is listed there and in no published block is shown as held; a patch in neither shows no badge ("Not listed here"; ja 一覧にありません).

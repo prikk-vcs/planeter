@@ -188,10 +188,11 @@ data segment of 184 MiB, on a quiet machine (the figures are the machine's, not 
   for recovery as for any output that cannot be read. The declaration check ("is this declared patch already held") reads up to 100,000 blocks
   of each ref, with a cap of 162 MB on that `log`; the landing observation reads fewer (`PLANETER_OBSERVATION_BLOCKS`, see `proposals.md`).
 
-* **A proposal does not move a branch, and until the maintainer's history is published here it will usually stay open.** What a
-  person sends is held for review; it lands (the page says *Landed*) only when every one of its patches is in a block of a published branch of
-  this repository, which only a key-holding action puts there. History that was merely *received* here (an archive import without
-  `--adopt`) is shown as a sighting and never counts. This is true whatever D-8 will decide about merging.
+* **A proposal does not move a branch, and until the maintainer's history is delivered here it will usually stay open.** What a
+  person sends is held for review; it lands (the page says *Landed*) only when every one of its patches is in a block of the project's branch,
+  `heads/main`, which only a maintainer's own delivery of history signed by a key the repository trusts puts there (`docs/deliveries.md`).
+  History that was merely *received* here (an archive import without `--adopt`) is shown as a sighting and never counts, and neither does a
+  patch that is only in another branch.
 * **Why a proposal can be over the bound:** prikk keeps a full copy of a file for every edit it records, so a 4 MiB file edited fifty
   times makes a 200 MiB artifact. That is the usual reason a proposal is refused with `413` (`payload_too_large`). The remedy is to
   propose in smaller steps (a few edits at a time), or to ask the person who runs the server to raise `PRIKK_EXCHANGE_MAX_BYTES`.
