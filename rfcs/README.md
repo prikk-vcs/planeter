@@ -51,14 +51,14 @@ artifact) are accepted by the prikk owner, so 008 is gated on RFC 154 shipping; 
 | 010 | [Upstream tracking and supply-chain maintenance](accepted/010-upstream-and-supply-chain-maintenance.md) | all (maintenance) | **accepted** (2026-10-15) |
 | 011 | [The read-path resource model](accepted/011-read-path-resource-model.md) | before RFC 004's first write path | **accepted** (2026-10-18) |
 | 012 | [Web UI foundations: language, plain words, accessibility and inclusion](accepted/012-web-ui-foundations.md) | T14, before RFC 005's UI | **accepted** (2026-10-20) |
-| 013 | [Maintainer keys after creation: adding, rotating by addition](proposed/013-maintainer-keys.md) | B1 (trust) | **proposed** (2026-11-21; D-1, D-2, D-4, D-5 buildable after acceptance; D-3 has a decision gate on prikk's 0.59.0 design) |
+| 013 | [Maintainer keys after creation: adding, rotating by addition](accepted/013-maintainer-keys.md) | B1 (trust) | **accepted** (2026-11-22; D-3 has a decision gate on prikk's 0.59.0 design and is not to be built) |
 
 ## Current state
 
 | State | RFCs |
 |---|---|
-| Proposed | [006](proposed/006-ci-runners.md), [007](proposed/007-registry.md), [009](proposed/009-hosted-format-durability.md) — re-opened 2026-10-15 for revision; [013](proposed/013-maintainer-keys.md) — new 2026-11-21 |
-| Accepted | [004 — Transport](accepted/004-transport.md), [005 — Change proposal and review](accepted/005-change-review.md), [010 — Upstream tracking and supply-chain maintenance](accepted/010-upstream-and-supply-chain-maintenance.md), [011 — The read-path resource model](accepted/011-read-path-resource-model.md), [012 — Web UI foundations](accepted/012-web-ui-foundations.md) |
+| Proposed | [006](proposed/006-ci-runners.md), [007](proposed/007-registry.md), [009](proposed/009-hosted-format-durability.md) — re-opened 2026-10-15 for revision |
+| Accepted | [004 — Transport](accepted/004-transport.md), [005 — Change proposal and review](accepted/005-change-review.md), [010 — Upstream tracking and supply-chain maintenance](accepted/010-upstream-and-supply-chain-maintenance.md), [011 — The read-path resource model](accepted/011-read-path-resource-model.md), [012 — Web UI foundations](accepted/012-web-ui-foundations.md), [013 — Maintainer keys after creation](accepted/013-maintainer-keys.md) (2026-11-22; D-3 gated) |
 | Done | [001 — Foundations](done/001-foundations.md), [002 — Authorization](done/002-authorization.md), [003 — Read path](done/003-read-path.md) — shipped in 0.1.0 (2026-09-23) |
 | Archived | *(none yet)* |
 
