@@ -77,7 +77,7 @@ The five third-party pins that lagged upstream (IS-35: `docker/setup-qemu`, `set
 `build-push-action`, and `attest-build-provenance` two majors behind) and the single-maintainer
 `dtolnay/rust-toolchain` were **retired, not updated**: the toolchain is installed by the runner's `rustup`,
 the image is built natively per architecture with the runner's `docker`/`buildx` and a BuildKit image pinned by
-digest (`moby/buildkit` v0.33.1), the registry login is `docker login --password-stdin`, and attestation is
+digest (`moby/buildkit` v0.34.2), the registry login is `docker login --password-stdin`, and attestation is
 `actions/attest` v4.2.2 (SHA `1e69f48a…`, `create-storage-record: false`). What is left outside the
 repository: GitHub's `actions/checkout`, `upload-artifact`, `download-artifact`, `attest`, one BuildKit image, the
 base image and the runners' own tools. `pin-check` enforces the shape: no `uses:` outside `actions/`; an

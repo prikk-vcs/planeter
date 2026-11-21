@@ -196,7 +196,7 @@ jobs:
 
   # The container image (RFC 010 D-11): each architecture is built NATIVELY on its own runner (no QEMU, no
   # `docker/*` action) by a `docker-container` buildx builder whose BuildKit image is pinned by digest
-  # (moby/buildkit v0.33.1, the build `docker/setup-buildx-action` pulled as `buildx-stable-1` before this
+  # (moby/buildkit v0.34.2, moved from v0.33.1 for IS-60; the build `docker/setup-buildx-action` pulled as `buildx-stable-1` before the pin
   # change). Each architecture is pushed BY DIGEST, with BuildKit's provenance (`mode=max`, as before), and a
   # later job joins the two into one manifest list with `docker buildx imagetools create`, tags it, and
   # attests the manifest list's digest. No per-architecture tag is ever written to a package.
@@ -240,7 +240,7 @@ jobs:
       - name: BuildKit builder (docker-container; image pinned by digest, D-9 record in the review request)
         run: |
           set -euo pipefail
-          docker buildx create --name planeter-builder --driver docker-container --driver-opt image=moby/buildkit@sha256:cec9f139f45e93c5c69c60f8b07cfad9f43f4ef6b6a6cd917527fea5ff2e3dea --use
+          docker buildx create --name planeter-builder --driver docker-container --driver-opt image=moby/buildkit@sha256:c5f8862f52499773af85bc07695b2379ef08e8002352b0df2c4864c91d78dabe --use
           docker buildx inspect --bootstrap planeter-builder
       # THE GATE (D-51, in every mode, before anything is pushed or attested): the image this job just built is RUN, and the
       # binary's glibc needs are checked against the glibc of the image that carries it. A binary the image's loader refuses to
