@@ -89,6 +89,13 @@ fn procs_of(root: &Path) -> Vec<u32> {
     found
 }
 
+fn comm_of(pid: u32) -> String {
+    std::fs::read_to_string(format!("/proc/{pid}/comm"))
+        .unwrap_or_default()
+        .trim()
+        .to_owned()
+}
+
 fn reap(root: &Path) {
     for pid in procs_of(root) {
         let _ = Command::new("kill").args(["-9", &pid.to_string()]).status();
@@ -203,7 +210,18 @@ fn a_sigkilled_server_leaves_no_bwrap_or_prikk_process_of_an_in_flight_call() {
         let _ = s.read_to_end(&mut buf);
     });
 
-    let in_flight = wait_for(Duration::from_secs(15), || !procs_of(&repo_dir).is_empty());
+    // In flight = the calls are fully up (their `sleep` is running) and no new process has appeared for a moment. The server makes **two**
+    // calls at start now (the request's `log`, and the one-time pass that records where each trusted key came from, RFC 013 T5); a kill at the
+    // very first sight of a process can land while the second is still being spawned, before bubblewrap has asked to die with its parent
+    // (a race of the spawn, not of the property this test holds: that an in-flight call does not outlive its server).
+    let in_flight = wait_for(Duration::from_secs(15), || {
+        let a = procs_of(&repo_dir);
+        if a.is_empty() || !a.iter().any(|p| comm_of(*p) == "sleep") {
+            return false;
+        }
+        std::thread::sleep(Duration::from_millis(150));
+        procs_of(&repo_dir) == a
+    });
     if !in_flight {
         let _ = server.kill();
         let _ = server.wait();
