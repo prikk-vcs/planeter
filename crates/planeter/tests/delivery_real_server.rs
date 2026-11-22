@@ -769,9 +769,16 @@ fn while_a_confirmation_holds_the_lease_reads_answer_and_the_rest_is_refused_cle
     let keys = inst.dir.join("forge-keys");
     let marker = inst.dir.join("marker");
     let server = Server::start(&inst.dir, Some(("reaccept_first", &marker)));
-    let id = deliver_req(&server, "tok-alice", &inst.sc.d).json()["id"]
+    let first = deliver_req(&server, "tok-alice", &inst.sc.d);
+    let id = first.json()["id"]
         .as_str()
-        .unwrap()
+        .unwrap_or_else(|| {
+            panic!(
+                "the delivery was not accepted: {} {}",
+                first.status,
+                first.text()
+            )
+        })
         .to_owned();
     let port = server.port;
     let hung = {
