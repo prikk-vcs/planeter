@@ -89,6 +89,14 @@ fn findings(path: &Path, text: &str) -> Vec<String> {
 /// (a) No code of planeter can spawn `prikk trust maintainer remove` (RFC 013 D-1, ledger PK-90).
 #[test]
 fn no_source_of_the_workspace_can_spawn_trust_maintainer_remove() {
+    // the scan covers the operator's command (RFC 013 D-2), the one place that calls `trust maintainer add` besides creation
+    let files = source_files();
+    assert!(
+        files
+            .iter()
+            .any(|f| f.ends_with("crates/planeter/src/operator.rs")),
+        "the scan must cover crates/planeter/src/operator.rs"
+    );
     let mut found = Vec::new();
     for f in source_files() {
         found.extend(findings(&f, &std::fs::read_to_string(&f).unwrap()));
