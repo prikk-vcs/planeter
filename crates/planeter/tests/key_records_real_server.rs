@@ -193,7 +193,18 @@ impl Server {
         let _ = self.child.wait();
     }
     fn get(&self, path: &str) -> u16 {
-        let mut s = TcpStream::connect(("127.0.0.1", self.port)).unwrap();
+        // the server says it is listening a moment before the socket accepts: retry the connection for a few seconds
+        let end = Instant::now() + Duration::from_secs(10);
+        let mut s = loop {
+            match TcpStream::connect(("127.0.0.1", self.port)) {
+                Ok(s) => break s,
+                Err(e) if Instant::now() < end => {
+                    let _ = e;
+                    std::thread::sleep(Duration::from_millis(50));
+                }
+                Err(e) => panic!("the server does not accept connections: {e}"),
+            }
+        };
         s.set_read_timeout(Some(Duration::from_secs(60))).ok();
         s.write_all(
             format!("GET {path} HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
