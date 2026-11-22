@@ -516,6 +516,98 @@ fn the_whole_story_a_delivery_signed_by_the_new_key_is_refused_before_the_add_an
     assert_eq!(verify_exit(&f), 0);
 }
 
+// ------------------------------------------------------------------------------------------------ the three states of "trusted, not recorded"
+
+/// RFC 013 D-4: the page never claims what was not recorded. In a repository with **no key record at all**, every trusted key is
+/// "not recorded"; a key trusted since creation is **not** an interrupted act of this command (which always leaves a row), so the
+/// command refuses it as already trusted and writes no `operator` event for it.
+#[test]
+fn a_key_trusted_since_creation_in_a_repository_with_no_record_is_refused_and_never_becomes_an_operators_add()
+ {
+    need_all!();
+    let fx = fixtures();
+    let f = fix("no-record", &[&fx.m1]);
+    assert!(
+        events(&f).is_empty(),
+        "the precondition: no key record at all"
+    );
+    let snap = snapshot(&f);
+    let o = operator(&f, &add_args(&fx.m1, "x"));
+    let (out, err) = text(&o);
+    assert_eq!(code(&o), 1, "{out}{err}");
+    assert!(err.contains("This key is already trusted."), "{err}");
+    assert!(out.is_empty(), "{out}");
+    assert!(
+        operator_events(&f).is_empty(),
+        "no operator event for a key that was there from the start"
+    );
+    assert_eq!(
+        snapshot(&f),
+        snap,
+        "nothing changed: no event, counter unmoved, no lease record"
+    );
+}
+
+/// The state an interrupted act leaves (rows exist, the key is trusted and has no row of its own) is completed: the kill-point table
+/// (`a_kill_at_every_point_is_recovered…`, rows `operator_after_add`, `_verify`, `_bump`) is that state, and this test pins it in the
+/// third form below. A key added out of band beside rows is recorded as the operator's add with the operator's reason: the command cannot
+/// tell it from an interrupted act, and an operator who runs it with a reason asserts it.
+#[test]
+fn a_key_trusted_and_unrecorded_beside_existing_rows_is_completed_and_recorded_with_the_operators_reason()
+ {
+    need_all!();
+    let fx = fixtures();
+    let f = fix("rows-then-oob", &[&fx.m1]);
+    // the repository has rows: the key it trusts is recorded (creation, backfilled)
+    SqliteKeyEventStore::new(f.db.clone())
+        .unwrap()
+        .record(&planeter_store::KeyEvent {
+            repo_id: repo_id(),
+            key_id: fx.m1.key_id.clone(),
+            public_key: fx.m1.public_key.clone(),
+            source: planeter_store::KeySource::Creation,
+            detail: String::new(),
+            delivery_id: None,
+            recorded_at: 1,
+            backfilled: true,
+        })
+        .unwrap();
+    // key B added out of band with prikk, never recorded
+    let b = new_key(&f.dir, "keyb");
+    archives::run(
+        &f.live,
+        &f.dir.join("forge-keys"),
+        &[
+            "trust",
+            "maintainer",
+            "add",
+            "--key-id",
+            &b.key_id,
+            "--public-key",
+            &b.public_key,
+        ],
+    );
+    assert!(trusted_ids(&f).contains(&b.key_id));
+    assert!(operator_events(&f).is_empty());
+    let before = revision(&f);
+    let o = operator(&f, &add_args(&b, "added by hand earlier"));
+    assert_eq!(code(&o), 0, "{:?}", text(&o));
+    assert!(
+        text(&o).0.contains(
+            "was already trusted by alice/forge; the record of it was missing and is written now."
+        ),
+        "{:?}",
+        text(&o)
+    );
+    let rows = operator_events(&f);
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert_eq!(rows[0].key_id, b.key_id);
+    assert_eq!(rows[0].detail, "added by hand earlier");
+    assert!(!rows[0].backfilled);
+    assert_eq!(revision(&f), before + 1);
+    assert_eq!(verify_exit(&f), 0);
+}
+
 // ------------------------------------------------------------------------------------------------ the refusals
 
 /// Run a refused command and hold that nothing changed.

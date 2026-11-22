@@ -397,8 +397,13 @@ fn key_add(t: &T, cmd: &KeyAdd) -> i32 {
         }
     };
     let already = keys.iter().find(|k| k.public_key == cmd.public_key);
+    // An interrupted act of this command always leaves at least one row (step 7b writes the older keys' records before the add), so only
+    // a repository that already has a key record can have one. In a repository with none, every trusted key is "not recorded"; a key
+    // trusted since creation is no act of this command, and the page must not say it was added by the operator (RFC 013 D-4). An error
+    // reading the table counts as "no record": the key is refused as already trusted, and nothing is claimed.
+    let has_records = events.has_any(&repo).unwrap_or(false);
     let completing = match already {
-        Some(k) if k.source == KeySourceView::NotRecorded => true,
+        Some(k) if k.source == KeySourceView::NotRecorded && has_records => true,
         Some(_) => {
             return fail(t.msg(Key::OperatorErrorAlreadyTrusted), exit::REFUSED);
         }
