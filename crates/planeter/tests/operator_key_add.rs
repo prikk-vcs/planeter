@@ -1070,14 +1070,13 @@ fn a_secret_in_the_environment_is_never_read_and_appears_in_no_output_and_no_fil
     }
     assert!(!seen.contains(CANARY));
     // nor in the database or the repository the command wrote
-    for p in [f.dir.join("state.db")] {
-        let bytes = std::fs::read(&p).unwrap();
-        assert!(
-            !bytes.windows(CANARY.len()).any(|w| w == CANARY.as_bytes()),
-            "{}",
-            p.display()
-        );
-    }
+    let db_bytes = std::fs::read(f.dir.join("state.db")).unwrap();
+    assert!(
+        !db_bytes
+            .windows(CANARY.len())
+            .any(|w| w == CANARY.as_bytes()),
+        "the canary is in the database"
+    );
     let tree = snapshot(&f);
     assert!(!tree.contains(CANARY));
 }

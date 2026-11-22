@@ -204,10 +204,15 @@ fn names_in(text: &str) -> BTreeSet<String> {
 
 #[test]
 fn usage_lists_exactly_the_variables_main_reads() {
-    let main =
-        std::fs::read_to_string(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src/main.rs"))
-            .unwrap();
-    // Names read by the binary: string literals in main.rs outside comments.
+    // The binary's settings are read in main.rs and in config.rs (the paths `PLANETER_DB` and `PLANETER_REPOS_ROOT`, which the server and
+    // `planeter operator` both read, so that they cannot disagree about where the data is).
+    let src = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
+    let main = ["main.rs", "config.rs"]
+        .iter()
+        .map(|f| std::fs::read_to_string(src.join(f)).unwrap())
+        .collect::<Vec<_>>()
+        .join("\n");
+    // Names read by the binary: string literals outside comments.
     let code: String = main
         .lines()
         .filter(|l| !l.trim_start().starts_with("//"))
@@ -232,11 +237,11 @@ fn usage_lists_exactly_the_variables_main_reads() {
     let stale: Vec<_> = listed.difference(&read).collect();
     assert!(
         missing.is_empty(),
-        "read by main.rs but not in USAGE: {missing:?}"
+        "read by main.rs or config.rs but not in USAGE: {missing:?}"
     );
     assert!(
         stale.is_empty(),
-        "in USAGE but not read by main.rs: {stale:?}"
+        "in USAGE but not read by main.rs or config.rs: {stale:?}"
     );
 }
 
