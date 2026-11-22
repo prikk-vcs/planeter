@@ -15,6 +15,19 @@ use std::fmt;
 /// The most maintainer keys a repository may trust, and the most an archive may carry for creation to keep its findings.
 pub const KEYS_MAX: usize = 64;
 
+/// Whether `text` is a public key as prikk writes it: 64 lowercase hexadecimal characters.
+pub fn is_public_key(text: &str) -> bool {
+    text.len() == 64 && text.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f'))
+}
+
+/// The id prikk derives from a public key: `ed25519-` and the **first 16 characters of the key** (measured on prikk 0.58.0 over the keys
+/// the tests make: the id of `ca34871b374be635…` is `ed25519-ca34871b374be635`). `None` when `public_key` is not a public key. The
+/// operator's command (RFC 013 D-2) refuses an id that is not this one, and shows both; creation never needed it (prikk reports each carried
+/// key as a pair). A test over real keys holds that it is what prikk says.
+pub fn key_id_of(public_key: &str) -> Option<String> {
+    is_public_key(public_key).then(|| format!("ed25519-{}", &public_key[..16]))
+}
+
 /// Adding would take a repository over [`KEYS_MAX`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct KeysBound {
@@ -54,6 +67,24 @@ pub fn room_for(trusted: usize, adding: usize) -> Result<(), KeysBound> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_id_is_the_first_sixteen_characters_of_the_key() {
+        let pk = "ca34871b374be63553636fa321a7c39a7e28ee79f4c32a437628b34fe0f9f199";
+        assert!(is_public_key(pk));
+        assert_eq!(key_id_of(pk).as_deref(), Some("ed25519-ca34871b374be635"));
+        for bad in [
+            "",
+            "ab",
+            &pk.to_uppercase(),
+            &pk[..63],
+            &format!("{pk}0"),
+            &"g".repeat(64),
+        ] {
+            assert!(!is_public_key(bad), "{bad}");
+            assert_eq!(key_id_of(bad), None, "{bad}");
+        }
+    }
 
     #[test]
     fn the_bound_is_sixty_four() {

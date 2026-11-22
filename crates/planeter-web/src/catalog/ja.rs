@@ -2072,4 +2072,109 @@ pub const CATALOG: &[Entry] = &[
         "プロジェクトのブランチは {ref} です。",
     ),
     msg("repo.trusted_keys", "このリポジトリが信頼する鍵"),
+    msg(
+        "operator.help.purpose",
+        "このサーバーを運用している人のためのコマンドです。サーバーのデータが必要で、ウェブからは実行できません。先にサーバーを止めてください。",
+    ),
+    msg(
+        "operator.help.usage",
+        "使い方: planeter operator key add OWNER/NAME --key-id ID --public-key HEX --reason TEXT [--lang en|ja]\n       planeter operator --help\n\nkey add        公開鍵をもう 1 つ、1 つのリポジトリのメンテナーの鍵にします。そのリポジトリは、この鍵で署名された引き渡しを受け付けるようになります。鍵を加えるだけで、鍵を取り除くことはありません\n--key-id       鍵の ID です。ed25519- に続く 16 文字で、0〜9 と小文字の a〜f を使います\n--public-key   公開鍵です。64 文字で、0〜9 と小文字の a〜f を使います\n--reason       鍵を加える理由です。1〜200 文字で、リポジトリのページに表示されます\n--lang         これらのメッセージの言語です（省略すると、LC_ALL、LC_MESSAGES、LANG のうち指定されているものの言語、なければ英語です）",
+    ),
+    msg(
+        "operator.help.exit_codes",
+        "終了コード: 0 完了、1 拒否（リポジトリまたは鍵）、2 コマンドラインの誤り、3 サーバーが動いている、またはロックを取れない、4 変更のあとで prikk または記録が失敗、5 ローカルのファイルまたはデータベース",
+    ),
+    msg(
+        "operator.error.usage",
+        "このコマンドラインは解釈できません。planeter operator --help で、指定できるものを確認してください。",
+    ),
+    msg(
+        "operator.error.repo_form",
+        "リポジトリは OWNER/NAME の形で指定してください。確認して、もう一度実行してください。",
+    ),
+    msg(
+        "operator.error.reason_missing",
+        "理由が必要です。鍵を加える理由を、1〜{max} 文字で書いてください。",
+    ),
+    msg(
+        "operator.error.reason_long",
+        "理由が {length} 文字あり、{max} 文字までです。短くして、もう一度実行してください。",
+    ),
+    msg(
+        "operator.error.reason_control",
+        "理由に、改行など、表示できない文字が含まれています。1 行の普通の文章にして、もう一度実行してください。",
+    ),
+    msg(
+        "operator.error.key_shape",
+        "公開鍵は 64 文字で、各文字は 0〜9 か小文字の a〜f にしてください。確認して、もう一度実行してください。",
+    ),
+    msg(
+        "operator.error.key_id_shape",
+        "鍵の ID は、ed25519- に続けて 16 文字にし、各文字は 0〜9 か小文字の a〜f にしてください。確認して、もう一度実行してください。",
+    ),
+    msg(
+        "operator.error.key_id_mismatch",
+        "鍵の ID {given} は、この公開鍵のものではありません。この公開鍵から prikk が導く ID は {derived} です。その ID を使うか、公開鍵が意図したものか確認してください。",
+    ),
+    msg(
+        "operator.error.running",
+        "サーバーが動いています。サーバーを止めてから、このコマンドをもう一度実行し、そのあとでサーバーを起動してください。",
+    ),
+    msg(
+        "operator.error.lock",
+        "サーバーのデータベースのロックを取れません: {why}。サーバーが動いていないなら、そこに書かれているファイルを確認してください。",
+    ),
+    msg(
+        "operator.error.no_database",
+        "{path} にデータベースがありません。PLANETER_DB にサーバーのデータベースを指定して、もう一度実行してください。",
+    ),
+    msg(
+        "operator.error.database",
+        "データベースを開けません: {why}。何も変わっていません。",
+    ),
+    msg(
+        "operator.error.unknown_repo",
+        "リポジトリ {repo} はありません。所有者と名前を確認してください。",
+    ),
+    msg(
+        "operator.error.needs_recovery",
+        "先にサーバーを起動して、復旧が終わるのを待ってください。",
+    ),
+    msg(
+        "operator.error.already_trusted",
+        "この鍵は、すでに信頼されています。",
+    ),
+    msg(
+        "operator.error.bound",
+        "このリポジトリは、planeter が対応する最大数の鍵（{max} 個）をすでに信頼しています。鍵はまだ取り除けないため、これ以上は加えられません。",
+    ),
+    msg(
+        "operator.error.prikk",
+        "prikk を実行できません: {why}。何も変わっていません。",
+    ),
+    msg(
+        "operator.error.add",
+        "prikk が鍵を加えませんでした: {why}。サーバーを起動する前に、prikk でリポジトリを確認してください。",
+    ),
+    msg(
+        "operator.error.verify",
+        "鍵は加わりましたが、リポジトリがチェックに通らなくなりました。鍵を取り除くことはできません。リポジトリには復旧が必要という印を付けました。サーバーを起動して、リポジトリの管理者に確認を依頼してください。",
+    ),
+    msg(
+        "operator.error.record",
+        "鍵は信頼されていますが、その記録を書けませんでした。同じコマンドをもう一度実行して、記録してください。",
+    ),
+    msg(
+        "operator.error.files",
+        "コマンドに必要なファイルまたはディレクトリを読めません: {why}。何も変わっていません。",
+    ),
+    msg(
+        "operator.done",
+        "{fingerprint} は、{repo} で信頼されるようになりました。このサーバーの運用者が {date} に追加しました: {reason}",
+    ),
+    msg(
+        "operator.done.recorded",
+        "{fingerprint} は、{repo} で、すでに信頼されていました。記録がなかったため、今、書きました。このサーバーの運用者が {date} に追加しました: {reason}",
+    ),
+    msg("operator.start", "サーバーを起動してください。"),
 ];

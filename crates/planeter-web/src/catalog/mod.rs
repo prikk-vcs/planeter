@@ -251,6 +251,16 @@ impl Lang {
             .map(Lang)
     }
 
+    /// The language a POSIX locale names (`LC_ALL`, `LC_MESSAGES`, `LANG`, the first that is set and not empty), among the available
+    /// languages; English otherwise. For a command line (`planeter operator`), which has no `Accept-Language`.
+    pub fn from_environment(var: impl Fn(&str) -> Option<String>) -> Lang {
+        let defs = available();
+        let langs: Vec<&'static Language> = defs.iter().map(|d| d.lang).collect();
+        planeter_i18n::tag::from_environment(var, &langs)
+            .and_then(|found| defs.into_iter().find(|d| std::ptr::eq(d.lang, found)))
+            .map_or(EN, Lang)
+    }
+
     /// Negotiate the page language (RFC 012 D-3b): the `lang` cookie when it names an available language, else the best
     /// `Accept-Language` entry (q-values, `q=0` refused), else English.
     pub fn negotiate(accept_language: Option<&str>, cookie: Option<&str>) -> Lang {
@@ -1039,6 +1049,33 @@ keys! {
     RepoDeliveredBy => "repo.delivered_by",
     RepoProjectBranch => "repo.project_branch",
     RepoTrustedKeys => "repo.trusted_keys",
+    OperatorHelpPurpose => "operator.help.purpose",
+    OperatorHelpUsage => "operator.help.usage",
+    OperatorHelpExitCodes => "operator.help.exit_codes",
+    OperatorErrorUsage => "operator.error.usage",
+    OperatorErrorRepoForm => "operator.error.repo_form",
+    OperatorErrorReasonMissing => "operator.error.reason_missing",
+    OperatorErrorReasonLong => "operator.error.reason_long",
+    OperatorErrorReasonControl => "operator.error.reason_control",
+    OperatorErrorKeyShape => "operator.error.key_shape",
+    OperatorErrorKeyIdShape => "operator.error.key_id_shape",
+    OperatorErrorKeyIdMismatch => "operator.error.key_id_mismatch",
+    OperatorErrorRunning => "operator.error.running",
+    OperatorErrorLock => "operator.error.lock",
+    OperatorErrorNoDatabase => "operator.error.no_database",
+    OperatorErrorDatabase => "operator.error.database",
+    OperatorErrorUnknownRepo => "operator.error.unknown_repo",
+    OperatorErrorNeedsRecovery => "operator.error.needs_recovery",
+    OperatorErrorAlreadyTrusted => "operator.error.already_trusted",
+    OperatorErrorBound => "operator.error.bound",
+    OperatorErrorPrikk => "operator.error.prikk",
+    OperatorErrorAdd => "operator.error.add",
+    OperatorErrorVerify => "operator.error.verify",
+    OperatorErrorRecord => "operator.error.record",
+    OperatorErrorFiles => "operator.error.files",
+    OperatorDone => "operator.done",
+    OperatorDoneRecorded => "operator.done.recorded",
+    OperatorStart => "operator.start",
 }
 
 /// Marks a response whose text depends on the caller's language, so that the response-policy layer adds

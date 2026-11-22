@@ -2059,4 +2059,109 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg("repo.project_branch", "The project's branch is {ref}."),
     msg("repo.trusted_keys", "Keys this repository trusts"),
+    msg(
+        "operator.help.purpose",
+        "For the person who runs this server. It needs the server's data and cannot be run from the web. Stop the server first.",
+    ),
+    msg(
+        "operator.help.usage",
+        "usage: planeter operator key add OWNER/NAME --key-id ID --public-key HEX --reason TEXT [--lang en|ja]\n       planeter operator --help\n\nkey add        make one more public key a maintainer key of one repository, so that the repository accepts deliveries signed by it; it adds a key and never removes one\n--key-id       the key's id: ed25519- and 16 characters, 0-9 and a-f in lower case\n--public-key   the public key: 64 characters, 0-9 and a-f in lower case\n--reason       why the key is added, 1 to 200 characters; the repository's page shows it\n--lang         the language of these messages (default: the one LC_ALL, LC_MESSAGES or LANG names, else English)",
+    ),
+    msg(
+        "operator.help.exit_codes",
+        "exit codes: 0 done; 1 refused (the repository or the key); 2 the command line; 3 the server is running, or its lock cannot be taken; 4 prikk or the record failed after a change; 5 local files or the database",
+    ),
+    msg(
+        "operator.error.usage",
+        "This command line is not understood. Run planeter operator --help to see what it takes.",
+    ),
+    msg(
+        "operator.error.repo_form",
+        "The repository must be written OWNER/NAME. Check it and run the command again.",
+    ),
+    msg(
+        "operator.error.reason_missing",
+        "A reason is required: say why the key is added, in 1 to {max} characters.",
+    ),
+    msg(
+        "operator.error.reason_long",
+        "The reason is {length} characters long, and it can be at most {max}. Shorten it and run the command again.",
+    ),
+    msg(
+        "operator.error.reason_control",
+        "The reason has a character that cannot be shown, such as a line break. Write it as one line of plain text and run the command again.",
+    ),
+    msg(
+        "operator.error.key_shape",
+        "The public key must be 64 characters, each one 0-9 or a-f in lower case. Check it and run the command again.",
+    ),
+    msg(
+        "operator.error.key_id_shape",
+        "The key id must be ed25519- followed by 16 characters, each one 0-9 or a-f in lower case. Check it and run the command again.",
+    ),
+    msg(
+        "operator.error.key_id_mismatch",
+        "The key id {given} does not belong to this public key: prikk derives {derived} from it. Use that id, or check that the public key is the one you mean.",
+    ),
+    msg(
+        "operator.error.running",
+        "The server is running. Stop it, run this command again, then start it.",
+    ),
+    msg(
+        "operator.error.lock",
+        "The server's lock on its database cannot be taken: {why}. If no server is running, check the file it names.",
+    ),
+    msg(
+        "operator.error.no_database",
+        "There is no database at {path}. Set PLANETER_DB to the server's database and run the command again.",
+    ),
+    msg(
+        "operator.error.database",
+        "The database cannot be opened: {why}. Nothing was changed.",
+    ),
+    msg(
+        "operator.error.unknown_repo",
+        "There is no repository {repo}. Check the owner and the name.",
+    ),
+    msg(
+        "operator.error.needs_recovery",
+        "Start the server and let recovery finish first.",
+    ),
+    msg(
+        "operator.error.already_trusted",
+        "This key is already trusted.",
+    ),
+    msg(
+        "operator.error.bound",
+        "This repository already trusts the most keys planeter supports: {max}. Keys cannot be removed yet, so no more can be added.",
+    ),
+    msg(
+        "operator.error.prikk",
+        "prikk could not be run: {why}. Nothing was changed.",
+    ),
+    msg(
+        "operator.error.add",
+        "prikk did not add the key: {why}. Check the repository with prikk before you start the server.",
+    ),
+    msg(
+        "operator.error.verify",
+        "The key was added, but the repository no longer passes its checks, and a key cannot be taken out again. The repository is marked as needing recovery. Start the server and ask the repository's administrator to look at it.",
+    ),
+    msg(
+        "operator.error.record",
+        "The key is trusted but the record of it was not written. Run the same command again to record it.",
+    ),
+    msg(
+        "operator.error.files",
+        "A file or a directory the command needs cannot be read: {why}. Nothing was changed.",
+    ),
+    msg(
+        "operator.done",
+        "{fingerprint} is now trusted by {repo}. Added by this server's operator on {date}: {reason}",
+    ),
+    msg(
+        "operator.done.recorded",
+        "{fingerprint} was already trusted by {repo}; the record of it was missing and is written now. Added by this server's operator on {date}: {reason}",
+    ),
+    msg("operator.start", "Start the server."),
 ];

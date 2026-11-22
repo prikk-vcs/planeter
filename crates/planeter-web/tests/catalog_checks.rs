@@ -268,6 +268,8 @@ fn sources_outside_the_catalog() -> String {
     for p in rust_sources() {
         all += &read(&p);
     }
+    // The server binary's operator command (RFC 013 D-2) speaks in this catalog too: its messages are used there.
+    all += &read(&root().join("../planeter/src/operator.rs"));
     // The catalog module uses a few keys itself (sizes); its key table (`Variant => "id"`) never says `Key::`.
     all += &read(&root().join("src/catalog/mod.rs"));
     all
