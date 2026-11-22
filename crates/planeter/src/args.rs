@@ -23,6 +23,8 @@ pub enum Action {
     Version,
     /// `--help` / `-h`.
     Help,
+    /// `operator …` (RFC 013 D-2): commands for the person who runs the server; the rest of the command line is theirs to read.
+    Operator(Vec<std::ffi::OsString>),
     /// Anything else: an argument that is not understood.
     Unknown,
 }
@@ -37,6 +39,9 @@ where
     let Some(first) = it.next() else {
         return Action::Serve;
     };
+    if first.as_ref().to_str() == Some("operator") {
+        return Action::Operator(it.map(|a| a.as_ref().to_owned()).collect());
+    }
     if it.next().is_some() {
         return Action::Unknown;
     }
@@ -61,11 +66,13 @@ pub fn version_text(commit: &str, floor: (u64, u64, u64)) -> String {
 /// The usage text: the flags and the environment variables the binary reads.
 pub const USAGE: &str = "\
 usage: planeter [--version | -V | --help | -h]
+       planeter operator …
 
 With no argument, planeter reads its configuration from the environment and serves.
 
   -V, --version   print the version, the build's commit and the prikk floor, then exit
   -h, --help      print this text, then exit
+  operator        commands for the person who runs this server, with the server stopped (planeter operator --help)
 
 environment:
   PLANETER_ADDR                 bind address (default 127.0.0.1:8080)

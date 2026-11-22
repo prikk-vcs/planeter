@@ -52,6 +52,13 @@ if [ -e target/release/planeter ] && grep -aq 'PLANETER_FAILPOINT' target/releas
   found=1
 fi
 
+# The operator command's stops (RFC 013 D-2, `planeter operator key add`) exist in debug builds only, like the delivery engine's: the release server
+# must not carry their names either.
+if [ -e target/release/planeter ] && grep -aq 'operator_after_' target/release/planeter; then
+  echo "ENF-2 FAIL: the release server carries the operator command's test stops (operator_after_*); they belong to debug builds only"
+  found=1
+fi
+
 if [ "$scanned" -eq 0 ]; then
   echo "ENF-2 ERROR: no artifacts found to scan (did the build produce target/release/*?)." >&2
   exit 2

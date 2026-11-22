@@ -10,6 +10,8 @@
 //! its default (the list lives in `args::USAGE` and nowhere else).
 
 mod args;
+mod config;
+mod operator;
 
 // The delivery engine's test hook: debug builds only, and not an operator's setting (so not in `USAGE`).
 #[cfg(debug_assertions)]
@@ -55,6 +57,9 @@ async fn main() {
             print!("{}", args::USAGE);
             return;
         }
+        // RFC 013 D-2: the first command of the operator's family. It reads only the settings it needs, takes the server's own lock, does one
+        // thing and exits: it never starts a server.
+        args::Action::Operator(rest) => std::process::exit(operator::run(rest)),
         args::Action::Unknown => {
             eprintln!("planeter: unrecognized argument");
             eprint!("{}", args::USAGE);
@@ -66,11 +71,11 @@ async fn main() {
         .unwrap_or_else(|_| "127.0.0.1:8080".to_owned())
         .parse()
         .expect("PLANETER_ADDR must be a socket address");
-    let repos_root =
-        std::env::var("PLANETER_REPOS_ROOT").unwrap_or_else(|_| "./planeter-repos".to_owned());
+    let shared = config::paths_from_env();
+    let repos_root = shared.repos_root.clone();
     let content_origin =
         std::env::var("PLANETER_CONTENT_ORIGIN").unwrap_or_else(|_| format!("http://{addr}"));
-    let db_path = std::env::var("PLANETER_DB").unwrap_or_else(|_| "./planeter.db".to_owned());
+    let db_path = shared.db_path.clone();
     let trusted_proxies = match planeter_web::TrustedProxies::parse(
         &std::env::var("PLANETER_TRUSTED_PROXIES").unwrap_or_default(),
     ) {
@@ -133,7 +138,7 @@ async fn main() {
     // RFC 004 D-7: the repository lease is in-process, so a second server against one database is refused here,
     // before the database is opened. The lock file sits next to the database and is removed on a normal exit; a
     // killed server leaves it, and the next start recognises it as stale.
-    match planeter_core::ProcessLock::acquire(format!("{db_path}.lock")) {
+    match planeter_core::ProcessLock::acquire(shared.lock_file()) {
         Ok(lock) => *PROCESS_LOCK.lock().expect("lock slot") = Some(lock),
         Err(e) => {
             eprintln!("planeter: refusing to start: {e}");
@@ -236,17 +241,7 @@ async fn main() {
     // previous process left in the durable holder table is reported, so an operator sees it.
     let leases = match SqliteLeaseRecords::new(db.clone()) {
         Ok(records) => {
-            let leases = planeter_core::LeaseManager::new(
-                Arc::new(records),
-                planeter_core::new_boot_id(),
-                || {
-                    std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map(|d| d.as_secs())
-                        .unwrap_or(0)
-                },
-                std::time::Duration::from_secs(5),
-            );
+            let leases = config::lease_manager(records);
             match leases.orphans() {
                 Ok(o) if o.is_empty() => {}
                 Ok(o) => eprintln!(
@@ -255,7 +250,7 @@ async fn main() {
                 ),
                 Err(e) => eprintln!("planeter: cannot read the lease records: {e}"),
             }
-            Arc::new(leases)
+            leases
         }
         Err(e) => {
             eprintln!("planeter: cannot initialise the lease records: {e}");
