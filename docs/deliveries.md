@@ -62,7 +62,7 @@ The repository's home page and history page say who delivered last — "Delivere
 
 ### What a delivery does not do
 
-* It **does not add, rotate or revoke maintainer keys**: the repository's trusted keys are the creator's. A maintainer whose key is not trusted cannot deliver.
+* It **does not add, rotate or revoke maintainer keys**: a delivery is accepted only if it is signed by keys the repository already trusts. A maintainer whose key is not trusted cannot deliver; the server's operator can add it ([`docs/keys.md`](keys.md), which also says what cannot be done about a key).
 * It follows **`heads/main` only**: landing counts that branch and no other (a patch in a branch the delivery added lands nothing).
 * It **sends the whole history each time**, and the archive is bounded (below); a repository larger than the bound cannot be delivered until the operator raises it. There is no delta form.
 * It **cannot rewind**: undoing a delivery is a new delivery of a successor.
