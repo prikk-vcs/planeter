@@ -1058,6 +1058,7 @@ keys! {
     RepoKeysSourceDelivery => "repo.keys.source.delivery",
     RepoKeysSourceNotRecorded => "repo.keys.source.not_recorded",
     StageKeySlots => "stage.key.slots",
+    StageKeySlotsOne => "stage.key.slots_one",
     OperatorHelpPurpose => "operator.help.purpose",
     OperatorHelpUsage => "operator.help.usage",
     OperatorHelpExitCodes => "operator.help.exit_codes",

@@ -2087,6 +2087,10 @@ pub const CATALOG: &[Entry] = &[
         "This repository can trust at most {max} keys. Keys cannot be removed yet, so each key you add uses one for the repository's whole life. Adopting all {carried} leaves {left}; adopting fewer leaves more.",
     ),
     msg(
+        "stage.key.slots_one",
+        "This repository can trust at most {max} keys. Keys cannot be removed yet, so each key you add uses one for the repository's whole life. Adopting this key leaves {left}.",
+    ),
+    msg(
         "operator.help.purpose",
         "For the person who runs this server. It needs the server's data and cannot be run from the web. Stop the server first.",
     ),

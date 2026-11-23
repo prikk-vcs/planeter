@@ -743,8 +743,14 @@ fn stage_page_with(
         .with("repo", &repo)
         .text();
     let none_note = t.msg(Key::StageNoneConsequence).with("repo", &repo).text();
+    // one carried key has its own sentence ("Adopting this key leaves …": there is no "all" and no "fewer" of one); the web catalog's plural
+    // facility has one text for Japanese, so the two sentences are two messages chosen by the number of carried keys
     let slots_note = t
-        .msg(Key::StageKeySlots)
+        .msg(if f.keys.len() == 1 {
+            Key::StageKeySlotsOne
+        } else {
+            Key::StageKeySlots
+        })
         .with("max", planeter_transport::KEYS_MAX)
         .with("carried", f.keys.len())
         .with(

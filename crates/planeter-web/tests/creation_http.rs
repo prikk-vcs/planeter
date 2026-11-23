@@ -1574,21 +1574,21 @@ async fn the_archive_flow_on_the_pages_in_two_screens_with_empty_fingerprint_fie
                 && html.contains("name=\"mode\" value=\"none\"")
         );
         assert!(!unfilled_placeholder(&html), "{lang}");
-        // RFC 013 D-6: said once, in plain words, with how many slots adopting every carried key leaves
-        let left = 64 - keys.len();
+        // RFC 013 D-6: said once, in plain words (one carried key: its own sentence; the whole story is in the test for 1, 2 and 64)
         let (at_most, leaves) = if lang == "en" {
             (
                 "can trust at most 64 keys. Keys cannot be removed yet",
-                format!("Adopting all {} leaves {left}", keys.len()),
+                "Adopting this key leaves 63.",
             )
         } else {
             (
                 "最大 64 個です。鍵はまだ取り除けない",
-                format!("{} 個すべてを信頼すると残りは {left} 個", keys.len()),
+                "この鍵を信頼すると、残りは 63 個です。",
             )
         };
+        assert_eq!(keys.len(), 1);
         assert_eq!(html.matches(at_most).count(), 1, "{lang}: said once");
-        assert!(html.contains(&leaves), "{lang}: {leaves}");
+        assert!(html.contains(leaves), "{lang}: {leaves}");
     }
     // Another person cannot see it.
     let mallory = w.session("mallory");
@@ -1711,6 +1711,112 @@ async fn the_page_can_create_without_trusting_any_key_and_says_what_that_means()
     assert!(html.contains("No key was trusted."), "{html}");
     assert!(html.contains("named remotes/heads/main"), "{html}");
     assert_eq!(violations(&html), Vec::<String>::new());
+}
+
+/// The one sentence about the 64 slots on the confirmation page reads right for one carried key, for two and for 64, in both languages
+/// (RFC 013 fix: "Adopting all 1 leaves 63" is not English): the structural rules pass over each, and each is saved for the reviewer.
+#[tokio::test]
+async fn the_slots_sentence_reads_right_for_one_two_and_sixty_four_carried_keys_in_both_languages()
+{
+    need_prikk!();
+    let _g = SERIAL.lock().await;
+    planeter_web::catalog::enable_preview_languages("ja").unwrap();
+    let w = world("page-slots", |c, rate| {
+        *rate = 10_000;
+        c.stage_limits.per_principal = 3;
+    });
+    let alice = w.session("alice");
+    let fields = [
+        ("csrf", "tok123"),
+        ("owner", "alice"),
+        ("name", "arch"),
+        ("visibility", "private"),
+        ("proposals", "members"),
+    ];
+    // three archives: one key; two keys; 64 keys (a maintainer who trusts 63 more keys, which prikk takes as any well-formed pair)
+    let (one, keys_one) = simple_archive(&w.base, "slots-one", 1, 0);
+    let (two, keys_two) = two_key_archive(&w.base, "slots-two");
+    let many = archives::Maintainer::new(&w.base, "slots-many");
+    for i in 0..63u8 {
+        let pk = format!("{:02x}{:02x}", i, 0xa5).repeat(16);
+        let id = format!("ed25519-{}", &pk[..16]);
+        archives::run(
+            &many.work,
+            &many.keys,
+            &[
+                "trust",
+                "maintainer",
+                "add",
+                "--key-id",
+                &id,
+                "--public-key",
+                &pk,
+            ],
+        );
+    }
+    let sixty_four = w.base.join("slots-many.archive");
+    many.archive(&sixty_four);
+    let keys_many = many.carried(&sixty_four);
+    assert_eq!(
+        (keys_one.len(), keys_two.len(), keys_many.len()),
+        (1, 2, 64)
+    );
+    let cases = [
+        (
+            "one",
+            one,
+            1usize,
+            "Adopting this key leaves 63.",
+            "この鍵を信頼すると、残りは 63 個です。",
+        ),
+        (
+            "two",
+            two,
+            2,
+            "Adopting all 2 leaves 62; adopting fewer leaves more.",
+            "2 個すべてを信頼すると残りは 62 個で、一部だけにすると、残りはそれより多くなります。",
+        ),
+        (
+            "64",
+            sixty_four,
+            64,
+            "Adopting all 64 leaves 0; adopting fewer leaves more.",
+            "64 個すべてを信頼すると残りは 0 個で、一部だけにすると、残りはそれより多くなります。",
+        ),
+    ];
+    for (name, archive, n, en, ja) in cases {
+        let bytes = std::fs::read(&archive).unwrap();
+        let r = upload(&w, Some(&alice), &fields, &bytes, "en").await;
+        assert_eq!(r.status, StatusCode::SEE_OTHER, "{name}: {}", r.text());
+        let location = r.h("location").to_owned();
+        for (lang, want) in [("en", en), ("ja", ja)] {
+            let html = page(&w, "GET", &location, Some(&alice), lang).await.text();
+            assert!(html.contains(want), "{name} {lang}: {want}");
+            assert_eq!(
+                html.matches("fieldset").count(),
+                2 * n,
+                "{name}: one fieldset per carried key"
+            );
+            assert_eq!(violations(&html), Vec::<String>::new(), "{name} {lang}");
+            for bad in ["all 1 ", "1 個すべて"] {
+                assert!(!html.contains(bad), "{name} {lang}: {bad}");
+            }
+            if name == "one" {
+                assert!(!html.contains("adopting fewer"), "one key has no fewer");
+                assert!(!html.contains("一部だけ"));
+            }
+            save_page(&format!("stage-slots-{name}"), lang, &html);
+        }
+    }
+}
+
+/// Where the reviewer's saved pages go (`SLOTS_PAGES=<dir>`).
+fn save_page(name: &str, lang: &str, html: &str) {
+    if let Ok(d) = std::env::var("SLOTS_PAGES") {
+        let d = PathBuf::from(d);
+        std::fs::create_dir_all(&d).unwrap();
+        std::fs::write(d.join(format!("{name}-{lang}.html")), html).unwrap();
+    }
 }
 
 #[tokio::test]
