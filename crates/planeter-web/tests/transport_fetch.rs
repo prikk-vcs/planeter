@@ -1364,10 +1364,14 @@ async fn a_writer_holding_the_repository_makes_a_fetch_busy_and_readers_do_not()
     let adv = call(&fx.router, ADVERTISE, &[]).await;
     assert_eq!(adv.status, StatusCode::OK);
     let etag = adv.json()["archive"]["etag"].as_str().unwrap().to_owned();
-    let t = Instant::now();
+    // The writer still holds, and the 304 is answered all the same: with a wait for the writer the answer would have been `busy` at the end
+    // of the 600 ms wait, never a 304. (The old form timed the answer, under half a second, which a slow host fails without a queue.)
     let not_modified = call(&fx.router, FETCH_ARCHIVE, &[("if-none-match", &etag)]).await;
     assert_eq!(not_modified.status, StatusCode::NOT_MODIFIED);
-    assert!(t.elapsed() < Duration::from_millis(500));
+    assert!(
+        fx.leases.holder_of(&RepoId::new("r-open")).is_some(),
+        "the writer was still holding when the 304 was answered"
+    );
     drop(w);
     // With the writer gone the fetch works; a reader lease never blocks an export.
     let _reader = fx
@@ -1687,7 +1691,7 @@ async fn under_the_real_sandbox_the_export_writes_into_the_spool_mount_and_nowhe
     // A deadline is a named refusal and keeps nothing: a stand-in that sleeps past a one-second deadline.
     let dir = scratch("bwrap-slow-bin");
     // (A shell script and `sleep` are all the sandbox's read-only /usr offers: no wrapper around the real prikk.)
-    let slow = stand_in(&dir, r#"if [ "$2" = "export" ]; then sleep 5; fi"#);
+    let slow = stand_in(&dir, r#"if [ "$2" = "export" ]; then sleep 120; fi"#);
     let cfg = ExportConfig {
         deadline: Duration::from_secs(1),
         ..ExportConfig::default()
@@ -1714,8 +1718,10 @@ async fn under_the_real_sandbox_the_export_writes_into_the_spool_mount_and_nowhe
         "{}",
         r.json()
     );
+    // the stand-in sleeps two minutes and the deadline is one second: a call that came back at all, within a guard no loaded host reaches,
+    // came back because the deadline killed it
     assert!(
-        t.elapsed() < Duration::from_secs(4),
+        t.elapsed() < Duration::from_secs(60),
         "the deadline bounded the call: {:?}",
         t.elapsed()
     );
@@ -2267,11 +2273,15 @@ async fn a_have_list_takes_the_read_lease_so_a_writer_is_never_blocked_by_it_nor
     // A slow `sync have`: while it runs, the repository's write lease is free to take at once (an export would hold X).
     let dir = scratch("have-slow-bin");
     let marker = dir.join("started");
+    // The have-list runs until the test lets it go (a file it creates); a guard of a minute ends it if the test dies first. It does not
+    // run "for two seconds": on a slow host two seconds can be over before the test looks.
+    let release = dir.join("release");
     let bin = stand_in(
         &dir,
         &real_but(&format!(
-            r#"touch {m}; sleep 2; printf 'PSYNCHV1' > "$5""#,
-            m = marker.display()
+            r#"touch {m}; i=0; while [ ! -e {r} ] && [ $i -lt 1200 ]; do sleep 0.05; i=$((i+1)); done; printf 'PSYNCHV1' > "$5""#,
+            m = marker.display(),
+            r = release.display()
         )),
     );
     let fx = Arc::new(fixture(
@@ -2295,7 +2305,9 @@ async fn a_have_list_takes_the_read_lease_so_a_writer_is_never_blocked_by_it_nor
         None,
         "no exclusive lease is held by a have-list"
     );
-    let t = Instant::now();
+    // A zero wait: the lease is granted at once or it is `Busy`; the have-list is still running (its marker file is there, and `pending`
+    // has not been awaited), so a grant is the ordering. (The old form timed the grant, under half a second.)
+    assert!(!pending.is_finished(), "the have-list was still running");
     let w = fx
         .leases
         .acquire(
@@ -2305,8 +2317,8 @@ async fn a_have_list_takes_the_read_lease_so_a_writer_is_never_blocked_by_it_nor
             Duration::ZERO,
         )
         .expect("a writer does not wait for a have-list");
-    assert!(t.elapsed() < Duration::from_millis(500));
     drop(w);
+    std::fs::write(&release, b"").unwrap();
     let r = pending.await.unwrap();
     assert_eq!(
         r.status,

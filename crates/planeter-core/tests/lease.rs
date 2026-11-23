@@ -94,8 +94,22 @@ fn a_wait_is_bounded_and_ends_in_busy_with_a_retry_hint_and_the_holder_class() {
     let r = repo("r1");
     let _held = m.acquire(&r, W, "sync accept", Duration::ZERO).unwrap();
     let wait = Duration::from_millis(120);
-    let t = Instant::now();
-    match m.acquire(&r, X, "archive export", wait) {
+    // The call runs on a thread of its own and the test waits for its answer with a guard no loaded host reaches: a wait that were not bounded
+    // fails here instead of hanging the run. How long a bounded wait took says nothing about the bound on a host of unknown speed (the old
+    // upper limit of the wait plus half a second did fail on a loaded one); that it **ends in Busy although the holder never lets go** does.
+    let (tx, rx) = mpsc::channel();
+    {
+        let (m, r) = (m.clone(), r.clone());
+        thread::spawn(move || {
+            let t = Instant::now();
+            let answer = m.acquire(&r, X, "archive export", wait);
+            let _ = tx.send((answer.map(|_| ()), t.elapsed()));
+        });
+    }
+    let (answer, took) = rx
+        .recv_timeout(Duration::from_secs(60))
+        .expect("the wait ended: it is bounded although the holder never lets go");
+    match answer {
         Err(LeaseError::Busy {
             retry_after,
             held_by,
@@ -105,12 +119,8 @@ fn a_wait_is_bounded_and_ends_in_busy_with_a_retry_hint_and_the_holder_class() {
         }
         other => panic!("expected Busy, got {other:?}"),
     }
-    let took = t.elapsed();
+    // a wait is a wait, and the least it can be is its bound: a lower bound cannot fail by load
     assert!(took >= wait, "returned early: {took:?}");
-    assert!(
-        took < wait + Duration::from_millis(500),
-        "waited far too long: {took:?}"
-    );
     // And the message names what to do, in a sentence the transport can turn into a 503.
     assert!(
         LeaseError::Busy {
@@ -128,15 +138,29 @@ fn a_waiter_gets_in_as_soon_as_the_holder_lets_go() {
     let r = repo("r1");
     let held = m.acquire(&r, W, "first", Duration::ZERO).unwrap();
     let (m2, r2) = (m.clone(), r.clone());
+    // The waiter's bound is two minutes. What this holds is that **the release is what lets it in**, not the end of its bound: the answer
+    // must be there long before the bound could end (a guard of 30 s, which no loaded host reaches), whereas a waiter woken only by its bound
+    // would not answer for two minutes. (The old form timed the answer: under one second after a release.)
+    let (tx, rx) = mpsc::channel();
     let waiter = thread::spawn(move || {
-        m2.acquire(&r2, W, "second", Duration::from_secs(5))
-            .map(|l| l.class())
+        let _ = tx.send(
+            m2.acquire(&r2, W, "second", Duration::from_secs(120))
+                .map(|l| l.class()),
+        );
     });
-    thread::sleep(Duration::from_millis(80));
-    let t = Instant::now();
+    // A head start for the waiter to begin waiting. It is not an assertion about time: a waiter that has not begun when the holder lets go
+    // simply takes the lease at once and the test holds less, it cannot fail by it. A writer is never let in beside a writer.
+    thread::sleep(Duration::from_millis(100));
+    assert!(
+        rx.try_recv().is_err(),
+        "the waiter was let in beside the holder"
+    );
     drop(held);
-    assert_eq!(waiter.join().unwrap().unwrap(), W);
-    assert!(t.elapsed() < Duration::from_secs(1));
+    let answer = rx
+        .recv_timeout(Duration::from_secs(30))
+        .expect("the waiter was let in when the holder let go, not when its bound ended");
+    assert_eq!(answer.unwrap(), W);
+    waiter.join().unwrap();
 }
 
 // ------------------------------------------------------------------------------------------------ fairness
@@ -233,15 +257,11 @@ fn a_stream_of_readers_cannot_starve_a_writer() {
         // the stream is running around every writer: it has made progress since the last one (a count of reads over a fixed time would
         // depend on how loaded the machine is; this does not)
         let seen = reads.load(Ordering::Relaxed);
-        let t = Instant::now();
+        // **with no wait at all**: a writer is compatible with readers, so it is granted at once or the lease is wrong; how long a grant took
+        // on this host says nothing about that (the old form timed it: under half a second)
         let w = m
-            .acquire(&r, W, "write", Duration::from_secs(2))
-            .expect("a writer gets in beside the readers");
-        assert!(
-            t.elapsed() < Duration::from_millis(500),
-            "the writer waited {:?}",
-            t.elapsed()
-        );
+            .acquire(&r, W, "write", Duration::ZERO)
+            .expect("a writer gets in beside the readers, without waiting");
         drop(w);
         let end = Instant::now() + Duration::from_secs(20);
         while reads.load(Ordering::Relaxed) <= seen && Instant::now() < end {

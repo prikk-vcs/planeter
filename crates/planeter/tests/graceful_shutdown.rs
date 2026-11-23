@@ -77,6 +77,24 @@ fn stand_in(dir: &Path, secs: u32) -> PathBuf {
     bin_dir
 }
 
+/// A stand-in `prikk` whose slow call lasts **until the test creates `release` in the repository's directory** (the sandbox sees only that
+/// one; a guard of a minute ends it if the test dies first): the order of events is the test's, not a number of seconds that a slow host
+/// can outlast.
+fn stand_in_held(dir: &Path) -> PathBuf {
+    let bin_dir = dir.join("bin");
+    std::fs::create_dir_all(&bin_dir).unwrap();
+    let script = bin_dir.join("prikk");
+    std::fs::write(
+        &script,
+        "#!/bin/sh\ncase \"$1\" in --version) echo 'prikk 0.58.0';; *) i=0; while [ ! -e \"$PWD/release\" ] && [ $i -lt 1200 ]; do sleep 0.05; i=$((i+1)); done;; esac\n",
+    )
+    .unwrap();
+    use std::os::unix::fs::PermissionsExt;
+    std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    exec_wait::wait_until_runs(&script);
+    bin_dir
+}
+
 /// A public repository record pointing at an empty store directory (admission measures `.prikk`).
 fn seed(dir: &Path) -> PathBuf {
     let repo_dir = dir.join("repo");
@@ -233,14 +251,15 @@ fn an_idle_server_stops_at_once_on_sigterm_and_on_sigint_and_removes_its_lock() 
         let bin = stand_in(&dir, 1);
         let (mut server, _) = start(&dir, &bin, None);
         assert!(lock(&dir).exists(), "the lock is held while it runs");
-        let t = Instant::now();
         signal(&server, sig);
-        let code = wait_exit(&mut server, Duration::from_secs(5));
+        // The default drain is thirty seconds: an idle server that stopped within twenty-five did not wait it out (a guard no loaded host
+        // reaches; the old form asked for under three seconds, which a slow host can exceed with nothing to drain).
+        let code = wait_exit(&mut server, Duration::from_secs(25));
         assert_eq!(code, Some(0), "SIG{sig}: {}", log_of(&dir));
         assert!(
-            t.elapsed() < Duration::from_secs(3),
-            "idle must stop at once: {:?}",
-            t.elapsed()
+            !log_of(&dir).contains("the drain of"),
+            "idle must stop at once, not at the end of a drain: {}",
+            log_of(&dir)
         );
         assert!(!lock(&dir).exists(), "SIG{sig}: the lock file is removed");
         let log = log_of(&dir);
@@ -258,7 +277,7 @@ fn a_request_in_flight_finishes_when_sigterm_arrives_and_then_the_server_exits_c
         return;
     }
     let dir = scratch("inflight");
-    let bin = stand_in(&dir, 3);
+    let bin = stand_in_held(&dir);
     let repo = seed(&dir);
     let (mut server, port) = start(&dir, &bin, None);
     let client = slow_request(port);
@@ -266,11 +285,10 @@ fn a_request_in_flight_finishes_when_sigterm_arrives_and_then_the_server_exits_c
         wait_for(Duration::from_secs(15), || !procs_of(&repo).is_empty()),
         "the read never reached the sandbox"
     );
-    let t = Instant::now();
     signal(&server, "TERM");
     // No new connection is accepted once it is draining.
     assert!(
-        wait_for(Duration::from_secs(2), || TcpStream::connect((
+        wait_for(Duration::from_secs(30), || TcpStream::connect((
             "127.0.0.1",
             port
         ))
@@ -281,18 +299,21 @@ fn a_request_in_flight_finishes_when_sigterm_arrives_and_then_the_server_exits_c
         server.try_wait().unwrap().is_none(),
         "it must wait for the request in flight"
     );
+    // The slow call is held until this test lets go, so the request cannot have been answered, and the server cannot have exited: the
+    // server waits for it for as long as it lasts. (The old form timed the wait, at least two of the three seconds of a sleeping stand-in,
+    // which a slow host can shorten.)
+    assert!(
+        !client.is_finished(),
+        "the request in flight was answered before the slow call ended"
+    );
+    std::fs::write(repo.join("release"), b"").unwrap();
     let response = client.join().unwrap();
     assert!(
         response.starts_with("HTTP/1.1 "),
         "the request in flight got its answer: {response:?}"
     );
-    let code = wait_exit(&mut server, Duration::from_secs(10));
+    let code = wait_exit(&mut server, Duration::from_secs(25));
     assert_eq!(code, Some(0), "{}", log_of(&dir));
-    assert!(
-        t.elapsed() >= Duration::from_secs(2),
-        "it waited for the slow request: {:?}",
-        t.elapsed()
-    );
     assert!(!lock(&dir).exists(), "the lock file is gone");
 }
 
@@ -314,14 +335,14 @@ fn a_second_signal_stops_at_once_and_so_does_the_end_of_the_drain() {
     assert!(server.try_wait().unwrap().is_none());
     signal(&server, "TERM");
     assert_eq!(
-        wait_exit(&mut server, Duration::from_secs(5)),
+        wait_exit(&mut server, Duration::from_secs(25)),
         Some(1),
         "{}",
         log_of(&dir)
     );
     assert!(!lock(&dir).exists());
     assert!(
-        wait_for(Duration::from_secs(5), || procs_of(&repo).is_empty()),
+        wait_for(Duration::from_secs(25), || procs_of(&repo).is_empty()),
         "no sandbox process survives"
     );
     let _ = client.join();
@@ -334,18 +355,14 @@ fn a_second_signal_stops_at_once_and_so_does_the_end_of_the_drain() {
     let (mut server, port) = start(&dir, &bin, Some("1"));
     let client = slow_request(port);
     assert!(wait_for(Duration::from_secs(15), || !procs_of(&repo).is_empty()));
-    let t = Instant::now();
     signal(&server, "INT");
+    // The drain is one second and the slow call would last a minute: a server that stopped with the deadline's status (1) within twenty-five
+    // seconds was stopped by the end of the drain, not by the call (a guard no loaded host reaches; the old limit was four seconds in all).
     assert_eq!(
-        wait_exit(&mut server, Duration::from_secs(6)),
+        wait_exit(&mut server, Duration::from_secs(25)),
         Some(1),
         "{}",
         log_of(&dir)
-    );
-    assert!(
-        t.elapsed() < Duration::from_secs(4),
-        "the drain is bounded by the setting: {:?}",
-        t.elapsed()
     );
     assert!(!lock(&dir).exists());
     assert!(wait_for(Duration::from_secs(5), || procs_of(&repo).is_empty()));

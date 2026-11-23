@@ -199,7 +199,7 @@ fn at_most_eight_requests_wait_for_one_revision_and_the_ninth_is_refused_without
     }
     // wait until all eight are parked (they cannot finish: the holder still holds)
     let t = std::time::Instant::now();
-    while started.load(Ordering::SeqCst) < MAX_WAITERS && t.elapsed().as_secs() < 5 {
+    while started.load(Ordering::SeqCst) < MAX_WAITERS && t.elapsed().as_secs() < 60 {
         std::thread::sleep(std::time::Duration::from_millis(5));
     }
     std::thread::sleep(std::time::Duration::from_millis(200));

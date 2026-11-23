@@ -68,8 +68,10 @@ fn control_a_child_spawned_on_an_idle_pool_thread_dies_when_that_thread_expires(
             .join()
             .unwrap()
     });
+    // `sleep 3` that ran to the end exits with success; one that was killed with its spawning thread does not. The status says which, whatever
+    // the speed of the host (the old form also asked for under 2.5 s, which a slow host can exceed while the premise holds).
     assert!(
-        !status.success() && started.elapsed() < Duration::from_millis(2500),
+        !status.success(),
         "the premise of the pin failed: the call survived its spawning thread ({status:?}, {:?})",
         started.elapsed()
     );

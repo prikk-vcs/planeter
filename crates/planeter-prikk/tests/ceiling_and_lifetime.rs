@@ -201,8 +201,10 @@ fn a_call_past_the_deadline_is_killed_by_the_server_and_leaves_no_process() {
         .expect("spawn");
     let took = t.elapsed();
     assert!(run.timed_out, "the bound must fire");
+    // the bound is one second and the call would sleep thirty: at least the bound (it cannot fail by load), and far less than the thirty it
+    // would have run (a guard of twenty seconds, which no loaded host reaches; the old upper limit was four)
     assert!(
-        took >= Duration::from_secs(1) && took < Duration::from_secs(4),
+        took >= Duration::from_secs(1) && took < Duration::from_secs(20),
         "{took:?}"
     );
     // No process of the call remains (bounded settle time).

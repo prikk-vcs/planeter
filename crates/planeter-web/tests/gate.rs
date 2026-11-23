@@ -32,7 +32,13 @@ case "$1" in
   --version) echo "prikk 0.58.0"; exit 0 ;;
   log)
     echo "start $$ $(date +%s%N)" >> "$PWD/events"
-    sleep "$(cat "$PWD/sleep")"
+    if [ "$(cat "$PWD/sleep")" = hold ]; then
+      # held until the test creates $PWD/release (a guard of a minute ends it if the test dies first): an ordering the test controls,
+      # not a number of seconds that a slow host can outlast
+      i=0; while [ ! -e "$PWD/release" ] && [ $i -lt 1200 ]; do sleep 0.05; i=$((i+1)); done
+    else
+      sleep "$(cat "$PWD/sleep")"
+    fi
     echo "end $$ $(date +%s%N)" >> "$PWD/events"
     echo '{"schema_version":"log-report-v1","repository":"/r/.prikk","ref":"heads/main","current_branch":null,"blocks":[]}'
     exit 0 ;;
@@ -62,7 +68,7 @@ struct Harness {
     repo: PathBuf,
 }
 
-/// A public repository `alice/app` whose prikk is the stand-in, sleeping `sleep_secs` per `log`.
+/// A public repository `alice/app` whose prikk is the stand-in, sleeping `sleep_secs` per `log` (or, for `hold`, until `release` is called).
 fn harness(name: &str, concurrency: usize, wait: Duration, sleep_secs: &str) -> Harness {
     let binary = stand_in();
     let repo = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("gate-{name}"));
@@ -128,6 +134,11 @@ fn harness(name: &str, concurrency: usize, wait: Duration, sleep_secs: &str) -> 
 
 const HISTORY: &str = "/api/v1/repos/alice/app/history";
 
+/// Let every held stand-in `log` end.
+fn release(h: &Harness) {
+    std::fs::write(h.repo.join("release"), b"").unwrap();
+}
+
 async fn get(router: Router, path: &str) -> (StatusCode, axum::http::HeaderMap, usize) {
     let resp = router
         .oneshot(Request::builder().uri(path).body(Body::empty()).unwrap())
@@ -192,7 +203,7 @@ async fn the_cap_bounds_running_prikk_and_the_extra_request_waits_then_succeeds(
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn past_the_bounded_wait_the_request_is_503_with_retry_after_and_counted() {
-    let h = harness("busy", 1, Duration::from_secs(1), "3");
+    let h = harness("busy", 1, Duration::from_secs(1), "hold");
     let first = tokio::spawn(get(h.router.clone(), HISTORY));
     eventually(
         "the first request to hold the slot",
@@ -213,13 +224,14 @@ async fn past_the_bounded_wait_the_request_is_503_with_retry_after_and_counted()
     assert!(started.elapsed() >= Duration::from_millis(900));
     assert_eq!(h.gate.rejected(), 1);
 
-    // The request that held the slot is unaffected.
+    // The request that held the slot is unaffected (it held until now: the refusal above is the end of the second one's wait and nothing else).
+    release(&h);
     assert_eq!(first.await.unwrap().0, StatusCode::OK);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_cheap_route_answers_in_under_a_second_while_every_slot_is_busy() {
-    let h = harness("cheap", 2, Duration::from_secs(30), "3");
+async fn a_cheap_route_is_answered_while_every_slot_is_busy() {
+    let h = harness("cheap", 2, Duration::from_secs(30), "hold");
     // Two requests fill both slots; three more queue behind them.
     let busy: Vec<_> = (0..5)
         .map(|_| tokio::spawn(get(h.router.clone(), HISTORY)))
@@ -229,23 +241,26 @@ async fn a_cheap_route_answers_in_under_a_second_while_every_slot_is_busy() {
     })
     .await;
 
-    let started = Instant::now();
+    // The slots are held until this test lets go, so "answered" can only mean "answered while every slot was busy": a route that queued
+    // for a slot would not be answered at all, and the answer would be a `busy` at the end of a 30 s wait. (The old form timed the answer,
+    // under one second, which a slow host misses without any queue.)
     let (status, _, body_len) = get(h.router.clone(), "/api/v1/openapi.json").await;
-    let took = started.elapsed();
     assert_eq!(status, StatusCode::OK);
     assert!(body_len > 0);
-    assert!(
-        took < Duration::from_secs(1),
-        "the cheap route took {took:?} while prikk was saturated"
+    assert_eq!(
+        h.gate.available(),
+        0,
+        "the slots were still all busy when the cheap route was answered"
     );
     for t in busy {
         t.abort();
     }
+    release(&h);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn a_cancelled_request_never_leaks_a_permit() {
-    let h = harness("cancel", 1, Duration::from_secs(30), "1.5");
+    let h = harness("cancel", 1, Duration::from_secs(30), "hold");
     let running = tokio::spawn(get(h.router.clone(), HISTORY));
     eventually("the slot to be taken", Duration::from_secs(5), || {
         h.gate.available() == 0
@@ -266,7 +281,8 @@ async fn a_cancelled_request_never_leaks_a_permit() {
     // counts running processes) and comes back when that process ends.
     running.abort();
     assert_eq!(h.gate.available(), 0);
-    eventually("the permit to return", Duration::from_secs(10), || {
+    release(&h);
+    eventually("the permit to return", Duration::from_secs(60), || {
         h.gate.available() == 1
     })
     .await;

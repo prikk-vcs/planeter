@@ -28,11 +28,13 @@ use planeter_store::{
 };
 use planeter_web::{AppState, BlockingGate, ContentOrigin, PrikkGate, router};
 
-/// `verify` sleeps `delay_ms` and counts; `hash` is `h:<password>`.
+/// `verify` sleeps `delay_ms` and counts; `hash` is `h:<password>`. While `held` is set it does not return at all (a guard of a minute
+/// ends it if the test dies first): a verification the test holds and lets go, as an ordering it controls.
 #[derive(Default)]
 struct SlowHasher {
     delay_ms: AtomicU64,
     verifies: AtomicUsize,
+    held: std::sync::atomic::AtomicBool,
 }
 
 impl PasswordHasher for SlowHasher {
@@ -41,6 +43,10 @@ impl PasswordHasher for SlowHasher {
     }
     fn verify(&self, password: &str, hash: &PasswordHash) -> bool {
         self.verifies.fetch_add(1, Ordering::SeqCst);
+        let guard = Instant::now();
+        while self.held.load(Ordering::SeqCst) && guard.elapsed() < Duration::from_secs(60) {
+            std::thread::sleep(Duration::from_millis(5));
+        }
         let ms = self.delay_ms.load(Ordering::SeqCst);
         if ms > 0 {
             std::thread::sleep(Duration::from_millis(ms));
@@ -224,8 +230,10 @@ async fn unknown_account_and_wrong_password_each_cost_one_verify_through_the_han
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn a_cheap_route_and_a_session_check_answer_quickly_while_the_auth_gate_is_full() {
-    let h = harness(2, Duration::from_secs(30), 2500);
+async fn a_cheap_route_and_a_session_check_are_answered_while_the_auth_gate_is_full() {
+    let h = harness(2, Duration::from_secs(30), 0);
+    // every verification is held until this test lets go: "answered" below can only mean "answered while the gate was full"
+    h.hasher.held.store(true, Ordering::SeqCst);
     let session = h
         .sessions
         .create(UserId::new("alice"), 1_000_000, 1_000_000 + 3600)
@@ -242,7 +250,6 @@ async fn a_cheap_route_and_a_session_check_answer_quickly_while_the_auth_gate_is
     })
     .await;
 
-    let t = Instant::now();
     let (s, _, _) = send(
         h.router.clone(),
         Request::builder()
@@ -252,14 +259,13 @@ async fn a_cheap_route_and_a_session_check_answer_quickly_while_the_auth_gate_is
     )
     .await;
     assert_eq!(s, StatusCode::OK);
-    assert!(
-        t.elapsed() < Duration::from_secs(1),
-        "cheap route: {:?}",
-        t.elapsed()
+    assert_eq!(
+        h.gate.available(),
+        0,
+        "the gate was still full when the cheap route was answered"
     );
 
     // A session cookie is resolved without a permit: the page greets the user while the gate is full.
-    let t = Instant::now();
     let (s, _, body) = send(
         h.router.clone(),
         Request::builder()
@@ -271,14 +277,15 @@ async fn a_cheap_route_and_a_session_check_answer_quickly_while_the_auth_gate_is
     .await;
     assert_eq!(s, StatusCode::OK);
     assert!(String::from_utf8_lossy(&body).contains("alice"));
-    assert!(
-        t.elapsed() < Duration::from_secs(1),
-        "session check: {:?}",
-        t.elapsed()
+    assert_eq!(
+        h.gate.available(),
+        0,
+        "the gate was still full when the session was checked"
     );
     for b in busy {
         b.abort();
     }
+    h.hasher.held.store(false, Ordering::SeqCst);
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
