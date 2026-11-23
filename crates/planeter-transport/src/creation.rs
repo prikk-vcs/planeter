@@ -843,6 +843,15 @@ impl CreationService {
                     carried: report.maintainer_keys.len(),
                 });
             }
+            // RFC 013 PK-93: prikk 0.58.0 does not check that a key's id belongs to the key (a wrong id becomes a second entry for the
+            // same key), and the pair comes from the archive, which is hostile input. The id is the one prikk derives from the key. An
+            // archive carrying any other pair is refused as a damaged archive is: the same closed reason, and nothing is staged.
+            if planeter_prikk::keys::key_id_of(&k.public_key).as_deref() != Some(k.key_id.as_str())
+            {
+                return Err(CreateError::ArchiveRefused {
+                    text: "the archive is not internally consistent".to_owned(),
+                });
+            }
             if let Some(same) = keys.iter().find(|f| f.key_id == k.key_id) {
                 if same.public_key != k.public_key {
                     return Err(CreateError::Keys {

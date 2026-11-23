@@ -153,11 +153,19 @@ fn fixture_with(name: &str, wrapper: Option<&str>, tweak: impl FnOnce(&mut Creat
         // A prikk that fails the calls whose first two words are `pattern` from the `n`-th such call on (`pattern@n`; plain
         // `pattern` is from the first), and is the real prikk otherwise. A counter file keeps the count across calls.
         // `flood:` before the pattern: the call prints 80 MB on stdout (and exits 0) instead of failing, IS-55.
+        // `wrongid:` before the pattern: the call's JSON is the real prikk's with every carried key's id replaced by another well-formed
+        // one (the hostile archive of PK-93: prikk 0.58.0 takes any well-formed id for a key).
+        let (wrongid, spec) = match spec.strip_prefix("wrongid:") {
+            Some(rest) => (true, rest),
+            None => (false, spec),
+        };
         let (flood, spec) = match spec.strip_prefix("flood:") {
             Some(rest) => (true, rest),
             None => (false, spec),
         };
-        let injected = if flood {
+        let injected = if wrongid {
+            "prikk \"$@\" | sed 's/\"key_id\": *\"ed25519-[0-9a-f]*\"/\"key_id\": \"ed25519-0000000000000000\"/'; exit 0"
+        } else if flood {
             "head -c 80000000 /dev/zero | tr '\\0' ' '; exit 0"
         } else {
             "echo 'error: injected failure' >&2; exit 1"
@@ -604,6 +612,32 @@ fn a_tampered_archive_is_refused_with_prikks_text_and_nothing_is_kept() {
         Err(CreateError::ArchiveRefused { .. })
     ));
     assert!(stage_dirs(&fix).is_empty());
+}
+
+/// RFC 013 PK-93: a carried key whose id is not the one prikk derives from the key is refused with the reason a damaged archive gets, and
+/// nothing is staged; the same archive, unaltered, stages as before.
+#[test]
+fn an_archive_carrying_a_key_with_a_wrong_id_is_refused_like_a_damaged_one_and_nothing_is_kept() {
+    need_prikk!();
+    let fix = fixture_with("wrong-id", Some("wrongid:archive verify"), |_| {});
+    let (archive, _) = simple_archive(&fix.base, "maint", 2, 0);
+    match stage(&fix, &archive, "app").unwrap_err() {
+        CreateError::ArchiveRefused { text } => {
+            assert_eq!(text, "the archive is not internally consistent");
+        }
+        other => panic!("{other:?}"),
+    }
+    assert!(stage_dirs(&fix).is_empty(), "no directory is kept");
+    assert!(fix.stages.all().unwrap().is_empty(), "no record is kept");
+    assert!(
+        everything_on_disk(&fix).is_empty(),
+        "no repository was made"
+    );
+    // and the unaltered archive is unchanged: it stages
+    let plain = fixture("wrong-id-control");
+    let (archive, keys) = simple_archive(&plain.base, "maint", 2, 0);
+    let summary = stage(&plain, &archive, "app").unwrap();
+    assert_eq!(summary.findings.keys.len(), keys.len());
 }
 
 #[test]
