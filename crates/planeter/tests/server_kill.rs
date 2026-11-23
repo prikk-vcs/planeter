@@ -139,16 +139,36 @@ fn start_server(dir: &Path, bin_dir: &Path) -> (Child, u16) {
         let stderr = server.stderr.take().unwrap();
         let mut lines = BufReader::new(stderr).lines();
         let mut listening = false;
+        let mut said = Vec::new();
         for line in lines.by_ref().map_while(Result::ok) {
             if line.starts_with("planeter listening on ") {
                 listening = true;
                 break;
             }
+            said.push(line);
+        }
+        if !listening {
+            eprintln!(
+                "attempt {attempt}: the server ended without listening; it said:\n{}",
+                said.join("\n")
+            );
         }
         // Keep draining: closing the read end would hand the running server a broken pipe on its next log line.
         std::thread::spawn(move || for _ in lines {});
-        if listening && TcpStream::connect(("127.0.0.1", port)).is_ok() {
-            return (server, port);
+        // The server says it is listening a moment **before** it binds the socket (`main.rs` prints the line, then `serve_until` binds), so a single
+        // connect right after the line can be refused, and on a loaded host it often is. Retry the connection while the server is running, with a guard
+        // no loaded host reaches; a refusal that lasts the whole guard, or a server that ended, is a real failure.
+        if listening {
+            let end = Instant::now() + Duration::from_secs(60);
+            loop {
+                if TcpStream::connect(("127.0.0.1", port)).is_ok() {
+                    return (server, port);
+                }
+                if Instant::now() >= end || server.try_wait().ok().flatten().is_some() {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(20));
+            }
         }
         eprintln!("server start attempt {attempt} did not accept on port {port}; retrying");
         let _ = server.kill();

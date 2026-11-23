@@ -1692,8 +1692,11 @@ async fn under_the_real_sandbox_the_export_writes_into_the_spool_mount_and_nowhe
     let dir = scratch("bwrap-slow-bin");
     // (A shell script and `sleep` are all the sandbox's read-only /usr offers: no wrapper around the real prikk.)
     let slow = stand_in(&dir, r#"if [ "$2" = "export" ]; then sleep 120; fi"#);
+    // A ten-second deadline against a stand-in that sleeps two minutes: the deadline's value is not what this test holds (it holds that the write
+    // lands in the spool mount and nowhere else, and that an export that does not finish is `export_failed`); one second could end before the
+    // sandboxed call had started on a loaded host, and the answer was then `unavailable` (1 in 100 loaded runs).
     let cfg = ExportConfig {
-        deadline: Duration::from_secs(1),
+        deadline: Duration::from_secs(10),
         ..ExportConfig::default()
     };
     let fx2 = fixture(
@@ -1718,7 +1721,7 @@ async fn under_the_real_sandbox_the_export_writes_into_the_spool_mount_and_nowhe
         "{}",
         r.json()
     );
-    // the stand-in sleeps two minutes and the deadline is one second: a call that came back at all, within a guard no loaded host reaches,
+    // the stand-in sleeps two minutes and the deadline is ten seconds: a call that came back at all, within a guard no loaded host reaches,
     // came back because the deadline killed it
     assert!(
         t.elapsed() < Duration::from_secs(60),
