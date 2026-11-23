@@ -1,0 +1,23 @@
+# RFC 010 — IS-67: the glibc step of the release workflow must not fail by a broken pipe — Implementation Handoff (v1)
+
+| | |
+|---|---|
+| Document | On the 0.8.0 tag run (`44908650694`) the step "Check the binary's glibc needs against the image's glibc (every mode)" failed for `image (arm64, native)` with `write /dev/stdout: broken pipe` and passed on amd64 and in both rehearsals; the failed job was re-run and went green. The cause is in the step: `base="$(docker run … --entrypoint ldd "${IMAGE_ID}" --version \| head -n 1)"` under `set -euo pipefail`. `ldd --version` prints several lines; `head -n 1` exits after the first; `docker` can then fail writing the rest, and `pipefail` makes the step fail. A race, not about glibc. It is in the **release chain**, so the fix needs a **rehearsal** (RFC 010 D-10) before a release can rely on it. |
+| Status | Assigned 2026-11-23 (SCHEDULE D-117), after the display fix is approved. |
+| Basis | `.github/workflows/release.yml` line 284 (and the lines around it: the gate that runs before any push); `.github/workflows/ci.yml` line 190 (`"$t" --version 2>&1 \| head -n 1` in the tool-versions step); `tools/glibc-check` (`BASE` is the first line of `ldd --version`, or a version); `docs/RELEASING.md` ("Rehearsal", "Updating one of these"); `docs/STATUS.md` IS-67. |
+| Audience | Dev team. Return a short review-request package. |
+
+## Change scope
+1. **Read the whole output first, then take the first line**, with no pipe into `head`: capture `ldd --version` completely (`out="$(docker run … --entrypoint ldd "${IMAGE_ID}" --version 2>&1)"`, mind that a non-zero exit of `docker run` must still fail the step and say why), then `base="${out%%$'\n'*}"` (or `printf '%s\n' "$out" | sed -n 1p` **after** the capture, which reads all of its input). The line the checker receives is the same as before; show that it is, from a saved real run's output. Keep `set -euo pipefail`.
+2. **Audit every other `| head`, `| grep -q`, `| sed -n 1q` and similar pipe in all three workflows** (`ci.yml`, `release.yml`, `supply-chain.yml`) for the same race under `pipefail` (a reader that exits early while the writer still has output). For each: say whether the writer's output can exceed the reader's need, and fix those that can the same way. `ci.yml:190` prints one tool's `--version` line: say what you decided and why.
+3. **A test that holds it, where the project can:** `planeter-pin-check` already refuses mutable references in the workflow files; add a check (or a unit test in the tool) that **no step whose shell has `pipefail` pipes a `docker run` into `head`** (a plain pattern check, with its own cases that find it and pass the fixed form). Mutation: put the old line back, see the check fail, restore.
+4. **The rehearsal (RFC 010 D-10):** after the commit is on `main`, run `gh workflow run release.yml --ref main -f mode=rehearsal` and report the run id and the per-job result (both architectures; the glibc step's log line "the image's ldd says: …" for each). The step is a race, so **one green rehearsal does not prove the fix**: also run the changed step's command **at least 20 times in a loop on a Linux host with docker if one is available** (say if none is), against the same image, and report the exit codes; if docker is not available, run the pipeline shape with a stand-in writer that prints a long output and is slow to finish, with and without the fix, and show the old shape fails and the new one does not.
+
+## Non-change scope
+No other change to the release chain: no pin, no version, no base image, no BuildKit, no step reordered; no source of the product; no catalog text; no tag, release or upload; `cargo publish` only `--dry-run`. Do not touch `docs/SCHEDULE.md`, `docs/STATUS.md`, the ledger, the threat model.
+
+## Acceptance criteria
+The step takes the first line without a pipe into `head`; the audit table is complete; the pin-check test exists and its mutation was shown; the rehearsal is green on both architectures; the loop or the stand-in shows the old shape failing and the new one not; all gates green; CI green on all eight jobs.
+
+## Required evidence and review-request format
+Commits (hash → what); the diff of the workflow files; the audit table (file, line, writer, reader, decision); the pin-check test and its mutation; the rehearsal run link and per-job result and the log lines; the loop or stand-in evidence; the gates in a clean worktree (fmt, floor, pin, clippy, tests with prikk 0.58.0 **three times in a row** and without, `cargo deny`, `cargo audit` on a fresh database, ENF-2, doc, msrv) with commands, exit codes and the advisory-database HEAD; deviations and open questions.
