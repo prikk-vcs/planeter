@@ -281,7 +281,14 @@ jobs:
           set -euo pipefail
           IMAGE_ID="$(cat image-id.txt)"
           printf '%s\n' "${IMAGE_ID}" | grep -Eqx 'sha256:[0-9a-f]{64}'
-          base="$(docker run --rm --platform "linux/${ARCH}" --entrypoint ldd "${IMAGE_ID}" --version | head -n 1)"
+          # The whole output is read first and its first line taken from the variable: `docker run … | head -n 1` under pipefail fails the step by
+          # a broken pipe, at random, when `ldd --version` still has output to write after `head` has read its line (IS-67, the 0.8.0 tag run).
+          # A non-zero exit of docker still fails the step; its own message is in the log above this one.
+          if ! out="$(docker run --rm --platform "linux/${ARCH}" --entrypoint ldd "${IMAGE_ID}" --version)"; then
+            echo "::error::running ldd --version in the image failed (the message of docker or of ldd is above)" >&2
+            exit 1
+          fi
+          base="${out%%$'\n'*}"
           echo "the image's ldd says: ${base}"
           cargo run --locked --release -p planeter-glibc-check -- "ctx/${ARCH}/planeter" "${base}"
       # The real publish: only a tag push.

@@ -1211,3 +1211,74 @@ fn a_cargo_install_outside_a_workflow_is_prose_and_is_not_scanned() {
     ));
     assert_eq!(code, 0, "{text}");
 }
+
+// ---- IS-67: `docker … | head` under pipefail ------------------------------------------------------------------------------------
+
+fn pipe_workflow(step: &str) -> String {
+    workflow(&format!(
+        "      - uses: actions/checkout@{SHA} # v7.0.1\n      - name: glibc\n        run: |\n{step}"
+    ))
+}
+
+const OLD_LINE: &str = "          set -euo pipefail\n          base=\"$(docker run --rm --platform \"linux/${ARCH}\" --entrypoint ldd \"ghcr.io/x/y@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587\" --version | head -n 1)\"\n";
+
+#[test]
+fn a_docker_command_piped_into_head_under_pipefail_fails_and_names_the_step() {
+    expect_fail(
+        "pipe-old",
+        &[(".github/workflows/release.yml", &pipe_workflow(OLD_LINE))],
+        &["IS-67", "release.yml:", "piped into `head`"],
+    );
+    // the same through a continued line, a plain assignment, `docker buildx`, and a step that gets pipefail from `shell: bash`
+    let continued = "          set -eo pipefail\n          docker run --rm \\\n            --entrypoint ldd ghcr.io/x/y@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 --version \\\n            | head -n 1\n";
+    expect_fail(
+        "pipe-continued",
+        &[(".github/workflows/release.yml", &pipe_workflow(continued))],
+        &["IS-67"],
+    );
+    let buildx = "          set -euo pipefail\n          docker buildx imagetools inspect ghcr.io/x/y@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 | head -n 3\n";
+    expect_fail(
+        "pipe-buildx",
+        &[(".github/workflows/release.yml", &pipe_workflow(buildx))],
+        &["IS-67"],
+    );
+    let shell = workflow(&format!(
+        "      - uses: actions/checkout@{SHA} # v7.0.1\n      - name: glibc\n        shell: bash\n        run: docker run --rm --entrypoint ldd ghcr.io/x/y@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 --version | head -n 1\n"
+    ));
+    expect_fail(
+        "pipe-shell-bash",
+        &[(".github/workflows/release.yml", &shell)],
+        &["IS-67"],
+    );
+}
+
+#[test]
+fn the_fixed_form_and_the_pipes_that_cannot_race_pass() {
+    let ok = |name: &str, step: &str| {
+        let (code, text) = run(&fixture(
+            name,
+            &[(".github/workflows/release.yml", &pipe_workflow(step))],
+        ));
+        assert_eq!(code, 0, "{name}: {text}");
+    };
+    // the fix: the whole output into a variable, then the first line of the variable
+    ok(
+        "pipe-fixed",
+        "          set -euo pipefail\n          if ! out=\"$(docker run --rm --entrypoint ldd ghcr.io/x/y@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 --version)\"; then exit 1; fi\n          base=\"${out%%$'\\n'*}\"\n",
+    );
+    // `head` after something that is not docker, and `docker … | tee` (tee reads everything), are not this race
+    ok(
+        "pipe-not-docker",
+        "          set -euo pipefail\n          printf 'a\\nb\\n' | head -n 1\n          docker run --rm ghcr.io/x/y@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 --version | tee v.txt\n",
+    );
+    // a step whose shell has no pipefail (the runner's default `bash -e`) is outside the rule: a pipeline's status is its last command's
+    ok(
+        "pipe-no-pipefail",
+        "          docker run --rm ghcr.io/x/y@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 --version | head -n 1\n",
+    );
+    // `||` is not a pipe
+    ok(
+        "pipe-or",
+        "          set -euo pipefail\n          docker run --rm ghcr.io/x/y@sha256:7c7b2c966bc9ee8cedfeef67e0e279108992c77681fa595db4a9d65c06ccc587 --version || head -n 1 /dev/null\n",
+    );
+}

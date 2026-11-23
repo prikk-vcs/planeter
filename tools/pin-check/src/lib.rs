@@ -49,6 +49,11 @@
 //!   tool update is a reviewed change at the pins review of each release (`docs/RELEASING.md`, step 5), because an update that is
 //!   loud (a gate goes red) is safe and one that is silent (a changed verdict) is exactly what the gate exists to prevent.
 //!
+//! - a pipe from `docker` into `head` in a step whose shell has `pipefail` (IS-67): `docker run … | head -n 1` under `set -o pipefail` (or an explicit
+//!   `shell: bash`, which runs with `-eo pipefail`) fails the step by a broken pipe when `docker` still has output to write after `head`
+//!   has read its line, and it does so at random (the 0.8.0 tag run's arm64 glibc step). The output is read **whole**, then the first line is taken
+//!   from the variable.
+//!
 //! It has no allow-list. It reads text only, so it understands the shapes this repository uses, and
 //! says so: `cargo install` is read only in the closed form above, and the tools' own dependencies are
 //! covered by `--locked` (the tool's own `Cargo.lock`), not by this check.
@@ -139,6 +144,7 @@ pub fn check(root: &Path) -> io::Result<Report> {
             hits.extend(scan_release_paths(&text));
             hits.extend(scan_image_gate(&text));
             hits.extend(scan_image_identity(&text));
+            hits.extend(scan_pipes(&text));
             hits.extend(
                 parse_tool_installs(&text)
                     .into_iter()
@@ -1071,6 +1077,77 @@ fn runs_the_identity_check(step: &Step) -> bool {
     step.text
         .lines()
         .any(|l| l.contains("planeter-image-identity") && l.split_whitespace().any(|w| w == "same"))
+}
+
+/// The logical lines of a step: a line that ends in `\` is joined with the next.
+fn logical_lines(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    for line in text.lines() {
+        let t = line.trim_end();
+        if let Some(head) = t.strip_suffix('\\') {
+            cur.push_str(head);
+            cur.push(' ');
+        } else {
+            cur.push_str(t);
+            out.push(std::mem::take(&mut cur));
+        }
+    }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
+    out
+}
+
+/// The commands of one logical line, split at a single `|` (a pipe; `||` is not one).
+fn pipe_segments(line: &str) -> Vec<&str> {
+    let bytes = line.as_bytes();
+    let mut out = Vec::new();
+    let mut from = 0;
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'|' {
+            if bytes.get(i + 1) == Some(&b'|') {
+                i += 2;
+                continue;
+            }
+            out.push(&line[from..i]);
+            from = i + 1;
+        }
+        i += 1;
+    }
+    out.push(&line[from..]);
+    out
+}
+
+/// IS-67: in a step whose shell has `pipefail`, `docker` is never piped into `head`.
+fn scan_pipes(text: &str) -> Hits {
+    let mut hits = Hits::new();
+    for step in steps_of(text) {
+        let pipefail = step.text.contains("pipefail")
+            || step
+                .text
+                .lines()
+                .any(|l| value_of(l, "shell") == Some("bash"));
+        if !pipefail {
+            continue;
+        }
+        for line in logical_lines(&step.text) {
+            let segments = pipe_segments(&line);
+            let into_head = segments.windows(2).any(|w| {
+                w[0].split_whitespace()
+                    .any(|word| word.rsplit(['(', '"', '=', '`']).next() == Some("docker"))
+                    && w[1].split_whitespace().next() == Some("head")
+            });
+            if into_head {
+                hits.push((
+                    step.line,
+                    "a `docker` command is piped into `head` in a step whose shell has `pipefail` (IS-67): when `head` has read its line and `docker` still has output to write, `docker` fails by a broken pipe and the step fails, at random; read the whole output into a variable and take its first line from that".to_owned(),
+                ));
+            }
+        }
+    }
+    hits
 }
 
 /// D-51 (identity): after every push by digest, and before the next push or the upload of the digest, the registry's answer is

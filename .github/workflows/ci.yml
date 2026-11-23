@@ -187,7 +187,7 @@ jobs:
         shell: bash
         run: |
           for t in cc gcc clang cmake nasm perl go ninja make; do
-            if command -v "$t" >/dev/null 2>&1; then echo "$t: $("$t" --version 2>&1 | head -n 1)"; else echo "$t: absent"; fi
+            if command -v "$t" >/dev/null 2>&1; then out="$("$t" --version 2>&1 || true)"; echo "$t: ${out%%$'\n'*}"; else echo "$t: absent"; fi
           done
 
       - name: Build planeter-client (release, locked), with its time and size
