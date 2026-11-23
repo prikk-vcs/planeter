@@ -370,6 +370,8 @@ pub struct Services {
     pub recovery: Arc<RecoveryService>,
     pub delivery: Arc<DeliveryService>,
     pub record: RepositoryRecord,
+    /// The record of where each key came from (rows are written by the tests that show them).
+    pub key_events: Arc<planeter_store::InMemoryKeyEventStore>,
 }
 
 pub const REPO: &str = "fg01";
@@ -467,14 +469,18 @@ pub fn open_full(
     let artifacts = Arc::new(ArtifactStore::open(base.join("artifacts")).unwrap());
     let spool = Spool::open(base.join("spool"), 512 << 20).unwrap();
     let metrics = Arc::new(Metrics::new());
-    let export = Arc::new(ExportService::new(
-        hosting.clone(),
-        spool,
-        leases.clone(),
-        revisions as Arc<dyn RevisionStore>,
-        ExportConfig::default(),
-        metrics.clone(),
-    ));
+    let key_events = Arc::new(planeter_store::InMemoryKeyEventStore::new());
+    let export = Arc::new(
+        ExportService::new(
+            hosting.clone(),
+            spool,
+            leases.clone(),
+            revisions as Arc<dyn RevisionStore>,
+            ExportConfig::default(),
+            metrics.clone(),
+        )
+        .with_key_events(key_events.clone() as Arc<dyn planeter_store::KeyEventStore>),
+    );
     let propose_config = ProposeConfig {
         lease_wait: Duration::from_secs(3),
         accept_deadline: Duration::from_secs(120),
@@ -553,6 +559,7 @@ pub fn open_full(
         recovery,
         delivery,
         record,
+        key_events,
     }
 }
 

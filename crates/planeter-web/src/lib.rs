@@ -23,6 +23,7 @@ pub mod edge;
 pub mod errors;
 pub mod gate;
 pub mod headers;
+pub mod keys;
 pub mod lang_switch;
 pub mod multipart;
 pub mod openapi;

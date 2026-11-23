@@ -2059,13 +2059,40 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg("repo.project_branch", "The project's branch is {ref}."),
     msg("repo.trusted_keys", "Keys this repository trusts"),
+    msg("repo.keys.count", "({total})"),
+    msg("repo.keys.none", "This repository trusts no keys."),
+    msg(
+        "repo.keys.unavailable",
+        "The keys this repository trusts cannot be read now.",
+    ),
+    msg(
+        "repo.keys.source.creation",
+        "From the repository's creation.",
+    ),
+    msg(
+        "repo.keys.source.creation_recorded",
+        "From the repository's creation (recorded on {date}).",
+    ),
+    msg(
+        "repo.keys.source.operator",
+        "Added by this server's operator on {date}: {reason}",
+    ),
+    msg(
+        "repo.keys.source.delivery",
+        "Added by a delivery on {date}.",
+    ),
+    msg("repo.keys.source.not_recorded", "Source not recorded."),
+    msg(
+        "stage.key.slots",
+        "This repository can trust at most {max} keys. Keys cannot be removed yet, so each key you add uses one for the repository's whole life. Adopting all {carried} leaves {left}; adopting fewer leaves more.",
+    ),
     msg(
         "operator.help.purpose",
         "For the person who runs this server. It needs the server's data and cannot be run from the web. Stop the server first.",
     ),
     msg(
         "operator.help.usage",
-        "usage: planeter operator key add OWNER/NAME --key-id ID --public-key HEX --reason TEXT [--lang en|ja]\n       planeter operator --help\n\nkey add        make one more public key a maintainer key of one repository, so that the repository accepts deliveries signed by it; it adds a key and never removes one\n--key-id       the key's id: ed25519- and 16 characters, 0-9 and a-f in lower case\n--public-key   the public key: 64 characters, 0-9 and a-f in lower case\n--reason       why the key is added, 1 to 200 characters; the repository's page shows it\n--lang         the language of these messages (default: the one LC_ALL, LC_MESSAGES or LANG names, else English)",
+        "usage: planeter operator key add OWNER/NAME --key-id ID --public-key HEX --reason TEXT [--lang en|ja]\n       planeter operator --help\n\nkey add        make one more public key a maintainer key of one repository, so that the repository accepts deliveries signed by it; it only ever adds a key\n--key-id       the key's id: ed25519- and 16 characters, 0-9 and a-f in lower case\n--public-key   the public key: 64 characters, 0-9 and a-f in lower case\n--reason       why the key is added, 1 to 200 characters; the repository's page shows it\n--lang         the language of these messages (default: the one LC_ALL, LC_MESSAGES or LANG names, else English)",
     ),
     msg(
         "operator.help.exit_codes",

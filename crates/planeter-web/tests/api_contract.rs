@@ -541,6 +541,30 @@ async fn every_view_serializes_to_exactly_the_declared_fields() {
                 }],
             })
             .unwrap();
+            // RFC 013 D-4: the keys the repository trusts now, one of each kind of source
+            let source =
+                |kind, backfilled, recorded_at, delivery_id: Option<&str>, reason: Option<&str>| {
+                    planeter_web::keys::SourceJson {
+                        kind,
+                        backfilled,
+                        recorded_at,
+                        delivery_id: delivery_id.map(str::to_owned),
+                        reason: reason.map(str::to_owned),
+                    }
+                };
+            let key = |source| planeter_web::keys::TrustedKeyJson {
+                key_id: "ed25519-0123456789abcdef".into(),
+                public_key: "0123456789abcdef".repeat(4),
+                fingerprint: "01234567 89abcdef".into(),
+                source,
+            };
+            v["trusted_keys"] = serde_json::to_value(vec![
+                key(source("creation", Some(false), Some(1), None, None)),
+                key(source("operator", None, Some(2), None, Some("why"))),
+                key(source("delivery", None, Some(3), Some("dl-1"), None)),
+                key(source("not_recorded", None, None, None, None)),
+            ])
+            .unwrap();
             v
         }),
         (

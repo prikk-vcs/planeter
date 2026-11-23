@@ -454,7 +454,7 @@ async fn refs_handler(
     let result = match result {
         Ok(view) => {
             let owner_handle = owner_for_lookup;
-            let last = match crate::transport::readable(
+            let (last, trusted_keys) = match crate::transport::readable(
                 &state,
                 &principal_again,
                 &owner_handle,
@@ -462,13 +462,20 @@ async fn refs_handler(
             )
             .await
             {
-                Ok(record) => crate::deliveries::last_delivery(&state, &record.repo_id).await,
-                Err(_) => None,
+                Ok(record) => {
+                    let last = crate::deliveries::last_delivery(&state, &record.repo_id).await;
+                    // RFC 013 D-4: the keys the repository trusts now. `null` when they cannot be read now: never a list from earlier.
+                    let keys =
+                        crate::keys::json_of(&crate::keys::read_record(&state, record).await);
+                    (last, keys)
+                }
+                Err(_) => (None, None),
             };
             Ok(RefsAnswer {
                 refs: view,
                 followed_ref: planeter_transport::FOLLOWED_REF,
                 last_delivery: last,
+                trusted_keys,
             })
         }
         Err(e) => Err(e),
@@ -483,6 +490,7 @@ struct RefsAnswer {
     refs: planeter_core::RefsView,
     followed_ref: &'static str,
     last_delivery: Option<crate::deliveries::LastDelivery>,
+    trusted_keys: Option<Vec<crate::keys::TrustedKeyJson>>,
 }
 
 async fn verify_handler(

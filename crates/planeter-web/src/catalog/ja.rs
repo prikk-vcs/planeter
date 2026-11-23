@@ -2072,13 +2072,43 @@ pub const CATALOG: &[Entry] = &[
         "プロジェクトのブランチは {ref} です。",
     ),
     msg("repo.trusted_keys", "このリポジトリが信頼する鍵"),
+    msg("repo.keys.count", "（{total}）"),
+    msg(
+        "repo.keys.none",
+        "このリポジトリが信頼している鍵はありません。",
+    ),
+    msg(
+        "repo.keys.unavailable",
+        "このリポジトリが信頼する鍵を、今は読めません。",
+    ),
+    msg("repo.keys.source.creation", "リポジトリの作成時の鍵です。"),
+    msg(
+        "repo.keys.source.creation_recorded",
+        "リポジトリの作成時の鍵です（{date} に記録）。",
+    ),
+    msg(
+        "repo.keys.source.operator",
+        "このサーバーの運用者が {date} に追加しました: {reason}",
+    ),
+    msg(
+        "repo.keys.source.delivery",
+        "{date} に、引き渡しで追加されました。",
+    ),
+    msg(
+        "repo.keys.source.not_recorded",
+        "どこから来た鍵か、記録がありません。",
+    ),
+    msg(
+        "stage.key.slots",
+        "このリポジトリが信頼できる鍵は、最大 {max} 個です。鍵はまだ取り除けないため、追加した鍵は、リポジトリが続くかぎり 1 つ分の枠を使います。{carried} 個すべてを信頼すると残りは {left} 個で、一部だけにすると、残りはそれより多くなります。",
+    ),
     msg(
         "operator.help.purpose",
         "このサーバーを運用している人のためのコマンドです。サーバーのデータが必要で、ウェブからは実行できません。先にサーバーを止めてください。",
     ),
     msg(
         "operator.help.usage",
-        "使い方: planeter operator key add OWNER/NAME --key-id ID --public-key HEX --reason TEXT [--lang en|ja]\n       planeter operator --help\n\nkey add        公開鍵をもう 1 つ、1 つのリポジトリのメンテナーの鍵にします。そのリポジトリは、この鍵で署名された引き渡しを受け付けるようになります。鍵を加えるだけで、鍵を取り除くことはありません\n--key-id       鍵の ID です。ed25519- に続く 16 文字で、0〜9 と小文字の a〜f を使います\n--public-key   公開鍵です。64 文字で、0〜9 と小文字の a〜f を使います\n--reason       鍵を加える理由です。1〜200 文字で、リポジトリのページに表示されます\n--lang         これらのメッセージの言語です（省略すると、LC_ALL、LC_MESSAGES、LANG のうち指定されているものの言語、なければ英語です）",
+        "使い方: planeter operator key add OWNER/NAME --key-id ID --public-key HEX --reason TEXT [--lang en|ja]\n       planeter operator --help\n\nkey add        公開鍵をもう 1 つ、1 つのリポジトリのメンテナーの鍵にします。そのリポジトリは、この鍵で署名された引き渡しを受け付けるようになります。鍵を加えるだけです\n--key-id       鍵の ID です。ed25519- に続く 16 文字で、0〜9 と小文字の a〜f を使います\n--public-key   公開鍵です。64 文字で、0〜9 と小文字の a〜f を使います\n--reason       鍵を加える理由です。1〜200 文字で、リポジトリのページに表示されます\n--lang         これらのメッセージの言語です（省略すると、LC_ALL、LC_MESSAGES、LANG のうち指定されているものの言語、なければ英語です）",
     ),
     msg(
         "operator.help.exit_codes",

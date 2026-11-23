@@ -931,12 +931,10 @@ pub(crate) async fn last_delivery(
     })
 }
 
-/// What a repository page adds when the repository has had a delivery (RFC 008 D-4): the sentence, the project's branch, and the keys.
+/// What a repository page adds when the repository has had a delivery (RFC 008 D-4): the sentence and the project's branch (the keys the repository trusts now are shown by `keys`, not here).
 pub struct DeliveredBlock {
     pub line: String,
     pub branch_line: String,
-    pub keys_heading: String,
-    pub keys: Vec<KeyJson>,
 }
 
 /// The block for the pages of `owner/name`, in `t`'s language; `None` when the repository has had no delivery (a page then shows
@@ -963,7 +961,5 @@ pub(crate) async fn delivered_block(
             .msg(Key::RepoProjectBranch)
             .with("ref", FOLLOWED_REF)
             .text(),
-        keys_heading: t.get(Key::RepoTrustedKeys).to_owned(),
-        keys: last.trusted_keys,
     })
 }

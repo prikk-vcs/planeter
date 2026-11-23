@@ -1,0 +1,8 @@
+{% if let Some(k) = keys %}
+<section class="keys">
+{% if let Some(n) = k.note %}<p class="muted">{{ n }}</p>
+{% endif %}{% if !k.items.is_empty() %}<details><summary>{{ k.heading }}{% if let Some(c) = k.count %}<span class="count">{{ c }}</span>{% endif %}</summary>
+<ul>{% for i in k.items %}<li><code class="fingerprint">{{ i.key_id }}</code> <code class="fingerprint" dir="ltr">{{ i.fingerprint }}</code> <span class="muted">{{ i.source }}</span></li>{% endfor %}</ul>
+</details>
+{% endif %}</section>
+{% endif %}

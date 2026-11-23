@@ -25,6 +25,7 @@
 <h2>{{ t.get(Key::StageKeysHeading) }}</h2>
 {% if keys.is_empty() %}<p>{{ t.get(Key::StageKeysNone) }}</p>
 {% else %}<p>{{ t.get(Key::StageKeysExplain) }}</p>
+<p>{{ slots_note }}</p>
 {% for k in keys %}<fieldset>
 <legend>{{ k.title }}</legend>
 <p class="muted">{{ k.fingerprint_label }}</p>

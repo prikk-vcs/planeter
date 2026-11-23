@@ -231,10 +231,11 @@ fn schemas() -> Value {
             "closed": {"type": "boolean"}, "current": {"type": "boolean"}
         })),
         "Tag": obj(&["ref_name", "target_block_id"], json!({"ref_name": string_prop(), "target_block_id": string_prop()})),
-        "RefsView": obj(&["current_branch", "branches", "tags", "followed_ref", "last_delivery"], json!({
+        "RefsView": obj(&["current_branch", "branches", "tags", "followed_ref", "last_delivery", "trusted_keys"], json!({
             "current_branch": nullable_string(), "branches": array_of("Branch"), "tags": array_of("Tag"),
             "followed_ref": {"type": "string", "description": "The project's branch: the one ref whose blocks make a proposal landed (RFC 008). Always `heads/main` in this version."},
-            "last_delivery": {"nullable": true, "allOf": [{"$ref": "#/components/schemas/LastDelivery"}], "description": "The last finished delivery of this repository; null when it has had none."}
+            "last_delivery": {"nullable": true, "allOf": [{"$ref": "#/components/schemas/LastDelivery"}], "description": "The last finished delivery of this repository; null when it has had none."},
+            "trusted_keys": {"type": "array", "nullable": true, "items": {"$ref": "#/components/schemas/TrustedKey"}, "description": "The keys this repository trusts now (prikk's own list), each with how it came, creation keys first, then the others by when they were recorded, then the keys not recorded. null when the list cannot be read now (prikk or the store did not answer; never a list from earlier) or this server does not show it."}
         })),
         "Offer": obj(&["kind", "ref", "size", "etag"], json!({
             "kind": {"type": "string", "enum": ["bundle", "archive", "have"]},
@@ -741,7 +742,7 @@ fn creation_schemas() -> Value {
             "landed_as": {"type": "string", "description": "The name it would land under (`remotes/…` when it would not be a branch)."},
             "reason": nullable_string()
         })),
-        "ImportStage": obj(&["stage_id", "owner", "name", "visibility", "proposals", "archive_bytes", "archive_sha256", "created_at", "expires_at", "internally_consistent", "keys", "refs", "refs_total", "objects", "object_total", "verifies_with_all_keys", "verify_failures", "note", "message"], json!({
+        "ImportStage": obj(&["stage_id", "owner", "name", "visibility", "proposals", "archive_bytes", "archive_sha256", "created_at", "expires_at", "internally_consistent", "keys", "keys_max", "refs", "refs_total", "objects", "object_total", "verifies_with_all_keys", "verify_failures", "note", "message"], json!({
             "stage_id": string_prop(), "owner": string_prop(), "name": string_prop(),
             "visibility": {"type": "string", "enum": ["public", "internal", "private"]},
             "proposals": {"type": "string", "enum": ["members", "any-authenticated"]},
@@ -749,6 +750,7 @@ fn creation_schemas() -> Value {
             "created_at": {"type": "integer"}, "expires_at": {"type": "integer", "description": "A day after `created_at`; then the archive is removed."},
             "internally_consistent": {"type": "boolean", "description": "prikk found nothing wrong inside the archive. **Not a statement of trust**: nothing in the archive is trusted until the creator types the fingerprints."},
             "keys": array_of("CarriedKey"),
+            "keys_max": {"type": "integer", "description": "The most keys a repository can trust (64). Keys cannot be removed yet, so each key trusted uses one for the repository's whole life."},
             "refs": array_of("StageRef"),
             "refs_total": {"type": "integer"},
             "objects": {"type": "object", "additionalProperties": {"type": "integer"}, "description": "Objects by kind, as the dry-run import wrote them."},
@@ -882,6 +884,19 @@ fn creation_paths(paths_obj: &mut serde_json::Map<String, Value>) {
 /// The delivery schemas (RFC 008).
 fn delivery_schemas() -> Value {
     json!({
+        "TrustedKey": obj(&["key_id", "public_key", "fingerprint", "source"], json!({
+            "key_id": string_prop(),
+            "public_key": {"type": "string", "description": "64 lowercase hexadecimal characters."},
+            "fingerprint": {"type": "string", "description": "The same key in eight groups of eight."},
+            "source": {"$ref": "#/components/schemas/KeySource"}
+        })),
+        "KeySource": obj(&["kind", "backfilled", "recorded_at", "delivery_id", "reason"], json!({
+            "kind": {"type": "string", "enum": ["creation", "delivery", "operator", "not_recorded"], "description": "How the key came to be trusted. `not_recorded` means prikk lists the key and planeter has no record of how it got there (it was added with prikk directly); nothing is claimed about it."},
+            "backfilled": {"type": "boolean", "nullable": true, "description": "`creation` only (null otherwise): the record was written later, when it was first filled for a repository that already existed."},
+            "recorded_at": {"type": "integer", "nullable": true, "description": "Unix seconds when the record was written; null for `not_recorded`."},
+            "delivery_id": {"type": "string", "nullable": true, "description": "`delivery` only (null otherwise)."},
+            "reason": {"type": "string", "nullable": true, "description": "`operator` only (null otherwise): the reason the server's operator gave. Display-safe text, at most 200 characters; it is shown to everyone who can see the repository."}
+        })),
         "LastDelivery": obj(&["delivered_at", "delivered_by", "old_tip", "new_tip", "trusted_keys"], json!({
             "trusted_keys": {"type": "array", "items": {"$ref": "#/components/schemas/DeliveryKey"}, "description": "The keys this repository trusted when the delivery was checked."},
             "delivered_at": {"type": "integer", "minimum": 0, "description": "Unix seconds."},

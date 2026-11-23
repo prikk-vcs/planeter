@@ -77,6 +77,8 @@ struct StageTpl {
     refs_more: Option<String>,
     verifies_line: String,
     keys: Vec<KeyRow>,
+    /// RFC 013 D-6: how many keys a repository can trust, and how many this creation leaves.
+    slots_note: String,
     confirm_note: String,
     none_note: String,
 }
@@ -741,6 +743,15 @@ fn stage_page_with(
         .with("repo", &repo)
         .text();
     let none_note = t.msg(Key::StageNoneConsequence).with("repo", &repo).text();
+    let slots_note = t
+        .msg(Key::StageKeySlots)
+        .with("max", planeter_transport::KEYS_MAX)
+        .with("carried", f.keys.len())
+        .with(
+            "left",
+            planeter_transport::KEYS_MAX.saturating_sub(f.keys.len()),
+        )
+        .text();
     let tpl = StageTpl {
         user: c.user.clone(),
         csrf: c.csrf.clone(),
@@ -782,6 +793,7 @@ fn stage_page_with(
                 grouped: group_fingerprint(&k.public_key),
             })
             .collect(),
+        slots_note,
         confirm_note,
         none_note,
     };

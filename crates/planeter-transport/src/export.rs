@@ -348,6 +348,8 @@ pub struct ExportService {
     flights: Mutex<HashMap<CacheKey, Arc<Flight>>>,
     listings: Mutex<HashMap<String, Listing>>,
     slots: Slots,
+    /// The record of where each trusted key came from (RFC 013 D-4); `None` where the pages and the JSON show no key list.
+    key_events: Option<Arc<dyn planeter_store::KeyEventStore>>,
 }
 
 impl ExportService {
@@ -375,7 +377,29 @@ impl ExportService {
             flights: Mutex::new(HashMap::new()),
             listings: Mutex::new(HashMap::new()),
             slots,
+            key_events: None,
         }
+    }
+
+    /// Give the service the record of where each key came from, so that [`ExportService::repo_keys`] can answer (RFC 013 D-4).
+    pub fn with_key_events(mut self, store: Arc<dyn planeter_store::KeyEventStore>) -> Self {
+        self.key_events = Some(store);
+        self
+    }
+
+    /// The keys `record` trusts now, each with how it came (prikk's list joined to the record), **under a read lease**. `None` when the
+    /// service was not given the record of the keys (then nothing is shown). Blocking: call it from `spawn_blocking`, admitted by the gate.
+    pub fn repo_keys(
+        &self,
+        record: &planeter_store::RepositoryRecord,
+    ) -> Option<Result<Vec<crate::keys::RepoKey>, crate::keys::KeysError>> {
+        let store = self.key_events.as_ref()?;
+        Some(crate::keys::read_keys(
+            &self.hosting,
+            &self.leases,
+            &**store,
+            record,
+        ))
     }
 
     pub fn metrics(&self) -> &Arc<Metrics> {

@@ -450,14 +450,18 @@ async fn main() {
             );
             let metrics = shared_metrics.clone();
             shutdown_metrics = Some(metrics.clone());
-            let export = Arc::new(planeter_transport::ExportService::new(
-                hosting.clone(),
-                spool.clone(),
-                leases.clone(),
-                revisions,
-                cfg,
-                metrics.clone(),
-            ));
+            let export = Arc::new(
+                planeter_transport::ExportService::new(
+                    hosting.clone(),
+                    spool.clone(),
+                    leases.clone(),
+                    revisions,
+                    cfg,
+                    metrics.clone(),
+                )
+                // RFC 013 D-4: the pages and the JSON show the keys the repository trusts and how each came
+                .with_key_events(key_events.clone()),
+            );
             // RFC 004 part 3b: proposals need the artifact store (accepted artifacts are retained there).
             let propose = match &dirs.artifacts {
                 None => {

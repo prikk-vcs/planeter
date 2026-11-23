@@ -23,6 +23,8 @@ h1,h2,td,th,.name,.crumbs,.readme{overflow-wrap:anywhere}pre code{overflow-wrap:
 th a,td a,.crumbs a{unicode-bidi:plaintext}
 /* A key's fingerprint (repository creation): in groups of eight, wrapping between groups on a narrow screen, never inside one word of the page */
 .fingerprint{overflow-wrap:anywhere}
+/* The keys a repository trusts (RFC 013): the number beside the summary; each key id and fingerprint wraps (the class above), so that 64 keys are no wider than the screen */
+.keys .count{margin-inline-start:.35em}.keys ul{padding-inline-start:1.25rem}.keys li{margin-block:.4rem;overflow-wrap:anywhere}
 .readme img{max-width:100%;height:auto}
 /* plain words (RFC 012 D-4): the in-place explanations are native <details>, no script */
 details.explain{margin-block:.5rem}details.explain summary{cursor:pointer;min-height:24px;min-width:24px;padding-block:.15rem}details.explain p{margin-block:.4rem;overflow-wrap:anywhere}

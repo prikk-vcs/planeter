@@ -771,6 +771,10 @@ async fn an_archive_is_staged_shows_its_keys_and_trusts_nothing_until_the_finger
     assert_eq!(v["refs"][0]["publishable"], true);
     assert_eq!(v["internally_consistent"], true);
     assert_eq!(v["verifies_with_all_keys"], true);
+    assert_eq!(
+        v["keys_max"], 64,
+        "RFC 013 D-6: the most keys a repository can trust"
+    );
     assert!(
         v["archive_bytes"].as_u64().unwrap() > 1000
             && v["archive_sha256"].as_str().unwrap().len() == 64
@@ -1570,6 +1574,21 @@ async fn the_archive_flow_on_the_pages_in_two_screens_with_empty_fingerprint_fie
                 && html.contains("name=\"mode\" value=\"none\"")
         );
         assert!(!unfilled_placeholder(&html), "{lang}");
+        // RFC 013 D-6: said once, in plain words, with how many slots adopting every carried key leaves
+        let left = 64 - keys.len();
+        let (at_most, leaves) = if lang == "en" {
+            (
+                "can trust at most 64 keys. Keys cannot be removed yet",
+                format!("Adopting all {} leaves {left}", keys.len()),
+            )
+        } else {
+            (
+                "最大 64 個です。鍵はまだ取り除けない",
+                format!("{} 個すべてを信頼すると残りは {left} 個", keys.len()),
+            )
+        };
+        assert_eq!(html.matches(at_most).count(), 1, "{lang}: said once");
+        assert!(html.contains(&leaves), "{lang}: {leaves}");
     }
     // Another person cannot see it.
     let mallory = w.session("mallory");

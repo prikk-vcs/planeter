@@ -182,3 +182,8 @@ exact :: deliveries.rs :: no-store :: a cache directive
 re :: errors.rs :: ^(delivery_busy|delivery_not_confirmable)$ :: a stable machine-readable error code (RFC 008)
 re :: errors.rs :: ^(another delivery to the repository is in flight|the delivery cannot be confirmed in its present state) :: the OpenAPI description of an error code (developer-facing, English by decision)
 re :: deliveries.rs :: ^(name|date)$ :: the name of a catalog placeholder
+
+# --- the keys a repository trusts (RFC 013 D-4)
+re :: keys.rs :: ^(date|reason|total)$ :: the name of a catalog placeholder
+re :: keys.rs :: ^(creation|delivery|operator|not_recorded)$ :: the stable machine-readable kind of a key's source in the JSON (the sentence a person reads is a catalog message)
+exact :: keys.rs :: trust list :: the label of a gated job (a log word); never shown as text

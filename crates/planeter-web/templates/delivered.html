@@ -2,8 +2,5 @@
 <section class="delivered">
 <p class="muted">{{ d.line }}</p>
 <p class="muted">{{ d.branch_line }}</p>
-<details><summary>{{ d.keys_heading }}</summary>
-<ul>{% for k in d.keys %}<li><code>{{ k.key_id }}</code> <code>{{ k.fingerprint }}</code></li>{% endfor %}</ul>
-</details>
 </section>
 {% endif %}

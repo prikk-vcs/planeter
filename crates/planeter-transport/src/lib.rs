@@ -42,10 +42,12 @@ pub use export::{
 };
 pub use keys::{
     BackfillReport, Backfilled, KeyService, KeysError, RepoKey, Source as KeySourceView,
-    detail_for_record, join_keys, record_creation as record_creation_keys, repo_keys,
+    detail_for_record, join_keys, read_keys, record_creation as record_creation_keys, repo_keys,
 };
 pub use metrics::{CacheStatus, FetchRecord, Metrics, Outcome, ProposeOutcome, ProposeRecord};
 pub use planeter_prikk::findings::{ArchiveFindings, FoundKey, FoundRef};
+/// The most keys a repository can trust (RFC 013 D-6).
+pub use planeter_prikk::keys::KEYS_MAX;
 pub use proposals::{
     DETAIL_PATCH_LIMIT, Detail, FOLLOWED_REF, LIST_LIMIT_DEFAULT, LIST_LIMIT_MAX,
     OBSERVATION_BLOCKS_DEFAULT, OBSERVATION_BLOCKS_MAX, OBSERVATION_BLOCKS_MIN, Page, PatchEntry,

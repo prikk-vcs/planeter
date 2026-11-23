@@ -709,6 +709,7 @@ struct RepoTpl {
     ref_query: String,
     readme_html: Option<String>,
     delivered: Option<crate::deliveries::DeliveredBlock>,
+    keys: Option<crate::keys::KeysBlock>,
 }
 #[derive(Template)]
 #[template(path = "tree.html")]
@@ -772,6 +773,7 @@ struct HistoryTpl {
     explain: Vec<ExplainRow>,
     entries: Vec<HistoryRow>,
     delivered: Option<crate::deliveries::DeliveredBlock>,
+    keys: Option<crate::keys::KeysBlock>,
 }
 struct OpRow {
     kind: String,
@@ -1496,6 +1498,10 @@ async fn repo_home(
     let (proposals_nav, open_proposals) = proposal_pages::nav_for(&state, &c, &owner, &name).await;
     let delivered =
         crate::deliveries::delivered_block(&state, &c.principal, &owner, &name, &c.t).await;
+    let keys = crate::keys::block(
+        &crate::keys::read(&state, &c.principal, &owner, &name).await,
+        &c.t,
+    );
     render(
         &state,
         StatusCode::OK,
@@ -1518,6 +1524,7 @@ async fn repo_home(
             ref_query: ref_query(r),
             readme_html,
             delivered,
+            keys,
         },
         &c,
     )
@@ -1729,6 +1736,10 @@ async fn history_page(
     let (proposals_nav, _) = proposal_pages::nav_for(&state, &c, &owner, &name).await;
     let delivered =
         crate::deliveries::delivered_block(&state, &c.principal, &owner, &name, &c.t).await;
+    let keys = crate::keys::block(
+        &crate::keys::read(&state, &c.principal, &owner, &name).await,
+        &c.t,
+    );
     render(
         &state,
         StatusCode::OK,
@@ -1746,6 +1757,7 @@ async fn history_page(
             explain,
             entries,
             delivered,
+            keys,
         },
         &c,
     )

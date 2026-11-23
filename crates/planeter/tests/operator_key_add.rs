@@ -512,6 +512,24 @@ fn the_whole_story_a_delivery_signed_by_the_new_key_is_refused_before_the_add_an
     assert_eq!(status, 200, "{}", String::from_utf8_lossy(&body));
     let done: serde_json::Value = serde_json::from_slice(&body).unwrap();
     assert_eq!(done["state"], "done", "{done}");
+    // RFC 013 D-4, in the real server: the key the operator added is on the repository's page and in the JSON, with the reason and how it came
+    let (status, page) = server.http("GET", "/alice/forge", b"");
+    assert_eq!(status, 200);
+    let page = String::from_utf8_lossy(&page).into_owned();
+    assert!(
+        page.contains("Added by this server&#39;s operator on ")
+            && page.contains(": the second maintainer"),
+        "{page}"
+    );
+    assert!(page.contains("Keys this repository trusts<span class=\"count\">(2)</span>"));
+    let (status, refs) = server.http("GET", "/api/v1/repos/alice/forge/refs", b"");
+    assert_eq!(status, 200);
+    let refs: serde_json::Value = serde_json::from_slice(&refs).unwrap();
+    let keys = refs["trusted_keys"].as_array().expect("the keys");
+    assert_eq!(keys.len(), 2, "{refs}");
+    let added = keys.iter().find(|k| k["key_id"] == fx.m2.key_id).unwrap();
+    assert_eq!(added["source"]["kind"], "operator");
+    assert_eq!(added["source"]["reason"], "the second maintainer");
     server.stop();
     assert_eq!(verify_exit(&f), 0);
 }

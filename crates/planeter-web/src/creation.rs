@@ -205,6 +205,8 @@ pub struct StageView {
     /// prikk found nothing wrong inside the archive. Always true for a kept stage; **not** a statement of trust.
     internally_consistent: bool,
     keys: Vec<KeyView>,
+    /// The most keys a repository can trust (RFC 013 D-6); keys cannot be removed yet.
+    keys_max: usize,
     refs: Vec<StageRefView>,
     refs_total: u64,
     objects: std::collections::BTreeMap<String, u64>,
@@ -229,6 +231,7 @@ pub(crate) fn stage_view(s: &StageSummary, t: &T) -> StageView {
         expires_at: s.expires_at,
         internally_consistent: true,
         keys: s.findings.keys.iter().map(key_view).collect(),
+        keys_max: planeter_transport::KEYS_MAX,
         refs: s
             .findings
             .refs

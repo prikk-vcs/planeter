@@ -20,6 +20,7 @@ web	layout.*	B	The frame of every page	the header, the footer, the skip link and
 web	nav.*	B	The frame of every page	the repository menu
 web	title.home*	B	Home	the browser title of the home page
 web	home.*	B	Home	the home page (address field and button)
+web	repo.keys.*	A	Which keys a repository trusts	the list of keys a repository trusts, with one sentence of how each came
 web	repo.*	B	A repository	the repository page (location line, open proposals)
 web	title.repo	B	A repository	the browser title of the repository page
 web	tree.*	B	Files	a folder page

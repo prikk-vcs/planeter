@@ -134,6 +134,37 @@ pub fn repo_keys(
     Ok(join_keys(&trust.keys, &events))
 }
 
+/// The memory ceiling of a call that reads the trust list (a few KB of output): the light class.
+fn light_ceiling() -> planeter_prikk::CallLimits {
+    planeter_prikk::CallLimits::data_ceiling(planeter_core::admission::ceiling_for(
+        planeter_core::admission::COST_FLOOR,
+        None,
+    ))
+}
+
+/// The keys of `record` **under a read lease**, through the sandboxed driver: what a page and the JSON show. Blocking.
+pub fn read_keys(
+    hosting: &HostingService,
+    leases: &LeaseManager,
+    store: &dyn KeyEventStore,
+    record: &RepositoryRecord,
+) -> Result<Vec<RepoKey>, KeysError> {
+    let lease = leases
+        .acquire(
+            &record.repo_id,
+            LeaseClass::Read,
+            "trust maintainer list",
+            std::time::Duration::from_secs(5),
+        )
+        .map_err(|e| KeysError::Unavailable(format!("lease: {e}")))?;
+    let driver = hosting
+        .open_record_with(record, light_ceiling())
+        .map_err(|e| KeysError::Unavailable(format!("open: {e}")))?;
+    let keys = repo_keys(&driver, store, &record.repo_id);
+    drop(lease);
+    keys
+}
+
 /// Write the events of a creation: one per adopted key, source `creation`, not backfilled. **A failure is logged (no key named) and counted
 /// (`key_events_creation_failed`); it is never returned**: the repository stays created and the backfill covers the keys. Returns how many rows
 /// were written.
@@ -245,30 +276,12 @@ impl KeyService {
 
     /// The memory ceiling of a call that reads the trust list (a few KB of output): the light class.
     pub fn read_ceiling(&self) -> planeter_prikk::CallLimits {
-        planeter_prikk::CallLimits::data_ceiling(planeter_core::admission::ceiling_for(
-            planeter_core::admission::COST_FLOOR,
-            None,
-        ))
+        light_ceiling()
     }
 
     /// The keys of `record`: **under a read lease**, through the sandboxed driver. Blocking.
     pub fn keys(&self, record: &RepositoryRecord) -> Result<Vec<RepoKey>, KeysError> {
-        let lease = self
-            .leases
-            .acquire(
-                &record.repo_id,
-                LeaseClass::Read,
-                "trust maintainer list",
-                std::time::Duration::from_secs(5),
-            )
-            .map_err(|e| KeysError::Unavailable(format!("lease: {e}")))?;
-        let driver = self
-            .hosting
-            .open_record_with(record, self.read_ceiling())
-            .map_err(|e| KeysError::Unavailable(format!("open: {e}")))?;
-        let keys = repo_keys(&driver, &*self.store, &record.repo_id);
-        drop(lease);
-        keys
+        read_keys(&self.hosting, &self.leases, &*self.store, record)
     }
 
     /// The ready repositories that have **no event row at all**, in a stable order: what the backfill has to look at.
