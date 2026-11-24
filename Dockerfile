@@ -9,9 +9,9 @@
 # Running it: bubblewrap needs user namespaces. On most hosts that means `--security-opt
 # seccomp=unconfined` or a seccomp profile that permits unshare/clone with CLONE_NEWUSER, and
 # `--cap-add SYS_ADMIN` on kernels that restrict unprivileged user namespaces. See docs/RELEASING.md.
-# Debian 13 "trixie" (glibc 2.41), the multi-arch index digest of `trixie-20261104-slim` (13.7), read from the registry on 2026-11-21 (D-51; moved from the 2026-10-27 build `f6b08b09…` for apt 3.0.4, DSA-6607-1; was bookworm-slim, glibc 2.36, which the
+# Debian 13 "trixie" (glibc 2.41), the multi-arch index digest of `trixie-20261123-slim` (13.8), read from the registry on 2026-11-24 (D-51; moved from `trixie-20261104-slim` `a72b4433…` for glibc 2.41-12+deb13u5, zlib 1.3.1-1+deb13u1 (CVE-2026-85091) and OpenSSL 3.5.9, and before that from the 2026-10-27 build `f6b08b09…` for apt 3.0.4, DSA-6607-1; was bookworm-slim, glibc 2.36, which the
 # release binaries — built on glibc-2.39 runners — cannot start on: GLIBC_2.38 not found). `release.yml` runs the image and checks the glibc before any push.
-FROM debian:trixie-slim@sha256:a72b4433de1cf7d6bae0c4cee74d0547f58601a643b3375f070c51600d63b6b2
+FROM debian:trixie-slim@sha256:8aa5a7bf5a1955bddbe7d74fcdd0b91ab30e74362a8b73af672b0481b35b44a0
 
 ARG TARGETARCH
 ARG PRIKK_VERSION=0.58.0
