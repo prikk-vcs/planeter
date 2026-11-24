@@ -10,14 +10,14 @@ readme.workspace = true
 description = "planeter's transport ferry for keyless clone and push over prikk's bundle/sync artifacts (RFC 004; lands at M2)."
 
 [dependencies]
-planeter-core = { path = "../planeter-core", version = "0.8.0" }
+planeter-core = { path = "../planeter-core", version = "0.9.0" }
 # The streaming SHA-256 of the artifact store (RFC 004 D-2). An in-workspace edge (transport is an upper crate,
 # auth a lower one): no external crate is added.
-planeter-auth = { path = "../planeter-auth", version = "0.8.0" }
+planeter-auth = { path = "../planeter-auth", version = "0.9.0" }
 # The export service drives the repository store's records and prikk through core's hosting service (in-workspace
 # edges; upper -> lower, allowed by the layering gate).
-planeter-store = { path = "../planeter-store", version = "0.8.0" }
-planeter-prikk = { path = "../planeter-prikk", version = "0.8.0" }
+planeter-store = { path = "../planeter-store", version = "0.9.0" }
+planeter-prikk = { path = "../planeter-prikk", version = "0.9.0" }
 # The review view's change set is stored in the spool as JSON (RFC 005 part 6): serde and serde_json are already in the lock (the web and prikk crates use them).
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
