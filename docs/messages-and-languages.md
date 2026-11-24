@@ -123,8 +123,11 @@ the architect's second reading for consistency and naturalness, 24 of those mess
 passed them. (5) **2026-11-21**, the fifth reading (commit `17e7aae`, sheet fingerprint `7fab73d0fe483542`, 860 messages): the owner read the 107 messages that were newer than the
 sign-off of 2026-11-17 — the delivery's messages of `planeter-client` and of the pages and the API, the refusals and their hints, the repository page's lines, the landed view's five,
 the states and recovery words, the words of the delivery route's `413`, `fetch.branch_moved` and the changed `help.main` — in the order of a reading-order file, and accepted them without
+change. (6) **2026-11-25**, the sixth reading (commit `71e1e92`, sheet fingerprint `d1d0dc0468d880ad`, 897 messages): the owner read the 37 messages that were newer than the
+sign-off of 2026-11-21 — the help, the refusals and the result sentences of `planeter operator` (27), the sentences under each key on the repository and history pages with the number
+and the empty and unreadable states (8), and the creation page's sentence for one key and for two or more (2) — in the order of a reading-order file, and accepted them without
 change. The record in `crates/planeter-i18n/src/languages/ja.rs` and both `locales/ja.signed` baselines (written by `planeter-i18n-sheet --baseline ja web|client`)
-are those of this fifth record, which replaces the fourth; the sheet reads "860 unchanged, 0 changed, 0 new — 0 message(s) to read" and the server
+are those of this sixth record, which replaces the fifth; the sheet reads "897 unchanged, 0 changed, 0 new — 0 message(s) to read" and the server
 logs no count of messages newer than the sign-off.
 
 ## What is deliberately not in the catalog (`tests/literals.allow`)

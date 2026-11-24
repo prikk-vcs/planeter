@@ -16,7 +16,7 @@ CI, and packages.
 > is unchanged).
 > 0.9.0 adds **maintainer keys you can see and, as the person who runs the server, add** (RFC 013): every repository page lists the keys the repository trusts and how each came,
 > `planeter operator key add` adds one with the server stopped, and the creation page says how many of the 64 key slots it leaves. **No key can be removed, retired or revoked yet,
-> and a delivery cannot add one.** It still **requires prikk 0.58.0**. **37 Japanese messages of this release have not been read by a reviewer yet and ship flagged**; English is complete.
+> and a delivery cannot add one.** It still **requires prikk 0.58.0**. The 37 Japanese messages of this release were read and accepted by the owner on 2026-11-25, and none is flagged.
 > **1.0 is an explicit owner gate.**
 > Releases: [`CHANGELOG.md`](CHANGELOG.md) · plan: [`ROADMAP.md`](ROADMAP.md).
 
@@ -107,7 +107,7 @@ deployment notes are in [`docs/RELEASING.md`](docs/RELEASING.md).
   land, those that cannot be kept), and **after the maintainer confirms** it becomes `heads/main`, with the open proposals made again from the artifacts the server kept. A refusal changes nothing and
   says what to do. The repository's pages say who delivered; a landed proposal's changes are shown from the sealed history. A fresh clone has the delivered branch exactly.
 - **Maintainer keys** (RFC 013, [`docs/keys.md`](docs/keys.md)): the repository and history pages (and `trusted_keys` in the `refs` JSON) list the keys the repository trusts and how each came (creation, the server's operator, a delivery, or not recorded); with the server stopped, the operator adds one with `planeter operator key add`, with a reason everyone who can see the repository reads. A key is never removed (prikk cannot do it without breaking `verify`); at most 64 keys, and the creation page says how many slots are left.
-- **Languages** (RFC 012): English and Japanese (signed off by the owner on 2026-10-31, and read again on 2026-11-14, on 2026-11-17 and on 2026-11-21, the last time with the messages of delivery and the landed view; the 37 messages of 0.9.0's keys are not read yet and are flagged) — the pages, the API's error messages and `planeter-client`; a caller who does not ask is English.
+- **Languages** (RFC 012): English and Japanese (signed off by the owner on 2026-10-31, and read again on 2026-11-14, on 2026-11-17, on 2026-11-21 and on 2026-11-25, the last time with the 37 messages of the maintainer keys) — the pages, the API's error messages and `planeter-client`; a caller who does not ask is English.
 - **Not yet:** removing, retiring or revoking a maintainer key, adding one by a delivery, accounts and sign-in management (RFC 014, planned), required approvals, several followed branches, a delta delivery (the whole history is sent each time, up to
   `PLANETER_IMPORT_MAX_MB`), a web form for delivering (a browser cannot sign), issues, checks and CI, packages. SSH is not planned: transport is https behind your
   reverse proxy. The [roadmap](ROADMAP.md) has the order and the reasons.
