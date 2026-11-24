@@ -4,7 +4,7 @@
 service that hosts prikk repositories and the collaboration around them: repositories, review, issues,
 CI, and packages.
 
-> **Status: v0 — 0.8.0 builds on 0.5.0, the first release in which a person can propose work, have it reviewed, and create a
+> **Status: v0 — 0.9.0 builds on 0.5.0, the first release in which a person can propose work, have it reviewed, and create a
 > repository; the forge still holds no key.** planeter hosts and serves prikk repositories (multi-repository
 > hosting, a browse UI and a read API, sign-in with local passwords or SSO, scoped tokens, per-repository
 > authorization), and lets a signed-in person **propose** a change (held for review; no branch moves),
@@ -13,7 +13,10 @@ CI, and packages.
 > 0.8.0 adds **landing by delivery** (RFC 008): a maintainer seals work with their own key and runs `planeter-client deliver`; the server checks the repository
 > against a written rule, says what would change, and — only when the maintainer confirms — makes it the project's branch (`heads/main`). The forge signs nothing.
 > Proposals whose work is in that branch show as **landed**, and their changes can be looked at. It **requires prikk 0.58.0** (a breaking prerequisite; the 0.7.0 file-by-file view
-> is unchanged). The Japanese of this release was read and accepted by the owner on 2026-11-21.
+> is unchanged).
+> 0.9.0 adds **maintainer keys you can see and, as the person who runs the server, add** (RFC 013): every repository page lists the keys the repository trusts and how each came,
+> `planeter operator key add` adds one with the server stopped, and the creation page says how many of the 64 key slots it leaves. **No key can be removed, retired or revoked yet,
+> and a delivery cannot add one.** It still **requires prikk 0.58.0**. **37 Japanese messages of this release have not been read by a reviewer yet and ship flagged**; English is complete.
 > **1.0 is an explicit owner gate.**
 > Releases: [`CHANGELOG.md`](CHANGELOG.md) · plan: [`ROADMAP.md`](ROADMAP.md).
 
@@ -66,7 +69,7 @@ Install one of:
   cannot carry the prerequisites above).
 
 **On your own computer** (a person with their own prikk and keys): `cargo install planeter-client --locked`, or build it from source
-(`cargo build -p planeter-client --release --locked`). 0.5.0, 0.6.0, 0.7.0 and 0.8.0 ship the client through crates.io and as source; release-asset binaries of it
+(`cargo build -p planeter-client --release --locked`). 0.5.0, 0.6.0, 0.7.0, 0.8.0 and 0.9.0 ship the client through crates.io and as source; release-asset binaries of it
 are not part of this release. See [`docs/client.md`](docs/client.md).
 
 Run it:
@@ -103,9 +106,9 @@ deployment notes are in [`docs/RELEASING.md`](docs/RELEASING.md).
   continues the project's branch and is signed only by keys the repository already trusts, the report says what would change (the open proposals that stay, those that
   land, those that cannot be kept), and **after the maintainer confirms** it becomes `heads/main`, with the open proposals made again from the artifacts the server kept. A refusal changes nothing and
   says what to do. The repository's pages say who delivered; a landed proposal's changes are shown from the sealed history. A fresh clone has the delivered branch exactly.
-- **Maintainer keys** (RFC 013, [`docs/keys.md`](docs/keys.md)): every repository page lists the keys the repository trusts and how each came (creation, the server's operator, not recorded); with the server stopped, the operator adds one with `planeter operator key add`. A key is never removed (prikk cannot do it without breaking `verify`); at most 64 keys.
-- **Languages** (RFC 012): English and Japanese (signed off by the owner on 2026-10-31, and read again on 2026-11-14, on 2026-11-17 and on 2026-11-21, the last time with the messages of delivery and the landed view) — the pages, the API's error messages and `planeter-client`; a caller who does not ask is English.
-- **Not yet:** removing or revoking a maintainer key, adding one by a delivery, required approvals, several followed branches, a delta delivery (the whole history is sent each time, up to
+- **Maintainer keys** (RFC 013, [`docs/keys.md`](docs/keys.md)): the repository and history pages (and `trusted_keys` in the `refs` JSON) list the keys the repository trusts and how each came (creation, the server's operator, a delivery, or not recorded); with the server stopped, the operator adds one with `planeter operator key add`, with a reason everyone who can see the repository reads. A key is never removed (prikk cannot do it without breaking `verify`); at most 64 keys, and the creation page says how many slots are left.
+- **Languages** (RFC 012): English and Japanese (signed off by the owner on 2026-10-31, and read again on 2026-11-14, on 2026-11-17 and on 2026-11-21, the last time with the messages of delivery and the landed view; the 37 messages of 0.9.0's keys are not read yet and are flagged) — the pages, the API's error messages and `planeter-client`; a caller who does not ask is English.
+- **Not yet:** removing, retiring or revoking a maintainer key, adding one by a delivery, accounts and sign-in management (RFC 014, planned), required approvals, several followed branches, a delta delivery (the whole history is sent each time, up to
   `PLANETER_IMPORT_MAX_MB`), a web form for delivering (a browser cannot sign), issues, checks and CI, packages. SSH is not planned: transport is https behind your
   reverse proxy. The [roadmap](ROADMAP.md) has the order and the reasons.
 
