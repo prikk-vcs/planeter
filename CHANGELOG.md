@@ -3,7 +3,7 @@
 Releases are bare version tags; each section is the release's notes (assembled into the GitHub
 release by `release.yml`). Kept by hand, per release, so nothing here goes stale by templating.
 
-## [0.9.0] — unreleased until tagged — maintainer keys, and a quieter release chain
+## [0.9.0] — 2026-11-25 — maintainer keys, and a quieter release chain
 
 0.9.0 makes **the keys a repository trusts something a person can read and, for the person who runs the server, add to** (RFC 013). The repository page and the history page now list every key the repository trusts with one sentence of where it came from; `GET …/refs` gives the same list as data; a new command, **`planeter operator key add`**, adds one more key to one repository (with the server stopped); and the creation page says how many of the repository's 64 key slots a creation leaves. **What stays impossible is said plainly below: no key can be removed, retired or revoked, and a delivery cannot bring in a key.** The release also fixes the one start-up line that said "listening" before it was true, moves `url` to 2.5.9, and makes the release chain and the test suite less dependent on luck. The prikk floor stays **0.58.0**. Details are in `docs/keys.md`.
 
