@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Document | The security pass before a release, for what changed since 0.8.0 (the earlier reviews stay as the records of those releases). A **review by the architect of the design, the code paths and the evidence**, not an external audit. |
-| Date | 2026-11-24. Basis: threat model v0.9 (T-21, C-21a…h, RR-21; RR-20 corrected), RFC 013 (D-1, D-2, D-4, D-5, D-6), the reviews of each part (SCHEDULE D-110…D-120), my own gates on the candidate `00d128d` (all green; 1,520 tests with and without prikk 0.58.0), the dev team's run of the release binaries (`release-0-9-0-candidate-logs/t7/`: an upgrade from a real 0.8.0 data directory, the operator's command with kills, a 1,000-repository pass), and the rehearsal `45375363159` of the chain. |
+| Date | 2026-11-24. Basis: threat model v0.9 (T-21, C-21a…h, RR-21; RR-20 corrected), RFC 013 (D-1, D-2, D-4, D-5, D-6), the reviews of each part (SCHEDULE D-110…D-120), my own gates on the candidate `00d128d` and on the tag commit `082a5aa` (all green; 1,520 tests with and without prikk 0.58.0), the dev team's run of the release binaries (`release-0-9-0-candidate-logs/t7/`: an upgrade from a real 0.8.0 data directory, the operator's command with kills, a 1,000-repository pass), and the rehearsal `45375363159` of the chain. |
 | Verdict | **No open finding blocks 0.9.0.** One defect of the new feature was found by reading before release and fixed (a key trusted since creation could have been recorded as "added by the operator": false provenance), one hole in the architect's own handoff was found by the dev team and closed (a kill between the add and the record could have let the start-up pass label the new key "creation"), and one product defect found while fixing a test was fixed (the server said "listening" before it bound the socket). The largest residual is unchanged: **a stolen maintainer key cannot be withdrawn** (RR-20); what changed is that a lost key no longer leaves a repository without a way forward. |
 
 ## How to read the evidence column
@@ -34,7 +34,7 @@
 * **The operator's command was killed in the release binary at a time chosen, not at every point**: the five points are the debug build's failpoints.
 * **`gh attestation verify` of the rehearsal images and the image run on a host were not done** (no docker here; the workflow's own run is the evidence).
 * **The client's `1 changes`** (IS-64) and the missing singular of its counted messages remain; a macOS runner job was cancelled on two commits (a runner-pool matter, to be watched at the tag run).
-* **The Japanese** of the 37 new messages is `<owner's reading>`.
+* **The Japanese** of the 37 new messages is the owner's reading only: read and accepted without change on 2026-11-25 (the sixth record; sheet `d1d0dc0468d880ad`, 897 messages, none newer than the sign-off).
 
 ## Findings made on the way, all closed before this review
 A key trusted since creation recorded as "added by the operator" in a repository with no record (the architect, by reading; fixed test-first); the start-up pass could have labelled a new key "creation" after a kill (the dev team); the creation page's "Adopting all 1 leaves 63" (the architect); `url` 2.5.8's advisory arriving after the 0.8.0 check (the architect's gates); a glibc step failing by a broken pipe (the 0.8.0 tag run); the server saying "listening" before it bound (the dev team); a brief of the architect's that said the stop line now prints counters also without a spool, which the dev team measured and corrected (what changed is the key-record counters line).
