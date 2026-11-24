@@ -1008,6 +1008,18 @@ async fn main() {
         release_and_exit(&for_signals, 1);
     });
 
+    // Bind the socket **now, and say "listening" only after it succeeded** (IS-70): the line then says what is true when it is read, a
+    // connection started at once is queued by the kernel instead of refused, and a port that is taken is reported as that, not as a
+    // "server error" after a false "listening". Nothing below can fail the start-up (the passes that follow only log), so this is the
+    // last step that can; it sits before the key-records thread so that a start that cannot listen starts no background work.
+    let listener = match tokio::net::TcpListener::bind(addr).await {
+        Ok(l) => l,
+        Err(e) => {
+            eprintln!("planeter: cannot listen on {addr}: {e}");
+            release_and_exit(&leases, 1);
+        }
+    };
+
     // RFC 013 D-4: the one-time backfill of the record of where each trusted key came from, for the repositories that existed before it. **On a
     // thread of its own, so that the server is listening meanwhile** (as the unattended recovery above), one repository at a time, each read
     // admitted by the heavy pool's gate like any prikk work. It never changes a repository; it logs one line of counts when it ends.
@@ -1043,7 +1055,7 @@ async fn main() {
     }
 
     eprintln!("planeter listening on http://{addr} (db: {db_path})");
-    let served = planeter_web::serve_until(state, addr, async {
+    let served = planeter_web::serve_on(state, listener, async {
         let _ = stop_rx.await;
     })
     .await;

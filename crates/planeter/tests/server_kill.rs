@@ -155,9 +155,9 @@ fn start_server(dir: &Path, bin_dir: &Path) -> (Child, u16) {
         }
         // Keep draining: closing the read end would hand the running server a broken pipe on its next log line.
         std::thread::spawn(move || for _ in lines {});
-        // The server says it is listening a moment **before** it binds the socket (`main.rs` prints the line, then `serve_until` binds), so a single
-        // connect right after the line can be refused, and on a loaded host it often is. Retry the connection while the server is running, with a guard
-        // no loaded host reaches; a refusal that lasts the whole guard, or a server that ended, is a real failure.
+        // Since IS-70 the server says it is listening only after it bound the socket, so one connect would do (`listening_line.rs` holds that
+        // to account). The retry stays: it is cheap, and a test that starts a server another way still needs it. Retry while the server is
+        // running, with a guard no loaded host reaches; a refusal that lasts the whole guard, or a server that ended, is a real failure.
         if listening {
             let end = Instant::now() + Duration::from_secs(60);
             loop {

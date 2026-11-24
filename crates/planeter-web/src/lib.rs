@@ -132,6 +132,17 @@ pub async fn serve_until(
     shutdown: impl std::future::Future<Output = ()> + Send + 'static,
 ) -> std::io::Result<()> {
     let listener = tokio::net::TcpListener::bind(addr).await?;
+    serve_on(state, listener, shutdown).await
+}
+
+/// Like [`serve_until`], on a listener the caller **already bound**. A caller that announces that it is listening (the `planeter` binary
+/// does) binds first, announces after the bind has succeeded, and then calls this: the announcement is then true when it is read, and a
+/// connection started at once is queued by the kernel rather than refused.
+pub async fn serve_on(
+    state: AppState,
+    listener: tokio::net::TcpListener,
+    shutdown: impl std::future::Future<Output = ()> + Send + 'static,
+) -> std::io::Result<()> {
     // Connect-info gives handlers the TCP peer, which the trusted-proxy rules turn into the client IP.
     axum::serve(
         listener,
