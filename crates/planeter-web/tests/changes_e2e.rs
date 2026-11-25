@@ -358,6 +358,10 @@ fn world_with(name: &str, o: Opts, initial: &[(&str, &[u8])]) -> World {
     for (tok, user) in [("tok-alice", "alice"), ("tok-bob", "bob")] {
         creds
             .add_token(TokenRecord {
+                id: String::new(),
+                name: String::new(),
+                created_at: None,
+                last_used_at: None,
                 hash: TokenHasher::hash(&*hasher, tok),
                 user: UserId::new(user),
                 scope: Scope {

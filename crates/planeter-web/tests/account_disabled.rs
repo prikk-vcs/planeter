@@ -69,6 +69,10 @@ fn world(name: &str) -> World {
     for (secret, user) in [("tok-alice", "alice"), ("tok-bob", "bob")] {
         creds
             .add_token(TokenRecord {
+                id: String::new(),
+                name: String::new(),
+                created_at: None,
+                last_used_at: None,
                 hash: Sha256TokenHasher.hash(secret),
                 user: UserId::new(user),
                 scope: Scope {

@@ -56,6 +56,10 @@ fn world(accounts: Arc<dyn AccountStore>, creds: Arc<InMemoryCredentialStore>) -
     for (secret, user) in [("tok-alice", "alice"), ("tok-bob", "bob")] {
         creds
             .add_token(TokenRecord {
+                id: String::new(),
+                name: String::new(),
+                created_at: None,
+                last_used_at: None,
                 hash: t.hash(secret),
                 user: UserId::new(user),
                 scope: scope(Some(5000)),
@@ -233,6 +237,10 @@ fn an_account_with_no_row_is_not_disabled_and_a_store_that_cannot_answer_fails_c
     let creds = Arc::new(InMemoryCredentialStore::new());
     creds
         .add_token(TokenRecord {
+            id: String::new(),
+            name: String::new(),
+            created_at: None,
+            last_used_at: None,
             hash: Sha256TokenHasher.hash("tok-orphan"),
             user: UserId::new("orphan"),
             scope: scope(None),

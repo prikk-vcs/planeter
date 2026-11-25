@@ -405,6 +405,10 @@ fn instance(fx: &Fixture, tag: &str) -> Instance {
     SqliteCredentialStore::new(db)
         .unwrap()
         .add_token(TokenRecord {
+            id: String::new(),
+            name: String::new(),
+            created_at: None,
+            last_used_at: None,
             hash: TokenHasher::hash(&Sha256TokenHasher, "tok-alice"),
             user: UserId::new("alice"),
             // `Full`: the token of an administrator (it may use the recovery door).

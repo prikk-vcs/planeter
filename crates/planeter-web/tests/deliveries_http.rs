@@ -153,6 +153,10 @@ fn site_adopting(
     ] {
         creds
             .add_token(TokenRecord {
+                id: String::new(),
+                name: String::new(),
+                created_at: None,
+                last_used_at: None,
                 hash: TokenHasher::hash(&*hasher, tok),
                 user: UserId::new(user),
                 scope: Scope {

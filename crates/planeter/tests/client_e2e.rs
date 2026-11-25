@@ -258,6 +258,10 @@ fn the_client_clones_fetches_and_proposes_against_a_real_server_behind_tls() {
         SqliteCredentialStore::new(db)
             .unwrap()
             .add_token(TokenRecord {
+                id: String::new(),
+                name: String::new(),
+                created_at: None,
+                last_used_at: None,
                 hash: TokenHasher::hash(&Sha256TokenHasher, "tok-alice"),
                 user: UserId::new("alice"),
                 scope: Scope {

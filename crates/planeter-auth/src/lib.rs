@@ -29,7 +29,9 @@ pub mod throttle;
 
 pub use authenticator::Authenticator;
 pub use credential::{
-    CredentialStore, DeployKeyRecord, InMemoryCredentialStore, SshKeyRecord, TokenRecord,
+    CredentialStore, DeployKeyRecord, InMemoryCredentialStore, LEGACY_TOKEN_NAME, NewToken,
+    SshKeyRecord, TOKEN_LIFETIME_MAX_SECS, TOKEN_NAME_MAX, TOKEN_TOUCH_INTERVAL_SECS, TOKENS_MAX,
+    TokenError, TokenListing, TokenRecord, check_new_token, touch_due,
 };
 pub use events::{
     AccountEvent, AccountEventKind, AccountEventStore, EventBy, InMemoryAccountEventStore,
@@ -49,8 +51,7 @@ pub use session::{
     tokens_match,
 };
 pub use sqlite::{
-    AccountsMigration, LEGACY_TOKEN_NAME, SqliteAccountStore, SqliteCredentialStore,
-    SqliteSessionStore,
+    AccountsMigration, SqliteAccountStore, SqliteCredentialStore, SqliteSessionStore,
 };
 pub use sshkey::{SshKeyError, SshPublicKey};
 pub use throttle::{DEFAULT_LOCK_SECS, DEFAULT_MAX_FAILURES, LoginThrottle};

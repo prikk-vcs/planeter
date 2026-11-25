@@ -249,6 +249,27 @@ fn a_0_9_0_database_is_migrated_once_and_nothing_existing_changes() {
             .is_some()
     );
 
+    // The older tokens are listed with the placeholder name and their new ids, and revoked by id and holder only.
+    let listed = creds.list_tokens(&UserId::new("alice")).unwrap();
+    assert_eq!(listed.len(), 2);
+    assert!(
+        listed
+            .iter()
+            .all(|t| t.name == LEGACY_TOKEN_NAME && t.created_at.is_none())
+    );
+    assert!(
+        !creds
+            .revoke_token(&UserId::new("bob"), &listed[0].id)
+            .unwrap(),
+        "not bob's token"
+    );
+    assert!(
+        creds
+            .find_token(&Sha256TokenHasher.hash("tok-one"))
+            .unwrap()
+            .is_some()
+    );
+
     // A second start does nothing: no work counted, every table identical.
     let all = [
         "accounts",

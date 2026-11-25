@@ -319,6 +319,10 @@ fn the_real_sandbox_serves_the_view_and_the_log_holds_no_file_name_and_no_conten
     SqliteCredentialStore::new(db)
         .unwrap()
         .add_token(TokenRecord {
+            id: String::new(),
+            name: String::new(),
+            created_at: None,
+            last_used_at: None,
             hash: TokenHasher::hash(&Sha256TokenHasher, "tok-alice"),
             user: UserId::new("alice"),
             scope: Scope {

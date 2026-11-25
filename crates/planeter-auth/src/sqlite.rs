@@ -11,7 +11,10 @@ use rusqlite::{OptionalExtension, params};
 use planeter_core::{RepoScope, Scope, ScopeAccess};
 use planeter_store::{RepoId, SqliteDb, UserId};
 
-use crate::credential::{CredentialStore, DeployKeyRecord, SshKeyRecord, TokenRecord};
+use crate::credential::{
+    CredentialStore, DeployKeyRecord, LEGACY_TOKEN_NAME, NewToken, SshKeyRecord, TOKENS_MAX,
+    TokenError, TokenListing, TokenRecord, check_new_token, touch_due,
+};
 use crate::events::EVENTS_SCHEMA;
 use crate::hashing::{PasswordHash, TokenHash};
 use crate::identity::{Account, AccountStore, AuthError, DisabledState, Result};
@@ -104,9 +107,6 @@ pub(crate) fn random_token_id() -> String {
     OsRng.fill_bytes(&mut bytes);
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
-
-/// The placeholder name of a token that was made before tokens had names.
-pub const LEGACY_TOKEN_NAME: &str = "(created before 0.10.0)";
 
 /// Apply the auth schema and migrate an older database to it, **idempotently** (a second call does nothing and changes nothing):
 /// the new columns, the public id and name of every older token, the case-insensitive key of every handle and the unique indexes that
@@ -399,19 +399,95 @@ impl SqliteCredentialStore {
         Ok(Self { db })
     }
 
+    /// Store a token record as it is (a fixture, a migration): an empty `id` is given a fresh one and an empty `name` the placeholder.
+    /// **No rule of a new token is applied here**; [`create_token`](Self::create_token) is the door for a token a person asks for.
     pub fn add_token(&self, record: TokenRecord) -> Result<()> {
         let (access, repos, exp) = scope_cols(&record.scope);
+        let id = if record.id.is_empty() {
+            random_token_id()
+        } else {
+            record.id.clone()
+        };
+        let name = if record.name.is_empty() {
+            LEGACY_TOKEN_NAME.to_owned()
+        } else {
+            record.name.clone()
+        };
+        let secs = |v: Option<u64>| v.map(|n| i64::try_from(n).unwrap_or(i64::MAX));
         self.db
             .lock()
             .map_err(be)?
             .execute(
-                "INSERT INTO tokens (hash, user, access, repos, expires_at) VALUES (?1, ?2, ?3, ?4, ?5) \
+                "INSERT INTO tokens (hash, user, access, repos, expires_at, id, name, created_at, last_used_at) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9) \
                  ON CONFLICT(hash) DO UPDATE SET user = excluded.user, access = excluded.access, \
                  repos = excluded.repos, expires_at = excluded.expires_at",
-                params![record.hash.0, record.user.as_str(), access, repos, exp],
+                params![
+                    record.hash.0,
+                    record.user.as_str(),
+                    access,
+                    repos,
+                    exp,
+                    id,
+                    name,
+                    secs(record.created_at),
+                    secs(record.last_used_at)
+                ],
             )
             .map_err(be)?;
         Ok(())
+    }
+
+    /// Make a token a person asked for (RFC 014 D-8), **in one transaction**: the rules of [`check_new_token`] (a name of 1 to 60
+    /// display-safe characters; an expiry that is present, in the future and at most 365 days away), at most [`TOKENS_MAX`] tokens that
+    /// have not expired per account, a fresh public id. A refusal changes nothing.
+    pub fn create_token(
+        &self,
+        new: NewToken,
+        now: u64,
+    ) -> std::result::Result<TokenRecord, TokenError> {
+        check_new_token(&new, now)?;
+        let (access, repos, exp) = scope_cols(&new.scope);
+        let now_i = i64::try_from(now).unwrap_or(i64::MAX);
+        let refused = std::cell::Cell::new(None);
+        let made = immediate(&self.db, |conn| {
+            let live: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM tokens WHERE user = ?1 AND (expires_at IS NULL OR expires_at > ?2)",
+                params![new.user.as_str(), now_i],
+                |r| r.get(0),
+            )?;
+            if usize::try_from(live).unwrap_or(usize::MAX) >= TOKENS_MAX {
+                refused.set(Some(TokenError::TooMany));
+                return Ok(None);
+            }
+            // The id is random; a clash with the unique index is not an error to show, only a reason to draw again.
+            for _ in 0..8 {
+                let id = random_token_id();
+                let done = conn.execute(
+                    "INSERT OR IGNORE INTO tokens (hash, user, access, repos, expires_at, id, name, created_at) \
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                    params![new.hash.0, new.user.as_str(), access, repos, exp, id, new.name, now_i],
+                )?;
+                if done == 1 {
+                    return Ok(Some(id));
+                }
+            }
+            Ok(None)
+        })
+        .map_err(|e| TokenError::Backend(e.to_string()))?;
+        if let Some(e) = refused.take() {
+            return Err(e);
+        }
+        let id = made.ok_or_else(|| TokenError::Backend("no free token id".to_owned()))?;
+        Ok(TokenRecord {
+            hash: new.hash,
+            user: new.user,
+            scope: new.scope,
+            id,
+            name: new.name,
+            created_at: Some(now),
+            last_used_at: None,
+        })
     }
 
     pub fn add_ssh_key(&self, record: SshKeyRecord) -> Result<()> {
@@ -453,30 +529,127 @@ impl SqliteCredentialStore {
 impl CredentialStore for SqliteCredentialStore {
     fn find_token(&self, hash: &TokenHash) -> Result<Option<TokenRecord>> {
         let conn = self.db.lock().map_err(be)?;
-        let row = conn
+        type Row = (
+            String,
+            String,
+            String,
+            Option<String>,
+            Option<i64>,
+            Option<String>,
+            Option<String>,
+            Option<i64>,
+            Option<i64>,
+        );
+        let row: Option<Row> = conn
             .query_row(
-                "SELECT hash, user, access, repos, expires_at FROM tokens WHERE hash = ?1",
+                "SELECT hash, user, access, repos, expires_at, id, name, created_at, last_used_at FROM tokens WHERE hash = ?1",
                 params![hash.0],
                 |r| {
                     Ok((
-                        r.get::<_, String>(0)?,
-                        r.get::<_, String>(1)?,
-                        r.get::<_, String>(2)?,
-                        r.get::<_, Option<String>>(3)?,
-                        r.get::<_, Option<i64>>(4)?,
+                        r.get(0)?,
+                        r.get(1)?,
+                        r.get(2)?,
+                        r.get(3)?,
+                        r.get(4)?,
+                        r.get(5)?,
+                        r.get(6)?,
+                        r.get(7)?,
+                        r.get(8)?,
                     ))
                 },
             )
             .optional()
             .map_err(be)?;
-        row.map(|(h, user, access, repos, exp)| {
+        row.map(|(h, user, access, repos, exp, id, name, created, used)| {
+            let secs = |v: Option<i64>| v.map(|n| u64::try_from(n).unwrap_or(0));
             Ok(TokenRecord {
                 hash: TokenHash(h),
                 user: UserId::new(user),
                 scope: scope_from(access, repos, exp)?,
+                id: id.unwrap_or_default(),
+                name: name.unwrap_or_default(),
+                created_at: secs(created),
+                last_used_at: secs(used),
             })
         })
         .transpose()
+    }
+
+    fn list_tokens(&self, user: &UserId) -> Result<Vec<TokenListing>> {
+        let conn = self.db.lock().map_err(be)?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT id, name, access, repos, expires_at, created_at, last_used_at FROM tokens WHERE user = ?1 \
+                 ORDER BY COALESCE(created_at, 0) DESC, rowid DESC LIMIT ?2",
+            )
+            .map_err(be)?;
+        let rows = stmt
+            .query_map(
+                params![user.as_str(), i64::try_from(TOKENS_MAX).unwrap_or(200)],
+                |r| {
+                    Ok((
+                        r.get::<_, Option<String>>(0)?,
+                        r.get::<_, Option<String>>(1)?,
+                        r.get::<_, String>(2)?,
+                        r.get::<_, Option<String>>(3)?,
+                        r.get::<_, Option<i64>>(4)?,
+                        r.get::<_, Option<i64>>(5)?,
+                        r.get::<_, Option<i64>>(6)?,
+                    ))
+                },
+            )
+            .map_err(be)?
+            .collect::<std::result::Result<Vec<_>, _>>()
+            .map_err(be)?;
+        let secs = |v: Option<i64>| v.map(|n| u64::try_from(n).unwrap_or(0));
+        rows.into_iter()
+            .map(|(id, name, access, repos, exp, created, used)| {
+                Ok(TokenListing {
+                    id: id.unwrap_or_default(),
+                    name: name.unwrap_or_default(),
+                    scope: scope_from(access, repos, exp)?,
+                    created_at: secs(created),
+                    last_used_at: secs(used),
+                })
+            })
+            .collect()
+    }
+
+    fn revoke_token(&self, user: &UserId, id: &str) -> Result<bool> {
+        // By id **and** user, in the statement itself: another person's id matches nothing.
+        let n = self
+            .db
+            .lock()
+            .map_err(be)?
+            .execute(
+                "DELETE FROM tokens WHERE id = ?1 AND user = ?2",
+                params![id, user.as_str()],
+            )
+            .map_err(be)?;
+        Ok(n > 0)
+    }
+
+    fn touch_token(&self, hash: &TokenHash, now: u64) -> Result<bool> {
+        let conn = self.db.lock().map_err(be)?;
+        // Compare before writing: a read is not a write on every request.
+        let last: Option<Option<i64>> = conn
+            .query_row(
+                "SELECT last_used_at FROM tokens WHERE hash = ?1",
+                params![hash.0],
+                |r| r.get(0),
+            )
+            .optional()
+            .map_err(be)?;
+        let Some(last) = last else { return Ok(false) };
+        if !touch_due(last.map(|n| u64::try_from(n).unwrap_or(0)), now) {
+            return Ok(false);
+        }
+        conn.execute(
+            "UPDATE tokens SET last_used_at = ?2 WHERE hash = ?1",
+            params![hash.0, i64::try_from(now).unwrap_or(i64::MAX)],
+        )
+        .map_err(be)?;
+        Ok(true)
     }
 
     fn find_ssh_key(&self, fingerprint: &str) -> Result<Option<SshKeyRecord>> {
@@ -565,6 +738,10 @@ mod tests {
         };
         creds
             .add_token(TokenRecord {
+                id: String::new(),
+                name: String::new(),
+                created_at: None,
+                last_used_at: None,
                 hash: Sha256TokenHasher.hash("tok"),
                 user: UserId::new("alice"),
                 scope: scope.clone(),
@@ -629,6 +806,10 @@ mod tests {
         let tok = crate::hashing::mint_token();
         creds
             .add_token(TokenRecord {
+                id: String::new(),
+                name: String::new(),
+                created_at: None,
+                last_used_at: None,
                 hash: Sha256TokenHasher.hash(&tok),
                 user: UserId::new("bob"),
                 scope: Scope {

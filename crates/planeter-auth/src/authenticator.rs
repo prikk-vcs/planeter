@@ -166,6 +166,12 @@ impl Authenticator {
         }
         // At each use, not only at creation: the tokens of a disabled account are refused, as an unknown token is.
         self.require_active(&record.user)?;
+        // The time of this use, written at most once an hour per token (the record says when it was last written, so a token used
+        // again within the hour costs no write and not even a second read). A failure to write is not a failed sign-in.
+        let now = (self.now_unix)();
+        if crate::credential::touch_due(record.last_used_at, now) {
+            let _ = self.credentials.touch_token(&hash, now);
+        }
         Ok(Principal::MachineAsUser {
             user: record.user,
             scope: record.scope,
@@ -304,6 +310,10 @@ mod tests {
         // A live token.
         creds
             .add_token(TokenRecord {
+                id: String::new(),
+                name: String::new(),
+                created_at: None,
+                last_used_at: None,
                 hash: TokenHasher::hash(&hasher, "tok-live"),
                 user: UserId::new("bob"),
                 scope: Scope {
@@ -320,6 +330,10 @@ mod tests {
         // An expired token (expires 500, clock 1000) is refused.
         creds
             .add_token(TokenRecord {
+                id: String::new(),
+                name: String::new(),
+                created_at: None,
+                last_used_at: None,
                 hash: TokenHasher::hash(&hasher, "tok-dead"),
                 user: UserId::new("bob"),
                 scope: Scope {

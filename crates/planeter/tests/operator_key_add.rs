@@ -64,6 +64,10 @@ fn fix(name: &str, adopt: &[&archives::KeyInfo]) -> Fix {
     let creds = SqliteCredentialStore::new(db.clone()).unwrap();
     creds
         .add_token(TokenRecord {
+            id: String::new(),
+            name: String::new(),
+            created_at: None,
+            last_used_at: None,
             hash: TokenHasher::hash(&Sha256TokenHasher, "tok-alice"),
             user: UserId::new("alice"),
             scope: Scope {
