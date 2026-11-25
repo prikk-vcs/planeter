@@ -109,7 +109,7 @@ fn every_kind_is_rendered_in_english_and_in_japanese_from_its_typed_form() {
                 "Access token \"ci\" (write, 1 repository, until 2027-02-23) was created by {OP_EN}."
             ),
             format!(
-                "トークン「ci」（write、1 件のリポジトリ、2027-02-23 まで）を、{OP_JA}が作成しました。"
+                "トークン「ci」（書き込み、1 件のリポジトリ、2027-02-23 まで）を、{OP_JA}が作成しました。"
             ),
         ),
         (
@@ -118,7 +118,7 @@ fn every_kind_is_rendered_in_english_and_in_japanese_from_its_typed_form() {
                 "Access token \"ops\" (full, 2 repositories, until 2027-02-23) was created by {OP_EN}."
             ),
             format!(
-                "トークン「ops」（full、2 件のリポジトリ、2027-02-23 まで）を、{OP_JA}が作成しました。"
+                "トークン「ops」（完全なアクセス、2 件のリポジトリ、2027-02-23 まで）を、{OP_JA}が作成しました。"
             ),
         ),
         (

@@ -2339,8 +2339,8 @@ pub const CATALOG: &[Entry] = &[
     msg("operator.token.list.never", "なし"),
     msg("operator.token.list.all", "すべて"),
     msg("operator.token.list.read_only", "読み取り専用"),
-    msg("operator.token.list.write", "write"),
-    msg("operator.token.list.full", "full"),
+    msg("operator.token.list.write", "書き込み"),
+    msg("operator.token.list.full", "完全なアクセス"),
     msg(
         "operator.account.help.summary",
         "account …      アカウントと、アカウントにできることを管理します（create, set-password, disable, enable, link-oidc, unlink-oidc, grant, revoke, list, show）。これらは、動いているサーバーのそばで実行できます。詳しくは planeter operator account --help を実行してください。",
