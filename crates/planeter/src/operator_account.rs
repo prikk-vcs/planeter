@@ -372,6 +372,14 @@ fn backend(t: &T, why: &str) -> i32 {
     }
 }
 
+/// The words of a failed account write: the database's own message for a backend failure (a busy database is known by it).
+fn why(e: &AccountError) -> String {
+    match e {
+        AccountError::Backend(s) => s.clone(),
+        other => other.to_string(),
+    }
+}
+
 fn open(t: &T) -> Result<Ctx<'_>, i32> {
     let paths = config::paths_from_env();
     // The database must be there: it is never made here (the server makes it).
@@ -388,7 +396,7 @@ fn open(t: &T) -> Result<Ctx<'_>, i32> {
         Arc::new(Argon2idHasher),
         Arc::new(planeter_web::creation::is_reserved),
     )
-    .map_err(|e| backend(t, &e.to_string()))?;
+    .map_err(|e| backend(t, &why(&e)))?;
     let events = SqliteAccountEventStore::new(db).map_err(|e| backend(t, &e.to_string()))?;
     Ok(Ctx { t, service, events })
 }

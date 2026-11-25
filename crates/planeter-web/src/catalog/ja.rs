@@ -2225,11 +2225,11 @@ pub const CATALOG: &[Entry] = &[
     msg("operator.start", "サーバーを起動してください。"),
     msg(
         "operator.account.help.summary",
-        "account …      アカウントと、アカウントにできることを管理します （create, set-password, disable, enable, link-oidc, unlink-oidc, grant, revoke, list, show）。これらは、動いているサーバーのそばで実行できます。詳しくは planeter operator account --help を実行してください。",
+        "account …      アカウントと、アカウントにできることを管理します（create, set-password, disable, enable, link-oidc, unlink-oidc, grant, revoke, list, show）。これらは、動いているサーバーのそばで実行できます。詳しくは planeter operator account --help を実行してください。",
     ),
     msg(
         "operator.account.help.usage",
-        "使い方: planeter operator account create HANDLE --name TEXT [--password-prompt | --password-fd N]\n        planeter operator account set-password HANDLE [--password-fd N]\n        planeter operator account disable HANDLE --reason TEXT\n        planeter operator account enable HANDLE\n        planeter operator account link-oidc HANDLE --issuer URL --subject TEXT\n        planeter operator account unlink-oidc HANDLE --issuer URL --subject TEXT\n        planeter operator account grant OWNER/NAME HANDLE --role read|write|maintain|admin\n        planeter operator account revoke OWNER/NAME HANDLE [--allow-no-admin]\n        planeter operator account list [--check]\n        planeter operator account show HANDLE\n        （どれも [--lang en|ja] を付けられます）\n\ncreate         アカウントを作ります。ユーザー名 （HANDLE） は、小文字の英字、数字、- _ . の 1〜39 文字で、英字か数字から始め、あとから変えられません\n--name         アカウントに表示する名前。1〜100 文字\nset-password   アカウントのパスワードを設定します。そのアカウントのログイン中の状態はすべて終わり、トークンには手を付けません\ndisable        アカウントをすぐに止めます。ログインできなくなり、ログイン中の状態は終わり、トークンは受け付けられません。何も削除しません。--reason に理由を 1〜200 文字で書きます\nenable         disable を元に戻します。トークンは有効期限まで再び使え、終わったログイン中の状態は戻りません\nlink-oidc      アカウントを、このサーバーが設定されているログインのプロバイダー （PLANETER_OIDC_ISSUER） の ID に結び付けます。ほかのアカウントの ID を移すことはしません\ngrant          アカウントに、リポジトリでの権限を 1 つだけ与えます\nrevoke         アカウント自身がリポジトリで持っている権限を取り上げます。リポジトリの管理者が最後の 1 人になるときは、--allow-no-admin を付けないかぎり、取り上げません\nlist           アカウントを、ユーザー名の順に表示します。--check を付けると、大文字と小文字だけが違うユーザー名を表示します\nshow           アカウント 1 つ: 状態、権限、直近の 50 件の出来事",
+        "使い方: planeter operator account create HANDLE --name TEXT [--password-prompt | --password-fd N]\n        planeter operator account set-password HANDLE [--password-fd N]\n        planeter operator account disable HANDLE --reason TEXT\n        planeter operator account enable HANDLE\n        planeter operator account link-oidc HANDLE --issuer URL --subject TEXT\n        planeter operator account unlink-oidc HANDLE --issuer URL --subject TEXT\n        planeter operator account grant OWNER/NAME HANDLE --role read|write|maintain|admin\n        planeter operator account revoke OWNER/NAME HANDLE [--allow-no-admin]\n        planeter operator account list [--check]\n        planeter operator account show HANDLE\n       （どれも [--lang en|ja] を付けられます）\n\ncreate         アカウントを作ります。ユーザー名（HANDLE） は、小文字の英字、数字、- _ . の 1〜39 文字で、英字か数字から始め、あとから変えられません\n--name         アカウントに表示する名前。1〜100 文字\nset-password   アカウントのパスワードを設定します。そのアカウントのログイン中の状態はすべて終わり、トークンには手を付けません\ndisable        アカウントをすぐに止めます。ログインできなくなり、ログイン中の状態は終わり、トークンは受け付けられません。何も削除しません。--reason に理由を 1〜200 文字で書きます\nenable         disable を元に戻します。トークンは有効期限まで再び使え、終わったログイン中の状態は戻りません\nlink-oidc      アカウントを、このサーバーが設定されているログインのプロバイダー（PLANETER_OIDC_ISSUER） の ID に結び付けます。ほかのアカウントの ID を移すことはしません\ngrant          アカウントに、リポジトリでの権限を 1 つだけ与えます\nrevoke         アカウント自身がリポジトリで持っている権限を取り上げます。リポジトリの管理者が最後の 1 人になるときは、--allow-no-admin を付けないかぎり、取り上げません\nlist           アカウントを、ユーザー名の順に表示します。--check を付けると、大文字と小文字だけが違うユーザー名を表示します\nshow           アカウント 1 つ: 状態、権限、直近の 50 件の出来事",
     ),
     msg(
         "operator.account.help.roles",
@@ -2237,11 +2237,11 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "operator.account.help.password",
-        "パスワード: パスワードは、端末で画面に表示されない形で 2 回入力するか （--password-prompt。set-password では --password-fd がなければ常にこちら）、スクリプト向けに、開いているファイル記述子から 1 行として読みます （--password-fd N。スクリプトが、先にその番号でファイルかパイプを開いておきます）。引数や環境変数では渡せません。端末に入力が表示されなくなったときは、stty sane を実行してください。",
+        "パスワード: パスワードは、端末で画面に表示されない形で 2 回入力するか（--password-prompt。set-password では --password-fd がなければ常にこちら）、スクリプト向けに、開いているファイル記述子から 1 行として読みます（--password-fd N。スクリプトが、先にその番号でファイルかパイプを開いておきます）。引数や環境変数では渡せません。端末に入力が表示されなくなったときは、stty sane を実行してください。",
     ),
     msg(
         "operator.account.help.exit_codes",
-        "終了コード: 0 完了。1 拒否 （何も変えていません）。2 コマンドライン、または、パスワードを入力する端末がない。5 ローカルのファイルまたはデータベース （5 秒を超えて使用中のデータベースは、その旨を表示します）。これらのコマンドはサーバーを止めなくても実行できるので、3 は使いません。1 回の操作は 1 つの手順なので、変更が途中で終わることはなく、4 も使いません",
+        "終了コード: 0 完了。1 拒否（何も変えていません）。2 コマンドライン、または、パスワードを入力する端末がない。5 ローカルのファイルまたはデータベース（5 秒を超えて使用中のデータベースは、その旨を表示します）。これらのコマンドはサーバーを止めなくても実行できるので、3 は使いません。1 回の操作は 1 つの手順なので、変更が途中で終わることはなく、4 も使いません",
     ),
     msg(
         "operator.account.error.usage",
@@ -2261,7 +2261,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "operator.account.error.handle_taken",
-        "ユーザー名 {handle} はすでに使われています （大文字と小文字は区別せずに比べ、組織とリポジトリの所有者も数えます）。別のユーザー名にしてください。",
+        "ユーザー名 {handle} はすでに使われています（大文字と小文字は区別せずに比べ、組織とリポジトリの所有者も数えます）。別のユーザー名にしてください。",
     ),
     msg(
         "operator.account.error.name_missing",
@@ -2327,7 +2327,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "operator.account.error.no_provider",
-        "このサーバーには、ログインのプロバイダーが設定されていません （PLANETER_OIDC_ISSUER が未設定です） ので、結び付ける ID がありません。サーバーと同じように設定して、もう一度実行してください。",
+        "このサーバーには、ログインのプロバイダーが設定されていません（PLANETER_OIDC_ISSUER が未設定です） ので、結び付ける ID がありません。サーバーと同じように設定して、もう一度実行してください。",
     ),
     msg(
         "operator.account.error.other_issuer",
@@ -2367,7 +2367,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "operator.account.error.busy",
-        "データベースが {seconds} 秒を超えて使用中でした （ほかのプロセスが書き込んでいます）。何も変えていません。もう一度実行してください。",
+        "データベースが {seconds} 秒を超えて使用中でした（ほかのプロセスが書き込んでいます）。何も変えていません。もう一度実行してください。",
     ),
     msg(
         "operator.account.done.has_password",
@@ -2441,7 +2441,7 @@ pub const CATALOG: &[Entry] = &[
     msg("operator.account.list.none", "アカウントはありません。"),
     msg(
         "operator.account.list.more",
-        "ほか {more} 件 （全部で {total} 件）",
+        "ほか {more} 件（全部で {total} 件）",
     ),
     msg(
         "operator.account.check.none",
@@ -2454,7 +2454,7 @@ pub const CATALOG: &[Entry] = &[
     msg("operator.account.check.group", "{key}: {handles}"),
     msg(
         "operator.account.check.more",
-        "ほか {more} 行 （全部で {total} 行）",
+        "ほか {more} 行（全部で {total} 行）",
     ),
     msg("operator.account.show.handle", "ユーザー名"),
     msg("operator.account.show.name", "表示名"),
@@ -2467,14 +2467,14 @@ pub const CATALOG: &[Entry] = &[
     msg("operator.account.show.password", "パスワード"),
     msg(
         "operator.account.show.password_changed",
-        "あり （{date} に設定）",
+        "あり（{date} に設定）",
     ),
     msg("operator.account.show.identities", "結び付いた ID"),
     msg("operator.account.show.roles", "権限"),
     msg("operator.account.show.roles_none", "自分のものはありません"),
     msg(
         "operator.account.show.roles_more",
-        "ほか {more} 件 （全部で {total} 件）",
+        "ほか {more} 件（全部で {total} 件）",
     ),
     msg("operator.account.show.owner", "所有者"),
     msg("operator.account.show.events", "直近の出来事"),
