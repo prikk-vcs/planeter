@@ -507,3 +507,40 @@ fn no_code_deletes_or_rewrites_an_event() {
     }
     assert!(seen >= 8, "the scan read the crate's sources");
 }
+
+#[test]
+fn the_legacy_writer_never_refuses_a_case_collision_and_marks_both_accounts() {
+    // `upsert` is how tests and hand-seeded data write an account: it must keep working for a handle that differs only by case from
+    // another (the unique index leaves colliding accounts out), and mark both.
+    let db = SqliteDb::open_in_memory().unwrap();
+    let store = SqliteAccountStore::new(db.clone()).unwrap();
+    store
+        .upsert(planeter_auth::Account::local("Alice", "Alice", None))
+        .unwrap();
+    store
+        .upsert(planeter_auth::Account::local("alice", "alice", None))
+        .unwrap();
+    store
+        .upsert(planeter_auth::Account::local("ALICE", "ALICE", None))
+        .unwrap();
+    store
+        .upsert(planeter_auth::Account::local("bob", "bob", None))
+        .unwrap();
+    let conn = db.lock().unwrap();
+    let marks: Vec<(String, i64)> = conn
+        .prepare("SELECT user, handle_collides FROM accounts ORDER BY user")
+        .unwrap()
+        .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+        .unwrap()
+        .map(Result::unwrap)
+        .collect();
+    assert_eq!(
+        marks,
+        [
+            ("ALICE".to_owned(), 1),
+            ("Alice".to_owned(), 1),
+            ("alice".to_owned(), 1),
+            ("bob".to_owned(), 0)
+        ]
+    );
+}
