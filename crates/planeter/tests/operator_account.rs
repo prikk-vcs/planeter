@@ -73,6 +73,13 @@ impl World {
         let path = self.dir.join("root").join("rr").join(id);
         std::fs::create_dir_all(&path).unwrap();
         archives::run(&path, &self.dir.join("home"), &["init", "."]);
+        self.repository_row(owner, name, id);
+    }
+
+    /// The record of a private repository and an (empty) directory, **without prikk**: what the role commands need (they read no history).
+    fn repository_row(&self, owner: &str, name: &str, id: &str) {
+        let path = self.dir.join("root").join("rr").join(id);
+        std::fs::create_dir_all(&path).unwrap();
         SqliteRepositoryStore::new(self.db())
             .create(RepositoryRecord {
                 repo_id: RepoId::new(id),
@@ -1067,7 +1074,7 @@ fn the_happy_paths_print_the_sentence_the_holder_will_read_in_both_languages() {
         out(&o),
         "The account was created by this server's operator.\nA password was set by this server's operator.\nalice (Alice A) has a password.\n"
     );
-    w.repository("alice", "forge", "r1");
+    w.repository_row("alice", "forge", "r1");
     let o = w.op(&["account", "create", "bob", "--name", "Bob B"], None);
     assert_eq!(
         out(&o),
