@@ -19,9 +19,8 @@ use std::sync::Arc;
 
 use planeter_auth::password::{PasswordError, check_new_password};
 use planeter_auth::{
-    AccountError, AccountEvent, AccountEventKind, AccountEventStore, AccountService,
-    Argon2idHasher, DisplayNameError, EventBy, RepoRole, SqliteAccountEventStore,
-    check_display_name,
+    AccountError, AccountEvent, AccountEventStore, AccountService, Argon2idHasher,
+    DisplayNameError, EventBy, RepoRole, SqliteAccountEventStore, check_display_name,
 };
 use planeter_core::creation::{HandleError, check_new_handle};
 use planeter_store::SqliteDb;
@@ -401,35 +400,10 @@ fn open(t: &T) -> Result<Ctx<'_>, i32> {
     Ok(Ctx { t, service, events })
 }
 
-fn by_word(t: &T, by: EventBy) -> String {
-    t.get(match by {
-        EventBy::SelfService => Key::AccountBySelf,
-        EventBy::Operator => Key::AccountByOperator,
-        EventBy::Provider => Key::AccountByProvider,
-    })
-}
-
-/// The sentence of one event, **the one the account's holder reads in their own log** (RFC 014 D-7), in the language of `t`.
+/// The sentence of one event, **the one the account's holder reads in their own log** (RFC 014 D-7), in the language of `t`: the same
+/// function the account's page uses.
 pub(crate) fn event_sentence(t: &T, e: &AccountEvent) -> String {
-    let key = match e.kind {
-        AccountEventKind::Created => Key::AccountEventCreated,
-        AccountEventKind::PasswordSet => Key::AccountEventPasswordSet,
-        AccountEventKind::PasswordChanged => Key::AccountEventPasswordChanged,
-        AccountEventKind::IdentityLinked => Key::AccountEventIdentityLinked,
-        AccountEventKind::IdentityUnlinked => Key::AccountEventIdentityUnlinked,
-        AccountEventKind::TokenCreated => Key::AccountEventTokenCreated,
-        AccountEventKind::TokenRevoked => Key::AccountEventTokenRevoked,
-        AccountEventKind::SessionEnded => Key::AccountEventSessionEnded,
-        AccountEventKind::RoleGranted => Key::AccountEventRoleGranted,
-        AccountEventKind::RoleRevoked => Key::AccountEventRoleRevoked,
-        AccountEventKind::Disabled => Key::AccountEventDisabled,
-        AccountEventKind::Enabled => Key::AccountEventEnabled,
-        AccountEventKind::SignedInNewMethod => Key::AccountEventSignedInNewMethod,
-    };
-    t.msg(key)
-        .with("by", by_word(t, e.by))
-        .with("detail", &e.detail)
-        .text()
+    planeter_web::account_events::render_event(t, e)
 }
 
 impl Ctx<'_> {

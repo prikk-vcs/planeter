@@ -146,7 +146,7 @@ fn a_grant_sets_exactly_the_role_writes_the_event_and_does_nothing_twice() {
         .collect();
     assert_eq!(
         granted,
-        ["alice/app write", "alice/app admin", "alice/app read"]
+        ["alice/app\twrite", "alice/app\tadmin", "alice/app\tread"]
     );
     assert!(
         ev.iter()
@@ -242,7 +242,7 @@ fn the_last_administrator_cannot_be_revoked_without_saying_so() {
     let last = w.events.recent("bob", 1).unwrap().remove(0);
     assert_eq!(
         (last.kind, last.detail.as_str()),
-        (AccountEventKind::RoleRevoked, "acme/tool admin")
+        (AccountEventKind::RoleRevoked, "acme/tool\tadmin")
     );
     // With `allow_no_admin` the last one goes.
     w.db.lock()

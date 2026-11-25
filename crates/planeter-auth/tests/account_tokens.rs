@@ -159,7 +159,7 @@ fn a_token_is_made_with_its_event_in_one_step_and_works_as_its_scope_says() {
         (e.kind, e.by),
         (AccountEventKind::TokenCreated, EventBy::Operator)
     );
-    assert_eq!(e.detail, "laptop; write, 1 repositories; until 2027-02-23");
+    assert_eq!(e.detail, "laptop\twrite\t1\t2027-02-23");
     for forbidden in [
         secret.as_str(),
         &Sha256TokenHasher.hash(&secret).0,

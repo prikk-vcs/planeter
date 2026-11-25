@@ -506,7 +506,7 @@ fn revoke_and_disable_refuse_the_token_on_the_very_next_request_and_an_expired_o
     let o = w.op(&["token", "revoke", "alice", &id_a], None);
     assert_eq!(code(&o), 0, "{}", err(&o));
     assert!(
-        out(&o).contains("A token (to revoke) was revoked by this server's operator."),
+        out(&o).contains("Access token \"to revoke\" was revoked by this server's operator."),
         "{}",
         out(&o)
     );
@@ -735,7 +735,7 @@ fn standard_output_is_one_line_and_standard_error_says_what_it_is_in_plain_words
     let e = err(&o);
     assert!(!e.contains(&token), "the token is not on standard error");
     for must in [
-        "A token (laptop; read-only, 2 repositories; until ",
+        "Access token \"laptop\" (read-only, 2 repositories, until ",
         "A token for alice (laptop) was created. Its id is ",
         "It is read-only: it can look at repositories and clone them, and nothing else.",
         "It reaches only these repositories: alice/forge, alice/other.",
@@ -1273,4 +1273,56 @@ fn the_token_is_in_no_event_no_log_no_error_and_no_database_row_but_as_its_hash(
     drop(child.stdin.take());
     let o = child.wait_with_output().unwrap();
     assert_eq!(code(&o), 0);
+}
+
+// ------------------------------------------------------------------------------------------------ the sentence is the holder's sentence
+
+#[test]
+fn the_token_sentences_are_render_event_of_the_events_just_written_in_both_languages() {
+    use planeter_auth::{AccountEventStore, SqliteAccountEventStore};
+    use planeter_web::account_events::render_event;
+    use planeter_web::catalog::{Lang, T};
+    let w = with_two_repositories("holder-sentence");
+    let newest = || {
+        SqliteAccountEventStore::new(w.db())
+            .unwrap()
+            .recent("alice", 1)
+            .unwrap()
+            .remove(0)
+    };
+    for tag in ["en", "ja"] {
+        let t = T::new(Lang::from_tag(tag).unwrap());
+        let o = create(
+            &w,
+            "alice",
+            &format!("n-{tag}"),
+            "write",
+            &["--repos", "alice/forge,alice/other", "--lang", tag],
+        );
+        made(&o);
+        let sentence = render_event(&t, &newest());
+        assert!(
+            err(&o).lines().any(|l| l == sentence),
+            "{sentence:?} not among\n{}",
+            err(&o)
+        );
+        let id: String = w
+            .db()
+            .lock()
+            .unwrap()
+            .query_row(
+                "SELECT id FROM tokens WHERE name = ?1",
+                [format!("n-{tag}")],
+                |r| r.get(0),
+            )
+            .unwrap();
+        let o = w.op(&["token", "revoke", "alice", &id, "--lang", tag], None);
+        assert_eq!(code(&o), 0, "{}", err(&o));
+        let sentence = render_event(&t, &newest());
+        assert!(
+            out(&o).lines().any(|l| l == sentence),
+            "{sentence:?} not among\n{}",
+            out(&o)
+        );
+    }
 }

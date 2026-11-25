@@ -340,11 +340,7 @@ fn set_password_ends_that_accounts_sessions_and_writes_the_event_and_the_time() 
     let last = w.events.recent("alice", 1).unwrap().remove(0);
     assert_eq!(
         (last.kind, last.by, last.detail.as_str()),
-        (
-            AccountEventKind::PasswordSet,
-            EventBy::Operator,
-            "2 session(s) ended"
-        )
+        (AccountEventKind::PasswordSet, EventBy::Operator, "2")
     );
     // Set by the holder: the other word.
     w.service

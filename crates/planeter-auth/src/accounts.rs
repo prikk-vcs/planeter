@@ -21,7 +21,7 @@ use planeter_store::SqliteDb;
 use planeter_store::{RepoId, UserId};
 
 use crate::credential::{NewToken, TokenError, check_new_token};
-use crate::events::{AccountEvent, AccountEventKind, EventBy, insert_event};
+use crate::events::{AccountEvent, AccountEventKind, EventBy, EventDetail, insert_event};
 use crate::hashing::PasswordHasher;
 use crate::hashing::TokenHash;
 use crate::identity::AuthError;
@@ -243,7 +243,13 @@ impl AccountService {
             let ended = conn.execute("DELETE FROM sessions WHERE user = ?1", params![handle])?;
             insert_event(
                 conn,
-                &AccountEvent::new(handle, kind, by, &format!("{ended} session(s) ended"), now),
+                &AccountEvent::typed(
+                    handle,
+                    kind,
+                    by,
+                    &EventDetail::SignInsEnded(u32::try_from(ended).unwrap_or(u32::MAX)),
+                    now,
+                ),
             )?;
             Ok(None)
         })
@@ -292,11 +298,11 @@ impl AccountService {
             )?;
             insert_event(
                 conn,
-                &AccountEvent::new(
+                &AccountEvent::typed(
                     handle,
                     AccountEventKind::IdentityLinked,
                     by,
-                    &issuer_host(issuer),
+                    &EventDetail::Host(issuer_host(issuer)),
                     now,
                 ),
             )?;
@@ -325,11 +331,11 @@ impl AccountService {
             }
             insert_event(
                 conn,
-                &AccountEvent::new(
+                &AccountEvent::typed(
                     handle,
                     AccountEventKind::IdentityUnlinked,
                     by,
-                    &issuer_host(issuer),
+                    &EventDetail::Host(issuer_host(issuer)),
                     now,
                 ),
             )?;
@@ -368,7 +374,13 @@ impl AccountService {
             conn.execute("DELETE FROM sessions WHERE user = ?1", params![handle])?;
             insert_event(
                 conn,
-                &AccountEvent::new(handle, AccountEventKind::Disabled, by, &reason, now),
+                &AccountEvent::typed(
+                    handle,
+                    AccountEventKind::Disabled,
+                    by,
+                    &EventDetail::Reason(reason.clone()),
+                    now,
+                ),
             )?;
             done.set(true);
             Ok(None)
@@ -635,11 +647,14 @@ impl AccountService {
                 )?;
                 insert_event(
                     conn,
-                    &AccountEvent::new(
+                    &AccountEvent::typed(
                         handle,
                         AccountEventKind::RoleGranted,
                         by,
-                        &format!("{shown_owner}/{name} {}", role.as_str()),
+                        &EventDetail::Role {
+                            repository: format!("{shown_owner}/{name}"),
+                            role,
+                        },
                         now,
                     ),
                 )?;
@@ -713,11 +728,14 @@ impl AccountService {
             )?;
             insert_event(
                 conn,
-                &AccountEvent::new(
+                &AccountEvent::typed(
                     handle,
                     AccountEventKind::RoleRevoked,
                     by,
-                    &format!("{shown_owner}/{name} {}", was.as_str()),
+                    &EventDetail::Role {
+                        repository: format!("{shown_owner}/{name}"),
+                        role: was,
+                    },
                     now,
                 ),
             )?;
@@ -933,14 +951,6 @@ pub struct MadeToken {
     pub repos: Vec<String>,
 }
 
-fn scope_word(a: ScopeAccess) -> &'static str {
-    match a {
-        ScopeAccess::ReadOnly => "read-only",
-        ScopeAccess::Write => "write",
-        ScopeAccess::Full => "full",
-    }
-}
-
 impl AccountService {
     /// Make a token for an account, **in one transaction with its `token_created` event**: the account exists and is not disabled, every
     /// named repository exists, the rules of a new token (a name of 1 to 60 safe characters; an expiry in the future and within 365 days;
@@ -1019,23 +1029,18 @@ impl AccountService {
                 Err(TokenError::Backend(why)) => return Ok(Some(AccountError::Backend(why))),
                 Err(e) => return Ok(Some(AccountError::Token(e))),
             };
-            let reach = if shown.is_empty() {
-                String::new()
-            } else {
-                format!(", {} repositories", shown.len())
-            };
             insert_event(
                 conn,
-                &AccountEvent::new(
+                &AccountEvent::typed(
                     handle,
                     AccountEventKind::TokenCreated,
                     by,
-                    &format!(
-                        "{}; {}{reach}; until {}",
-                        spec.name,
-                        scope_word(spec.access),
-                        crate::text::ymd(spec.expires_at)
-                    ),
+                    &EventDetail::TokenCreated {
+                        name: spec.name.to_owned(),
+                        access: spec.access,
+                        repositories: u32::try_from(shown.len()).unwrap_or(u32::MAX),
+                        until: crate::text::ymd(spec.expires_at),
+                    },
                     now,
                 ),
             )?;
@@ -1089,7 +1094,15 @@ impl AccountService {
             )?;
             insert_event(
                 conn,
-                &AccountEvent::new(handle, AccountEventKind::TokenRevoked, by, &token_name, now),
+                &AccountEvent::typed(
+                    handle,
+                    AccountEventKind::TokenRevoked,
+                    by,
+                    &EventDetail::TokenRevoked {
+                        name: token_name.clone(),
+                    },
+                    now,
+                ),
             )?;
             *name.borrow_mut() = Some(token_name);
             Ok(None)

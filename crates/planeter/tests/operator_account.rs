@@ -1113,7 +1113,7 @@ fn the_happy_paths_print_the_sentence_the_holder_will_read_in_both_languages() {
         assert_eq!(code(&o), 0, "{}", err(&o));
         assert!(
             out(&o).contains(&format!(
-                "A role on a repository was given by this server's operator: alice/forge {role}"
+                "The role \"{role}\" on alice/forge was given by this server's operator."
             )),
             "{}",
             out(&o)
@@ -1138,9 +1138,11 @@ fn the_happy_paths_print_the_sentence_the_holder_will_read_in_both_languages() {
     assert_eq!(w.dump(), before);
     let o = w.op(&["account", "revoke", "alice/forge", "bob"], None);
     assert_eq!(code(&o), 0, "{}", err(&o));
-    assert!(out(&o).contains(
-        "A role on a repository was taken away by this server's operator: alice/forge admin"
-    ));
+    assert!(
+        out(&o).contains(
+            "The role \"admin\" on alice/forge was taken away by this server's operator."
+        )
+    );
     assert!(
         !out(&o).contains("no administrator"),
         "alice, the owner, remains"
@@ -1164,7 +1166,7 @@ fn the_happy_paths_print_the_sentence_the_holder_will_read_in_both_languages() {
     assert!(out(&o).contains("Last events:\n  "), "{}", out(&o));
     assert!(
         out(&o).contains(
-            "A role on a repository was taken away by this server's operator: alice/forge admin"
+            "The role \"admin\" on alice/forge was taken away by this server's operator."
         ),
         "{}",
         out(&o)
@@ -1756,4 +1758,88 @@ fn without_a_terminal_and_without_a_descriptor_a_password_is_refused_not_read_fr
         err(&o)
     );
     assert_eq!(w.dump(), before);
+}
+
+// ------------------------------------------------------------------------------------------------ the sentence is the holder's sentence
+
+#[test]
+fn the_sentence_a_command_prints_is_render_event_of_the_event_it_just_wrote_in_both_languages() {
+    use planeter_auth::{AccountEventStore, SqliteAccountEventStore};
+    use planeter_web::account_events::render_event;
+    use planeter_web::catalog::{Lang, T};
+    let w = world("sentence");
+    w.repository_row("alice", "forge", "r1");
+    let t_en = T::new(Lang::from_tag("en").unwrap());
+    let t_ja = T::new(Lang::from_tag("ja").unwrap());
+    let newest = |handle: &str| {
+        SqliteAccountEventStore::new(w.db())
+            .unwrap()
+            .recent(handle, 1)
+            .unwrap()
+            .remove(0)
+    };
+    for (tag, t) in [("en", &t_en), ("ja", &t_ja)] {
+        let handle = format!("p{tag}");
+        let lang = ["--lang", tag];
+        let run = |args: &[&str], pw: Option<&str>| {
+            let mut a: Vec<&str> = args.to_vec();
+            a.extend(lang);
+            let o = w.op(&a, pw);
+            assert_eq!(code(&o), 0, "{args:?}: {}", err(&o));
+            out(&o)
+        };
+        // Each act in turn: the printed lines contain the rendering of the newest event, character for character.
+        for (args, pw) in [
+            (
+                vec![
+                    "account",
+                    "create",
+                    handle.as_str(),
+                    "--name",
+                    "P P",
+                    "--password-fd",
+                    "3",
+                ],
+                Some(PASSWORD),
+            ),
+            (
+                vec![
+                    "account",
+                    "set-password",
+                    handle.as_str(),
+                    "--password-fd",
+                    "3",
+                ],
+                Some(PASSWORD),
+            ),
+            (
+                vec![
+                    "account",
+                    "grant",
+                    "alice/forge",
+                    handle.as_str(),
+                    "--role",
+                    "maintain",
+                ],
+                None,
+            ),
+            (
+                vec!["account", "revoke", "alice/forge", handle.as_str()],
+                None,
+            ),
+            (
+                vec!["account", "disable", handle.as_str(), "--reason", "away"],
+                None,
+            ),
+            (vec!["account", "enable", handle.as_str()], None),
+        ] {
+            let printed = run(&args, pw);
+            let event = newest(&handle);
+            let sentence = render_event(t, &event);
+            assert!(
+                printed.lines().any(|l| l == sentence),
+                "{args:?}: {sentence:?} not among\n{printed}"
+            );
+        }
+    }
 }

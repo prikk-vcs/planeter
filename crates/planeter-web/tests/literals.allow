@@ -187,3 +187,4 @@ re :: deliveries.rs :: ^(name|date)$ :: the name of a catalog placeholder
 re :: keys.rs :: ^(date|reason|total)$ :: the name of a catalog placeholder
 re :: keys.rs :: ^(creation|delivery|operator|not_recorded)$ :: the stable machine-readable kind of a key's source in the JSON (the sentence a person reads is a catalog message)
 exact :: keys.rs :: trust list :: the label of a gated job (a log word); never shown as text
+re :: account_events.rs :: ^(first|second|host|name|scope|repositories|date|repository|role|reason)$ :: the names of a catalog message's placeholders (RFC 014 D-7: the sentence of an account's log; never shown)

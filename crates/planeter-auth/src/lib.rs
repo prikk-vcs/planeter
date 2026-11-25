@@ -40,8 +40,8 @@ pub use credential::{
     TokenError, TokenListing, TokenRecord, check_new_token, touch_due,
 };
 pub use events::{
-    AccountEvent, AccountEventKind, AccountEventStore, EventBy, InMemoryAccountEventStore,
-    SqliteAccountEventStore,
+    AccountEvent, AccountEventKind, AccountEventStore, EVENT_DETAIL_MAX_CHARS, EventBy,
+    EventDetail, InMemoryAccountEventStore, SqliteAccountEventStore, scope_code,
 };
 pub use hashing::{
     Argon2idHasher, InsecureStubHasher, PasswordHash, PasswordHasher, Sha256Stream,

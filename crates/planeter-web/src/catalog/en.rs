@@ -2579,41 +2579,89 @@ pub const CATALOG: &[Entry] = &[
         "account.event.password_changed",
         "The password was changed by {by}.",
     ),
+    plural_msg(
+        "account.event.sign_ins_ended",
+        "{count} sign-in ended.",
+        "{count} sign-ins ended.",
+    ),
+    msg("account.event.then", "{first} {second}"),
     msg(
         "account.event.identity_linked",
-        "An identity at {detail} was linked to the account by {by}.",
+        "An identity at {host} was linked to the account by {by}.",
     ),
     msg(
         "account.event.identity_unlinked",
-        "An identity at {detail} was unlinked from the account by {by}.",
+        "An identity at {host} was unlinked from the account by {by}.",
+    ),
+    msg(
+        "account.event.plain.identity_linked",
+        "An identity was linked to the account by {by}.",
+    ),
+    msg(
+        "account.event.plain.identity_unlinked",
+        "An identity was unlinked from the account by {by}.",
     ),
     msg(
         "account.event.token_created",
-        "A token ({detail}) was created by {by}.",
+        "Access token \"{name}\" ({scope}, {repositories}, until {date}) was created by {by}.",
     ),
     msg(
         "account.event.token_revoked",
-        "A token ({detail}) was revoked by {by}.",
+        "Access token \"{name}\" was revoked by {by}.",
     ),
     msg(
+        "account.event.plain.token_created",
+        "An access token was created by {by}.",
+    ),
+    msg(
+        "account.event.plain.token_revoked",
+        "An access token was revoked by {by}.",
+    ),
+    plural_msg(
+        "account.event.token_repositories",
+        "{count} repository",
+        "{count} repositories",
+    ),
+    msg(
+        "account.event.token_repositories_all",
+        "all repositories the account can reach",
+    ),
+    plural_msg(
         "account.event.session_ended",
-        "A sign-in was ended by {by}.",
+        "{count} sign-in was ended by {by}.",
+        "{count} sign-ins were ended by {by}.",
     ),
     msg(
         "account.event.role_granted",
-        "A role on a repository was given by {by}: {detail}",
+        "The role \"{role}\" on {repository} was given by {by}.",
     ),
     msg(
         "account.event.role_revoked",
-        "A role on a repository was taken away by {by}: {detail}",
+        "The role \"{role}\" on {repository} was taken away by {by}.",
     ),
     msg(
+        "account.event.plain.role_granted",
+        "A role on a repository was given by {by}.",
+    ),
+    msg(
+        "account.event.plain.role_revoked",
+        "A role on a repository was taken away by {by}.",
+    ),
+    msg("account.event.role.read", "read"),
+    msg("account.event.role.write", "write"),
+    msg("account.event.role.maintain", "maintain"),
+    msg("account.event.role.admin", "admin"),
+    msg(
         "account.event.disabled",
-        "The account was disabled by {by}: {detail}",
+        "The account was disabled by {by}: {reason}",
+    ),
+    msg(
+        "account.event.plain.disabled",
+        "The account was disabled by {by}.",
     ),
     msg("account.event.enabled", "The account was enabled by {by}."),
     msg(
         "account.event.signed_in_new_method",
-        "The account signed in by a method it had not used before: {detail}",
+        "The account signed in by a method it had not used before.",
     ),
 ];

@@ -2614,36 +2614,78 @@ pub const CATALOG: &[Entry] = &[
         "パスワードを、{by}が変更しました。",
     ),
     msg(
+        "account.event.sign_ins_ended",
+        "ログイン中の状態を {count} 件、終わらせました。",
+    ),
+    msg("account.event.then", "{first}{second}"),
+    msg(
         "account.event.identity_linked",
-        "{detail} の ID を、{by}がアカウントに結び付けました。",
+        "{host} の ID を、{by}がアカウントに結び付けました。",
     ),
     msg(
         "account.event.identity_unlinked",
-        "{detail} の ID を、{by}がアカウントから外しました。",
+        "{host} の ID を、{by}がアカウントから外しました。",
+    ),
+    msg(
+        "account.event.plain.identity_linked",
+        "ID を、{by}がアカウントに結び付けました。",
+    ),
+    msg(
+        "account.event.plain.identity_unlinked",
+        "ID を、{by}がアカウントから外しました。",
     ),
     msg(
         "account.event.token_created",
-        "トークン ({detail}) を、{by}が作成しました。",
+        "トークン「{name}」（{scope}、{repositories}、{date} まで）を、{by}が作成しました。",
     ),
     msg(
         "account.event.token_revoked",
-        "トークン ({detail}) を、{by}が取り消しました。",
+        "トークン「{name}」を、{by}が取り消しました。",
+    ),
+    msg(
+        "account.event.plain.token_created",
+        "トークンを、{by}が作成しました。",
+    ),
+    msg(
+        "account.event.plain.token_revoked",
+        "トークンを、{by}が取り消しました。",
+    ),
+    msg("account.event.token_repositories", "{count} 件のリポジトリ"),
+    msg(
+        "account.event.token_repositories_all",
+        "アカウントが届くすべてのリポジトリ",
     ),
     msg(
         "account.event.session_ended",
-        "ログイン中の状態を、{by}が終わらせました。",
+        "ログイン中の状態 {count} 件を、{by}が終わらせました。",
     ),
     msg(
         "account.event.role_granted",
-        "リポジトリでの権限を、{by}が与えました: {detail}",
+        "{repository} での権限「{role}」を、{by}が与えました。",
     ),
     msg(
         "account.event.role_revoked",
-        "リポジトリでの権限を、{by}が取り上げました: {detail}",
+        "{repository} での権限「{role}」を、{by}が取り上げました。",
     ),
     msg(
+        "account.event.plain.role_granted",
+        "リポジトリでの権限を、{by}が与えました。",
+    ),
+    msg(
+        "account.event.plain.role_revoked",
+        "リポジトリでの権限を、{by}が取り上げました。",
+    ),
+    msg("account.event.role.read", "読み取り"),
+    msg("account.event.role.write", "書き込み"),
+    msg("account.event.role.maintain", "メンテナー"),
+    msg("account.event.role.admin", "リポジトリの管理者"),
+    msg(
         "account.event.disabled",
-        "アカウントを、{by}が無効にしました: {detail}",
+        "アカウントを、{by}が無効にしました: {reason}",
+    ),
+    msg(
+        "account.event.plain.disabled",
+        "アカウントを、{by}が無効にしました。",
     ),
     msg(
         "account.event.enabled",
@@ -2651,6 +2693,6 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "account.event.signed_in_new_method",
-        "アカウントが、これまで使っていなかった方法でログインしました: {detail}",
+        "アカウントが、これまで使っていなかった方法でログインしました。",
     ),
 ];

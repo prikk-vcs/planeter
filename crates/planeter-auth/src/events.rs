@@ -5,6 +5,25 @@
 //! display-safe detail (a reason, a token's *name*, never the token; an issuer's host, never a subject), and the time. No password, no hash,
 //! no token, no address, no session id: a test writes canaries through every act and finds none in this table or in a log.
 //!
+//! **A detail is data, never prose.** Stored history is read for years in whatever language the reader has, so **nothing the system
+//! generates is written as a sentence**: an event's `detail` is either free text a person typed (a *reason*, a token's *name*), made
+//! display-safe, or **language-neutral fields** in the fixed order below, separated by a tab (a character no display-safe text can hold:
+//! [`crate::text::escape_display`] shows it as a visible escape). Every kind has one typed form, [`EventDetail`], with a constructor
+//! ([`AccountEvent::typed`]) and a parser ([`AccountEvent::detail_data`]): nobody builds or reads these strings by hand. The catalog layer
+//! renders them in the reader's language (`planeter_web::account_events::render_event`).
+//!
+//! | kind | stored `detail` (fields in this order) |
+//! |---|---|
+//! | `created`, `enabled`, `signed_in_new_method` | empty (`signed_in_new_method`'s data is defined with the step that writes it) |
+//! | `password_set`, `password_changed`, `session_ended` | the number of sign-ins that ended, digits only |
+//! | `identity_linked`, `identity_unlinked` | the issuer's host |
+//! | `disabled` | the reason, as typed (display-safe) |
+//! | `token_created` | name (as typed) `TAB` scope code `read-only`\|`write`\|`full` `TAB` number of repositories the token is limited to (`0` = all) `TAB` end date `YYYY-MM-DD` |
+//! | `token_revoked` | name (as typed) |
+//! | `role_granted`, `role_revoked` | `owner/name` `TAB` role code `read`\|`write`\|`maintain`\|`admin` |
+//!
+//! A detail that does not parse (an older or damaged row) is **shown as nothing**, never as the raw text, and breaks nothing.
+//!
 //! **There is no delete and no update**: the trait has none, the SQL has none (a test scans the source), and a row says "this happened",
 //! never "this was undone" (an undoing is a new row).
 
@@ -14,6 +33,9 @@ use rusqlite::params;
 
 use planeter_store::SqliteDb;
 
+use planeter_core::ScopeAccess;
+
+use crate::accounts::RepoRole;
 use crate::identity::{AuthError, Result};
 use crate::text::escape_display;
 
@@ -108,6 +130,147 @@ impl EventBy {
     }
 }
 
+/// The data of an event's `detail`, one form for each shape in the table of this module's documentation. **Language-neutral**: codes, numbers,
+/// a host, a date, and the two kinds of text a person typed (a reason, a name).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EventDetail {
+    /// No detail (`created`, `enabled`, `signed_in_new_method`).
+    None,
+    /// How many sign-ins ended (`password_set`, `password_changed`, `session_ended`).
+    SignInsEnded(u32),
+    /// The issuer's host (`identity_linked`, `identity_unlinked`).
+    Host(String),
+    /// The reason the operator typed (`disabled`).
+    Reason(String),
+    /// `token_created`: the name as typed, the scope, how many repositories it is limited to (`0` = all), the end date `YYYY-MM-DD`.
+    TokenCreated {
+        name: String,
+        access: ScopeAccess,
+        repositories: u32,
+        until: String,
+    },
+    /// `token_revoked`: the name as typed.
+    TokenRevoked { name: String },
+    /// `role_granted`, `role_revoked`: `owner/name` and the role.
+    Role { repository: String, role: RepoRole },
+}
+
+/// The stable code of a token's scope in a stored detail.
+pub fn scope_code(a: ScopeAccess) -> &'static str {
+    match a {
+        ScopeAccess::ReadOnly => "read-only",
+        ScopeAccess::Write => "write",
+        ScopeAccess::Full => "full",
+    }
+}
+
+fn parse_scope_code(s: &str) -> Option<ScopeAccess> {
+    [ScopeAccess::ReadOnly, ScopeAccess::Write, ScopeAccess::Full]
+        .into_iter()
+        .find(|a| scope_code(*a) == s)
+}
+
+fn digits(s: &str) -> Option<u32> {
+    if s.is_empty() || s.len() > 9 || !s.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    s.parse().ok()
+}
+
+fn is_date(s: &str) -> bool {
+    let b = s.as_bytes();
+    b.len() == 10
+        && b.iter().enumerate().all(|(i, c)| {
+            if i == 4 || i == 7 {
+                *c == b'-'
+            } else {
+                c.is_ascii_digit()
+            }
+        })
+}
+
+impl EventDetail {
+    /// The stored text: each field display-safe, the fields joined by a tab.
+    pub fn to_stored(&self) -> String {
+        let f = |s: &str| escape_display(s, EVENT_DETAIL_MAX_CHARS);
+        match self {
+            EventDetail::None => String::new(),
+            EventDetail::SignInsEnded(n) => n.to_string(),
+            EventDetail::Host(h) => f(h),
+            EventDetail::Reason(r) => f(r),
+            EventDetail::TokenCreated {
+                name,
+                access,
+                repositories,
+                until,
+            } => format!(
+                "{}\t{}\t{}\t{}",
+                f(name),
+                scope_code(*access),
+                repositories,
+                f(until)
+            ),
+            EventDetail::TokenRevoked { name } => f(name),
+            EventDetail::Role { repository, role } => {
+                format!("{}\t{}", f(repository), role.as_str())
+            }
+        }
+    }
+
+    /// The typed form of the stored text of a `kind`, or `None` when the text is not the shape of that kind (**never a guess, never the raw
+    /// text**).
+    pub fn parse(kind: AccountEventKind, text: &str) -> Option<EventDetail> {
+        use AccountEventKind as K;
+        let fields: Vec<&str> = text.split('\t').collect();
+        match kind {
+            K::Created | K::Enabled | K::SignedInNewMethod => {
+                text.is_empty().then_some(EventDetail::None)
+            }
+            K::PasswordSet | K::PasswordChanged | K::SessionEnded => {
+                digits(text).map(EventDetail::SignInsEnded)
+            }
+            K::IdentityLinked | K::IdentityUnlinked => {
+                (fields.len() == 1 && !text.is_empty()).then(|| EventDetail::Host(text.to_owned()))
+            }
+            K::Disabled => (fields.len() == 1).then(|| EventDetail::Reason(text.to_owned())),
+            K::TokenCreated => match fields.as_slice() {
+                [name, scope, repos, until] if !name.is_empty() && is_date(until) => {
+                    Some(EventDetail::TokenCreated {
+                        name: (*name).to_owned(),
+                        access: parse_scope_code(scope)?,
+                        repositories: digits(repos)?,
+                        until: (*until).to_owned(),
+                    })
+                }
+                _ => None,
+            },
+            K::TokenRevoked => {
+                (fields.len() == 1 && !text.is_empty()).then(|| EventDetail::TokenRevoked {
+                    name: text.to_owned(),
+                })
+            }
+            K::RoleGranted | K::RoleRevoked => match fields.as_slice() {
+                [repository, role] if repository.contains('/') => Some(EventDetail::Role {
+                    repository: (*repository).to_owned(),
+                    role: RepoRole::parse(role)?,
+                }),
+                _ => None,
+            },
+        }
+    }
+}
+
+/// What a stored detail may hold: every tab-separated field display-safe, the whole cut at [`EVENT_DETAIL_MAX_CHARS`]. Idempotent.
+pub(crate) fn sanitize_detail(text: &str) -> String {
+    text.split('\t')
+        .map(|f| escape_display(f, EVENT_DETAIL_MAX_CHARS))
+        .collect::<Vec<_>>()
+        .join("\t")
+        .chars()
+        .take(EVENT_DETAIL_MAX_CHARS)
+        .collect()
+}
+
 /// One row.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AccountEvent {
@@ -132,6 +295,31 @@ impl AccountEvent {
             detail: escape_display(detail, EVENT_DETAIL_MAX_CHARS),
             at,
         }
+    }
+}
+
+impl AccountEvent {
+    /// An event whose detail is **data**: the typed form of `kind`, encoded (see [`EventDetail`]). Use this for everything the system
+    /// generates; [`AccountEvent::new`] is for text a person typed.
+    pub fn typed(
+        account: &str,
+        kind: AccountEventKind,
+        by: EventBy,
+        detail: &EventDetail,
+        at: u64,
+    ) -> Self {
+        Self {
+            account: account.to_owned(),
+            kind,
+            by,
+            detail: sanitize_detail(&detail.to_stored()),
+            at,
+        }
+    }
+
+    /// The typed form of this event's detail, or `None` when it does not parse (an older or damaged row): the reader shows nothing for it.
+    pub fn detail_data(&self) -> Option<EventDetail> {
+        EventDetail::parse(self.kind, &self.detail)
     }
 }
 
@@ -167,7 +355,7 @@ impl InMemoryAccountEventStore {
 impl AccountEventStore for InMemoryAccountEventStore {
     fn record(&self, event: &AccountEvent) -> Result<()> {
         let mut e = event.clone();
-        e.detail = escape_display(&event.detail, EVENT_DETAIL_MAX_CHARS);
+        e.detail = sanitize_detail(&event.detail);
         self.lock()?.push(e);
         Ok(())
     }
@@ -219,7 +407,7 @@ pub(crate) fn insert_event(
             event.account,
             event.kind.as_str(),
             event.by.as_str(),
-            escape_display(&event.detail, EVENT_DETAIL_MAX_CHARS),
+            sanitize_detail(&event.detail),
             i64::try_from(event.at).unwrap_or(i64::MAX)
         ],
     )?;

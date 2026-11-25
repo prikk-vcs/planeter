@@ -10,6 +10,7 @@
 //! the trusted-proxy [`client_ip`](mod@client_ip) rules. Every read-path prikk call runs through the
 //! [`gate`]: off the async workers, under a bounded number of concurrent invocations (IS-4).
 
+pub mod account_events;
 pub mod api;
 pub(crate) mod authn;
 pub mod budget;
