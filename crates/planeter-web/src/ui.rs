@@ -1131,7 +1131,7 @@ async fn login_submit(
                 state.ip_throttle.record_success(k);
             }
             // The one lifetime of a new session, from the session store (`PLANETER_SESSION_HOURS`): the expiry and the cookie use it both.
-            let ttl = state.sessions.ttl_secs();
+            let ttl = authn::session_ttl_secs(&state);
             let created =
                 authn::blocking(&state, move |s| s.sessions.create(user, now, now + ttl)).await;
             match created {
@@ -1361,7 +1361,7 @@ async fn oidc_callback(
         );
     }
     let now = (state.now_unix)();
-    let ttl = state.sessions.ttl_secs();
+    let ttl = authn::session_ttl_secs(&state);
     // Code exchange and ID-token verification run a confined `curl`; the account lookup and the session
     // write are SQLite. All of it is blocking, so all of it runs off the async workers.
     let completed = authn::blocking(&state, move |s| {

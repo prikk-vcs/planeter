@@ -976,10 +976,7 @@ async fn main() {
             // **The guard of the sign-in provider only**: its own instance, so that no other outbound path (there are none today besides this one;
             // webhooks and the rest would build their own) inherits the allowance. With the operator's `on`, that one host (the issuer's)
             // may be on a private address and every endpoint its discovery names must be on it (RFC 014 D-11).
-            let guard = planeter_core::StdEgressGuard::new(planeter_core::EgressPolicy {
-                allow_private_for_host: provider_settings.private_host.clone(),
-                ..Default::default()
-            });
+            let guard = provider_env::provider_guard(&provider_settings);
             let fetcher = Arc::new(planeter_core::CurlFetcher::new(Box::new(guard)));
             let provider = planeter_auth::OidcProvider::new(cfg, fetcher);
             Some(Arc::new(if provider_settings.private_host.is_some() {

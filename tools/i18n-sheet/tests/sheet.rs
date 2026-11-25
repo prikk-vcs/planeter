@@ -195,6 +195,7 @@ fn the_groups_are_what_the_handoff_says() {
                 || r.key.starts_with("quota.")
                 || r.key.starts_with("recovery.")
                 || r.key.starts_with("operator.")
+                || r.key.starts_with("provider.")
                 || (r.program == Program::Web && r.key.starts_with("propose."));
             assert_eq!(r.group == Group::D, d, "{}", r.key);
             assert_eq!(

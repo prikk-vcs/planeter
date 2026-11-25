@@ -83,6 +83,12 @@ where
         .await
 }
 
+/// The lifetime of a new sign-in in seconds, from the session store (`PLANETER_SESSION_HOURS`): the one value both sign-in paths use for the
+/// session's expiry and for the cookie's `Max-Age` (RFC 014 D-13). Handlers reach the session store only through here.
+pub(crate) fn session_ttl_secs(state: &AppState) -> u64 {
+    state.sessions.ttl_secs()
+}
+
 /// The one place a request becomes a [`Principal`]: a bearer token (the API path), else a session cookie
 /// (the UI path), else anonymous. A request carrying neither costs nothing; otherwise the lookups run on
 /// the blocking pool, without a permit (token and session checks are cheap and take no Argon2id).

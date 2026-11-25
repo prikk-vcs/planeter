@@ -81,6 +81,7 @@ web	error.*	D	API errors	the `message` or the `hint` of an API error body (devel
 web	quota.*	D	Quota refusals	the `message` or the `hint` of a quota refusal of a proposal
 web	operator.*	D	The operator's command	a line of `planeter operator` (the help, a refusal, the result): the person who runs the server reads it in a terminal
 web	account.*	B	An account's own log	a sentence of the log of what happened to an account (RFC 014 D-7): the person who holds the account reads it, and the operator's commands print the same sentence
+web	provider.*	D	The server's start-up	a line or a refusal printed at start-up about the sign-in provider's address and the length of a sign-in (RFC 014 D-11, D-13): the person who runs the server reads it in a terminal
 web	recovery.*	D	Recovery	a sentence of a repository's recovery plan or record (the operator reads it)
 web	propose.*	D	API answers	a sentence in the answer to a proposal sent to the server
 client	help.*	C	Help and version	the text printed by --help

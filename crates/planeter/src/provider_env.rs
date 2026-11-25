@@ -59,6 +59,16 @@ pub fn read(env: &dyn Fn(&str) -> Option<String>, t: &T) -> Result<ProviderSetti
     })
 }
 
+/// **The egress guard of the sign-in provider, and of nothing else**: its own instance, so that no other outbound path inherits the
+/// allowance (a caller builds its own guard; this one is handed to the provider's fetcher only). With the operator's `on`, the issuer's host
+/// (and only it) may be on a private address; every other host, and the scheme (`https` only), are judged as for any caller.
+pub fn provider_guard(s: &ProviderSettings) -> planeter_core::StdEgressGuard {
+    planeter_core::StdEgressGuard::new(planeter_core::EgressPolicy {
+        allow_private_for_host: s.private_host.clone(),
+        ..Default::default()
+    })
+}
+
 /// The start-up lines for these settings (the allowance names its host; the lifetime its hours).
 pub fn lines(s: &ProviderSettings, t: &T) -> Vec<String> {
     let mut out = Vec::new();
@@ -97,6 +107,57 @@ mod tests {
 
     fn ja() -> T {
         T::new(Lang::from_tag("ja").unwrap())
+    }
+
+    #[test]
+    fn the_provider_guard_admits_the_one_host_and_nothing_else_and_is_not_shared() {
+        use planeter_core::{EgressError, EgressGuard};
+        let on = ProviderSettings {
+            private_host: Some("127.0.0.1".into()),
+            session_hours: 168,
+        };
+        let g = provider_guard(&on);
+        assert!(
+            g.check("https://127.0.0.1:8443/x").is_ok(),
+            "the issuer's own host"
+        );
+        for refused in [
+            "https://127.0.0.2/x",
+            "https://10.0.0.5/x",
+            "https://169.254.169.254/x",
+            "https://[::1]/x",
+            "https://100.64.0.1/x",
+        ] {
+            assert!(
+                matches!(g.check(refused), Err(EgressError::BlockedAddress(_))),
+                "{refused}"
+            );
+        }
+        assert!(
+            matches!(
+                g.check("http://127.0.0.1/x"),
+                Err(EgressError::DisallowedScheme(_))
+            ),
+            "https only"
+        );
+        assert!(matches!(
+            g.check("https://user:pw@127.0.0.1/x"),
+            Err(EgressError::Unparsable(_))
+        ));
+        // With the allowance off, even the issuer's host is judged like any other.
+        let off = ProviderSettings {
+            private_host: None,
+            session_hours: 168,
+        };
+        assert!(matches!(
+            provider_guard(&off).check("https://127.0.0.1/x"),
+            Err(EgressError::BlockedAddress(_))
+        ));
+        // A guard any other caller builds is not touched by it.
+        assert!(matches!(
+            planeter_core::StdEgressGuard::default().check("https://127.0.0.1:8443/x"),
+            Err(EgressError::BlockedAddress(_))
+        ));
     }
 
     #[test]
