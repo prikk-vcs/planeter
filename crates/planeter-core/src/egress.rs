@@ -13,9 +13,11 @@
 //!   `172.16/12`, `192.168/16`, CGNAT `100.64/10`), unspecified, multicast, reserved, and their IPv6
 //!   counterparts (`::1`, `fe80::/10`, `fc00::/7`, `ff00::/8`, IPv4-mapped forms, NAT64) are refused —
 //!   unless the policy explicitly allows private targets (a self-hosted webhook receiver, say);
-//! - **one named host may be allowed to be private** ([`EgressPolicy::allow_private_for_host`], RFC 014 D-11): the identity provider's, when the
-//!   operator says so. It is compared as a whole host (case-insensitive, port ignored, no wildcard, no suffix match) and changes nothing else:
-//!   https only, every resolved address is classified and pinned for **every other host exactly as before**;
+//! - **one named authority may be allowed to be private** ([`EgressPolicy::allow_private_for_authority`], RFC 014 D-11): the identity provider's
+//!   **host and port**, when the operator says so. The host is compared as a whole (case-insensitive, no wildcard, no suffix match) **and the
+//!   effective port must be the same** (the URL's, else the scheme's 443): another port of the same host is **another service**, and is judged
+//!   as any private target. It changes nothing else: https only, every resolved address is classified and pinned for **every other
+//!   authority exactly as before**;
 //! - userinfo in the URL is refused (a classic confusion vector);
 //! - **redirects are re-checked**: a caller following `3xx` runs the new location through the guard
 //!   again before connecting.
@@ -95,10 +97,42 @@ pub struct EgressPolicy {
     /// Permit private/loopback/link-local targets (default: refused). For deployments whose webhook
     /// receivers live on an internal network — an explicit, logged opt-in, never a default.
     pub allow_private_targets: bool,
-    /// Permit private, loopback, link-local and CGNAT addresses **for exactly this host** (a name or a literal address; compared
-    /// case-insensitively, a trailing dot ignored, the port ignored, no wildcard and no suffix match). Every other host is judged as
-    /// before. Used for the OIDC provider's own host and for nothing else (RFC 014 D-11).
-    pub allow_private_for_host: Option<String>,
+    /// Permit private, loopback, link-local and CGNAT addresses **for exactly this authority: this host and this port** (a name or a
+    /// literal address; the host compared case-insensitively with a trailing dot ignored, no wildcard and no suffix match; the port is the
+    /// URL's, else 443). **The same host on another port is another service and is judged as before**, and so is every other host. Used for
+    /// the OIDC provider's own authority and for nothing else (RFC 014 D-11).
+    pub allow_private_for_authority: Option<Authority>,
+}
+
+/// A host and a port: what one service is, as far as the egress guard is concerned.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Authority {
+    /// As [`comparable_host`] writes it.
+    pub host: String,
+    pub port: u16,
+}
+
+impl Authority {
+    pub fn new(host: &str, port: u16) -> Self {
+        Self {
+            host: comparable_host(host),
+            port,
+        }
+    }
+
+    /// How a person reads it: the host, and `:port` unless it is 443 (an IPv6 literal in brackets).
+    pub fn shown(&self) -> String {
+        let host = if self.host.contains(':') {
+            format!("[{}]", self.host)
+        } else {
+            self.host.clone()
+        };
+        if self.port == 443 {
+            host
+        } else {
+            format!("{host}:{}", self.port)
+        }
+    }
 }
 
 /// How a name becomes addresses (the OS resolver in production; a test can replace it to show that the address checked is the address
@@ -106,10 +140,15 @@ pub struct EgressPolicy {
 pub type Resolver =
     std::sync::Arc<dyn Fn(&str, u16) -> Result<Vec<SocketAddr>, EgressError> + Send + Sync>;
 
-/// The host of an `https://…` URL as [`comparable_host`] writes it, or `None` when the URL has none or does not parse.
-pub fn url_host(url: &str) -> Option<String> {
+/// The scheme (lower case) and the [`Authority`] of a URL: its host and its **effective port** (the explicit one, else the scheme's default,
+/// 443 for `https`), or `None` when the URL has no host or does not parse.
+pub fn url_authority(url: &str) -> Option<(String, Authority)> {
     let parsed = url::Url::parse(url).ok()?;
-    Some(comparable_host(parsed.host_str()?))
+    let port = parsed.port_or_known_default()?;
+    Some((
+        parsed.scheme().to_ascii_lowercase(),
+        Authority::new(parsed.host_str()?, port),
+    ))
 }
 
 /// A host as compared for the one-host allowance: lower case, no brackets, no trailing dot.
@@ -190,12 +229,12 @@ impl EgressGuard for StdEgressGuard {
             .port_or_known_default()
             .ok_or_else(|| EgressError::Unparsable("no port".to_owned()))?;
         let addrs = self.resolve(&host, port)?;
-        let the_allowed_host = self
+        let the_allowed_authority = self
             .policy
-            .allow_private_for_host
-            .as_deref()
-            .is_some_and(|h| comparable_host(h) == comparable_host(&host));
-        if !self.policy.allow_private_targets && !the_allowed_host {
+            .allow_private_for_authority
+            .as_ref()
+            .is_some_and(|a| a.host == comparable_host(&host) && a.port == port);
+        if !self.policy.allow_private_targets && !the_allowed_authority {
             // All-or-nothing: one blocked address among the answers refuses the whole target.
             if let Some(bad) = addrs.iter().find(|a| !is_public_unicast(a.ip())) {
                 return Err(EgressError::BlockedAddress(format!(
@@ -370,29 +409,35 @@ mod tests {
         ("v6.test", &["fd12::5"]),
     ];
 
-    fn one_host_guard(host: &str) -> StdEgressGuard {
+    fn one_host_guard(host: &str, port: u16) -> StdEgressGuard {
         StdEgressGuard::new(EgressPolicy {
-            allow_private_for_host: Some(host.to_owned()),
+            allow_private_for_authority: Some(Authority::new(host, port)),
             ..Default::default()
         })
         .with_resolver(resolving(NAMES))
     }
 
     #[test]
-    fn the_one_host_allowance_admits_that_host_only_and_pins_what_it_resolved() {
-        let g = one_host_guard("IDP.test.");
-        // The named host: private is admitted (case, a trailing dot and the port do not matter), https only, and its addresses are pinned.
-        for u in ["https://idp.test/x", "https://IDP.TEST:8443/x"] {
+    fn the_one_authority_allowance_admits_that_host_and_port_only_and_pins_what_it_resolved() {
+        let g = one_host_guard("IDP.test.", 8443);
+        // The named authority: private is admitted (case and a trailing dot do not matter; the port is the allowed one), https only, and its
+        // addresses are pinned.
+        for u in ["https://idp.test:8443/x", "https://IDP.TEST:8443/x"] {
             let t = g.check(u).unwrap_or_else(|e| panic!("{u}: {e}"));
             assert_eq!(t.addrs[0].ip().to_string(), "127.0.0.1");
         }
         assert!(matches!(
-            g.check("http://idp.test/x"),
+            g.check("http://idp.test:8443/x"),
             Err(EgressError::DisallowedScheme(_))
         ));
-        // Everything else is judged as before: another private host, a name that resolves to a private and a public address, a literal
-        // private address, loopback by name, a suffix or a prefix of the allowed name, a wildcard.
+        // Everything else is judged as before: **the same host on another port (and on no port: 443)**, another private host, a name that
+        // resolves to a private and a public address, a literal private address, loopback by name, a suffix or a prefix of the allowed name.
         for u in [
+            "https://idp.test:9999/",
+            "https://idp.test/",
+            "https://idp.test:443/",
+            "https://idp.test:8444/",
+            "https://idp.test:6379/token",
             "https://other.test/",
             "https://mixed.test/",
             "https://10.0.0.5/",
@@ -412,14 +457,46 @@ mod tests {
             );
         }
         assert!(g.check("https://public.test/").is_ok());
-        // A literal address as the allowed host: that address only (the port is ignored).
+        // An issuer with no explicit port allows 443 and refuses 8443.
+        let plain = one_host_guard("idp.test", 443);
+        assert!(plain.check("https://idp.test/x").is_ok());
+        assert!(plain.check("https://idp.test:443/x").is_ok());
+        assert!(matches!(
+            plain.check("https://idp.test:8443/x"),
+            Err(EgressError::BlockedAddress(_))
+        ));
+        // A literal address as the allowed authority: that address and port only.
         let lit = StdEgressGuard::new(EgressPolicy {
-            allow_private_for_host: Some("127.0.0.1".into()),
+            allow_private_for_authority: Some(Authority::new("127.0.0.1", 9443)),
             ..Default::default()
         });
         assert!(lit.check("https://127.0.0.1:9443/").is_ok());
+        for u in [
+            "https://127.0.0.1:9444/",
+            "https://127.0.0.1/",
+            "https://127.0.0.2:9443/",
+        ] {
+            assert!(
+                matches!(lit.check(u), Err(EgressError::BlockedAddress(_))),
+                "{u}"
+            );
+        }
+        // The literal `[::1]` form, brackets in the URL and not in the allowance (the same authority).
+        let v6 = StdEgressGuard::new(EgressPolicy {
+            allow_private_for_authority: Some(Authority::new("[::1]", 8443)),
+            ..Default::default()
+        });
+        assert!(v6.check("https://[::1]:8443/").is_ok());
         assert!(matches!(
-            lit.check("https://127.0.0.2/"),
+            v6.check("https://[::1]:8444/"),
+            Err(EgressError::BlockedAddress(_))
+        ));
+        assert!(matches!(
+            v6.check("https://[::1]/"),
+            Err(EgressError::BlockedAddress(_))
+        ));
+        assert!(matches!(
+            v6.check("https://[::2]:8443/"),
             Err(EgressError::BlockedAddress(_))
         ));
         // The allowance is part of the policy of one guard: the default guard of every other caller is untouched.

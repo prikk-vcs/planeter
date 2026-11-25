@@ -167,9 +167,11 @@ fn resolver() -> planeter_core::Resolver {
     )
 }
 
-fn guard(allow_for: Option<&str>) -> StdEgressGuard {
+/// The guard of the sign-in provider: with `Some(issuer URL)` the **authority** of that URL (its host and effective port) may be private.
+fn guard(allow_for_issuer: Option<&str>) -> StdEgressGuard {
     StdEgressGuard::new(EgressPolicy {
-        allow_private_for_host: allow_for.map(str::to_owned),
+        allow_private_for_authority: allow_for_issuer
+            .map(|u| planeter_core::url_authority(u).expect("an issuer URL").1),
         ..Default::default()
     })
     .with_resolver(resolver())
@@ -285,7 +287,7 @@ fn with_the_allowance_on_the_whole_flow_completes_and_the_linked_person_is_signe
     let s = Standin::start("on", "127.0.0.1");
     let issuer = format!("https://idp.test:{}", s.port);
     publish(&s, &issuer);
-    let p = provider(&issuer, guard(Some("idp.test")), &s.dir, true);
+    let p = provider(&issuer, guard(Some(&issuer)), &s.dir, true);
     let begin = p
         .begin_login(1_000)
         .expect("discovery over the private address");
@@ -373,10 +375,13 @@ fn a_second_private_host_named_in_discovery_is_refused_and_never_asked() {
         discovery(&issuer, &format!("other.test:{}", other.port)),
     );
     issuer_server.put("jwks.json", jwks());
-    let p = provider(&issuer, guard(Some("idp.test")), &issuer_server.dir, true);
+    let p = provider(&issuer, guard(Some(&issuer)), &issuer_server.dir, true);
     match p.begin_login(1_000) {
         Err(OidcError::Provider(why)) => {
-            assert_eq!(why, "the token endpoint is not on the issuer's host")
+            assert_eq!(
+                why,
+                "the token endpoint is not on the issuer's host and port"
+            )
         }
         other => panic!("expected the refusal naming the token endpoint, got {other:?}"),
     }
@@ -385,7 +390,7 @@ fn a_second_private_host_named_in_discovery_is_refused_and_never_asked() {
         "the other private host was never asked"
     );
     // Even without the endpoint comparison (the guard alone) that host is refused: it is private and it is not the allowed one.
-    let g = guard(Some("idp.test"));
+    let g = guard(Some(&issuer));
     assert!(matches!(
         g.check(&format!("https://other.test:{}/token", other.port)),
         Err(EgressError::BlockedAddress(_))
@@ -403,16 +408,93 @@ fn a_second_private_host_named_in_discovery_is_refused_and_never_asked() {
         .unwrap();
         d[field] = serde_json::json!(format!("https://mixed.test:{}/x", other.port));
         issuer_server.put("discovery.json", d.to_string());
-        let p = provider(&issuer, guard(Some("idp.test")), &issuer_server.dir, true);
+        let p = provider(&issuer, guard(Some(&issuer)), &issuer_server.dir, true);
         match p.begin_login(1_000) {
             Err(OidcError::Provider(why)) => assert_eq!(
                 why,
-                format!("the {name} endpoint is not on the issuer's host")
+                format!("the {name} endpoint is not on the issuer's host and port")
             ),
             other => panic!("{field}: {other:?}"),
         }
     }
     assert!(other.requests().is_empty());
+}
+
+#[test]
+fn another_port_of_the_issuers_host_is_another_service_and_is_refused_and_never_asked() {
+    need_tools!();
+    let issuer_server = Standin::start("port-a", "127.0.0.1");
+    // Another service on the **same host** (the same loopback address, the same name): what an operator did not allow.
+    let admin = Standin::start("port-b", "127.0.0.1");
+    assert_ne!(issuer_server.port, admin.port);
+    let issuer = format!("https://idp.test:{}", issuer_server.port);
+    issuer_server.put("jwks.json", jwks());
+    // Each of the three endpoints, one at a time, on the other port of the issuer's host: refused with that endpoint named.
+    for (field, name) in [
+        ("authorization_endpoint", "authorization"),
+        ("token_endpoint", "token"),
+        ("jwks_uri", "jwks"),
+    ] {
+        let mut d: serde_json::Value = serde_json::from_str(&discovery(
+            &issuer,
+            &format!("idp.test:{}", issuer_server.port),
+        ))
+        .unwrap();
+        d[field] = serde_json::json!(format!("https://idp.test:{}/x", admin.port));
+        issuer_server.put("discovery.json", d.to_string());
+        let p = provider(&issuer, guard(Some(&issuer)), &issuer_server.dir, true);
+        match p.begin_login(1_000) {
+            Err(OidcError::Provider(why)) => assert_eq!(
+                why,
+                format!("the {name} endpoint is not on the issuer's host and port"),
+                "{field}"
+            ),
+            other => panic!("{field}: {other:?}"),
+        }
+    }
+    // An endpoint without a port (443) is another authority too, and so is the same port over `http`.
+    for endpoint in [
+        "https://idp.test/token",
+        &format!("http://idp.test:{}/token", issuer_server.port),
+    ] {
+        let mut d: serde_json::Value = serde_json::from_str(&discovery(
+            &issuer,
+            &format!("idp.test:{}", issuer_server.port),
+        ))
+        .unwrap();
+        d["token_endpoint"] = serde_json::json!(endpoint);
+        issuer_server.put("discovery.json", d.to_string());
+        let p = provider(&issuer, guard(Some(&issuer)), &issuer_server.dir, true);
+        assert!(
+            matches!(p.begin_login(1_000), Err(OidcError::Provider(_))),
+            "{endpoint}"
+        );
+    }
+    assert!(
+        admin.requests().is_empty(),
+        "the other port received nothing: {:?}",
+        admin.requests()
+    );
+    // The guard alone refuses the other port (private, and not the allowed authority) and admits the allowed one.
+    let g = guard(Some(&issuer));
+    assert!(matches!(
+        g.check(&format!("https://idp.test:{}/x", admin.port)),
+        Err(EgressError::BlockedAddress(_))
+    ));
+    assert!(g.check(&format!("{issuer}/x")).is_ok());
+    // The issuer's own stand-in was asked for the discovery document (once per attempt) and for nothing else.
+    let asked: Vec<String> = issuer_server
+        .requests()
+        .iter()
+        .map(|r| r["path"].as_str().unwrap().to_owned())
+        .collect();
+    assert_eq!(asked.len(), 5, "{asked:?}");
+    assert!(
+        asked
+            .iter()
+            .all(|p| p == "/.well-known/openid-configuration"),
+        "{asked:?}"
+    );
 }
 
 #[test]
@@ -434,7 +516,7 @@ fn a_redirect_to_another_private_address_is_not_followed() {
             other.port
         ),
     );
-    let p = provider(&issuer, guard(Some("idp.test")), &s.dir, true);
+    let p = provider(&issuer, guard(Some(&issuer)), &s.dir, true);
     assert!(
         matches!(p.begin_login(1_000), Err(OidcError::Provider(_))),
         "a redirect answer is not a discovery document"
@@ -450,7 +532,7 @@ fn a_redirect_to_another_private_address_is_not_followed() {
         "https://93.184.216.34/x".to_owned(),
     ] {
         s.put("redirect", target);
-        let p = provider(&issuer, guard(Some("idp.test")), &s.dir, true);
+        let p = provider(&issuer, guard(Some(&issuer)), &s.dir, true);
         assert!(p.begin_login(1_000).is_err());
     }
     assert!(other.requests().is_empty());
@@ -467,15 +549,11 @@ fn a_redirect_to_another_private_address_is_not_followed() {
 }
 
 #[test]
-fn an_http_issuer_is_refused_even_on_the_allowed_host() {
+fn an_http_issuer_is_refused_even_on_the_allowed_authority() {
     need_tools!();
     let s = Standin::start("http", "127.0.0.1");
-    let p = provider(
-        &format!("http://idp.test:{}", s.port),
-        guard(Some("idp.test")),
-        &s.dir,
-        true,
-    );
+    let issuer = format!("http://idp.test:{}", s.port);
+    let p = provider(&issuer, guard(Some(&issuer)), &s.dir, true);
     match p.begin_login(1_000) {
         Err(OidcError::Provider(why)) => {
             assert!(why.contains("disallowed URL scheme: http"), "{why}")
@@ -486,15 +564,15 @@ fn an_http_issuer_is_refused_even_on_the_allowed_host() {
 }
 
 #[test]
-fn a_name_with_a_private_and_a_public_address_is_refused_unless_it_is_the_allowed_host() {
+fn a_name_with_a_private_and_a_public_address_is_refused_unless_it_is_the_allowed_authority() {
     // (No stand-in needed: the guard alone, with the resolver that gives `mixed.test` both kinds.)
-    let g = guard(Some("idp.test"));
+    let g = guard(Some("https://idp.test:8443"));
     assert!(matches!(
         g.check("https://mixed.test:8443/"),
         Err(EgressError::BlockedAddress(_))
     ));
     // The allowed host itself is admitted whatever it resolves to (the operator named it), and everything it resolved is pinned.
-    let only_mixed = guard(Some("mixed.test"));
+    let only_mixed = guard(Some("https://mixed.test:8443"));
     let t = only_mixed.check("https://mixed.test:8443/").unwrap();
     assert_eq!(t.addrs.len(), 2);
 }
@@ -519,7 +597,7 @@ fn the_pinned_address_is_the_address_connected_to_even_if_the_name_resolves_else
         Ok(vec![SocketAddr::new(ip.parse().unwrap(), port)])
     });
     let g = StdEgressGuard::new(EgressPolicy {
-        allow_private_for_host: Some("idp.test".into()),
+        allow_private_for_authority: Some(planeter_core::Authority::new("idp.test", s.port)),
         ..Default::default()
     })
     .with_resolver(flapping);
@@ -542,7 +620,7 @@ fn the_pinned_address_is_the_address_connected_to_even_if_the_name_resolves_else
     );
     // The arguments say so: the connection is pinned to the checked address (`--resolve name:port:address`), never left to the name.
     let target = {
-        let again = guard(Some("idp.test"));
+        let again = guard(Some(&issuer));
         again.check(&url).unwrap()
     };
     let args = CurlFetcher::curl_args(

@@ -343,7 +343,7 @@ fn the_start_up_lines_say_what_is_on_and_the_default_is_seven_days() {
     let log = s.stop();
     assert!(log.contains("planeter: Sign-ins last 24 hours."), "{log}");
     assert!(
-        log.contains("The sign-in provider's host idp.internal.example is allowed to be on a private address (PLANETER_OIDC_ALLOW_PRIVATE_ISSUER=on). Every other outbound address is checked as before."),
+        log.contains("The sign-in provider's host idp.internal.example:8443 is allowed to be on a private address (PLANETER_OIDC_ALLOW_PRIVATE_ISSUER=on). Every other outbound address is checked as before."),
         "{log}"
     );
     // The line names a host and a number; nothing secret.
@@ -354,7 +354,7 @@ fn the_start_up_lines_say_what_is_on_and_the_default_is_seven_days() {
     assert!(
         log.contains("ログイン中の状態は 24 時間続きます。")
             && log.contains(
-                "idp.internal.example は、プライベートアドレスにあることが許可されています"
+                "idp.internal.example:8443 は、プライベートアドレスにあることが許可されています"
             ),
         "{log}"
     );

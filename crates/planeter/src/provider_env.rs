@@ -7,8 +7,8 @@ use planeter_web::catalog::{Key, T};
 /// What the environment asked for.
 #[derive(Debug, PartialEq, Eq)]
 pub struct ProviderSettings {
-    /// The one host that may be on a private address: the issuer's host, when the operator said so.
-    pub private_host: Option<String>,
+    /// The one authority (host and port) that may be on a private address: the issuer's, when the operator said so.
+    pub private_authority: Option<planeter_core::Authority>,
     /// The lifetime of a new sign-in, in hours.
     pub session_hours: u64,
 }
@@ -29,12 +29,12 @@ pub fn read(env: &dyn Fn(&str) -> Option<String>, t: &T) -> Result<ProviderSetti
                 .text());
         }
     };
-    let private_host = if allow {
+    let private_authority = if allow {
         let Some(issuer) = issuer else {
             return Err(t.get(Key::ProviderErrorAllowPrivateNoProvider));
         };
-        match planeter_core::url_host(&issuer) {
-            Some(h) if !h.is_empty() => Some(h),
+        match planeter_core::url_authority(&issuer) {
+            Some((scheme, a)) if scheme == "https" && !a.host.is_empty() => Some(a),
             _ => {
                 return Err(t
                     .msg(Key::ProviderErrorIssuerHost)
@@ -54,28 +54,29 @@ pub fn read(env: &dyn Fn(&str) -> Option<String>, t: &T) -> Result<ProviderSetti
                 .text()
         })?;
     Ok(ProviderSettings {
-        private_host,
+        private_authority,
         session_hours,
     })
 }
 
 /// **The egress guard of the sign-in provider, and of nothing else**: its own instance, so that no other outbound path inherits the
-/// allowance (a caller builds its own guard; this one is handed to the provider's fetcher only). With the operator's `on`, the issuer's host
-/// (and only it) may be on a private address; every other host, and the scheme (`https` only), are judged as for any caller.
+/// allowance (a caller builds its own guard; this one is handed to the provider's fetcher only). With the operator's `on`, the issuer's
+/// **host and port** (and only that authority) may be on a private address; every other host, **the same host on another port**, and the
+/// scheme (`https` only), are judged as for any caller.
 pub fn provider_guard(s: &ProviderSettings) -> planeter_core::StdEgressGuard {
     planeter_core::StdEgressGuard::new(planeter_core::EgressPolicy {
-        allow_private_for_host: s.private_host.clone(),
+        allow_private_for_authority: s.private_authority.clone(),
         ..Default::default()
     })
 }
 
-/// The start-up lines for these settings (the allowance names its host; the lifetime its hours).
+/// The start-up lines for these settings (the allowance names its host, and `:port` when the port is not 443; the lifetime its hours).
 pub fn lines(s: &ProviderSettings, t: &T) -> Vec<String> {
     let mut out = Vec::new();
-    if let Some(host) = &s.private_host {
+    if let Some(authority) = &s.private_authority {
         out.push(
             t.msg(Key::ProviderLineAllowPrivate)
-                .with("host", host)
+                .with("host", authority.shown())
                 .text(),
         );
     }
@@ -113,7 +114,7 @@ mod tests {
     fn the_provider_guard_admits_the_one_host_and_nothing_else_and_is_not_shared() {
         use planeter_core::{EgressError, EgressGuard};
         let on = ProviderSettings {
-            private_host: Some("127.0.0.1".into()),
+            private_authority: Some(planeter_core::Authority::new("127.0.0.1", 8443)),
             session_hours: 168,
         };
         let g = provider_guard(&on);
@@ -121,6 +122,17 @@ mod tests {
             g.check("https://127.0.0.1:8443/x").is_ok(),
             "the issuer's own host"
         );
+        // The same host on another port is another service.
+        for other_port in [
+            "https://127.0.0.1:6379/x",
+            "https://127.0.0.1/x",
+            "https://127.0.0.1:8444/x",
+        ] {
+            assert!(
+                matches!(g.check(other_port), Err(EgressError::BlockedAddress(_))),
+                "{other_port}"
+            );
+        }
         for refused in [
             "https://127.0.0.2/x",
             "https://10.0.0.5/x",
@@ -144,9 +156,9 @@ mod tests {
             g.check("https://user:pw@127.0.0.1/x"),
             Err(EgressError::Unparsable(_))
         ));
-        // With the allowance off, even the issuer's host is judged like any other.
+        // With the allowance off, even the issuer's authority is judged like any other.
         let off = ProviderSettings {
-            private_host: None,
+            private_authority: None,
             session_hours: 168,
         };
         assert!(matches!(
@@ -166,7 +178,7 @@ mod tests {
         assert_eq!(
             s,
             ProviderSettings {
-                private_host: None,
+                private_authority: None,
                 session_hours: 168
             }
         );
@@ -188,7 +200,10 @@ mod tests {
             ("PLANETER_SESSION_HOURS", "24"),
         ]);
         let s = read(&e, &en()).unwrap();
-        assert_eq!(s.private_host.as_deref(), Some("idp.internal.example"));
+        assert_eq!(
+            s.private_authority,
+            Some(planeter_core::Authority::new("idp.internal.example", 8443))
+        );
         assert_eq!(s.session_hours, 24);
         let l = lines(&s, &en());
         assert!(
@@ -196,10 +211,25 @@ mod tests {
             "{l:?}"
         );
         assert_eq!(l[1], "Sign-ins last 24 hours.");
+        // The line names the authority: `host:port` when the port is not 443, the bare host when it is.
+        assert!(
+            l[0].contains("host idp.internal.example:8443 is allowed"),
+            "{l:?}"
+        );
+        let default_port = ProviderSettings {
+            private_authority: Some(planeter_core::Authority::new("idp.internal.example", 443)),
+            session_hours: 168,
+        };
+        assert!(lines(&default_port, &en())[0].contains("host idp.internal.example is allowed"));
+        let v6 = ProviderSettings {
+            private_authority: Some(planeter_core::Authority::new("[::1]", 8443)),
+            session_hours: 168,
+        };
+        assert!(lines(&v6, &en())[0].contains("host [::1]:8443 is allowed"));
         assert_eq!(
             lines(
                 &ProviderSettings {
-                    private_host: None,
+                    private_authority: None,
                     session_hours: 1
                 },
                 &en()

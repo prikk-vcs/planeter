@@ -68,9 +68,9 @@ fn the_three_kinds_of_call_and_what_curl_is_given_for_each() {
     )
     .unwrap();
 
-    // The guard of the sign-in provider with the allowance for its own host: the name resolves to a private address.
+    // The guard of the sign-in provider with the allowance for its own authority: the name resolves to a private address.
     let guard = StdEgressGuard::new(EgressPolicy {
-        allow_private_for_host: Some("idp.test".into()),
+        allow_private_for_authority: Some(planeter_core::Authority::new("idp.test", 8443)),
         ..Default::default()
     })
     .with_resolver(Arc::new(

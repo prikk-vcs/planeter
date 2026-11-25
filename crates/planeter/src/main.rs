@@ -979,7 +979,7 @@ async fn main() {
             let guard = provider_env::provider_guard(&provider_settings);
             let fetcher = Arc::new(planeter_core::CurlFetcher::new(Box::new(guard)));
             let provider = planeter_auth::OidcProvider::new(cfg, fetcher);
-            Some(Arc::new(if provider_settings.private_host.is_some() {
+            Some(Arc::new(if provider_settings.private_authority.is_some() {
                 provider.with_endpoints_on_issuer_host()
             } else {
                 provider

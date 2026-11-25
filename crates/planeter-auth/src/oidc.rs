@@ -158,7 +158,7 @@ pub struct OidcProvider {
     discovery: Mutex<Option<Discovery>>,
     jwks: Mutex<Option<JwkSet>>,
     pending: PendingLogins,
-    /// Every endpoint the discovery document names must be on the issuer's host (set when the operator allowed a private provider).
+    /// Every endpoint the discovery document names must be on the issuer's host and port (set when the operator allowed a private provider).
     endpoints_on_issuer_host: bool,
 }
 
@@ -174,9 +174,10 @@ impl OidcProvider {
         }
     }
 
-    /// **Require every endpoint of the discovery document (authorization, token, JWKS) to be on the issuer's host** (RFC 014 D-11). Used when
-    /// the operator has allowed the issuer's host to be private: a provider must not be able to point planeter at some other internal
-    /// address through its own discovery document. The refusal names the endpoint and says nothing else.
+    /// **Require every endpoint of the discovery document (authorization, token, JWKS) to be on the issuer's host and port, over https**
+    /// (RFC 014 D-11). Used when the operator has allowed the issuer's authority to be private: a provider must not be able to point planeter at
+    /// another internal address, **or at another service on the same machine (another port)**, through its own discovery document. The refusal
+    /// names the endpoint and says nothing else.
     #[must_use]
     pub fn with_endpoints_on_issuer_host(mut self) -> Self {
         self.endpoints_on_issuer_host = true;
@@ -214,15 +215,17 @@ impl OidcProvider {
             return Err(OidcError::Provider("discovery issuer mismatch".into()));
         }
         if self.endpoints_on_issuer_host {
-            let issuer_host = planeter_core::url_host(&self.cfg.issuer);
+            // The issuer's **authority**: its host and its effective port, over https. Another port of the same host is another service.
+            let issuer = planeter_core::url_authority(&self.cfg.issuer)
+                .filter(|(scheme, _)| scheme == "https");
             for (name, url) in [
                 ("authorization", &d.authorization_endpoint),
                 ("token", &d.token_endpoint),
                 ("jwks", &d.jwks_uri),
             ] {
-                if issuer_host.is_none() || planeter_core::url_host(url) != issuer_host {
+                if issuer.is_none() || planeter_core::url_authority(url) != issuer {
                     return Err(OidcError::Provider(format!(
-                        "the {name} endpoint is not on the issuer's host"
+                        "the {name} endpoint is not on the issuer's host and port"
                     )));
                 }
             }
