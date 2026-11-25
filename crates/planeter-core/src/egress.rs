@@ -13,6 +13,9 @@
 //!   `172.16/12`, `192.168/16`, CGNAT `100.64/10`), unspecified, multicast, reserved, and their IPv6
 //!   counterparts (`::1`, `fe80::/10`, `fc00::/7`, `ff00::/8`, IPv4-mapped forms, NAT64) are refused —
 //!   unless the policy explicitly allows private targets (a self-hosted webhook receiver, say);
+//! - **one named host may be allowed to be private** ([`EgressPolicy::allow_private_for_host`], RFC 014 D-11): the identity provider's, when the
+//!   operator says so. It is compared as a whole host (case-insensitive, port ignored, no wildcard, no suffix match) and changes nothing else:
+//!   https only, every resolved address is classified and pinned for **every other host exactly as before**;
 //! - userinfo in the URL is refused (a classic confusion vector);
 //! - **redirects are re-checked**: a caller following `3xx` runs the new location through the guard
 //!   again before connecting.
@@ -92,23 +95,68 @@ pub struct EgressPolicy {
     /// Permit private/loopback/link-local targets (default: refused). For deployments whose webhook
     /// receivers live on an internal network — an explicit, logged opt-in, never a default.
     pub allow_private_targets: bool,
+    /// Permit private, loopback, link-local and CGNAT addresses **for exactly this host** (a name or a literal address; compared
+    /// case-insensitively, a trailing dot ignored, the port ignored, no wildcard and no suffix match). Every other host is judged as
+    /// before. Used for the OIDC provider's own host and for nothing else (RFC 014 D-11).
+    pub allow_private_for_host: Option<String>,
+}
+
+/// How a name becomes addresses (the OS resolver in production; a test can replace it to show that the address checked is the address
+/// connected to).
+pub type Resolver =
+    std::sync::Arc<dyn Fn(&str, u16) -> Result<Vec<SocketAddr>, EgressError> + Send + Sync>;
+
+/// The host of an `https://…` URL as [`comparable_host`] writes it, or `None` when the URL has none or does not parse.
+pub fn url_host(url: &str) -> Option<String> {
+    let parsed = url::Url::parse(url).ok()?;
+    Some(comparable_host(parsed.host_str()?))
+}
+
+/// A host as compared for the one-host allowance: lower case, no brackets, no trailing dot.
+pub fn comparable_host(host: &str) -> String {
+    host.trim_matches(|c| c == '[' || c == ']')
+        .trim_end_matches('.')
+        .to_ascii_lowercase()
 }
 
 /// The production guard: parse, policy, resolve, classify every address, pin.
-#[derive(Debug, Clone, Default)]
+#[derive(Clone, Default)]
 pub struct StdEgressGuard {
     policy: EgressPolicy,
+    resolver: Option<Resolver>,
+}
+
+impl std::fmt::Debug for StdEgressGuard {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("StdEgressGuard")
+            .field("policy", &self.policy)
+            .field("resolver", &self.resolver.as_ref().map(|_| "custom"))
+            .finish()
+    }
 }
 
 impl StdEgressGuard {
     pub fn new(policy: EgressPolicy) -> Self {
-        Self { policy }
+        Self {
+            policy,
+            resolver: None,
+        }
+    }
+
+    /// **Tests:** resolve names with `resolver` instead of the OS (there is no such path in the server).
+    #[must_use]
+    pub fn with_resolver(mut self, resolver: Resolver) -> Self {
+        self.resolver = Some(resolver);
+        self
     }
 
     /// Resolve `host` (literal IP or DNS name) to socket addresses via the OS resolver.
-    fn resolve(host: &str, port: u16) -> Result<Vec<SocketAddr>, EgressError> {
+    fn resolve(&self, host: &str, port: u16) -> Result<Vec<SocketAddr>, EgressError> {
         if let Ok(ip) = host.parse::<IpAddr>() {
             return Ok(vec![SocketAddr::new(ip, port)]);
+        }
+        if let Some(r) = &self.resolver {
+            return r(host, port);
         }
         let addrs: Vec<SocketAddr> = (host, port)
             .to_socket_addrs()
@@ -141,8 +189,13 @@ impl EgressGuard for StdEgressGuard {
         let port = parsed
             .port_or_known_default()
             .ok_or_else(|| EgressError::Unparsable("no port".to_owned()))?;
-        let addrs = Self::resolve(&host, port)?;
-        if !self.policy.allow_private_targets {
+        let addrs = self.resolve(&host, port)?;
+        let the_allowed_host = self
+            .policy
+            .allow_private_for_host
+            .as_deref()
+            .is_some_and(|h| comparable_host(h) == comparable_host(&host));
+        if !self.policy.allow_private_targets && !the_allowed_host {
             // All-or-nothing: one blocked address among the answers refuses the whole target.
             if let Some(bad) = addrs.iter().find(|a| !is_public_unicast(a.ip())) {
                 return Err(EgressError::BlockedAddress(format!(
@@ -293,6 +346,112 @@ mod tests {
         assert!(matches!(
             guard().check("not a url"),
             Err(EgressError::Unparsable(_))
+        ));
+    }
+
+    fn resolving(map: &'static [(&'static str, &'static [&'static str])]) -> Resolver {
+        std::sync::Arc::new(move |host: &str, port: u16| {
+            map.iter()
+                .find(|(h, _)| *h == host)
+                .map(|(_, ips)| {
+                    ips.iter()
+                        .map(|ip| SocketAddr::new(ip.parse().unwrap(), port))
+                        .collect()
+                })
+                .ok_or_else(|| EgressError::Unresolvable(host.to_owned()))
+        })
+    }
+
+    const NAMES: &[(&str, &[&str])] = &[
+        ("idp.test", &["127.0.0.1"]),
+        ("other.test", &["10.0.0.7"]),
+        ("mixed.test", &["10.0.0.7", "93.184.216.34"]),
+        ("public.test", &["93.184.216.34"]),
+        ("v6.test", &["fd12::5"]),
+    ];
+
+    fn one_host_guard(host: &str) -> StdEgressGuard {
+        StdEgressGuard::new(EgressPolicy {
+            allow_private_for_host: Some(host.to_owned()),
+            ..Default::default()
+        })
+        .with_resolver(resolving(NAMES))
+    }
+
+    #[test]
+    fn the_one_host_allowance_admits_that_host_only_and_pins_what_it_resolved() {
+        let g = one_host_guard("IDP.test.");
+        // The named host: private is admitted (case, a trailing dot and the port do not matter), https only, and its addresses are pinned.
+        for u in ["https://idp.test/x", "https://IDP.TEST:8443/x"] {
+            let t = g.check(u).unwrap_or_else(|e| panic!("{u}: {e}"));
+            assert_eq!(t.addrs[0].ip().to_string(), "127.0.0.1");
+        }
+        assert!(matches!(
+            g.check("http://idp.test/x"),
+            Err(EgressError::DisallowedScheme(_))
+        ));
+        // Everything else is judged as before: another private host, a name that resolves to a private and a public address, a literal
+        // private address, loopback by name, a suffix or a prefix of the allowed name, a wildcard.
+        for u in [
+            "https://other.test/",
+            "https://mixed.test/",
+            "https://10.0.0.5/",
+            "https://127.0.0.1/",
+            "https://localhost/",
+            "https://[fd12::1]/",
+            "https://v6.test/",
+            "https://sub.idp.test/",
+            "https://xidp.test/",
+        ] {
+            assert!(
+                matches!(
+                    g.check(u),
+                    Err(EgressError::BlockedAddress(_)) | Err(EgressError::Unresolvable(_))
+                ),
+                "{u} must still be refused"
+            );
+        }
+        assert!(g.check("https://public.test/").is_ok());
+        // A literal address as the allowed host: that address only (the port is ignored).
+        let lit = StdEgressGuard::new(EgressPolicy {
+            allow_private_for_host: Some("127.0.0.1".into()),
+            ..Default::default()
+        });
+        assert!(lit.check("https://127.0.0.1:9443/").is_ok());
+        assert!(matches!(
+            lit.check("https://127.0.0.2/"),
+            Err(EgressError::BlockedAddress(_))
+        ));
+        // The allowance is part of the policy of one guard: the default guard of every other caller is untouched.
+        assert!(matches!(
+            guard().check("https://127.0.0.1/"),
+            Err(EgressError::BlockedAddress(_))
+        ));
+    }
+
+    #[test]
+    fn the_name_is_resolved_once_and_the_pinned_addresses_are_what_the_caller_connects_to() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let calls = std::sync::Arc::new(AtomicUsize::new(0));
+        let seen = calls.clone();
+        // The resolver answers differently the second time (DNS rebinding): the first answer is checked and pinned.
+        let g = StdEgressGuard::new(EgressPolicy::default()).with_resolver(std::sync::Arc::new(
+            move |_h, port| {
+                let ip = if seen.fetch_add(1, Ordering::SeqCst) == 0 {
+                    "93.184.216.34"
+                } else {
+                    "10.0.0.9"
+                };
+                Ok(vec![SocketAddr::new(ip.parse().unwrap(), port)])
+            },
+        ));
+        let t = g.check("https://rebind.test/x").unwrap();
+        assert_eq!(t.addrs, vec!["93.184.216.34:443".parse().unwrap()]);
+        assert_eq!(calls.load(Ordering::SeqCst), 1, "one resolution per check");
+        // The second check is the rebound answer: refused. (A caller that connected by name would have gone to it.)
+        assert!(matches!(
+            g.check("https://rebind.test/x"),
+            Err(EgressError::BlockedAddress(_))
         ));
     }
 

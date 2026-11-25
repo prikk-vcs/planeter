@@ -274,6 +274,8 @@ fn sources_outside_the_catalog() -> String {
     all += &read(&root().join("../planeter/src/operator_account.rs"));
     all += &read(&root().join("../planeter/src/password_input.rs"));
     all += &read(&root().join("../planeter/src/operator_token.rs"));
+    // ... and the provider and session-lifetime settings read at start-up (RFC 014 D-11, D-13).
+    all += &read(&root().join("../planeter/src/provider_env.rs"));
     // The catalog module uses a few keys itself (sizes); its key table (`Variant => "id"`) never says `Key::`.
     all += &read(&root().join("src/catalog/mod.rs"));
     all

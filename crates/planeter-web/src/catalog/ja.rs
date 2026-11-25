@@ -2695,4 +2695,28 @@ pub const CATALOG: &[Entry] = &[
         "account.event.signed_in_new_method",
         "アカウントが、これまで使っていなかった方法でログインしました。",
     ),
+    msg(
+        "provider.error.allow_private_value",
+        "PLANETER_OIDC_ALLOW_PRIVATE_ISSUER は on か off にしてください。今の値は {value} です。on にするか、設定を外してください。",
+    ),
+    msg(
+        "provider.error.allow_private_no_provider",
+        "PLANETER_OIDC_ALLOW_PRIVATE_ISSUER=on には、ログインのプロバイダーが必要です。PLANETER_OIDC_ISSUER を設定するか、この設定を外してください。",
+    ),
+    msg(
+        "provider.error.issuer_host",
+        "PLANETER_OIDC_ISSUER {issuer} には、許可できるホストがありません。アドレスを確認してください。",
+    ),
+    msg(
+        "provider.error.session_hours",
+        "PLANETER_SESSION_HOURS は、{min} から {max} までの整数の時間にしてください。今の値は {value} です。その範囲の数にするか、設定を外してください。",
+    ),
+    msg(
+        "provider.line.allow_private",
+        "ログインのプロバイダーのホスト {host} は、プライベートアドレスにあることが許可されています（PLANETER_OIDC_ALLOW_PRIVATE_ISSUER=on）。それ以外の接続先は、これまでどおり確認されます。",
+    ),
+    msg(
+        "provider.line.session_hours",
+        "ログイン中の状態は {count} 時間続きます。",
+    ),
 ];

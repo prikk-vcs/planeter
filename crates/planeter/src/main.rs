@@ -15,6 +15,7 @@ mod operator;
 mod operator_account;
 mod operator_token;
 mod password_input;
+mod provider_env;
 
 // The delivery engine's test hook: debug builds only, and not an operator's setting (so not in `USAGE`).
 #[cfg(debug_assertions)]
@@ -931,8 +932,24 @@ async fn main() {
         Arc::new(Sha256TokenHasher),
     ));
 
-    let sessions = match SqliteSessionStore::new(db) {
+    // The provider settings and the lifetime of a sign-in (RFC 014 D-11, D-13): a wrong value refuses the start, in the language of the
+    // environment (the same choice the operator commands make).
+    let provider_t =
+        planeter_web::catalog::T::new(planeter_web::catalog::Lang::from_environment(|n| {
+            std::env::var(n).ok()
+        }));
+    let provider_settings = match provider_env::read(&|n| std::env::var(n).ok(), &provider_t) {
         Ok(s) => s,
+        Err(sentence) => {
+            eprintln!("planeter: {sentence}");
+            exit_releasing_lock(1);
+        }
+    };
+    for line in provider_env::lines(&provider_settings, &provider_t) {
+        eprintln!("planeter: {line}");
+    }
+    let sessions = match SqliteSessionStore::new(db) {
+        Ok(s) => s.with_ttl_secs(provider_settings.session_hours * 3600),
         Err(e) => {
             eprintln!("planeter: cannot initialise sessions: {e}");
             exit_releasing_lock(1);
@@ -956,10 +973,20 @@ async fn main() {
                     .filter(|s| !s.is_empty()),
                 redirect_uri: need("PLANETER_OIDC_REDIRECT_URI"),
             };
-            let fetcher = Arc::new(planeter_core::CurlFetcher::new(Box::new(
-                planeter_core::StdEgressGuard::default(),
-            )));
-            Some(Arc::new(planeter_auth::OidcProvider::new(cfg, fetcher)))
+            // **The guard of the sign-in provider only**: its own instance, so that no other outbound path (there are none today besides this one;
+            // webhooks and the rest would build their own) inherits the allowance. With the operator's `on`, that one host (the issuer's)
+            // may be on a private address and every endpoint its discovery names must be on it (RFC 014 D-11).
+            let guard = planeter_core::StdEgressGuard::new(planeter_core::EgressPolicy {
+                allow_private_for_host: provider_settings.private_host.clone(),
+                ..Default::default()
+            });
+            let fetcher = Arc::new(planeter_core::CurlFetcher::new(Box::new(guard)));
+            let provider = planeter_auth::OidcProvider::new(cfg, fetcher);
+            Some(Arc::new(if provider_settings.private_host.is_some() {
+                provider.with_endpoints_on_issuer_host()
+            } else {
+                provider
+            }))
         }
         _ => None,
     };

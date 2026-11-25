@@ -1234,6 +1234,12 @@ keys! {
     AccountEventPlainDisabled => "account.event.plain.disabled",
     AccountEventEnabled => "account.event.enabled",
     AccountEventSignedInNewMethod => "account.event.signed_in_new_method",
+    ProviderErrorAllowPrivateValue => "provider.error.allow_private_value",
+    ProviderErrorAllowPrivateNoProvider => "provider.error.allow_private_no_provider",
+    ProviderErrorIssuerHost => "provider.error.issuer_host",
+    ProviderErrorSessionHours => "provider.error.session_hours",
+    ProviderLineAllowPrivate => "provider.line.allow_private",
+    ProviderLineSessionHours => "provider.line.session_hours",
 }
 
 /// Marks a response whose text depends on the caller's language, so that the response-policy layer adds

@@ -37,8 +37,8 @@ pub use authorize::{
     RefProtection, RefResource, RepoResource, RepoScope, Resource, Scope, ScopeAccess, authorize,
 };
 pub use egress::{
-    DenyAllEgress, EgressError, EgressGuard, EgressPolicy, ResolvedTarget, StdEgressGuard,
-    is_public_unicast,
+    DenyAllEgress, EgressError, EgressGuard, EgressPolicy, ResolvedTarget, Resolver,
+    StdEgressGuard, comparable_host, is_public_unicast, url_host,
 };
 pub use fetch::{CurlFetcher, FetchError, FetchLimits, FetchRequest, HttpsFetcher};
 pub use hosting::{Creation, HostingError, HostingService, SweepReport};

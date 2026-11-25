@@ -16,8 +16,27 @@ use subtle::ConstantTimeEq as _;
 
 use crate::identity::{AuthError, Result};
 
-/// Session lifetime: 7 days.
-pub const SESSION_TTL_SECS: u64 = 7 * 24 * 3600;
+/// The session lifetime in hours when `PLANETER_SESSION_HOURS` is not set: 7 days (RFC 014 D-13).
+pub const SESSION_HOURS_DEFAULT: u64 = 168;
+/// The shortest and the longest lifetime the operator may set, in hours.
+pub const SESSION_HOURS_MIN: u64 = 1;
+pub const SESSION_HOURS_MAX: u64 = 720;
+/// The default session lifetime in seconds (**the value of [`SESSION_HOURS_DEFAULT`]; 7 days as it has always been**). A session store
+/// reports the lifetime it was set up with ([`SessionStore::ttl_secs`]); this is what a store has until the operator sets another.
+pub const SESSION_TTL_SECS: u64 = SESSION_HOURS_DEFAULT * 3600;
+
+/// `PLANETER_SESSION_HOURS` as the number of hours: unset or empty is the default; anything but a whole number from 1 to 720 is **refused,
+/// never clamped** (the sentence names the value it got).
+pub fn session_hours_from(value: Option<&str>) -> std::result::Result<u64, String> {
+    match value.map(str::trim) {
+        None | Some("") => Ok(SESSION_HOURS_DEFAULT),
+        Some(v) => v
+            .parse::<u64>()
+            .ok()
+            .filter(|h| (SESSION_HOURS_MIN..=SESSION_HOURS_MAX).contains(h))
+            .ok_or_else(|| v.to_owned()),
+    }
+}
 
 /// An opaque session id (32 OS-random bytes, base64url).
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -52,17 +71,31 @@ pub trait SessionStore: Send + Sync {
     fn get(&self, id: &SessionId, now_unix: u64) -> Result<Option<Session>>;
     /// Destroy a session (logout).
     fn delete(&self, id: &SessionId) -> Result<()>;
+    /// **The lifetime a new session is given, in seconds: the one value, from the one place** (RFC 014 D-13). Both sign-in paths use it for
+    /// the session's expiry and for the cookie's `Max-Age`, so they cannot differ. A session that exists keeps the lifetime it was created
+    /// with (its `expires_at` is stored).
+    fn ttl_secs(&self) -> u64 {
+        SESSION_TTL_SECS
+    }
 }
 
 /// In-memory [`SessionStore`] for tests/dev.
 #[derive(Default)]
 pub struct InMemorySessionStore {
     sessions: RwLock<HashMap<String, Session>>,
+    ttl: Option<u64>,
 }
 
 impl InMemorySessionStore {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// New sessions last `ttl_secs` seconds.
+    #[must_use]
+    pub fn with_ttl_secs(mut self, ttl_secs: u64) -> Self {
+        self.ttl = Some(ttl_secs);
+        self
     }
 }
 
@@ -96,6 +129,10 @@ impl SessionStore for InMemorySessionStore {
             .remove(&id.0);
         Ok(())
     }
+
+    fn ttl_secs(&self) -> u64 {
+        self.ttl.unwrap_or(SESSION_TTL_SECS)
+    }
 }
 
 #[cfg(test)]
@@ -118,6 +155,35 @@ mod tests {
         s.delete(&sess.id).unwrap();
         assert!(s.get(&sess.id, 200).unwrap().is_none());
         assert!(s.get(&SessionId("nope".into()), 200).unwrap().is_none());
+    }
+
+    #[test]
+    fn the_default_lifetime_is_seven_days_in_hours_and_in_seconds() {
+        // Fails if one of the two numbers is changed without the other (and without the owner's say).
+        assert_eq!(SESSION_HOURS_DEFAULT, 168);
+        assert_eq!(SESSION_TTL_SECS, 7 * 24 * 3600);
+        assert_eq!(SESSION_TTL_SECS, SESSION_HOURS_DEFAULT * 3600);
+        assert_eq!(InMemorySessionStore::new().ttl_secs(), 7 * 24 * 3600);
+    }
+
+    #[test]
+    fn session_hours_accept_one_to_720_and_refuse_everything_else() {
+        assert_eq!(session_hours_from(None), Ok(168));
+        assert_eq!(session_hours_from(Some("")), Ok(168));
+        assert_eq!(session_hours_from(Some(" 24 ")), Ok(24));
+        assert_eq!(session_hours_from(Some("1")), Ok(1));
+        assert_eq!(session_hours_from(Some("720")), Ok(720));
+        for bad in [
+            "0",
+            "721",
+            "-5",
+            "1.5",
+            "a day",
+            "24h",
+            "99999999999999999999",
+        ] {
+            assert_eq!(session_hours_from(Some(bad)), Err(bad.to_owned()), "{bad}");
+        }
     }
 
     #[test]

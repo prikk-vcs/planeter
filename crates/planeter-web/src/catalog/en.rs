@@ -2664,4 +2664,29 @@ pub const CATALOG: &[Entry] = &[
         "account.event.signed_in_new_method",
         "The account signed in by a method it had not used before.",
     ),
+    msg(
+        "provider.error.allow_private_value",
+        "PLANETER_OIDC_ALLOW_PRIVATE_ISSUER must be on or off, and it is {value}. Set it to on, or remove it.",
+    ),
+    msg(
+        "provider.error.allow_private_no_provider",
+        "PLANETER_OIDC_ALLOW_PRIVATE_ISSUER=on needs a sign-in provider. Set PLANETER_OIDC_ISSUER, or remove this setting.",
+    ),
+    msg(
+        "provider.error.issuer_host",
+        "PLANETER_OIDC_ISSUER {issuer} has no host that can be allowed. Check the address.",
+    ),
+    msg(
+        "provider.error.session_hours",
+        "PLANETER_SESSION_HOURS must be a whole number of hours from {min} to {max}, and it is {value}. Set a number in that range, or remove it.",
+    ),
+    msg(
+        "provider.line.allow_private",
+        "The sign-in provider's host {host} is allowed to be on a private address (PLANETER_OIDC_ALLOW_PRIVATE_ISSUER=on). Every other outbound address is checked as before.",
+    ),
+    plural_msg(
+        "provider.line.session_hours",
+        "Sign-ins last {count} hour.",
+        "Sign-ins last {count} hours.",
+    ),
 ];

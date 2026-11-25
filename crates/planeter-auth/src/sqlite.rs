@@ -854,12 +854,20 @@ mod tests {
 #[derive(Clone)]
 pub struct SqliteSessionStore {
     db: SqliteDb,
+    ttl: Option<u64>,
 }
 
 impl SqliteSessionStore {
     pub fn new(db: SqliteDb) -> Result<Self> {
         prepare(&db)?;
-        Ok(Self { db })
+        Ok(Self { db, ttl: None })
+    }
+
+    /// New sessions last `ttl_secs` seconds (`PLANETER_SESSION_HOURS`); sessions that exist keep the expiry they were stored with.
+    #[must_use]
+    pub fn with_ttl_secs(mut self, ttl_secs: u64) -> Self {
+        self.ttl = Some(ttl_secs);
+        self
     }
 }
 
@@ -912,6 +920,10 @@ impl SessionStore for SqliteSessionStore {
             .execute("DELETE FROM sessions WHERE id = ?1", params![id.0])
             .map_err(be)?;
         Ok(())
+    }
+
+    fn ttl_secs(&self) -> u64 {
+        self.ttl.unwrap_or(crate::session::SESSION_TTL_SECS)
     }
 }
 

@@ -158,6 +158,8 @@ pub struct OidcProvider {
     discovery: Mutex<Option<Discovery>>,
     jwks: Mutex<Option<JwkSet>>,
     pending: PendingLogins,
+    /// Every endpoint the discovery document names must be on the issuer's host (set when the operator allowed a private provider).
+    endpoints_on_issuer_host: bool,
 }
 
 impl OidcProvider {
@@ -168,7 +170,17 @@ impl OidcProvider {
             discovery: Mutex::new(None),
             jwks: Mutex::new(None),
             pending: PendingLogins::default(),
+            endpoints_on_issuer_host: false,
         }
+    }
+
+    /// **Require every endpoint of the discovery document (authorization, token, JWKS) to be on the issuer's host** (RFC 014 D-11). Used when
+    /// the operator has allowed the issuer's host to be private: a provider must not be able to point planeter at some other internal
+    /// address through its own discovery document. The refusal names the endpoint and says nothing else.
+    #[must_use]
+    pub fn with_endpoints_on_issuer_host(mut self) -> Self {
+        self.endpoints_on_issuer_host = true;
+        self
     }
 
     pub fn issuer(&self) -> &str {
@@ -201,6 +213,20 @@ impl OidcProvider {
         if d.issuer.trim_end_matches('/') != self.cfg.issuer.trim_end_matches('/') {
             return Err(OidcError::Provider("discovery issuer mismatch".into()));
         }
+        if self.endpoints_on_issuer_host {
+            let issuer_host = planeter_core::url_host(&self.cfg.issuer);
+            for (name, url) in [
+                ("authorization", &d.authorization_endpoint),
+                ("token", &d.token_endpoint),
+                ("jwks", &d.jwks_uri),
+            ] {
+                if issuer_host.is_none() || planeter_core::url_host(url) != issuer_host {
+                    return Err(OidcError::Provider(format!(
+                        "the {name} endpoint is not on the issuer's host"
+                    )));
+                }
+            }
+        }
         if let Ok(mut g) = self.discovery.lock() {
             *g = Some(d.clone());
         }
@@ -215,7 +241,14 @@ impl OidcProvider {
             return Ok(k.clone());
         }
         let d = self.discovery()?;
-        let set: JwkSet = self.fetch_json(&FetchRequest::get(d.jwks_uri))?;
+        // The refresh (after an unknown `kid`) asks every cache for a fresh copy: a provider may publish a new key only when it becomes the
+        // signer, and a shared cache that still holds the old set would answer our one refresh with it (RFC 014 ID-7).
+        let req = if refresh {
+            FetchRequest::get_no_cache(d.jwks_uri)
+        } else {
+            FetchRequest::get(d.jwks_uri)
+        };
+        let set: JwkSet = self.fetch_json(&req)?;
         if let Ok(mut g) = self.jwks.lock() {
             *g = Some(set.clone());
         }
@@ -297,6 +330,7 @@ impl OidcProvider {
             url: d.token_endpoint,
             form: Some(form),
             authorization,
+            no_cache: false,
         })?;
         self.verify_id_token(&tok.id_token, Some(&pending.nonce))
     }

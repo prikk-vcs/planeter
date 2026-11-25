@@ -53,7 +53,8 @@ pub use oidc::{
     UnconfiguredOidc, VerifiedIdentity,
 };
 pub use session::{
-    InMemorySessionStore, SESSION_TTL_SECS, Session, SessionId, SessionStore, random_token,
+    InMemorySessionStore, SESSION_HOURS_DEFAULT, SESSION_HOURS_MAX, SESSION_HOURS_MIN,
+    SESSION_TTL_SECS, Session, SessionId, SessionStore, random_token, session_hours_from,
     tokens_match,
 };
 pub use sqlite::{

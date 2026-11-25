@@ -44,6 +44,10 @@ pub struct FetchRequest {
     pub form: Option<String>,
     /// Extra `Authorization` header value (e.g. `Basic …` for a confidential OIDC client), if any.
     pub authorization: Option<String>,
+    /// Ask every cache on the way for a fresh answer: `Cache-Control: no-cache` and `Pragma: no-cache`. The one optional header of a
+    /// request besides `Authorization`: **a closed choice, never a header name or value taken from a provider or a request** (RFC 014 ID-7:
+    /// the refresh of a JWKS after an unknown `kid` must not be answered from a shared cache's stale copy).
+    pub no_cache: bool,
 }
 
 impl FetchRequest {
@@ -52,6 +56,15 @@ impl FetchRequest {
             url: url.into(),
             form: None,
             authorization: None,
+            no_cache: false,
+        }
+    }
+
+    /// A GET that every cache must revalidate (see [`FetchRequest::no_cache`]).
+    pub fn get_no_cache(url: impl Into<String>) -> Self {
+        Self {
+            no_cache: true,
+            ..Self::get(url)
         }
     }
 }
@@ -154,6 +167,12 @@ impl CurlFetcher {
             "-H".to_owned(),
             "User-Agent: planeter".to_owned(),
         ];
+        if req.no_cache {
+            for h in ["Cache-Control: no-cache", "Pragma: no-cache"] {
+                a.push("-H".to_owned());
+                a.push(h.to_owned());
+            }
+        }
         if let Some(auth) = &req.authorization {
             a.push("-H".to_owned());
             a.push(format!("Authorization: {auth}"));
@@ -303,6 +322,7 @@ mod tests {
                 url: "https://idp.example/token".into(),
                 form: Some("grant_type=authorization_code&code=x".into()),
                 authorization: Some("Basic abc".into()),
+                no_cache: false,
             },
             FetchLimits::default(),
         );
@@ -310,6 +330,32 @@ mod tests {
         assert!(s.contains("Content-Type: application/x-www-form-urlencoded"));
         assert!(s.contains("--data-binary grant_type=authorization_code&code=x"));
         assert!(s.contains("Authorization: Basic abc"));
+    }
+
+    #[test]
+    fn only_a_no_cache_request_carries_the_cache_headers() {
+        let plain = CurlFetcher::curl_args(
+            &target(),
+            &FetchRequest::get("https://idp.example/jwks"),
+            FetchLimits::default(),
+        );
+        assert!(!plain.join(" ").to_ascii_lowercase().contains("no-cache"));
+        let fresh = CurlFetcher::curl_args(
+            &target(),
+            &FetchRequest::get_no_cache("https://idp.example/jwks"),
+            FetchLimits::default(),
+        );
+        let s = fresh.join(" ");
+        assert!(
+            s.contains("-H Cache-Control: no-cache") && s.contains("-H Pragma: no-cache"),
+            "{s}"
+        );
+        // Still pinned, https only, no redirects.
+        assert!(
+            s.contains("--proto =https")
+                && s.contains("--max-redirs 0")
+                && s.contains("--resolve idp.example:443:93.184.216.34")
+        );
     }
 
     #[test]

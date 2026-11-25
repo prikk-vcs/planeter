@@ -19,7 +19,7 @@ use axum::routing::{get, post};
 
 use crate::routes::{Action, Class, Routes};
 use planeter_auth::{
-    AuthError, OidcError, PENDING_TTL_SECS, SESSION_TTL_SECS, SessionId, random_token, tokens_match,
+    AuthError, OidcError, PENDING_TTL_SECS, SessionId, random_token, tokens_match,
 };
 use planeter_core::admission::{CONTENT_MAX_BYTES, ReadVerb};
 use planeter_core::{Assurance, Principal, RawTarget, ReadError, TreeEntryView, VerifyView};
@@ -1130,15 +1130,15 @@ async fn login_submit(
             if let Some(k) = &ip_key {
                 state.ip_throttle.record_success(k);
             }
-            let created = authn::blocking(&state, move |s| {
-                s.sessions.create(user, now, now + SESSION_TTL_SECS)
-            })
-            .await;
+            // The one lifetime of a new session, from the session store (`PLANETER_SESSION_HOURS`): the expiry and the cookie use it both.
+            let ttl = state.sessions.ttl_secs();
+            let created =
+                authn::blocking(&state, move |s| s.sessions.create(user, now, now + ttl)).await;
             match created {
                 Ok(Ok(session)) => redirect(
                     &state,
                     "/",
-                    vec![set_cookie(SESSION_COOKIE, &session.id.0, SESSION_TTL_SECS)],
+                    vec![set_cookie(SESSION_COOKIE, &session.id.0, ttl)],
                 ),
                 _ => notice(
                     &state,
@@ -1361,6 +1361,7 @@ async fn oidc_callback(
         );
     }
     let now = (state.now_unix)();
+    let ttl = state.sessions.ttl_secs();
     // Code exchange and ID-token verification run a confined `curl`; the account lookup and the session
     // write are SQLite. All of it is blocking, so all of it runs off the async workers.
     let completed = authn::blocking(&state, move |s| {
@@ -1372,7 +1373,7 @@ async fn oidc_callback(
         Some(Ok(match s.auth.authenticate_oidc(&identity) {
             Ok(Principal::User(user)) => s
                 .sessions
-                .create(user, now, now + SESSION_TTL_SECS)
+                .create(user, now, now + ttl)
                 .map(OidcSignIn::Session)
                 .map_err(|_| ()),
             // The provider proved who this is and the account is disabled: the person is told so (RFC 014 D-6).
@@ -1402,7 +1403,7 @@ async fn oidc_callback(
             &state,
             "/",
             vec![
-                set_cookie(SESSION_COOKIE, &session.id.0, SESSION_TTL_SECS),
+                set_cookie(SESSION_COOKIE, &session.id.0, ttl),
                 clear_cookie(OIDC_STATE_COOKIE),
             ],
         ),
