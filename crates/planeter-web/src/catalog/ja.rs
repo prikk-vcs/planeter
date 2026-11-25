@@ -2229,11 +2229,11 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "operator.token.help.usage",
-        "使い方: planeter operator token create HANDLE --name TEXT --scope read-only|write|full [--expires-days N] [--repos OWNER/NAME[,OWNER/NAME…]] [--out FILE]\n        planeter operator token list HANDLE\n        planeter operator token revoke HANDLE ID\n       （どれも [--lang en|ja] を付けられます）\n\ncreate         アカウントのトークンを作ります。表示されるのは 1 回だけで、保存されるのはそのハッシュだけです\n--name         トークンの用途。1〜60 文字。持ち主が自分のトークンを見分けるためのものです\n--scope        read-only: リポジトリを見て、クローンできます。write: さらに、作業を提案できますが、ブランチの引き渡しはできません。full: アカウントにできることはすべて、ブランチの引き渡しも含めてできます\n--expires-days トークンの有効日数。1〜365（省略すると 90）。期限のないトークンはありません\n--repos        トークンを、指定したリポジトリ（20 個まで） に限ります。指定しなければ、アカウントが届くすべてのリポジトリに届きます\n--out          トークンを表示せず、新しいファイル（モード 0600、上書きしません） に書きます。そのファイルを planeter-client --token-file に渡します\nlist           アカウントのトークンを新しい順に表示します: ID、名前、スコープ、リポジトリ、作成日、最後に使った日、期限。秘密は表示しません\nrevoke         指定した ID のトークンを、次のリクエストから受け付けなくします",
+        "使い方: planeter operator token create HANDLE --name TEXT --scope read-only|write|full [--expires-days N] [--repos OWNER/NAME[,OWNER/NAME…]] [--out FILE]\n        planeter operator token list HANDLE\n        planeter operator token revoke HANDLE ID\n       （どれも [--lang en|ja] を付けられます）\n\ncreate         アカウントのトークンを作ります。表示されるのは 1 回だけで、保存されるのはそのハッシュだけです\n--name         トークンの用途。1〜60 文字。持ち主が自分のトークンを見分けるためのものです\n--scope        read-only: リポジトリを見て、クローンできます。write: さらに、作業を提案できますが、ブランチの引き渡しはできません。full: アカウントにできることはすべて、ブランチの引き渡しも含めてできます\n--expires-days トークンの有効日数。1〜365（省略すると 90）。期限のないトークンはありません\n--repos        トークンを、指定したリポジトリ（20 個まで）に限ります。指定しなければ、アカウントが届くすべてのリポジトリに届きます\n--out          トークンを表示せず、新しいファイル（モード 0600、上書きしません）に書きます。そのファイルを planeter-client --token-file に渡します\nlist           アカウントのトークンを新しい順に表示します: ID、名前、スコープ、リポジトリ、作成日、最後に使った日、期限。秘密は表示しません\nrevoke         指定した ID のトークンを、次のリクエストから受け付けなくします",
     ),
     msg(
         "operator.token.help.output",
-        "トークン: 標準では、標準出力に 1 行で表示し、ほかのものは標準出力に出しません（なので TOKEN=$（planeter operator token create …） が使えます）。何のトークンか、いつまで有効かは、標準エラー出力に出します。--out を付けると、ファイルに書き、表示しません。",
+        "トークン: 標準では、標準出力に 1 行で表示し、ほかのものは標準出力に出しません。そのため、TOKEN=$(planeter operator token create HANDLE --name TEXT --scope full) のように使えます。何のトークンか、いつまで有効かは、標準エラー出力に出します。--out を付けると、ファイルに書き、表示しません。",
     ),
     msg(
         "operator.token.error.usage",
@@ -2293,7 +2293,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "operator.token.done.created",
-        "{handle} のトークン（{name}） を作りました。ID は {id} です。",
+        "{handle} のトークン（{name}）を作りました。ID は {id} です。",
     ),
     msg(
         "operator.token.done.once",
@@ -2326,7 +2326,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "operator.token.done.revoked",
-        "{handle} のトークン {id}（{name}） を取り消しました。次のリクエストから受け付けられません。",
+        "{handle} のトークン {id}（{name}）を取り消しました。次のリクエストから受け付けられません。",
     ),
     msg(
         "operator.token.list.header",
