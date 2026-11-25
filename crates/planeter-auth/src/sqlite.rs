@@ -12,6 +12,7 @@ use planeter_core::{RepoScope, Scope, ScopeAccess};
 use planeter_store::{RepoId, SqliteDb, UserId};
 
 use crate::credential::{CredentialStore, DeployKeyRecord, SshKeyRecord, TokenRecord};
+use crate::events::EVENTS_SCHEMA;
 use crate::hashing::{PasswordHash, TokenHash};
 use crate::identity::{Account, AccountStore, AuthError, Result};
 use crate::session::{Session, SessionId, SessionStore, random_token};
@@ -59,6 +60,137 @@ CREATE TABLE IF NOT EXISTS deploy_keys (
 
 fn be(e: impl std::fmt::Display) -> AuthError {
     AuthError::Backend(e.to_string())
+}
+
+/// What the start-up migration of the account tables found and did (RFC 014 T3). **Counts only**: no handle, no token, no id.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct AccountsMigration {
+    /// Accounts that had no `handle_key` and were given one now (0 on every start after the first).
+    pub handles_keyed: usize,
+    /// Tokens that had no public id and were given one now (0 on every start after the first).
+    pub tokens_identified: usize,
+    /// Accounts whose handle is the same as another account's when case is ignored (the state, not the work of this start).
+    /// Nobody is renamed and the start does not fail: these accounts are left out of the unique index, and `planeter operator account
+    /// list --check` (a later handoff) reports them.
+    pub colliding_accounts: usize,
+}
+
+/// Run `work` on the shared connection inside one `BEGIN IMMEDIATE` transaction: it commits when `work` returns `Ok` and **rolls back
+/// when it returns `Err`**, so a refused act changes nothing (and leaves no event). A writer waits at most the connection's busy timeout
+/// (5 s) for another process's write to finish.
+pub(crate) fn immediate<T>(
+    db: &SqliteDb,
+    work: impl FnOnce(&rusqlite::Connection) -> rusqlite::Result<T>,
+) -> Result<T> {
+    let conn = db.lock().map_err(be)?;
+    conn.execute_batch("BEGIN IMMEDIATE").map_err(be)?;
+    match work(&conn) {
+        Ok(v) => {
+            conn.execute_batch("COMMIT").map_err(be)?;
+            Ok(v)
+        }
+        Err(e) => {
+            let _ = conn.execute_batch("ROLLBACK");
+            Err(be(e))
+        }
+    }
+}
+
+/// 16 random lowercase hexadecimal characters: the public identifier of a token (it names the token to its holder and to the operator;
+/// it is **not** the secret and cannot be used to present the token).
+pub(crate) fn random_token_id() -> String {
+    use argon2::password_hash::rand_core::{OsRng, RngCore};
+    let mut bytes = [0u8; 8];
+    OsRng.fill_bytes(&mut bytes);
+    bytes.iter().map(|b| format!("{b:02x}")).collect()
+}
+
+/// The placeholder name of a token that was made before tokens had names.
+pub const LEGACY_TOKEN_NAME: &str = "(created before 0.10.0)";
+
+/// Apply the auth schema and migrate an older database to it, **idempotently** (a second call does nothing and changes nothing):
+/// the new columns, the public id and name of every older token, the case-insensitive key of every handle and the unique indexes that
+/// hold both rules in the database. Nothing existing is renamed, removed or rewritten; a token's hash and secret are untouched.
+pub(crate) fn prepare(db: &SqliteDb) -> Result<AccountsMigration> {
+    db.apply_schema(AUTH_SCHEMA).map_err(be)?;
+    db.apply_schema(EVENTS_SCHEMA).map_err(be)?;
+    for (table, column, declaration) in [
+        ("accounts", "created_at", "INTEGER"),
+        ("accounts", "disabled_at", "INTEGER"),
+        ("accounts", "disabled_reason", "TEXT"),
+        ("accounts", "password_changed_at", "INTEGER"),
+        ("accounts", "handle_key", "TEXT"),
+        ("accounts", "handle_collides", "INTEGER NOT NULL DEFAULT 0"),
+        ("tokens", "id", "TEXT"),
+        ("tokens", "name", "TEXT"),
+        ("tokens", "created_at", "INTEGER"),
+        ("tokens", "last_used_at", "INTEGER"),
+    ] {
+        db.ensure_column(table, column, declaration).map_err(be)?;
+    }
+    immediate(db, |conn| {
+        // Every account has a key: its handle in ASCII lowercase (SQLite's `lower` folds ASCII only, as `handle_key` does).
+        let handles_keyed = conn.execute(
+            "UPDATE accounts SET handle_key = lower(user) WHERE handle_key IS NULL",
+            [],
+        )?;
+        // Which accounts share a key with another. Recomputed every start from the data (it is state, and costs one pass).
+        conn.execute(
+            "UPDATE accounts SET handle_collides = \
+               CASE WHEN (SELECT COUNT(*) FROM accounts a2 WHERE a2.handle_key = accounts.handle_key) > 1 THEN 1 ELSE 0 END",
+            [],
+        )?;
+        let colliding_accounts = usize::try_from(conn.query_row(
+            "SELECT COUNT(*) FROM accounts WHERE handle_collides = 1",
+            [],
+            |r| r.get::<_, i64>(0),
+        )?)
+        .unwrap_or(0);
+        // The database holds the rule: unique among every account that does not collide. A colliding pair is left out of the index (it
+        // could not be built with it), which is why the creation of a new account also asks the table, not only the index.
+        conn.execute_batch(
+            "CREATE UNIQUE INDEX IF NOT EXISTS accounts_handle_key ON accounts (handle_key) WHERE handle_collides = 0",
+        )?;
+        // Every token has a public id and a name, assigned once, in this transaction.
+        let missing: Vec<i64> = {
+            let mut stmt =
+                conn.prepare("SELECT rowid FROM tokens WHERE id IS NULL ORDER BY rowid")?;
+            stmt.query_map([], |r| r.get(0))?
+                .collect::<std::result::Result<_, _>>()?
+        };
+        for rowid in &missing {
+            conn.execute(
+                "UPDATE tokens SET id = ?1 WHERE rowid = ?2",
+                params![random_token_id(), rowid],
+            )?;
+        }
+        let tokens_identified = missing.len();
+        conn.execute(
+            "UPDATE tokens SET name = ?1 WHERE name IS NULL",
+            params![LEGACY_TOKEN_NAME],
+        )?;
+        conn.execute_batch("CREATE UNIQUE INDEX IF NOT EXISTS tokens_id ON tokens (id)")?;
+        Ok(AccountsMigration {
+            handles_keyed,
+            tokens_identified,
+            colliding_accounts,
+        })
+    })
+}
+
+/// Whether a handle is taken, **compared case-insensitively** (RFC 014 D-2): by an account (colliding ones included), by an organization
+/// (a role, a team) or by the owner of a repository. The caller holds the transaction.
+#[allow(dead_code)] // used by the account writes of RFC 014 T6
+pub(crate) fn handle_taken(conn: &rusqlite::Connection, key: &str) -> rusqlite::Result<bool> {
+    conn.query_row(
+        "SELECT EXISTS (SELECT 1 FROM accounts WHERE handle_key = ?1) \
+             OR EXISTS (SELECT 1 FROM org_roles WHERE lower(org) = ?1) \
+             OR EXISTS (SELECT 1 FROM teams WHERE lower(org) = ?1) \
+             OR EXISTS (SELECT 1 FROM repositories WHERE lower(owner) = ?1)",
+        params![key],
+        |r| r.get::<_, i64>(0),
+    )
+    .map(|n| n != 0)
 }
 
 fn access_str(a: ScopeAccess) -> &'static str {
@@ -110,12 +242,19 @@ fn scope_from(access: String, repos: Option<String>, exp: Option<i64>) -> Result
 #[derive(Clone)]
 pub struct SqliteAccountStore {
     db: SqliteDb,
+    migration: AccountsMigration,
 }
 
 impl SqliteAccountStore {
+    /// Open over `db`: apply the schema and migrate an older database (idempotent; see [`AccountsMigration`]).
     pub fn new(db: SqliteDb) -> Result<Self> {
-        db.apply_schema(AUTH_SCHEMA).map_err(be)?;
-        Ok(Self { db })
+        let migration = prepare(&db)?;
+        Ok(Self { db, migration })
+    }
+
+    /// What the migration at construction found and did.
+    pub fn migration(&self) -> AccountsMigration {
+        self.migration
     }
 }
 
@@ -139,20 +278,39 @@ impl AccountStore for SqliteAccountStore {
     }
 
     fn upsert(&self, account: Account) -> Result<()> {
-        let conn = self.db.lock().map_err(be)?;
-        conn.execute(
-            "INSERT INTO accounts (user, display_name, email, password_hash) VALUES (?1, ?2, ?3, ?4) \
-             ON CONFLICT(user) DO UPDATE SET display_name = excluded.display_name, \
-             email = excluded.email, password_hash = excluded.password_hash",
-            params![
-                account.user.as_str(),
-                account.display_name,
-                account.email,
-                account.password.map(|p| p.0),
-            ],
-        )
-        .map_err(be)?;
-        Ok(())
+        // The legacy write: it never refuses a handle (existing tests and hand-seeded data), but keeps the case-insensitive key and the
+        // collision mark true. It does not touch the state columns (disabled, created, password changed).
+        let key = planeter_core::creation::handle_key(account.user.as_str());
+        immediate(&self.db, |conn| {
+            // Another account with the same key (a different handle): both are marked colliding *before* the row is written, so the
+            // unique index (which leaves colliding accounts out) never refuses the write.
+            let others: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM accounts WHERE handle_key = ?1 AND user != ?2",
+                params![key, account.user.as_str()],
+                |r| r.get(0),
+            )?;
+            if others > 0 {
+                conn.execute(
+                    "UPDATE accounts SET handle_collides = 1 WHERE handle_key = ?1",
+                    params![key],
+                )?;
+            }
+            conn.execute(
+                "INSERT INTO accounts (user, display_name, email, password_hash, handle_key, handle_collides) \
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6) \
+                 ON CONFLICT(user) DO UPDATE SET display_name = excluded.display_name, \
+                 email = excluded.email, password_hash = excluded.password_hash",
+                params![
+                    account.user.as_str(),
+                    account.display_name,
+                    account.email,
+                    account.password.map(|p| p.0),
+                    key,
+                    i64::from(others > 0),
+                ],
+            )?;
+            Ok(())
+        })
     }
 
     fn set_password_hash(&self, user: &UserId, hash: PasswordHash) -> Result<()> {
@@ -200,7 +358,7 @@ pub struct SqliteCredentialStore {
 
 impl SqliteCredentialStore {
     pub fn new(db: SqliteDb) -> Result<Self> {
-        db.apply_schema(AUTH_SCHEMA).map_err(be)?;
+        prepare(&db)?;
         Ok(Self { db })
     }
 
@@ -464,7 +622,7 @@ pub struct SqliteSessionStore {
 
 impl SqliteSessionStore {
     pub fn new(db: SqliteDb) -> Result<Self> {
-        db.apply_schema(AUTH_SCHEMA).map_err(be)?;
+        prepare(&db)?;
         Ok(Self { db })
     }
 }

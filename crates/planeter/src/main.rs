@@ -907,6 +907,20 @@ async fn main() {
             exit_releasing_lock(1);
         }
     };
+    // RFC 014 T3: what the migration of the account tables found and did. Counts only, and only when there is something to say.
+    let migration = accounts.migration();
+    if migration.handles_keyed > 0 || migration.tokens_identified > 0 {
+        eprintln!(
+            "planeter: accounts: {} account(s) and {} token(s) were given their new identifiers (once; nothing was renamed)",
+            migration.handles_keyed, migration.tokens_identified
+        );
+    }
+    if migration.colliding_accounts > 0 {
+        eprintln!(
+            "planeter: accounts: {} account(s) have a handle that differs from another account's only by case; they keep working and are not renamed",
+            migration.colliding_accounts
+        );
+    }
     let auth = Arc::new(Authenticator::new(
         Arc::new(accounts),
         Arc::new(credentials),

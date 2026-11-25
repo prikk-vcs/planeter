@@ -16,6 +16,7 @@
 
 pub mod authenticator;
 pub mod credential;
+pub mod events;
 pub mod hashing;
 pub mod identity;
 pub mod oidc;
@@ -23,11 +24,16 @@ pub mod password;
 pub mod session;
 pub mod sqlite;
 pub mod sshkey;
+pub mod text;
 pub mod throttle;
 
 pub use authenticator::Authenticator;
 pub use credential::{
     CredentialStore, DeployKeyRecord, InMemoryCredentialStore, SshKeyRecord, TokenRecord,
+};
+pub use events::{
+    AccountEvent, AccountEventKind, AccountEventStore, EventBy, InMemoryAccountEventStore,
+    SqliteAccountEventStore,
 };
 pub use hashing::{
     Argon2idHasher, InsecureStubHasher, PasswordHash, PasswordHasher, Sha256Stream,
@@ -42,6 +48,9 @@ pub use session::{
     InMemorySessionStore, SESSION_TTL_SECS, Session, SessionId, SessionStore, random_token,
     tokens_match,
 };
-pub use sqlite::{SqliteAccountStore, SqliteCredentialStore, SqliteSessionStore};
+pub use sqlite::{
+    AccountsMigration, LEGACY_TOKEN_NAME, SqliteAccountStore, SqliteCredentialStore,
+    SqliteSessionStore,
+};
 pub use sshkey::{SshKeyError, SshPublicKey};
 pub use throttle::{DEFAULT_LOCK_SECS, DEFAULT_MAX_FAILURES, LoginThrottle};

@@ -170,3 +170,18 @@ fn a_long_line_is_its_head_with_no_marker_and_the_count_of_the_characters_left_o
     let looks = "see \u{2026}(500 more characters)";
     assert_eq!(display_line(looks), (looks.to_owned(), 0));
 }
+
+#[test]
+fn the_account_records_treat_the_same_characters_as_a_disguise() {
+    // RFC 014 D-7: `planeter_auth::text` (the escaping of an account event's detail and the refusal of an unsafe name) and this module
+    // (the file-by-file view) must agree on every character, so that one set is what "display-safe" means in the project.
+    for cp in 0..=0x10FFFFu32 {
+        if let Some(c) = char::from_u32(cp) {
+            assert_eq!(
+                planeter_auth::text::is_disguise(c),
+                is_disguise(c),
+                "U+{cp:04X}"
+            );
+        }
+    }
+}
