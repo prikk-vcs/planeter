@@ -30,7 +30,8 @@ pub mod throttle;
 
 pub use accounts::{
     AccountDetail, AccountError, AccountList, AccountRow, AccountService, DISPLAY_NAME_MAX,
-    DisplayNameError, Granted, RepoRole, Revoked, SoleAdministrator, check_display_name,
+    DisplayNameError, Granted, MadeToken, RepoRole, Revoked, SoleAdministrator, TokenSpec,
+    check_display_name,
 };
 pub use authenticator::Authenticator;
 pub use credential::{

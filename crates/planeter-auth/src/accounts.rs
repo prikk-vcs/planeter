@@ -16,13 +16,17 @@ use std::sync::Arc;
 use rusqlite::params;
 
 use planeter_core::creation::{HandleError, check_new_handle, handle_key};
+use planeter_core::{RepoScope, Scope, ScopeAccess};
 use planeter_store::SqliteDb;
+use planeter_store::{RepoId, UserId};
 
+use crate::credential::{NewToken, TokenError, check_new_token};
 use crate::events::{AccountEvent, AccountEventKind, EventBy, insert_event};
 use crate::hashing::PasswordHasher;
+use crate::hashing::TokenHash;
 use crate::identity::AuthError;
 use crate::password::NormalizedPassword;
-use crate::sqlite::{handle_taken, immediate, prepare};
+use crate::sqlite::{handle_taken, immediate, insert_new_token, prepare};
 use crate::text::{escape_display, is_display_safe};
 
 /// The longest display name, in characters.
@@ -68,6 +72,12 @@ pub enum AccountError {
     LastAdministrator,
     /// The account has no role of its own on the repository to take away.
     NoGrant,
+    /// A rule of a new token (the name, the expiry, the bound of 200) refused it.
+    Token(TokenError),
+    /// The account has no token with this id.
+    NoSuchToken,
+    /// A repository a token was to be limited to does not exist (`owner/name`).
+    RepositoryUnknown(String),
     Backend(String),
 }
 
@@ -85,6 +95,9 @@ impl AccountError {
             AccountError::AccountDisabled => "account_disabled",
             AccountError::LastAdministrator => "last_administrator",
             AccountError::NoGrant => "no_grant",
+            AccountError::Token(_) => "token",
+            AccountError::NoSuchToken => "no_such_token",
+            AccountError::RepositoryUnknown(_) => "repository_unknown",
             AccountError::Backend(_) => "backend",
         }
     }
@@ -895,4 +908,193 @@ fn row_of(r: &rusqlite::Row<'_>) -> rusqlite::Result<AccountRow> {
             .get::<_, Option<i64>>(5)?
             .map(|n| u64::try_from(n).unwrap_or(0)),
     })
+}
+
+/// A token to make for an account (the operator's `token create`). The **secret is not here**: the caller minted it and gives only its
+/// hash, so this layer never holds a token it could leak.
+pub struct TokenSpec<'a> {
+    pub handle: &'a str,
+    pub hash: TokenHash,
+    pub name: &'a str,
+    pub access: ScopeAccess,
+    /// The repositories the token is limited to, as `(owner, name)`; empty means every repository the account can reach.
+    pub repos: &'a [(String, String)],
+    /// Unix seconds.
+    pub expires_at: u64,
+}
+
+/// What a token creation made.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MadeToken {
+    /// The public identifier (not the secret).
+    pub id: String,
+    pub display_name: String,
+    /// The repositories the token is limited to, as `owner/name` (empty: all).
+    pub repos: Vec<String>,
+}
+
+fn scope_word(a: ScopeAccess) -> &'static str {
+    match a {
+        ScopeAccess::ReadOnly => "read-only",
+        ScopeAccess::Write => "write",
+        ScopeAccess::Full => "full",
+    }
+}
+
+impl AccountService {
+    /// Make a token for an account, **in one transaction with its `token_created` event**: the account exists and is not disabled, every
+    /// named repository exists, the rules of a new token (a name of 1 to 60 safe characters; an expiry in the future and within 365 days;
+    /// at most 200 unexpired tokens) hold. A refusal changes nothing. The event's detail is the token's **name, scope and expiry date
+    /// only**: never the secret, its hash or its id.
+    pub fn create_token_for(
+        &self,
+        spec: TokenSpec<'_>,
+        by: EventBy,
+        now: u64,
+    ) -> Result<MadeToken, AccountError> {
+        let handle = spec.handle;
+        // The rules that need no store first (the same function the store applies).
+        let probe = NewToken {
+            hash: spec.hash.clone(),
+            user: UserId::new(handle),
+            name: spec.name.to_owned(),
+            scope: Scope {
+                access: spec.access,
+                repos: RepoScope::All,
+                expires_at: Some(spec.expires_at),
+            },
+        };
+        check_new_token(&probe, now).map_err(AccountError::Token)?;
+        let made = std::cell::RefCell::new(None);
+        self.txn(|conn| {
+            let found: Option<(String, Option<i64>)> = conn
+                .query_row(
+                    "SELECT display_name, disabled_at FROM accounts WHERE user = ?1",
+                    params![handle],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .map(Some)
+                .or_else(|e| match e {
+                    rusqlite::Error::QueryReturnedNoRows => Ok(None),
+                    other => Err(other),
+                })?;
+            let Some((display_name, disabled_at)) = found else {
+                return Ok(Some(AccountError::NoSuchAccount));
+            };
+            if disabled_at.is_some() {
+                return Ok(Some(AccountError::AccountDisabled));
+            }
+            let mut ids: Vec<RepoId> = Vec::new();
+            let mut shown: Vec<String> = Vec::new();
+            for (owner, name) in spec.repos {
+                match resolve_repo(conn, owner, name)? {
+                    Some((id, _, shown_owner)) => {
+                        ids.push(RepoId::new(id));
+                        shown.push(format!("{shown_owner}/{name}"));
+                    }
+                    None => {
+                        return Ok(Some(AccountError::RepositoryUnknown(format!(
+                            "{owner}/{name}"
+                        ))));
+                    }
+                }
+            }
+            let repo_scope = if ids.is_empty() {
+                RepoScope::All
+            } else {
+                RepoScope::Only(ids)
+            };
+            let new = NewToken {
+                hash: spec.hash.clone(),
+                user: UserId::new(handle),
+                name: spec.name.to_owned(),
+                scope: Scope {
+                    access: spec.access,
+                    repos: repo_scope,
+                    expires_at: Some(spec.expires_at),
+                },
+            };
+            let id = match insert_new_token(conn, &new, now)? {
+                Ok(id) => id,
+                Err(TokenError::Backend(why)) => return Ok(Some(AccountError::Backend(why))),
+                Err(e) => return Ok(Some(AccountError::Token(e))),
+            };
+            let reach = if shown.is_empty() {
+                String::new()
+            } else {
+                format!(", {} repositories", shown.len())
+            };
+            insert_event(
+                conn,
+                &AccountEvent::new(
+                    handle,
+                    AccountEventKind::TokenCreated,
+                    by,
+                    &format!(
+                        "{}; {}{reach}; until {}",
+                        spec.name,
+                        scope_word(spec.access),
+                        crate::text::ymd(spec.expires_at)
+                    ),
+                    now,
+                ),
+            )?;
+            *made.borrow_mut() = Some(MadeToken {
+                id,
+                display_name,
+                repos: shown,
+            });
+            Ok(None)
+        })?;
+        made.into_inner()
+            .ok_or_else(|| AccountError::Backend("no result".to_owned()))
+    }
+
+    /// Revoke the token with this public `id` **that belongs to `handle`**, in one transaction with the `token_revoked` event (the token's
+    /// **name** only). Another account's id is `NoSuchToken` and nothing is written. Returns the token's name.
+    pub fn revoke_token_of(
+        &self,
+        handle: &str,
+        id: &str,
+        by: EventBy,
+        now: u64,
+    ) -> Result<String, AccountError> {
+        let name = std::cell::RefCell::new(None);
+        self.txn(|conn| {
+            let exists: i64 = conn.query_row(
+                "SELECT COUNT(*) FROM accounts WHERE user = ?1",
+                params![handle],
+                |r| r.get(0),
+            )?;
+            if exists == 0 {
+                return Ok(Some(AccountError::NoSuchAccount));
+            }
+            let found: Option<String> = conn
+                .query_row(
+                    "SELECT COALESCE(name, '') FROM tokens WHERE id = ?1 AND user = ?2",
+                    params![id, handle],
+                    |r| r.get(0),
+                )
+                .map(Some)
+                .or_else(|e| match e {
+                    rusqlite::Error::QueryReturnedNoRows => Ok(None),
+                    other => Err(other),
+                })?;
+            let Some(token_name) = found else {
+                return Ok(Some(AccountError::NoSuchToken));
+            };
+            conn.execute(
+                "DELETE FROM tokens WHERE id = ?1 AND user = ?2",
+                params![id, handle],
+            )?;
+            insert_event(
+                conn,
+                &AccountEvent::new(handle, AccountEventKind::TokenRevoked, by, &token_name, now),
+            )?;
+            *name.borrow_mut() = Some(token_name);
+            Ok(None)
+        })?;
+        name.into_inner()
+            .ok_or_else(|| AccountError::Backend("no result".to_owned()))
+    }
 }

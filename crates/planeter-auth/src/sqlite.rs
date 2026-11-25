@@ -237,6 +237,38 @@ fn scope_from(access: String, repos: Option<String>, exp: Option<i64>) -> Result
     })
 }
 
+/// Insert a new token on an open connection **inside the caller's transaction**: the cap of [`TOKENS_MAX`] unexpired tokens per account
+/// (`Err(TooMany)`), a fresh public id (a clash with the unique index only draws again). Returns the id. The rules of [`check_new_token`]
+/// are the caller's to have applied.
+pub(crate) fn insert_new_token(
+    conn: &rusqlite::Connection,
+    new: &NewToken,
+    now: u64,
+) -> rusqlite::Result<std::result::Result<String, TokenError>> {
+    let (access, repos, exp) = scope_cols(&new.scope);
+    let now_i = i64::try_from(now).unwrap_or(i64::MAX);
+    let live: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM tokens WHERE user = ?1 AND (expires_at IS NULL OR expires_at > ?2)",
+        params![new.user.as_str(), now_i],
+        |r| r.get(0),
+    )?;
+    if usize::try_from(live).unwrap_or(usize::MAX) >= TOKENS_MAX {
+        return Ok(Err(TokenError::TooMany));
+    }
+    for _ in 0..8 {
+        let id = random_token_id();
+        let done = conn.execute(
+            "INSERT OR IGNORE INTO tokens (hash, user, access, repos, expires_at, id, name, created_at) \
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            params![new.hash.0, new.user.as_str(), access, repos, exp, id, new.name, now_i],
+        )?;
+        if done == 1 {
+            return Ok(Ok(id));
+        }
+    }
+    Ok(Err(TokenError::Backend("no free token id".to_owned())))
+}
+
 /// [`AccountStore`] over SQLite.
 #[derive(Clone)]
 pub struct SqliteAccountStore {
@@ -446,32 +478,13 @@ impl SqliteCredentialStore {
         now: u64,
     ) -> std::result::Result<TokenRecord, TokenError> {
         check_new_token(&new, now)?;
-        let (access, repos, exp) = scope_cols(&new.scope);
-        let now_i = i64::try_from(now).unwrap_or(i64::MAX);
         let refused = std::cell::Cell::new(None);
-        let made = immediate(&self.db, |conn| {
-            let live: i64 = conn.query_row(
-                "SELECT COUNT(*) FROM tokens WHERE user = ?1 AND (expires_at IS NULL OR expires_at > ?2)",
-                params![new.user.as_str(), now_i],
-                |r| r.get(0),
-            )?;
-            if usize::try_from(live).unwrap_or(usize::MAX) >= TOKENS_MAX {
-                refused.set(Some(TokenError::TooMany));
-                return Ok(None);
+        let made = immediate(&self.db, |conn| match insert_new_token(conn, &new, now)? {
+            Ok(id) => Ok(Some(id)),
+            Err(e) => {
+                refused.set(Some(e));
+                Ok(None)
             }
-            // The id is random; a clash with the unique index is not an error to show, only a reason to draw again.
-            for _ in 0..8 {
-                let id = random_token_id();
-                let done = conn.execute(
-                    "INSERT OR IGNORE INTO tokens (hash, user, access, repos, expires_at, id, name, created_at) \
-                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
-                    params![new.hash.0, new.user.as_str(), access, repos, exp, id, new.name, now_i],
-                )?;
-                if done == 1 {
-                    return Ok(Some(id));
-                }
-            }
-            Ok(None)
         })
         .map_err(|e| TokenError::Backend(e.to_string()))?;
         if let Some(e) = refused.take() {
