@@ -14,6 +14,7 @@
 //! provider's JWKS with `jsonwebtoken`'s `aws_lc_rs` backend, fetching only through the egress guard +
 //! confined `curl`; accounts are linked to `(issuer, subject)` administratively — no auto-provisioning.
 
+pub mod accounts;
 pub mod authenticator;
 pub mod credential;
 pub mod events;
@@ -27,6 +28,9 @@ pub mod sshkey;
 pub mod text;
 pub mod throttle;
 
+pub use accounts::{
+    AccountError, AccountService, DISPLAY_NAME_MAX, DisplayNameError, check_display_name,
+};
 pub use authenticator::Authenticator;
 pub use credential::{
     CredentialStore, DeployKeyRecord, InMemoryCredentialStore, LEGACY_TOKEN_NAME, NewToken,

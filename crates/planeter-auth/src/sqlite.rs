@@ -180,7 +180,6 @@ pub(crate) fn prepare(db: &SqliteDb) -> Result<AccountsMigration> {
 
 /// Whether a handle is taken, **compared case-insensitively** (RFC 014 D-2): by an account (colliding ones included), by an organization
 /// (a role, a team) or by the owner of a repository. The caller holds the transaction.
-#[allow(dead_code)] // used by the account writes of RFC 014 T6
 pub(crate) fn handle_taken(conn: &rusqlite::Connection, key: &str) -> rusqlite::Result<bool> {
     conn.query_row(
         "SELECT EXISTS (SELECT 1 FROM accounts WHERE handle_key = ?1) \
