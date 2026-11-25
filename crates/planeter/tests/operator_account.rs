@@ -1567,7 +1567,17 @@ fn script_works() -> bool {
         .unwrap_or(false)
 }
 
+/// How long a test waits for a prompt before it fails with what it did receive.
+const PROMPT_GUARD: Duration = Duration::from_secs(30);
+
 /// Run `planeter operator account …` on a pseudo-terminal (util-linux `script`), typing `typed` lines; the PATH starts with `bin`.
+///
+/// **Each line is typed only after its prompt has appeared** in the terminal's transcript (the first after `Password:`, the second after
+/// `Password again:`), as a person types after seeing the prompt. The command turns the echo off **before** it prints the first prompt,
+/// so "prompt seen" means "echo already off": the order is prompt printed → echo off → input sent. A fixed pause instead raced with the
+/// command's start under the load of a whole-workspace run (the typed password was echoed once). If the command ends before a prompt
+/// (echo that cannot be turned off asks for nothing), nothing more is typed. If a prompt does not appear within [`PROMPT_GUARD`] the
+/// test fails with the transcript it received.
 fn on_a_terminal(w: &World, args: &[&str], typed: &[&str], bin: Option<&Path>) -> (i32, String) {
     let transcript = w.dir.join("typescript");
     let _ = std::fs::remove_file(&transcript);
@@ -1590,17 +1600,50 @@ fn on_a_terminal(w: &World, args: &[&str], typed: &[&str], bin: Option<&Path>) -
         .spawn()
         .expect("run script");
     let mut stdin = child.stdin.take().unwrap();
-    std::thread::sleep(Duration::from_millis(700));
-    for line in typed {
+    let seen = || std::fs::read_to_string(&transcript).unwrap_or_default();
+    for (i, line) in typed.iter().enumerate() {
+        // The (i + 1)-th prompt: "Password:" then "Password again:" (both contain "Password"; the second also "again").
+        let prompt = if i == 0 {
+            "Password:"
+        } else {
+            "Password again:"
+        };
+        let deadline = Instant::now() + PROMPT_GUARD;
+        let mut ended = false;
+        loop {
+            if seen().matches(prompt).count() >= 1 {
+                break;
+            }
+            if child.try_wait().unwrap().is_some() {
+                ended = true;
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "the prompt {prompt:?} did not appear within {PROMPT_GUARD:?}; the terminal showed: {:?}",
+                seen()
+            );
+            std::thread::sleep(Duration::from_millis(20));
+        }
+        if ended {
+            break;
+        }
         let _ = stdin.write_all(format!("{line}\n").as_bytes());
-        std::thread::sleep(Duration::from_millis(500));
+        // The next prompt is waited for in the transcript; nothing is assumed about how fast the command reads.
     }
-    drop(stdin);
-    let status = child.wait().unwrap();
-    (
-        status.code().unwrap_or(-1),
-        std::fs::read_to_string(&transcript).unwrap_or_default(),
-    )
+    // Let the command finish reading before its input closes: it ends by itself once it has what it asked for.
+    let end = Instant::now() + PROMPT_GUARD;
+    let status = loop {
+        if let Some(st) = child.try_wait().unwrap() {
+            break st;
+        }
+        if Instant::now() > end {
+            drop(stdin);
+            break child.wait().unwrap();
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    };
+    (status.code().unwrap_or(-1), seen())
 }
 
 #[test]
