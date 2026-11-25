@@ -34,6 +34,10 @@ serde_json = "1"
 # SQLite account/credential stores over planeter-store's shared SqliteDb (same crate, no new tree).
 rusqlite = { version = "0.41", features = ["bundled"] }
 
+# RFC 014 D-4: Unicode NFKC for the password rule, so one Japanese password typed through different input methods is one password. Already in the
+# lock (url -> idna -> idna_adapter -> icu_normalizer), so the crate count does not change; the ledger in docs/dependency-policy.md has the row.
+icu_normalizer = { version = "2", default-features = false, features = ["compiled_data"] }
+
 [dev-dependencies]
 # Tests sign ES256 tokens from a PEM fixture; production verifies with JWKs only, so PEM parsing is test-only.
 jsonwebtoken = { version = "11", default-features = false, features = ["aws_lc_rs", "use_pem"] }
