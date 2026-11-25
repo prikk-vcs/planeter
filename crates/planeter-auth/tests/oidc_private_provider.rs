@@ -137,6 +137,15 @@ fn trusting_curl(dir: &Path) -> PathBuf {
     )
     .unwrap();
     std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    // A script that was written a moment ago can be refused with "Text file busy" (ETXTBSY) while another test's thread has forked and not yet
+    // executed: the child holds a copy of the write descriptor until its `exec`. It is a race of the test and it goes away by itself, so
+    // the script is tried until it runs, before any fetch depends on it.
+    for _ in 0..200 {
+        match Command::new(&script).arg("--version").output() {
+            Err(e) if e.raw_os_error() == Some(26) => std::thread::sleep(Duration::from_millis(10)),
+            _ => break,
+        }
+    }
     script
 }
 
