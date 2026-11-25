@@ -77,6 +77,12 @@ fn signed_id_token(nonce: &str, sub: &str) -> String {
 
 /// An app with OIDC configured against the mock provider; `alice` is linked to subject `user-42`.
 fn app(subdir: &str) -> (AppState, Arc<MockFetcher>) {
+    let (state, fetcher, _) = app_with_accounts(subdir);
+    (state, fetcher)
+}
+
+/// [`app`], and the account store behind it (so a test can disable an account).
+fn app_with_accounts(subdir: &str) -> (AppState, Arc<MockFetcher>, Arc<InMemoryAccountStore>) {
     let root = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(subdir);
     let _ = std::fs::remove_dir_all(&root);
     let store: Arc<dyn RepositoryStore> = Arc::new(InMemoryRepositoryStore::new());
@@ -90,6 +96,9 @@ fn app(subdir: &str) -> (AppState, Arc<MockFetcher>) {
     let accounts = Arc::new(InMemoryAccountStore::new());
     accounts
         .upsert(Account {
+            created_at: None,
+            disabled: None,
+            password_changed_at: None,
             user: UserId::new("alice"),
             display_name: "Alice".into(),
             email: None,
@@ -101,7 +110,7 @@ fn app(subdir: &str) -> (AppState, Arc<MockFetcher>) {
         .unwrap();
     let hasher = Arc::new(InsecureStubHasher);
     let auth = Arc::new(Authenticator::new(
-        accounts,
+        accounts.clone(),
         Arc::new(InMemoryCredentialStore::new()),
         hasher.clone(),
         hasher,
@@ -139,7 +148,7 @@ fn app(subdir: &str) -> (AppState, Arc<MockFetcher>) {
         transport: None,
         creation: None,
     };
-    (state, fetcher)
+    (state, fetcher, accounts)
 }
 
 async fn send(r: &axum::Router, req: Request<Body>) -> Response {
@@ -311,4 +320,113 @@ async fn unlinked_subject_is_refused() {
     .await;
     assert_eq!(cb.status(), StatusCode::UNAUTHORIZED);
     assert!(cookie_value(&cb, "planeter_session").is_none());
+}
+
+/// Begin a sign-in, let the provider vouch for `subject`, and return the callback's answer (status, `Set-Cookie` names, body text).
+async fn verified_callback(
+    r: &axum::Router,
+    fetcher: &MockFetcher,
+    subject: &str,
+    lang: &str,
+) -> (StatusCode, Vec<String>, String) {
+    let begin = send(
+        r,
+        Request::builder()
+            .uri("/login/oidc")
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    let location = begin
+        .headers()
+        .get(header::LOCATION)
+        .unwrap()
+        .to_str()
+        .unwrap()
+        .to_owned();
+    let state_cookie = cookie_value(&begin, "planeter_oidc_state").expect("state cookie");
+    let nonce = query_param(&location, "nonce").unwrap();
+    fetcher.set(
+        "https://idp.example/token",
+        format!(r#"{{"id_token":"{}"}}"#, signed_id_token(&nonce, subject)),
+    );
+    let cb = send(
+        r,
+        Request::builder()
+            .uri(format!(
+                "/login/oidc/callback?code=abc&state={state_cookie}"
+            ))
+            .header(header::ACCEPT_LANGUAGE, lang)
+            .header(
+                header::COOKIE,
+                format!("planeter_oidc_state={state_cookie}"),
+            )
+            .body(Body::empty())
+            .unwrap(),
+    )
+    .await;
+    let status = cb.status();
+    let cookies: Vec<String> = cb
+        .headers()
+        .get_all(header::SET_COOKIE)
+        .iter()
+        .filter_map(|v| v.to_str().ok())
+        .map(|c| c.split('=').next().unwrap_or("").to_owned())
+        .collect();
+    let body = axum::body::to_bytes(cb.into_body(), 1 << 20).await.unwrap();
+    (status, cookies, String::from_utf8_lossy(&body).into_owned())
+}
+
+#[tokio::test]
+async fn a_verified_identity_whose_account_is_disabled_is_told_so_plainly_and_gets_no_session() {
+    // RFC 014 D-6: the provider has just proved who this is, so the refusal says what is true and what to do. (A password sign-in does
+    // not: it answers as for any bad credential.)
+    let (state, fetcher, accounts) = app_with_accounts("web-oidc-disabled");
+    let r = router(state);
+    accounts
+        .disable(&UserId::new("alice"), "left the project", 1)
+        .unwrap();
+    let (status, cookies, body) = verified_callback(&r, &fetcher, "user-42", "en").await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert!(
+        body.contains("This account has been disabled. Ask the person who runs this server."),
+        "{body}"
+    );
+    assert!(
+        !cookies.iter().any(|c| c == "planeter_session"),
+        "no session: {cookies:?}"
+    );
+    // The reason the operator wrote is not shown to the person (it is the operator's note, not a message).
+    assert!(!body.contains("left the project"));
+    // In Japanese.
+    let (status, _, body) = verified_callback(&r, &fetcher, "user-42", "ja").await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+    assert!(
+        body.contains("このアカウントは無効になっています。このサーバーを運用している人に問い合わせてください。"),
+        "{body}"
+    );
+    // Enabled again: the same identity signs in.
+    accounts.enable(&UserId::new("alice")).unwrap();
+    let (status, cookies, _) = verified_callback(&r, &fetcher, "user-42", "en").await;
+    assert_eq!(status, StatusCode::SEE_OTHER);
+    assert!(cookies.iter().any(|c| c == "planeter_session"));
+}
+
+#[tokio::test]
+async fn an_identity_with_no_account_is_told_it_is_not_linked_in_the_same_plain_words() {
+    // The existing notice, checked for plainness and kept: one sentence says what is true (this identity is not linked) and one what to do.
+    let (state, fetcher, _) = app_with_accounts("web-oidc-unlinked");
+    let r = router(state);
+    let (status, cookies, body) = verified_callback(&r, &fetcher, "user-unknown", "en").await;
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+    assert!(
+        body.contains("This single sign-on identity is not linked to a planeter account. Ask the person who runs this server."),
+        "{body}"
+    );
+    assert!(!cookies.iter().any(|c| c == "planeter_session"));
+    let (_, _, ja) = verified_callback(&r, &fetcher, "user-unknown", "ja").await;
+    assert!(
+        ja.contains("このシングルサインオンの ID は、planeter のアカウントに連携されていません。このサーバーを運用している人に問い合わせてください。"),
+        "{ja}"
+    );
 }

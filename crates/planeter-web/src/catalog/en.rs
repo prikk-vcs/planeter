@@ -701,6 +701,15 @@ pub const CATALOG: &[Entry] = &[
         "This single sign-on identity is not linked to a planeter account. Ask the person who runs this server.",
     ),
     msg(
+        "page.sso_disabled.title",
+        "This account is disabled · {product}",
+    ),
+    msg("page.sso_disabled.heading", "This account is disabled"),
+    msg(
+        "page.sso_disabled.body",
+        "This account has been disabled. Ask the person who runs this server.",
+    ),
+    msg(
         "page.server_error.title",
         "Something went wrong · {product}",
     ),

@@ -736,6 +736,18 @@ pub const CATALOG: &[Entry] = &[
         "page.sso_unlinked.body",
         "このシングルサインオンの ID は、planeter のアカウントに連携されていません。このサーバーを運用している人に問い合わせてください。",
     ),
+    msg(
+        "page.sso_disabled.title",
+        "このアカウントは無効になっています · {product}",
+    ),
+    msg(
+        "page.sso_disabled.heading",
+        "このアカウントは無効になっています",
+    ),
+    msg(
+        "page.sso_disabled.body",
+        "このアカウントは無効になっています。このサーバーを運用している人に問い合わせてください。",
+    ),
     msg("page.server_error.title", "問題が発生しました · {product}"),
     msg("page.server_error.heading", "問題が発生しました"),
     msg(

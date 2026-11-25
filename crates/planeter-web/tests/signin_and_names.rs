@@ -33,6 +33,9 @@ fn app(names: &[(&str, &str)]) -> App {
     for (id, name) in names {
         accounts
             .upsert(Account {
+                created_at: None,
+                disabled: None,
+                password_changed_at: None,
                 user: UserId::new(*id),
                 display_name: (*name).into(),
                 email: None,

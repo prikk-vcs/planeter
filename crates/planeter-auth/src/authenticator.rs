@@ -96,6 +96,11 @@ impl Authenticator {
         ) {
             (Some(hash), Some(presented)) => {
                 if self.password_hasher.verify(presented.as_str(), hash) {
+                    // A disabled account's password is checked like any other (the same one verification) and then refused as a wrong
+                    // password is: the answer and the work are the same (RFC 014 D-6, IS-31).
+                    if account.as_ref().is_some_and(|a| a.disabled.is_some()) {
+                        return Err(AuthError::BadCredentials);
+                    }
                     if self.password_hasher.needs_rehash(hash) {
                         // The password is right and was hashed with older parameters: store a fresh hash. A failure to store it
                         // is not a failed sign-in (the next one tries again).
@@ -123,8 +128,30 @@ impl Authenticator {
             .accounts
             .lookup_oidc(&identity.issuer, &identity.subject)?
             .ok_or(AuthError::BadCredentials)?;
-        self.accounts.get(&user)?.ok_or(AuthError::BadCredentials)?;
+        let account = self.accounts.get(&user)?.ok_or(AuthError::BadCredentials)?;
+        if account.disabled.is_some() {
+            // The provider has just proved who this is, so the person is told plainly (RFC 014 D-6): nothing is revealed to anyone else.
+            return Err(AuthError::Disabled);
+        }
         Ok(Principal::User(user))
+    }
+
+    /// Whether `user` may act at all: `false` when the account is **disabled** (or the store cannot say: it fails closed). An account that
+    /// has no row at all is not disabled (a token or a session can name a handle that was never made an account row). Every path that
+    /// turns a stored credential into a principal asks this at each use: a token, a session, a key.
+    pub fn is_active(&self, user: &UserId) -> bool {
+        self.accounts
+            .get(user)
+            .is_ok_and(|a| a.is_none_or(|a| a.disabled.is_none()))
+    }
+
+    /// `Err(BadCredentials)` when [`Authenticator::is_active`] says no (and for a store failure).
+    fn require_active(&self, user: &UserId) -> Result<()> {
+        if self.is_active(user) {
+            Ok(())
+        } else {
+            Err(AuthError::BadCredentials)
+        }
     }
 
     /// A scoped access/OAuth token → a `MachineAsUser` principal. Rejects an expired token.
@@ -137,6 +164,8 @@ impl Authenticator {
         if record.scope.is_expired((self.now_unix)()) {
             return Err(AuthError::BadCredentials);
         }
+        // At each use, not only at creation: the tokens of a disabled account are refused, as an unknown token is.
+        self.require_active(&record.user)?;
         Ok(Principal::MachineAsUser {
             user: record.user,
             scope: record.scope,
@@ -152,6 +181,7 @@ impl Authenticator {
         if record.scope.is_expired((self.now_unix)()) {
             return Err(AuthError::BadCredentials);
         }
+        self.require_active(&record.user)?;
         Ok(Principal::MachineAsUser {
             user: record.user,
             scope: record.scope,
@@ -164,6 +194,7 @@ impl Authenticator {
             .credentials
             .find_deploy_key(fingerprint)?
             .ok_or(AuthError::BadCredentials)?;
+        self.require_active(&record.registrant)?;
         Ok(Principal::MachineAsUser {
             user: record.registrant.clone(),
             scope: record.scope(),
@@ -212,6 +243,9 @@ mod tests {
         for (id, name) in [("a", "Alice  "), ("b", ""), ("c", " \t ")] {
             accounts
                 .upsert(Account {
+                    created_at: None,
+                    disabled: None,
+                    password_changed_at: None,
                     user: UserId::new(id),
                     display_name: name.into(),
                     email: None,
@@ -238,6 +272,9 @@ mod tests {
         let hasher = InsecureStubHasher;
         accounts
             .upsert(Account {
+                created_at: None,
+                disabled: None,
+                password_changed_at: None,
                 user: UserId::new("alice"),
                 display_name: "Alice".into(),
                 email: None,

@@ -19,7 +19,7 @@ use axum::routing::{get, post};
 
 use crate::routes::{Action, Class, Routes};
 use planeter_auth::{
-    OidcError, PENDING_TTL_SECS, SESSION_TTL_SECS, SessionId, random_token, tokens_match,
+    AuthError, OidcError, PENDING_TTL_SECS, SESSION_TTL_SECS, SessionId, random_token, tokens_match,
 };
 use planeter_core::admission::{CONTENT_MAX_BYTES, ReadVerb};
 use planeter_core::{Assurance, Principal, RawTarget, ReadError, TreeEntryView, VerifyView};
@@ -355,6 +355,8 @@ enum Notice {
     SsoExpired,
     SsoRefused,
     SsoUnlinked,
+    /// The provider verified the person and their account is disabled (RFC 014 D-6): said plainly.
+    SsoDisabled,
     ServerError,
     MethodNotAllowed,
     PayloadTooLarge,
@@ -400,6 +402,11 @@ impl Notice {
                 Key::PageSsoUnlinkedTitle,
                 Key::PageSsoUnlinkedHeading,
                 Key::PageSsoUnlinkedBody,
+            ),
+            Notice::SsoDisabled => (
+                Key::PageSsoDisabledTitle,
+                Key::PageSsoDisabledHeading,
+                Key::PageSsoDisabledBody,
             ),
             Notice::ServerError => (
                 Key::PageServerErrorTitle,
@@ -1307,6 +1314,13 @@ async fn oidc_begin(State(state): State<AppState>, headers: HeaderMap) -> Respon
     }
 }
 
+/// How a verified identity ended (RFC 014 D-6).
+enum OidcSignIn {
+    Session(planeter_auth::Session),
+    Unlinked,
+    Disabled,
+}
+
 /// The provider's callback: state (cookie == query, one-shot server-side) → code exchange → ID token
 /// verification → the linked account → a session. Unlinked subjects are refused (no auto-provisioning).
 async fn oidc_callback(
@@ -1359,9 +1373,11 @@ async fn oidc_callback(
             Ok(Principal::User(user)) => s
                 .sessions
                 .create(user, now, now + SESSION_TTL_SECS)
-                .map(Some)
+                .map(OidcSignIn::Session)
                 .map_err(|_| ()),
-            _ => Ok(None),
+            // The provider proved who this is and the account is disabled: the person is told so (RFC 014 D-6).
+            Err(AuthError::Disabled) => Ok(OidcSignIn::Disabled),
+            _ => Ok(OidcSignIn::Unlinked),
         }))
     })
     .await;
@@ -1382,7 +1398,7 @@ async fn oidc_callback(
             Next::SignIn,
             vec![],
         ),
-        Ok(Some(Ok(Ok(Some(session))))) => redirect(
+        Ok(Some(Ok(Ok(OidcSignIn::Session(session))))) => redirect(
             &state,
             "/",
             vec![
@@ -1390,11 +1406,19 @@ async fn oidc_callback(
                 clear_cookie(OIDC_STATE_COOKIE),
             ],
         ),
-        Ok(Some(Ok(Ok(None)))) => notice(
+        Ok(Some(Ok(Ok(OidcSignIn::Unlinked)))) => notice(
             &state,
             &c,
             StatusCode::UNAUTHORIZED,
             Notice::SsoUnlinked,
+            Next::SignIn,
+            vec![clear_cookie(OIDC_STATE_COOKIE)],
+        ),
+        Ok(Some(Ok(Ok(OidcSignIn::Disabled)))) => notice(
+            &state,
+            &c,
+            StatusCode::FORBIDDEN,
+            Notice::SsoDisabled,
             Next::SignIn,
             vec![clear_cookie(OIDC_STATE_COOKIE)],
         ),

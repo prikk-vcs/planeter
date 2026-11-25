@@ -69,6 +69,9 @@ fn harness(concurrency: usize, wait: Duration, delay_ms: u64) -> Harness {
     for name in ["alice", "user-1", "user-2", "user-3", "user-4"] {
         accounts
             .upsert(Account {
+                created_at: None,
+                disabled: None,
+                password_changed_at: None,
                 user: UserId::new(name),
                 display_name: name.into(),
                 email: None,

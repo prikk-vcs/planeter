@@ -14,7 +14,7 @@ use planeter_store::{RepoId, SqliteDb, UserId};
 use crate::credential::{CredentialStore, DeployKeyRecord, SshKeyRecord, TokenRecord};
 use crate::events::EVENTS_SCHEMA;
 use crate::hashing::{PasswordHash, TokenHash};
-use crate::identity::{Account, AccountStore, AuthError, Result};
+use crate::identity::{Account, AccountStore, AuthError, DisabledState, Result};
 use crate::session::{Session, SessionId, SessionStore, random_token};
 
 const AUTH_SCHEMA: &str = "
@@ -262,14 +262,23 @@ impl AccountStore for SqliteAccountStore {
     fn get(&self, user: &UserId) -> Result<Option<Account>> {
         let conn = self.db.lock().map_err(be)?;
         conn.query_row(
-            "SELECT user, display_name, email, password_hash FROM accounts WHERE user = ?1",
+            "SELECT user, display_name, email, password_hash, created_at, disabled_at, disabled_reason, password_changed_at \
+             FROM accounts WHERE user = ?1",
             params![user.as_str()],
             |r| {
+                let secs = |v: Option<i64>| v.map(|n| u64::try_from(n).unwrap_or(0));
+                let disabled_at = secs(r.get::<_, Option<i64>>(5)?);
                 Ok(Account {
                     user: UserId::new(r.get::<_, String>(0)?),
                     display_name: r.get(1)?,
                     email: r.get(2)?,
                     password: r.get::<_, Option<String>>(3)?.map(PasswordHash),
+                    created_at: secs(r.get::<_, Option<i64>>(4)?),
+                    disabled: disabled_at.map(|at| DisabledState {
+                        at,
+                        reason: r.get::<_, Option<String>>(6).ok().flatten().unwrap_or_default(),
+                    }),
+                    password_changed_at: secs(r.get::<_, Option<i64>>(7)?),
                 })
             },
         )
@@ -310,6 +319,34 @@ impl AccountStore for SqliteAccountStore {
                 ],
             )?;
             Ok(())
+        })
+    }
+
+    fn disable(&self, user: &UserId, reason: &str, at: u64) -> Result<bool> {
+        let reason = crate::text::escape_display(reason, 200);
+        immediate(&self.db, |conn| {
+            let changed = conn.execute(
+                "UPDATE accounts SET disabled_at = ?2, disabled_reason = ?3 WHERE user = ?1 AND disabled_at IS NULL",
+                params![user.as_str(), i64::try_from(at).unwrap_or(i64::MAX), reason],
+            )?;
+            if changed > 0 {
+                // The same transaction: there is no moment at which the account is disabled and a session of it still lives.
+                conn.execute(
+                    "DELETE FROM sessions WHERE user = ?1",
+                    params![user.as_str()],
+                )?;
+            }
+            Ok(changed > 0)
+        })
+    }
+
+    fn enable(&self, user: &UserId) -> Result<bool> {
+        immediate(&self.db, |conn| {
+            let changed = conn.execute(
+                "UPDATE accounts SET disabled_at = NULL, disabled_reason = NULL WHERE user = ?1 AND disabled_at IS NOT NULL",
+                params![user.as_str()],
+            )?;
+            Ok(changed > 0)
         })
     }
 
@@ -507,6 +544,9 @@ mod tests {
 
         accounts
             .upsert(Account {
+                created_at: None,
+                disabled: None,
+                password_changed_at: None,
                 user: UserId::new("alice"),
                 display_name: "Alice".into(),
                 email: Some("a@example".into()),
@@ -577,6 +617,9 @@ mod tests {
         let creds = Arc::new(SqliteCredentialStore::new(db).unwrap());
         accounts
             .upsert(Account {
+                created_at: None,
+                disabled: None,
+                password_changed_at: None,
                 user: UserId::new("bob"),
                 display_name: "Bob".into(),
                 email: None,

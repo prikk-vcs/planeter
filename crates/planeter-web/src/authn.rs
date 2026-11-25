@@ -105,6 +105,8 @@ pub(crate) async fn principal(headers: &HeaderMap, state: &AppState) -> Principa
         }
         if let Some(id) = session_id
             && let Ok(Some(session)) = s.sessions.get(&SessionId(id), now)
+            // A session of a disabled account is no session (RFC 014 D-6): checked at every request, not only when it was made.
+            && s.auth.is_active(&session.user)
         {
             return Principal::User(session.user);
         }

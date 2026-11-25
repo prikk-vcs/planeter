@@ -64,6 +64,9 @@ fn app(subdir: &str, real: bool) -> AppState {
     let accounts = Arc::new(InMemoryAccountStore::new());
     accounts
         .upsert(Account {
+            created_at: None,
+            disabled: None,
+            password_changed_at: None,
             user: UserId::new("alice"),
             display_name: "Alice".into(),
             email: None,

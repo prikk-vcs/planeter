@@ -39,7 +39,7 @@ pub use hashing::{
     Argon2idHasher, InsecureStubHasher, PasswordHash, PasswordHasher, Sha256Stream,
     Sha256TokenHasher, TokenHash, TokenHasher, mint_token, sha256_hex,
 };
-pub use identity::{Account, AccountStore, AuthError, InMemoryAccountStore};
+pub use identity::{Account, AccountStore, AuthError, DisabledState, InMemoryAccountStore};
 pub use oidc::{
     BeginLogin, OidcConfig, OidcError, OidcProvider, OidcVerifier, PENDING_TTL_SECS,
     UnconfiguredOidc, VerifiedIdentity,
