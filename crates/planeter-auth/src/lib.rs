@@ -29,7 +29,8 @@ pub mod text;
 pub mod throttle;
 
 pub use accounts::{
-    AccountError, AccountService, DISPLAY_NAME_MAX, DisplayNameError, check_display_name,
+    AccountDetail, AccountError, AccountList, AccountRow, AccountService, DISPLAY_NAME_MAX,
+    DisplayNameError, Granted, RepoRole, Revoked, SoleAdministrator, check_display_name,
 };
 pub use authenticator::Authenticator;
 pub use credential::{

@@ -10,6 +10,7 @@
 //! (Argon2id is slow and the write lock must not be held through it); an identity event names the provider's **host** and nothing of the
 //! person's identity at it.
 
+use std::collections::BTreeSet;
 use std::sync::Arc;
 
 use rusqlite::params;
@@ -59,6 +60,14 @@ pub enum AccountError {
     IdentityTaken,
     /// The identity is not linked to this account.
     NotLinked,
+    /// No (ready) repository has this owner and name.
+    NoSuchRepository,
+    /// The account is disabled, so it is not given a role.
+    AccountDisabled,
+    /// The grant to remove is the last administrator's: the repository would have none (RFC 014 D-3).
+    LastAdministrator,
+    /// The account has no role of its own on the repository to take away.
+    NoGrant,
     Backend(String),
 }
 
@@ -72,6 +81,10 @@ impl AccountError {
             AccountError::NoSuchAccount => "no_such_account",
             AccountError::IdentityTaken => "identity_taken",
             AccountError::NotLinked => "not_linked",
+            AccountError::NoSuchRepository => "no_such_repository",
+            AccountError::AccountDisabled => "account_disabled",
+            AccountError::LastAdministrator => "last_administrator",
+            AccountError::NoGrant => "no_grant",
             AccountError::Backend(_) => "backend",
         }
     }
@@ -378,4 +391,486 @@ impl AccountService {
         })?;
         Ok(done.get())
     }
+}
+
+// ---------------------------------------------------------------------------------------------------- roles on a repository
+
+/// A role on a repository, as `repo_grants` keeps it (RFC 002 D-4). Ordered: each includes what the one before it allows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum RepoRole {
+    Read,
+    Write,
+    Maintain,
+    Admin,
+}
+
+impl RepoRole {
+    pub const ALL: [RepoRole; 4] = [
+        RepoRole::Read,
+        RepoRole::Write,
+        RepoRole::Maintain,
+        RepoRole::Admin,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            RepoRole::Read => "read",
+            RepoRole::Write => "write",
+            RepoRole::Maintain => "maintain",
+            RepoRole::Admin => "admin",
+        }
+    }
+
+    pub fn parse(word: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|r| r.as_str() == word)
+    }
+}
+
+/// What a grant did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Granted {
+    /// The display name of the account the role went to: shown back, so that a mistyped handle is seen at once.
+    pub display_name: String,
+    /// The role the account had of its own on the repository before (`Some(role)` equal to the one asked: nothing changed, no event).
+    pub previous: Option<RepoRole>,
+}
+
+/// What a revoke did.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Revoked {
+    pub display_name: String,
+    pub was: RepoRole,
+}
+
+/// The repositories for which an account is the only administrator, bounded.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SoleAdministrator {
+    /// `owner/name`, sorted, at most the limit asked.
+    pub repos: Vec<String>,
+    /// How many there are in all.
+    pub total: usize,
+}
+
+/// One line of the account list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AccountRow {
+    pub handle: String,
+    pub display_name: String,
+    pub disabled: bool,
+    pub has_password: bool,
+    pub identities: usize,
+    pub created_at: Option<u64>,
+}
+
+/// The accounts sorted by handle, bounded.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AccountList {
+    pub rows: Vec<AccountRow>,
+    pub total: usize,
+}
+
+/// One account in full (never a hash, a token or a subject).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct AccountDetail {
+    pub row: AccountRow,
+    /// When and why it was disabled.
+    pub disabled: Option<(u64, String)>,
+    pub password_changed_at: Option<u64>,
+    /// `(owner/name, role)`: the account's own grants and the repositories it owns (role `owner`), at most the limit asked.
+    pub roles: Vec<(String, String)>,
+    pub roles_total: usize,
+}
+
+fn count(
+    conn: &rusqlite::Connection,
+    sql: &str,
+    p: impl rusqlite::Params,
+) -> rusqlite::Result<usize> {
+    conn.query_row(sql, p, |r| r.get::<_, i64>(0))
+        .map(|n| usize::try_from(n).unwrap_or(0))
+}
+
+/// The ready repository with this owner and name: `(repo_id, owner_kind, owner)`. A user owner is looked for first (as every other
+/// resolution in the project does).
+fn resolve_repo(
+    conn: &rusqlite::Connection,
+    owner: &str,
+    name: &str,
+) -> rusqlite::Result<Option<(String, String, String)>> {
+    for kind in ["user", "org"] {
+        let found = conn.query_row(
+            "SELECT repo_id, owner_kind, owner FROM repositories WHERE owner_kind = ?1 AND owner = ?2 AND name = ?3 AND state = 'ready'",
+            params![kind, owner, name],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        );
+        match found {
+            Ok(v) => return Ok(Some(v)),
+            Err(rusqlite::Error::QueryReturnedNoRows) => {}
+            Err(e) => return Err(e),
+        }
+    }
+    Ok(None)
+}
+
+/// The handles that can administer a repository **and are not disabled**: its user owner, the admins of its owning organization, the users
+/// with an admin grant of their own and the members of a team that has one (the same sources as the project's role resolution).
+/// `without_direct_grant` leaves one user's own admin grant out (what a revoke would leave).
+fn administrators(
+    conn: &rusqlite::Connection,
+    repo_id: &str,
+    owner_kind: &str,
+    owner: &str,
+    without_direct_grant: Option<&str>,
+) -> rusqlite::Result<BTreeSet<String>> {
+    fn column(
+        conn: &rusqlite::Connection,
+        sql: &str,
+        p: &[&dyn rusqlite::ToSql],
+    ) -> rusqlite::Result<Vec<String>> {
+        let mut stmt = conn.prepare(sql)?;
+        let rows = stmt.query_map(p, |r| r.get::<_, String>(0))?;
+        rows.collect()
+    }
+    let mut all: BTreeSet<String> = BTreeSet::new();
+    if owner_kind == "user" {
+        all.insert(owner.to_owned());
+    }
+    // The users' own admin grants (leaving out the one a revoke would take away: the user stays an administrator by any other source).
+    let skip = without_direct_grant.unwrap_or("");
+    all.extend(column(
+        conn,
+        "SELECT subject FROM repo_grants WHERE repo_id = ?1 AND subject_kind = 'user' AND role = 'admin' AND subject != ?2",
+        &[&repo_id, &skip],
+    )?);
+    if owner_kind == "org" {
+        all.extend(column(
+            conn,
+            "SELECT user FROM org_roles WHERE org = ?1 AND role = 'admin'",
+            &[&owner],
+        )?);
+        all.extend(column(
+            conn,
+            "SELECT m.user FROM repo_grants g JOIN teams t ON t.team = g.subject JOIN team_members m ON m.team = t.team \
+             WHERE g.repo_id = ?1 AND g.subject_kind = 'team' AND g.role = 'admin' AND t.org = ?2",
+            &[&repo_id, &owner],
+        )?);
+    }
+    // A disabled account administers nothing: it cannot act.
+    let gone: BTreeSet<String> = column(
+        conn,
+        "SELECT user FROM accounts WHERE disabled_at IS NOT NULL",
+        &[],
+    )?
+    .into_iter()
+    .collect();
+    Ok(all.difference(&gone).cloned().collect())
+}
+
+impl AccountService {
+    /// Give an account `role` on a repository, **exactly** that role (a higher role it had is lowered, a lower one raised): refused for a
+    /// repository that does not exist, an account that does not exist and an account that is **disabled**. The event (`role_granted`,
+    /// with the repository and the role) is the person's own record of it. A grant the account already has changes nothing and writes
+    /// nothing (`previous` equals the role asked).
+    pub fn grant_role(
+        &self,
+        handle: &str,
+        owner: &str,
+        name: &str,
+        role: RepoRole,
+        by: EventBy,
+        now: u64,
+    ) -> Result<Granted, AccountError> {
+        let granted = std::cell::RefCell::new(None);
+        self.txn(|conn| {
+            let Some((repo_id, _, shown_owner)) = resolve_repo(conn, owner, name)? else {
+                return Ok(Some(AccountError::NoSuchRepository));
+            };
+            let found: Option<(String, Option<i64>)> = conn
+                .query_row(
+                    "SELECT display_name, disabled_at FROM accounts WHERE user = ?1",
+                    params![handle],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .map(Some)
+                .or_else(|e| match e {
+                    rusqlite::Error::QueryReturnedNoRows => Ok(None),
+                    other => Err(other),
+                })?;
+            let Some((display_name, disabled_at)) = found else {
+                return Ok(Some(AccountError::NoSuchAccount));
+            };
+            if disabled_at.is_some() {
+                return Ok(Some(AccountError::AccountDisabled));
+            }
+            let previous = conn
+                .query_row(
+                    "SELECT role FROM repo_grants WHERE subject_kind = 'user' AND subject = ?1 AND repo_id = ?2",
+                    params![handle, repo_id],
+                    |r| r.get::<_, String>(0),
+                )
+                .map(Some)
+                .or_else(|e| match e {
+                    rusqlite::Error::QueryReturnedNoRows => Ok(None),
+                    other => Err(other),
+                })?
+                .and_then(|w| RepoRole::parse(&w));
+            if previous != Some(role) {
+                conn.execute(
+                    "INSERT INTO repo_grants (subject_kind, subject, repo_id, role) VALUES ('user', ?1, ?2, ?3) \
+                     ON CONFLICT(subject_kind, subject, repo_id) DO UPDATE SET role = excluded.role",
+                    params![handle, repo_id, role.as_str()],
+                )?;
+                insert_event(
+                    conn,
+                    &AccountEvent::new(
+                        handle,
+                        AccountEventKind::RoleGranted,
+                        by,
+                        &format!("{shown_owner}/{name} {}", role.as_str()),
+                        now,
+                    ),
+                )?;
+            }
+            *granted.borrow_mut() = Some(Granted {
+                display_name,
+                previous,
+            });
+            Ok(None)
+        })?;
+        granted
+            .into_inner()
+            .ok_or_else(|| AccountError::Backend("no result".to_owned()))
+    }
+
+    /// Take away the role an account has **of its own** on a repository. An administrator grant that is the **last** administrator of the
+    /// repository (counting its owner, its organization's administrators and team grants, and leaving out disabled accounts) is refused
+    /// unless `allow_no_admin`. A repository's owner stays its administrator whatever grants are taken away.
+    pub fn revoke_role(
+        &self,
+        handle: &str,
+        owner: &str,
+        name: &str,
+        allow_no_admin: bool,
+        by: EventBy,
+        now: u64,
+    ) -> Result<Revoked, AccountError> {
+        let revoked = std::cell::RefCell::new(None);
+        self.txn(|conn| {
+            let Some((repo_id, owner_kind, shown_owner)) = resolve_repo(conn, owner, name)? else {
+                return Ok(Some(AccountError::NoSuchRepository));
+            };
+            let display_name: Option<String> = conn
+                .query_row(
+                    "SELECT display_name FROM accounts WHERE user = ?1",
+                    params![handle],
+                    |r| r.get(0),
+                )
+                .map(Some)
+                .or_else(|e| match e {
+                    rusqlite::Error::QueryReturnedNoRows => Ok(None),
+                    other => Err(other),
+                })?;
+            let Some(display_name) = display_name else {
+                return Ok(Some(AccountError::NoSuchAccount));
+            };
+            let was = conn
+                .query_row(
+                    "SELECT role FROM repo_grants WHERE subject_kind = 'user' AND subject = ?1 AND repo_id = ?2",
+                    params![handle, repo_id],
+                    |r| r.get::<_, String>(0),
+                )
+                .map(Some)
+                .or_else(|e| match e {
+                    rusqlite::Error::QueryReturnedNoRows => Ok(None),
+                    other => Err(other),
+                })?
+                .and_then(|w| RepoRole::parse(&w));
+            let Some(was) = was else {
+                return Ok(Some(AccountError::NoGrant));
+            };
+            if was == RepoRole::Admin && !allow_no_admin {
+                let left = administrators(conn, &repo_id, &owner_kind, &shown_owner, Some(handle))?;
+                if left.is_empty() {
+                    return Ok(Some(AccountError::LastAdministrator));
+                }
+            }
+            conn.execute(
+                "DELETE FROM repo_grants WHERE subject_kind = 'user' AND subject = ?1 AND repo_id = ?2",
+                params![handle, repo_id],
+            )?;
+            insert_event(
+                conn,
+                &AccountEvent::new(
+                    handle,
+                    AccountEventKind::RoleRevoked,
+                    by,
+                    &format!("{shown_owner}/{name} {}", was.as_str()),
+                    now,
+                ),
+            )?;
+            *revoked.borrow_mut() = Some(Revoked { display_name, was });
+            Ok(None)
+        })?;
+        revoked
+            .into_inner()
+            .ok_or_else(|| AccountError::Backend("no result".to_owned()))
+    }
+
+    /// The repositories for which `handle` is the **only** administrator (counting the other sources of the role, and leaving out disabled
+    /// accounts), `owner/name` sorted, at most `limit` of them and the total.
+    pub fn sole_administrator_of(
+        &self,
+        handle: &str,
+        limit: usize,
+    ) -> Result<SoleAdministrator, AccountError> {
+        let conn = self
+            .db
+            .lock()
+            .map_err(|e| AccountError::Backend(e.to_string()))?;
+        let be = |e: rusqlite::Error| AccountError::Backend(e.to_string());
+        let mut stmt = conn
+            .prepare(
+                "SELECT repo_id FROM repositories WHERE owner_kind = 'user' AND owner = ?1 AND state = 'ready' \
+                 UNION SELECT g.repo_id FROM repo_grants g JOIN repositories r ON r.repo_id = g.repo_id AND r.state = 'ready' \
+                       WHERE g.subject_kind = 'user' AND g.subject = ?1 AND g.role = 'admin' \
+                 UNION SELECT r.repo_id FROM repositories r JOIN org_roles o ON o.org = r.owner AND r.owner_kind = 'org' \
+                       WHERE o.user = ?1 AND o.role = 'admin' AND r.state = 'ready' \
+                 UNION SELECT g.repo_id FROM repo_grants g JOIN teams t ON t.team = g.subject JOIN team_members m ON m.team = t.team \
+                       JOIN repositories r ON r.repo_id = g.repo_id AND r.owner_kind = 'org' AND r.owner = t.org AND r.state = 'ready' \
+                       WHERE g.subject_kind = 'team' AND g.role = 'admin' AND m.user = ?1",
+            )
+            .map_err(be)?;
+        let candidates: Vec<String> = stmt
+            .query_map(params![handle], |r| r.get(0))
+            .map_err(be)?
+            .collect::<Result<_, _>>()
+            .map_err(be)?;
+        drop(stmt);
+        let mut sole: Vec<String> = Vec::new();
+        for repo_id in candidates {
+            let (kind, owner, name): (String, String, String) = conn
+                .query_row(
+                    "SELECT owner_kind, owner, name FROM repositories WHERE repo_id = ?1",
+                    params![repo_id],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                )
+                .map_err(be)?;
+            let admins = administrators(&conn, &repo_id, &kind, &owner, None).map_err(be)?;
+            if admins.len() == 1 && admins.contains(handle) {
+                sole.push(format!("{owner}/{name}"));
+            }
+        }
+        sole.sort();
+        let total = sole.len();
+        sole.truncate(limit);
+        Ok(SoleAdministrator { repos: sole, total })
+    }
+
+    /// The accounts sorted by handle, at most `limit` of them, and how many there are.
+    pub fn list_accounts(&self, limit: usize) -> Result<AccountList, AccountError> {
+        let conn = self
+            .db
+            .lock()
+            .map_err(|e| AccountError::Backend(e.to_string()))?;
+        let be = |e: rusqlite::Error| AccountError::Backend(e.to_string());
+        let total = count(&conn, "SELECT COUNT(*) FROM accounts", []).map_err(be)?;
+        let mut stmt = conn
+            .prepare(
+                "SELECT user, display_name, disabled_at IS NOT NULL, password_hash IS NOT NULL, \
+                        (SELECT COUNT(*) FROM oidc_links l WHERE l.user = accounts.user), created_at \
+                 FROM accounts ORDER BY user LIMIT ?1",
+            )
+            .map_err(be)?;
+        let rows = stmt
+            .query_map(params![i64::try_from(limit).unwrap_or(i64::MAX)], row_of)
+            .map_err(be)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(be)?;
+        Ok(AccountList { rows, total })
+    }
+
+    /// The handles that differ from another's only by case, grouped by key (`handle_collides = 1`), sorted.
+    pub fn collisions(&self) -> Result<Vec<(String, Vec<String>)>, AccountError> {
+        let conn = self
+            .db
+            .lock()
+            .map_err(|e| AccountError::Backend(e.to_string()))?;
+        let be = |e: rusqlite::Error| AccountError::Backend(e.to_string());
+        let mut stmt = conn
+            .prepare("SELECT handle_key, user FROM accounts WHERE handle_collides = 1 ORDER BY handle_key, user")
+            .map_err(be)?;
+        let rows: Vec<(String, String)> = stmt
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .map_err(be)?
+            .collect::<Result<_, _>>()
+            .map_err(be)?;
+        let mut groups: Vec<(String, Vec<String>)> = Vec::new();
+        for (key, user) in rows {
+            match groups.last_mut() {
+                Some((k, v)) if *k == key => v.push(user),
+                _ => groups.push((key, vec![user])),
+            }
+        }
+        Ok(groups)
+    }
+
+    /// One account in full, or `None`. `roles_limit` bounds the roles listed.
+    pub fn show_account(
+        &self,
+        handle: &str,
+        roles_limit: usize,
+    ) -> Result<Option<AccountDetail>, AccountError> {
+        let conn = self
+            .db
+            .lock()
+            .map_err(|e| AccountError::Backend(e.to_string()))?;
+        let be = |e: rusqlite::Error| AccountError::Backend(e.to_string());
+        let found = conn.query_row(
+            "SELECT user, display_name, disabled_at IS NOT NULL, password_hash IS NOT NULL, \
+                    (SELECT COUNT(*) FROM oidc_links l WHERE l.user = accounts.user), created_at, \
+                    disabled_at, disabled_reason, password_changed_at FROM accounts WHERE user = ?1",
+            params![handle],
+            |r| Ok((row_of(r)?, r.get::<_, Option<i64>>(6)?, r.get::<_, Option<String>>(7)?, r.get::<_, Option<i64>>(8)?)),
+        );
+        let (row, disabled_at, reason, changed) = match found {
+            Ok(v) => v,
+            Err(rusqlite::Error::QueryReturnedNoRows) => return Ok(None),
+            Err(e) => return Err(be(e)),
+        };
+        let secs = |v: Option<i64>| v.map(|n| u64::try_from(n).unwrap_or(0));
+        let mut stmt = conn
+            .prepare(
+                "SELECT owner || '/' || name, 'owner' FROM repositories WHERE owner_kind = 'user' AND owner = ?1 AND state = 'ready' \
+                 UNION ALL SELECT r.owner || '/' || r.name, g.role FROM repo_grants g JOIN repositories r ON r.repo_id = g.repo_id \
+                       WHERE g.subject_kind = 'user' AND g.subject = ?1 AND r.state = 'ready' \
+                 ORDER BY 1, 2",
+            )
+            .map_err(be)?;
+        let all: Vec<(String, String)> = stmt
+            .query_map(params![handle], |r| Ok((r.get(0)?, r.get(1)?)))
+            .map_err(be)?
+            .collect::<Result<_, _>>()
+            .map_err(be)?;
+        let roles_total = all.len();
+        Ok(Some(AccountDetail {
+            row,
+            disabled: secs(disabled_at).map(|at| (at, reason.unwrap_or_default())),
+            password_changed_at: secs(changed),
+            roles: all.into_iter().take(roles_limit).collect(),
+            roles_total,
+        }))
+    }
+}
+
+fn row_of(r: &rusqlite::Row<'_>) -> rusqlite::Result<AccountRow> {
+    Ok(AccountRow {
+        handle: r.get(0)?,
+        display_name: r.get(1)?,
+        disabled: r.get(2)?,
+        has_password: r.get(3)?,
+        identities: usize::try_from(r.get::<_, i64>(4)?).unwrap_or(0),
+        created_at: r
+            .get::<_, Option<i64>>(5)?
+            .map(|n| u64::try_from(n).unwrap_or(0)),
+    })
 }
