@@ -231,10 +231,11 @@ fn language(line: &Line) -> Option<Lang> {
 
 fn help(t: &T) -> String {
     format!(
-        "{}\n\n{}\n\n{}\n\n{}\n",
+        "{}\n\n{}\n\n{}\n{}\n\n{}\n",
         t.get(Key::OperatorHelpPurpose),
         t.get(Key::OperatorHelpUsage),
         t.get(Key::OperatorAccountHelpSummary),
+        t.get(Key::OperatorTokenHelpSummary),
         t.get(Key::OperatorHelpExitCodes)
     )
 }
@@ -253,6 +254,10 @@ pub fn run(args: Vec<OsString>) -> i32 {
     // `planeter operator account …` (RFC 014 D-3) is its own module: it runs beside a running server and takes no lock.
     if line.words.first().map(String::as_str) == Some("account") {
         return crate::operator_account::run(&t, &line);
+    }
+    // ... and `planeter operator token …` (RFC 014 D-3): the same frame, the same rules, beside a running server.
+    if line.words.first().map(String::as_str) == Some("token") {
+        return crate::operator_token::run(&t, &line);
     }
     match parse(&line) {
         Ok(Parsed::Help) => {

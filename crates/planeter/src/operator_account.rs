@@ -357,7 +357,7 @@ struct Ctx<'a> {
 }
 
 /// A backend failure, said: a database that stayed busy is its own sentence.
-fn backend(t: &T, why: &str) -> i32 {
+pub(crate) fn backend(t: &T, why: &str) -> i32 {
     let lower = why.to_lowercase();
     if lower.contains("database is locked") || lower.contains("busy") {
         fail(
@@ -373,7 +373,7 @@ fn backend(t: &T, why: &str) -> i32 {
 }
 
 /// The words of a failed account write: the database's own message for a backend failure (a busy database is known by it).
-fn why(e: &AccountError) -> String {
+pub(crate) fn why(e: &AccountError) -> String {
     match e {
         AccountError::Backend(s) => s.clone(),
         other => other.to_string(),
@@ -410,7 +410,7 @@ fn by_word(t: &T, by: EventBy) -> String {
 }
 
 /// The sentence of one event, **the one the account's holder reads in their own log** (RFC 014 D-7), in the language of `t`.
-fn event_sentence(t: &T, e: &AccountEvent) -> String {
+pub(crate) fn event_sentence(t: &T, e: &AccountEvent) -> String {
     let key = match e.kind {
         AccountEventKind::Created => Key::AccountEventCreated,
         AccountEventKind::PasswordSet => Key::AccountEventPasswordSet,
@@ -536,6 +536,10 @@ impl Ctx<'_> {
                 exit::REFUSED,
             ),
             AccountError::Backend(why) => backend(t, why),
+            // The token commands' errors (`operator_token.rs`): the account commands never make them.
+            other @ (AccountError::Token(_)
+            | AccountError::NoSuchToken
+            | AccountError::RepositoryUnknown(_)) => backend(t, &other.to_string()),
         }
     }
 

@@ -273,6 +273,7 @@ fn sources_outside_the_catalog() -> String {
     // ... and its account half (RFC 014 D-3) and the password prompt.
     all += &read(&root().join("../planeter/src/operator_account.rs"));
     all += &read(&root().join("../planeter/src/password_input.rs"));
+    all += &read(&root().join("../planeter/src/operator_token.rs"));
     // The catalog module uses a few keys itself (sizes); its key table (`Variant => "id"`) never says `Key::`.
     all += &read(&root().join("src/catalog/mod.rs"));
     all

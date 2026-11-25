@@ -2205,6 +2205,121 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg("operator.start", "Start the server."),
     msg(
+        "operator.token.help.summary",
+        "token …        make, list and revoke the access tokens of an account (create, list, revoke); these run beside a running server. Run planeter operator token --help for them.",
+    ),
+    msg(
+        "operator.token.help.usage",
+        "usage: planeter operator token create HANDLE --name TEXT --scope read-only|write|full [--expires-days N] [--repos OWNER/NAME[,OWNER/NAME…]] [--out FILE]\n       planeter operator token list HANDLE\n       planeter operator token revoke HANDLE ID\n       (each also takes [--lang en|ja])\n\ncreate         make a token for an account; it is shown once and only its hash is kept\n--name         what the token is for, 1 to 60 characters, so that its holder can tell their tokens apart\n--scope        read-only: look at repositories and clone them; write: also propose work, but not deliver a branch; full: everything the account can do, including delivering a branch\n--expires-days how many days the token lasts, 1 to 365 (default 90); there is no token without an end\n--repos        limit the token to these repositories, at most 20; without it the token reaches every repository the account can\n--out          write the token to this new file (mode 0600, never overwritten) instead of printing it; give the file to planeter-client --token-file\nlist           the account's tokens, newest first: id, name, scope, repositories, created, last used, expires; never a secret\nrevoke         refuse the token with this id from the next request",
+    ),
+    msg(
+        "operator.token.help.output",
+        "the token: by default it is printed on one line of standard output and nothing else goes there (so TOKEN=$(planeter operator token create …) works); what it is and when it ends go to standard error. With --out it is written to the file and not printed.",
+    ),
+    msg(
+        "operator.token.error.usage",
+        "This command line is not understood. Run planeter operator token --help to see what it takes.",
+    ),
+    msg(
+        "operator.token.error.account_disabled",
+        "{handle} is disabled, so it cannot be given a token. Enable it first.",
+    ),
+    msg(
+        "operator.token.error.name_missing",
+        "A name is required: --name TEXT, 1 to {max} characters, so that the token can be told from the others.",
+    ),
+    msg(
+        "operator.token.error.name_long",
+        "The name is {length} characters long, and it can be at most {max}. Shorten it and run the command again.",
+    ),
+    msg(
+        "operator.token.error.name_unsafe",
+        "The name has a character that cannot be shown, such as a line break. Write it as plain text and run the command again.",
+    ),
+    msg(
+        "operator.token.error.scope_missing",
+        "A scope is required: --scope read-only, write or full.",
+    ),
+    msg(
+        "operator.token.error.scope_unknown",
+        "The scope must be read-only, write or full.",
+    ),
+    msg(
+        "operator.token.error.days",
+        "--expires-days must be a whole number of days from 1 to {max}.",
+    ),
+    msg(
+        "operator.token.error.repos_too_many",
+        "A token can be limited to at most {max} repositories.",
+    ),
+    msg(
+        "operator.token.error.repos_empty",
+        "--repos needs one or more OWNER/NAME, separated by commas.",
+    ),
+    msg(
+        "operator.token.error.too_many_tokens",
+        "{handle} already has {max} tokens that have not expired. Revoke one first with planeter operator token revoke.",
+    ),
+    msg(
+        "operator.token.error.out_exists",
+        "{file} already exists, and a token file is never overwritten. Choose a file that does not exist. Nothing was stored.",
+    ),
+    msg(
+        "operator.token.error.out_failed",
+        "The token could not be written to {file}: {why}. Nothing was stored.",
+    ),
+    msg(
+        "operator.token.error.no_token",
+        "{handle} has no token {id}. Run planeter operator token list {handle} to see its tokens.",
+    ),
+    msg(
+        "operator.token.done.created",
+        "A token for {handle} ({name}) was created. Its id is {id}.",
+    ),
+    msg(
+        "operator.token.done.once",
+        "This is the only time the token is shown. Keep it somewhere private: it cannot be shown again.",
+    ),
+    msg("operator.token.done.expires", "It ends on {date}."),
+    msg(
+        "operator.token.scope.read_only",
+        "It is read-only: it can look at repositories and clone them, and nothing else.",
+    ),
+    msg(
+        "operator.token.scope.write",
+        "It can read and propose work, but it cannot deliver a branch.",
+    ),
+    msg(
+        "operator.token.scope.full",
+        "This token can do everything the account can, including delivering a branch.",
+    ),
+    msg(
+        "operator.token.repos.all",
+        "It reaches every repository the account can reach.",
+    ),
+    msg(
+        "operator.token.repos.only",
+        "It reaches only these repositories: {repos}.",
+    ),
+    msg(
+        "operator.token.done.out",
+        "The token was written to {file} (mode 0600). Give that path to planeter-client --token-file.",
+    ),
+    msg(
+        "operator.token.done.revoked",
+        "Token {id} ({name}) of {handle} was revoked. It is refused from the next request.",
+    ),
+    msg(
+        "operator.token.list.header",
+        "ID | NAME | SCOPE | REPOSITORIES | CREATED | LAST USED | EXPIRES",
+    ),
+    msg("operator.token.list.none", "{handle} has no tokens."),
+    msg("operator.token.list.never", "never"),
+    msg("operator.token.list.all", "all"),
+    msg("operator.token.list.read_only", "read-only"),
+    msg("operator.token.list.write", "write"),
+    msg("operator.token.list.full", "full"),
+    msg(
         "operator.account.help.summary",
         "account …      manage accounts and what they may do (create, set-password, disable, enable, link-oidc, unlink-oidc, grant, revoke, list, show); these run beside a running server. Run planeter operator account --help for them.",
     ),

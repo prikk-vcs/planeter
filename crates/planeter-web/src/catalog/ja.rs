@@ -2224,6 +2224,124 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg("operator.start", "サーバーを起動してください。"),
     msg(
+        "operator.token.help.summary",
+        "token …        アカウントのアクセストークンを作り、一覧にし、取り消します（create, list, revoke）。これらは、動いているサーバーのそばで実行できます。詳しくは planeter operator token --help を実行してください。",
+    ),
+    msg(
+        "operator.token.help.usage",
+        "使い方: planeter operator token create HANDLE --name TEXT --scope read-only|write|full [--expires-days N] [--repos OWNER/NAME[,OWNER/NAME…]] [--out FILE]\n        planeter operator token list HANDLE\n        planeter operator token revoke HANDLE ID\n       （どれも [--lang en|ja] を付けられます）\n\ncreate         アカウントのトークンを作ります。表示されるのは 1 回だけで、保存されるのはそのハッシュだけです\n--name         トークンの用途。1〜60 文字。持ち主が自分のトークンを見分けるためのものです\n--scope        read-only: リポジトリを見て、クローンできます。write: さらに、作業を提案できますが、ブランチの引き渡しはできません。full: アカウントにできることはすべて、ブランチの引き渡しも含めてできます\n--expires-days トークンの有効日数。1〜365（省略すると 90）。期限のないトークンはありません\n--repos        トークンを、指定したリポジトリ（20 個まで） に限ります。指定しなければ、アカウントが届くすべてのリポジトリに届きます\n--out          トークンを表示せず、新しいファイル（モード 0600、上書きしません） に書きます。そのファイルを planeter-client --token-file に渡します\nlist           アカウントのトークンを新しい順に表示します: ID、名前、スコープ、リポジトリ、作成日、最後に使った日、期限。秘密は表示しません\nrevoke         指定した ID のトークンを、次のリクエストから受け付けなくします",
+    ),
+    msg(
+        "operator.token.help.output",
+        "トークン: 標準では、標準出力に 1 行で表示し、ほかのものは標準出力に出しません（なので TOKEN=$（planeter operator token create …） が使えます）。何のトークンか、いつまで有効かは、標準エラー出力に出します。--out を付けると、ファイルに書き、表示しません。",
+    ),
+    msg(
+        "operator.token.error.usage",
+        "このコマンドラインは解釈できません。planeter operator token --help を実行して、指定できるものを確認してください。",
+    ),
+    msg(
+        "operator.token.error.account_disabled",
+        "{handle} は無効になっているので、トークンを作れません。先に有効にしてください。",
+    ),
+    msg(
+        "operator.token.error.name_missing",
+        "名前が必要です。--name TEXT に、ほかのトークンと見分けられるように、1〜{max} 文字で書いてください。",
+    ),
+    msg(
+        "operator.token.error.name_long",
+        "名前は {length} 文字あり、{max} 文字までです。短くして、もう一度実行してください。",
+    ),
+    msg(
+        "operator.token.error.name_unsafe",
+        "名前に、改行など、表示できない文字が含まれています。普通の文章にして、もう一度実行してください。",
+    ),
+    msg(
+        "operator.token.error.scope_missing",
+        "スコープが必要です。--scope に read-only、write、full のどれかを指定してください。",
+    ),
+    msg(
+        "operator.token.error.scope_unknown",
+        "スコープは read-only、write、full のどれかにしてください。",
+    ),
+    msg(
+        "operator.token.error.days",
+        "--expires-days は、1〜{max} の整数の日数にしてください。",
+    ),
+    msg(
+        "operator.token.error.repos_too_many",
+        "トークンを限れるリポジトリは、{max} 個までです。",
+    ),
+    msg(
+        "operator.token.error.repos_empty",
+        "--repos には、OWNER/NAME を 1 つ以上、カンマで区切って指定してください。",
+    ),
+    msg(
+        "operator.token.error.too_many_tokens",
+        "{handle} には、期限が切れていないトークンがすでに {max} 個あります。先に planeter operator token revoke で 1 つ取り消してください。",
+    ),
+    msg(
+        "operator.token.error.out_exists",
+        "{file} はすでにあり、トークンのファイルは上書きしません。まだないファイルを指定してください。何も保存していません。",
+    ),
+    msg(
+        "operator.token.error.out_failed",
+        "トークンを {file} に書けませんでした: {why}。何も保存していません。",
+    ),
+    msg(
+        "operator.token.error.no_token",
+        "{handle} には、トークン {id} はありません。planeter operator token list {handle} で、トークンを確認してください。",
+    ),
+    msg(
+        "operator.token.done.created",
+        "{handle} のトークン（{name}） を作りました。ID は {id} です。",
+    ),
+    msg(
+        "operator.token.done.once",
+        "トークンが表示されるのは、この 1 回だけです。人に見られない場所に保管してください。もう一度表示することはできません。",
+    ),
+    msg("operator.token.done.expires", "{date} までです。"),
+    msg(
+        "operator.token.scope.read_only",
+        "読み取り専用です。リポジトリを見て、クローンすることだけができます。",
+    ),
+    msg(
+        "operator.token.scope.write",
+        "読むことと、作業を提案することができますが、ブランチを引き渡すことはできません。",
+    ),
+    msg(
+        "operator.token.scope.full",
+        "このトークンは、アカウントにできることをすべて、ブランチの引き渡しも含めてできます。",
+    ),
+    msg(
+        "operator.token.repos.all",
+        "アカウントが届くすべてのリポジトリに届きます。",
+    ),
+    msg(
+        "operator.token.repos.only",
+        "次のリポジトリにだけ届きます: {repos}。",
+    ),
+    msg(
+        "operator.token.done.out",
+        "トークンを {file} に書きました（モード 0600）。このパスを planeter-client --token-file に渡してください。",
+    ),
+    msg(
+        "operator.token.done.revoked",
+        "{handle} のトークン {id}（{name}） を取り消しました。次のリクエストから受け付けられません。",
+    ),
+    msg(
+        "operator.token.list.header",
+        "ID | 名前 | スコープ | リポジトリ | 作成日 | 最後に使った日 | 期限",
+    ),
+    msg(
+        "operator.token.list.none",
+        "{handle} には、トークンがありません。",
+    ),
+    msg("operator.token.list.never", "なし"),
+    msg("operator.token.list.all", "すべて"),
+    msg("operator.token.list.read_only", "読み取り専用"),
+    msg("operator.token.list.write", "write"),
+    msg("operator.token.list.full", "full"),
+    msg(
         "operator.account.help.summary",
         "account …      アカウントと、アカウントにできることを管理します（create, set-password, disable, enable, link-oidc, unlink-oidc, grant, revoke, list, show）。これらは、動いているサーバーのそばで実行できます。詳しくは planeter operator account --help を実行してください。",
     ),
