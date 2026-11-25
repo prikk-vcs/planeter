@@ -155,6 +155,18 @@ impl AccountStore for SqliteAccountStore {
         Ok(())
     }
 
+    fn set_password_hash(&self, user: &UserId, hash: PasswordHash) -> Result<()> {
+        self.db
+            .lock()
+            .map_err(be)?
+            .execute(
+                "UPDATE accounts SET password_hash = ?2 WHERE user = ?1",
+                params![user.as_str(), hash.0],
+            )
+            .map_err(be)?;
+        Ok(())
+    }
+
     fn link_oidc(&self, issuer: &str, subject: &str, user: UserId) -> Result<()> {
         self.db
             .lock()

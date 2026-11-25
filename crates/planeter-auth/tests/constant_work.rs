@@ -133,3 +133,20 @@ fn the_dummy_never_authenticates_even_if_its_verification_says_yes() {
         assert_eq!(n, 1, "{u:?}");
     }
 }
+
+#[test]
+fn a_presented_password_too_long_to_be_one_costs_the_same_single_verify() {
+    // RFC 014 D-4: such an input is not normalized; it is a wrong password, and sign-in does the same one verification as for any other.
+    let (auth, hasher) = setup();
+    let huge = "s3cret".repeat(2000);
+    for user in ["alice", "ghost", "sso-only"] {
+        assert_eq!(
+            verifies_for(&auth, &hasher, user, &huge),
+            (false, 1),
+            "{user}"
+        );
+    }
+    // Even a hasher that says yes to everything cannot let it in (the real hash is not consulted for such an input).
+    hasher.accept_all.store(true, Ordering::SeqCst);
+    assert!(!verifies_for(&auth, &hasher, "alice", &huge).0);
+}

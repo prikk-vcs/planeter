@@ -78,22 +78,39 @@ impl Authenticator {
     }
 
     /// Interactive sign-in: verify a local password → a `User` principal (a session).
+    ///
+    /// **The presented password is normalized (Unicode NFKC) before it is verified**, exactly as a password is normalized when it is set
+    /// (`password::check_new_password`), so a password set through one input method verifies through any other; for ASCII nothing changes,
+    /// so every hash made before the rule existed still verifies. A presented password too long to have been set under the rule is a wrong
+    /// password and costs the same single verification (against the dummy). After a correct sign-in a hash made with older Argon2id
+    /// parameters is replaced by one made with today's (`PasswordHasher::needs_rehash`).
     pub fn authenticate_password(&self, user: &str, password: &str) -> Result<Principal> {
         let user = UserId::new(user);
         // A store failure is a backend error, not "no such account", and is returned as such. Beyond
         // that there is no early return: the account's absence must not shorten the work.
         let account = self.accounts.get(&user)?;
-        match account.as_ref().and_then(|a| a.password.as_ref()) {
-            Some(hash) => {
-                if self.password_hasher.verify(password, hash) {
+        let presented = crate::password::normalize_presented(password);
+        match (
+            account.as_ref().and_then(|a| a.password.as_ref()),
+            &presented,
+        ) {
+            (Some(hash), Some(presented)) => {
+                if self.password_hasher.verify(presented.as_str(), hash) {
+                    if self.password_hasher.needs_rehash(hash) {
+                        // The password is right and was hashed with older parameters: store a fresh hash. A failure to store it
+                        // is not a failed sign-in (the next one tries again).
+                        let fresh = self.password_hasher.hash(presented.as_str());
+                        let _ = self.accounts.set_password_hash(&user, fresh);
+                    }
                     Ok(Principal::User(user))
                 } else {
                     Err(AuthError::BadCredentials)
                 }
             }
-            None => {
-                // No real hash: do the same work against the dummy and refuse whatever it says.
-                let _ = self.password_hasher.verify(password, &self.dummy_hash);
+            _ => {
+                // No real hash (or an input no password could be): do the same work against the dummy and refuse whatever it says.
+                let text = presented.as_ref().map_or("", |p| p.as_str());
+                let _ = self.password_hasher.verify(text, &self.dummy_hash);
                 Err(AuthError::BadCredentials)
             }
         }

@@ -30,6 +30,11 @@ pub trait PasswordHasher: Send + Sync {
     fn hash(&self, password: &str) -> PasswordHash;
     /// Verify a presented password against a stored hash (constant-time in the real impl).
     fn verify(&self, password: &str, hash: &PasswordHash) -> bool;
+    /// Whether a stored hash was made with parameters other than the ones this hasher makes today (so a correct sign-in should store a
+    /// fresh hash: the upgrade path when the parameters are raised). `false` for a hasher with nothing to upgrade.
+    fn needs_rehash(&self, _hash: &PasswordHash) -> bool {
+        false
+    }
 }
 
 /// One-way hashing of an access/OAuth token. Tokens are stored hashed and compared in **constant time**
@@ -129,6 +134,24 @@ impl PasswordHasher for Argon2idHasher {
         argon2::Argon2::default()
             .verify_password(password.as_bytes(), &parsed)
             .is_ok()
+    }
+
+    /// A stored hash needs replacing when it is not Argon2id version 0x13 with exactly the parameters [`Argon2idHasher`] makes today
+    /// (`argon2::Params::default()`: m = 19456 KiB, t = 2, p = 1, the output length of the crate's default). A hash that cannot be parsed
+    /// is not "outdated": it cannot be verified either, so it is left alone.
+    fn needs_rehash(&self, hash: &PasswordHash) -> bool {
+        let Ok(parsed) = argon2::password_hash::PasswordHash::new(&hash.0) else {
+            return false;
+        };
+        let current = argon2::Params::default();
+        let same = parsed.algorithm == argon2::Algorithm::Argon2id.ident()
+            && parsed.version == Some(argon2::Version::V0x13.into())
+            && argon2::Params::try_from(&parsed).is_ok_and(|p| {
+                p.m_cost() == current.m_cost()
+                    && p.t_cost() == current.t_cost()
+                    && p.p_cost() == current.p_cost()
+            });
+        !same
     }
 }
 

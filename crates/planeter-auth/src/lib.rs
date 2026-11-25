@@ -19,6 +19,7 @@ pub mod credential;
 pub mod hashing;
 pub mod identity;
 pub mod oidc;
+pub mod password;
 pub mod session;
 pub mod sqlite;
 pub mod sshkey;

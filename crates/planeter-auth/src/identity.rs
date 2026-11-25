@@ -19,6 +19,19 @@ pub struct Account {
     pub password: Option<PasswordHash>,
 }
 
+impl Account {
+    /// An account with a handle, a name and (maybe) a password hash, and nothing else set. For tests and for the code that builds the
+    /// account it is about to create.
+    pub fn local(user: &str, display_name: &str, password: Option<PasswordHash>) -> Self {
+        Self {
+            user: UserId::new(user),
+            display_name: display_name.to_owned(),
+            email: None,
+            password,
+        }
+    }
+}
+
 /// An authentication failure (kept coarse so it never reveals whether an account exists — `T-7`).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
@@ -47,6 +60,9 @@ pub type Result<T> = std::result::Result<T, AuthError>;
 pub trait AccountStore: Send + Sync {
     fn get(&self, user: &UserId) -> Result<Option<Account>>;
     fn upsert(&self, account: Account) -> Result<()>;
+    /// Replace an account's password hash with another made of **the same password** (the rehash after a sign-in with older parameters).
+    /// It changes nothing else: no event, no session ends. An account that does not exist is left as it is.
+    fn set_password_hash(&self, user: &UserId, hash: PasswordHash) -> Result<()>;
     /// Link an OIDC `(issuer, subject)` to a local account (an administrative act; no auto-provisioning).
     fn link_oidc(&self, issuer: &str, subject: &str, user: UserId) -> Result<()>;
     /// The account linked to an OIDC `(issuer, subject)`, if any.
@@ -79,6 +95,17 @@ impl AccountStore for InMemoryAccountStore {
             .write()
             .map(|mut m| {
                 m.insert(account.user.clone(), account);
+            })
+            .map_err(|_| AuthError::Backend("account lock poisoned".to_owned()))
+    }
+
+    fn set_password_hash(&self, user: &UserId, hash: PasswordHash) -> Result<()> {
+        self.accounts
+            .write()
+            .map(|mut m| {
+                if let Some(a) = m.get_mut(user) {
+                    a.password = Some(hash);
+                }
             })
             .map_err(|_| AuthError::Backend("account lock poisoned".to_owned()))
     }
