@@ -506,3 +506,115 @@ fn an_archive_that_carries_no_key_has_nothing_to_adopt() {
     assert!(r.adopted.is_empty() && r.left_out.is_empty());
     assert!(resolve_adoption(&[], &adopt(&[], &[], true)).is_ok());
 }
+
+// ---------------------------------------------------------------------------------------------------- RFC 014 D-2: the handle of a new account
+
+use planeter_core::creation::{HandleError, NEW_HANDLE_MAX, check_new_handle, handle_key};
+
+#[test]
+fn a_new_handle_follows_one_rule() {
+    // valid
+    for ok in [
+        "a",
+        "alice",
+        "a-b_c.d",
+        "0day",
+        "9",
+        "alice.smith",
+        "x".repeat(NEW_HANDLE_MAX).as_str(),
+    ] {
+        assert_eq!(check_new_handle(ok, &reserved), Ok(()), "{ok}");
+    }
+    // each invalid class, with its word
+    let table: Vec<(String, HandleError, &str)> = vec![
+        (String::new(), HandleError::Empty, "empty"),
+        (
+            "x".repeat(NEW_HANDLE_MAX + 1),
+            HandleError::TooLong,
+            "too_long",
+        ),
+        ("Alice".into(), HandleError::Uppercase, "uppercase"),
+        ("aLice".into(), HandleError::Uppercase, "uppercase"),
+        ("al ice".into(), HandleError::BadCharacter, "bad_character"),
+        ("al/ice".into(), HandleError::BadCharacter, "bad_character"),
+        ("al@ice".into(), HandleError::BadCharacter, "bad_character"),
+        ("al+ice".into(), HandleError::BadCharacter, "bad_character"),
+        ("al~ice".into(), HandleError::BadCharacter, "bad_character"),
+        ("al\0ice".into(), HandleError::BadCharacter, "bad_character"),
+        ("alice\n".into(), HandleError::BadCharacter, "bad_character"),
+        ("-alice".into(), HandleError::BadStart, "bad_start"),
+        ("_alice".into(), HandleError::BadStart, "bad_start"),
+        (".alice".into(), HandleError::BadStart, "bad_start"),
+        ("alice.".into(), HandleError::Dotted, "dotted"),
+        ("al..ice".into(), HandleError::Dotted, "dotted"),
+        ("api".into(), HandleError::Reserved, "reserved"),
+        ("new".into(), HandleError::Reserved, "reserved"),
+    ];
+    for (handle, error, word) in table {
+        let got = check_new_handle(&handle, &reserved);
+        assert_eq!(got, Err(error), "{handle:?}");
+        assert_eq!(error.reason(), word);
+    }
+}
+
+#[test]
+fn a_new_handle_is_39_characters_at_most() {
+    assert_eq!(NEW_HANDLE_MAX, 39);
+    assert_eq!(check_new_handle(&"a".repeat(39), &none), Ok(()));
+    assert_eq!(
+        check_new_handle(&"a".repeat(40), &none),
+        Err(HandleError::TooLong)
+    );
+    // Non-ASCII characters are counted as characters (a 40-character Japanese handle is too long, and a short one is a bad character).
+    assert_eq!(
+        check_new_handle(&"あ".repeat(40), &none),
+        Err(HandleError::TooLong)
+    );
+    assert_eq!(
+        check_new_handle("あ", &none),
+        Err(HandleError::BadCharacter)
+    );
+}
+
+#[test]
+fn a_reserved_word_is_refused_whatever_its_case_and_a_look_alike_is_not_the_letter() {
+    // The rule is lowercase: an upper-case spelling of a reserved word is refused as upper case; the lowercase one as reserved.
+    for word in ["API", "Api", "aPI"] {
+        assert_eq!(
+            check_new_handle(word, &reserved),
+            Err(HandleError::Uppercase),
+            "{word}"
+        );
+    }
+    assert_eq!(
+        check_new_handle("api", &reserved),
+        Err(HandleError::Reserved)
+    );
+    // A Cyrillic `а` (U+0430) in place of the Latin `a` is not accepted as a lowercase letter.
+    assert_eq!(
+        check_new_handle("\u{430}pi", &reserved),
+        Err(HandleError::BadCharacter)
+    );
+    assert_eq!(
+        check_new_handle("alic\u{435}", &none),
+        Err(HandleError::BadCharacter)
+    );
+    // A fullwidth letter too.
+    assert_eq!(
+        check_new_handle("\u{ff41}lice", &none),
+        Err(HandleError::BadCharacter)
+    );
+}
+
+#[test]
+fn the_handle_key_is_the_ascii_lowercase_form_and_the_old_check_is_unchanged() {
+    assert_eq!(handle_key("Alice"), "alice");
+    assert_eq!(handle_key("ALICE.Smith_1"), "alice.smith_1");
+    assert_eq!(handle_key("alice"), "alice");
+    // Only ASCII is folded: another script's capital is left alone (it is not a valid new handle anyway).
+    assert_eq!(handle_key("\u{410}"), "\u{410}");
+    // `check_owner_handle` still accepts what it always did (existing handles keep working).
+    for old in ["Alice", "a@b", "x+y", "tilde~1", &"y".repeat(128)] {
+        assert_eq!(check_owner_handle(old, &none), Ok(()), "{old}");
+    }
+}

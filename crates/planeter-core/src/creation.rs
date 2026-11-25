@@ -129,6 +129,79 @@ pub fn check_owner_handle(handle: &str, reserved: &dyn Fn(&str) -> bool) -> Resu
     Ok(())
 }
 
+/// The longest handle a **new** account may have (RFC 014 D-2).
+pub const NEW_HANDLE_MAX: usize = 39;
+
+/// Why a handle for a **new** account is refused (RFC 014 D-2). Closed; each has a stable word ([`HandleError::reason`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HandleError {
+    Empty,
+    TooLong,
+    /// An upper-case letter: a new handle is lowercase, so that two people can never differ by case alone.
+    Uppercase,
+    /// A character outside `a-z`, `0-9`, `-`, `_` and `.` (every non-ASCII character too: a look-alike letter is not the letter).
+    BadCharacter,
+    /// Does not start with a letter or a digit.
+    BadStart,
+    /// `..`, or a trailing `.`.
+    Dotted,
+    /// The word belongs to the server (a path it answers on).
+    Reserved,
+}
+
+impl HandleError {
+    /// A stable word for a response body, a log and a message key.
+    pub fn reason(self) -> &'static str {
+        match self {
+            HandleError::Empty => "empty",
+            HandleError::TooLong => "too_long",
+            HandleError::Uppercase => "uppercase",
+            HandleError::BadCharacter => "bad_character",
+            HandleError::BadStart => "bad_start",
+            HandleError::Dotted => "dotted",
+            HandleError::Reserved => "reserved",
+        }
+    }
+}
+
+/// The rule for the handle of a **new** account (RFC 014 D-2): ASCII lowercase letters, digits, `-`, `_` and `.`; starts with a
+/// letter or a digit; 1 to [`NEW_HANDLE_MAX`] characters; no `..`, not ending in `.`; not reserved. It is stricter than
+/// [`check_owner_handle`], which stays as it is for the handles that already exist. **There is no rename**: a handle is the account's
+/// identity and the first segment of every URL and clone address it owns.
+pub fn check_new_handle(handle: &str, reserved: &dyn Fn(&str) -> bool) -> Result<(), HandleError> {
+    if handle.is_empty() {
+        return Err(HandleError::Empty);
+    }
+    // Count characters, not bytes: a 40-character non-ASCII handle is `BadCharacter` below, but the length answer is the same story.
+    if handle.chars().count() > NEW_HANDLE_MAX {
+        return Err(HandleError::TooLong);
+    }
+    for c in handle.chars() {
+        if c.is_ascii_uppercase() {
+            return Err(HandleError::Uppercase);
+        }
+        if !(c.is_ascii_lowercase() || c.is_ascii_digit() || matches!(c, '.' | '_' | '-')) {
+            return Err(HandleError::BadCharacter);
+        }
+    }
+    if !handle.starts_with(|c: char| c.is_ascii_lowercase() || c.is_ascii_digit()) {
+        return Err(HandleError::BadStart);
+    }
+    if handle.contains("..") || handle.ends_with('.') {
+        return Err(HandleError::Dotted);
+    }
+    if reserved(handle) {
+        return Err(HandleError::Reserved);
+    }
+    Ok(())
+}
+
+/// The form of a handle that decides **case-insensitive uniqueness** (RFC 014 D-2): its ASCII-lowercase form. Two handles with the
+/// same key are the same name to a person, so they cannot both exist among accounts, organizations and owners.
+pub fn handle_key(handle: &str) -> String {
+    handle.to_ascii_lowercase()
+}
+
 /// The word of a [`Visibility`].
 pub fn visibility_word(v: Visibility) -> &'static str {
     match v {
