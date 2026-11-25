@@ -13,6 +13,13 @@ published until M4. **Tagging and publishing are owner-authorized.**
    `tools/enf2-symbol-check/check.sh`, and the two maintenance gates `cargo run --locked -p
    planeter-floor-check` and `cargo run --locked -p planeter-pin-check` (RFC 010 D-2, D-5). The
    supply-chain pair may also be run as a checkpoint with the manual `supply-chain.yml` workflow.
+   **Run the gates capped.** The gates and the loaded repeats are heavy and the host is a person's machine, shared with other work: run them through
+   `tools/run-capped.sh -- COMMAND…` (a user scope with `CPUQuota=800%`, `MemoryMax=16G`, `MemorySwapMax=0`, `nice -n 10` and
+   `CARGO_BUILD_JOBS=8`; `--cpu`, `--mem`, `--jobs` change them), look at `uptime` first, and do not start one heavy job while another is
+   running. `tools/repeat-under-load.sh` now starts a quarter of the cores as workers (2 to 8) at low priority inside its own CPU cap, so use
+   it for a few repeats (10 to 20) of tests whose risk is load; where more contention is needed, `--confine 4 --workers 16` puts the
+   workers and the command on the same four cpus (the heat stays within four cores). Not 32 busy workers on 32 cores: that is what
+   overheated the host.
 1b. **Languages.** Run `cargo run -p planeter-i18n-sheet -- --status` and list its lines in the release notes: for each signed-off language, how
    many messages are newer than its sign-off (they ship, flagged until a reviewer has read them; `docs/messages-and-languages.md`). Do not
    write the number into other documents.
