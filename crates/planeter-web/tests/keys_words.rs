@@ -16,7 +16,9 @@ const THE_LIMIT: &[(&str, &str, &str)] = &[(
 )];
 
 fn scanned(key: &str) -> bool {
-    key.starts_with("repo.keys.") || key.starts_with("operator.")
+    // The operator's account commands (RFC 014) are about accounts, not keys: `revoke` is a command word there and 無効 is "disabled".
+    key.starts_with("repo.keys.")
+        || (key.starts_with("operator.") && !key.starts_with("operator.account."))
 }
 
 #[test]

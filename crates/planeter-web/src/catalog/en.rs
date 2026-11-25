@@ -2204,4 +2204,301 @@ pub const CATALOG: &[Entry] = &[
         "{fingerprint} was already trusted by {repo}; the record of it was missing and is written now. Added by this server's operator on {date}: {reason}",
     ),
     msg("operator.start", "Start the server."),
+    msg(
+        "operator.account.help.summary",
+        "account …      manage accounts and what they may do (create, set-password, disable, enable, link-oidc, unlink-oidc, grant, revoke, list, show); these run beside a running server. Run planeter operator account --help for them.",
+    ),
+    msg(
+        "operator.account.help.usage",
+        "usage: planeter operator account create HANDLE --name TEXT [--password-prompt | --password-fd N]\n       planeter operator account set-password HANDLE [--password-fd N]\n       planeter operator account disable HANDLE --reason TEXT\n       planeter operator account enable HANDLE\n       planeter operator account link-oidc HANDLE --issuer URL --subject TEXT\n       planeter operator account unlink-oidc HANDLE --issuer URL --subject TEXT\n       planeter operator account grant OWNER/NAME HANDLE --role read|write|maintain|admin\n       planeter operator account revoke OWNER/NAME HANDLE [--allow-no-admin]\n       planeter operator account list [--check]\n       planeter operator account show HANDLE\n       (each also takes [--lang en|ja])\n\ncreate         make an account; its handle is 1 to 39 lowercase letters, digits, - _ and ., starting with a letter or digit, and is never changed\n--name         the name shown for the account, 1 to 100 characters\nset-password   set the account's password; it is signed out everywhere, its tokens are not touched\ndisable        stop the account at once: it cannot sign in, it is signed out everywhere and its tokens are refused; nothing is deleted; --reason says why, 1 to 200 characters\nenable         undo disable; its tokens work again until they expire, the sign-ins that ended do not return\nlink-oidc      link the account to one identity at the sign-in provider this server is set up for (PLANETER_OIDC_ISSUER); the identity is never moved from another account\ngrant          give the account exactly one role on a repository\nrevoke         take away the role the account has of its own on a repository; the last administrator stays unless --allow-no-admin is given\nlist           the accounts, sorted by handle; with --check, the handles that differ only by case instead\nshow           one account: its state, its roles and its last 50 events",
+    ),
+    msg(
+        "operator.account.help.roles",
+        "roles: read: look at the repository and clone it; write: also propose work; maintain: also ask for a delivery and review proposals; admin: also manage who has access",
+    ),
+    msg(
+        "operator.account.help.password",
+        "passwords: a password is typed at the terminal without echo, twice (--password-prompt, and always for set-password without --password-fd), or read as one line from an open file descriptor for scripts (--password-fd N: the script opens the file or the pipe on that number first); it is never an argument or an environment variable. If your terminal stops echoing, run stty sane.",
+    ),
+    msg(
+        "operator.account.help.exit_codes",
+        "exit codes: 0 done; 1 refused (nothing was changed); 2 the command line, or no terminal for a password; 5 local files or the database (a database that stays busy for more than 5 seconds says so). These commands do not need the server stopped, so 3 is not used; each act is one step, so a change is never left half done and 4 is not used either",
+    ),
+    msg(
+        "operator.account.error.usage",
+        "This command line is not understood. Run planeter operator account --help to see what it takes.",
+    ),
+    msg(
+        "operator.account.error.handle_shape",
+        "The handle {handle} is not allowed. A handle is 1 to 39 characters: lowercase letters, digits, - _ and ., starting with a letter or digit, with no .. and no . at the end.",
+    ),
+    msg(
+        "operator.account.error.handle_upper",
+        "A handle is written in lowercase letters, and {handle} has capitals. Write it in lowercase and run the command again.",
+    ),
+    msg(
+        "operator.account.error.handle_reserved",
+        "{handle} is a word this server uses for its own pages. Choose another handle.",
+    ),
+    msg(
+        "operator.account.error.handle_taken",
+        "The handle {handle} is already in use (handles are compared without regard to case, and organizations and repository owners count). Choose another.",
+    ),
+    msg(
+        "operator.account.error.name_missing",
+        "A display name is required: --name TEXT, 1 to {max} characters.",
+    ),
+    msg(
+        "operator.account.error.name_long",
+        "The display name is {length} characters long, and it can be at most {max}. Shorten it and run the command again.",
+    ),
+    msg(
+        "operator.account.error.name_unsafe",
+        "The display name has a character that cannot be shown, such as a line break. Write it as plain text and run the command again.",
+    ),
+    msg(
+        "operator.account.error.password_short",
+        "The password is too short: use at least {min} characters. Nothing was changed.",
+    ),
+    msg(
+        "operator.account.error.password_long",
+        "The password is too long: use at most {max} characters. Nothing was changed.",
+    ),
+    msg(
+        "operator.account.error.password_handle",
+        "The password is the same as the handle. Choose another. Nothing was changed.",
+    ),
+    msg(
+        "operator.account.error.password_common",
+        "The password is one of the most common passwords. Choose another. Nothing was changed.",
+    ),
+    msg(
+        "operator.account.error.password_differ",
+        "The two entries are not the same. Nothing was changed; run the command again.",
+    ),
+    msg(
+        "operator.account.error.password_no_terminal",
+        "Standard input is not a terminal, so a password cannot be typed. Run the command in a terminal, or give the password on a file descriptor with --password-fd N.",
+    ),
+    msg(
+        "operator.account.error.password_fd",
+        "The file descriptor {fd} cannot be read as one line of password: {why}. Nothing was changed.",
+    ),
+    msg(
+        "operator.account.error.password_echo",
+        "The terminal's echo could not be turned off ({why}), so no password was asked for. Use --password-fd N, or run the command where stty works. Nothing was changed.",
+    ),
+    msg("operator.account.prompt.password", "Password:"),
+    msg("operator.account.prompt.again", "Password again:"),
+    msg(
+        "operator.account.error.no_account",
+        "There is no account {handle}. Check the handle.",
+    ),
+    msg(
+        "operator.account.error.reason_missing",
+        "A reason is required: say why the account is disabled, in 1 to {max} characters.",
+    ),
+    msg(
+        "operator.account.error.already_disabled",
+        "{handle} is already disabled. Nothing was changed.",
+    ),
+    msg(
+        "operator.account.error.not_disabled",
+        "{handle} is not disabled. Nothing was changed.",
+    ),
+    msg(
+        "operator.account.error.no_provider",
+        "No sign-in provider is set up on this server (PLANETER_OIDC_ISSUER is not set), so there is no identity to link. Set it as the server does and run the command again.",
+    ),
+    msg(
+        "operator.account.error.other_issuer",
+        "{issuer} is not the sign-in provider this server is set up for. Use the value of PLANETER_OIDC_ISSUER.",
+    ),
+    msg(
+        "operator.account.error.identity_taken",
+        "This identity is already linked to another account, and it is not moved. Unlink it there first.",
+    ),
+    msg(
+        "operator.account.error.not_linked",
+        "This identity is not linked to {handle}. Nothing was changed.",
+    ),
+    msg(
+        "operator.account.error.already_linked",
+        "This identity is already linked to {handle}. Nothing was changed.",
+    ),
+    msg(
+        "operator.account.error.role",
+        "The role must be read, write, maintain or admin.",
+    ),
+    msg(
+        "operator.account.error.account_disabled",
+        "{handle} is disabled, so it cannot be given a role. Enable it first.",
+    ),
+    msg(
+        "operator.account.error.last_admin",
+        "That would leave {repo} with no administrator. Make another account an administrator first, or add --allow-no-admin to leave it without one.",
+    ),
+    msg(
+        "operator.account.error.no_grant",
+        "{handle} has no role of its own on {repo}, so there is nothing to take away.",
+    ),
+    msg(
+        "operator.account.error.already_role",
+        "{handle} already has the role {role} on {repo}. Nothing was changed.",
+    ),
+    msg(
+        "operator.account.error.busy",
+        "The database stayed busy for more than {seconds} seconds (another process is writing). Nothing was changed. Run the command again.",
+    ),
+    msg(
+        "operator.account.done.has_password",
+        "{handle} ({name}) has a password.",
+    ),
+    msg(
+        "operator.account.done.no_password",
+        "{handle} ({name}) has no password: it can sign in only through a linked identity.",
+    ),
+    msg(
+        "operator.account.done.sessions_ended",
+        "It was signed out everywhere; its tokens are not touched.",
+    ),
+    msg(
+        "operator.account.done.disabled",
+        "It was signed out everywhere at once and its tokens are refused. Nothing it owns was deleted, and others can still read its repositories.",
+    ),
+    msg(
+        "operator.account.done.enabled",
+        "Its tokens work again until they expire. The sign-ins that ended do not return.",
+    ),
+    msg(
+        "operator.account.done.linked",
+        "{handle} can now sign in through that provider.",
+    ),
+    msg(
+        "operator.account.done.unlinked",
+        "{handle} can no longer sign in through that identity.",
+    ),
+    msg(
+        "operator.account.done.granted",
+        "{name} ({handle}) was given {role} on {repo}: {means}",
+    ),
+    msg(
+        "operator.account.done.revoked",
+        "{name} ({handle}) no longer has the role {role} of its own on {repo}.",
+    ),
+    msg(
+        "operator.account.done.no_admin",
+        "{repo} now has no administrator until you grant one.",
+    ),
+    msg(
+        "operator.account.role.read",
+        "look at the repository and clone it",
+    ),
+    msg("operator.account.role.write", "also propose work"),
+    msg(
+        "operator.account.role.maintain",
+        "also ask for a delivery and review proposals",
+    ),
+    msg("operator.account.role.admin", "also manage who has access"),
+    msg(
+        "operator.account.warn.sole_admin",
+        "These repositories will have no administrator until you grant one: {repos}",
+    ),
+    msg(
+        "operator.account.warn.sole_admin_more",
+        "These repositories will have no administrator until you grant one: {repos} and {more} more",
+    ),
+    msg(
+        "operator.account.list.header",
+        "HANDLE | NAME | STATE | PASSWORD | IDENTITY | CREATED",
+    ),
+    msg("operator.account.list.active", "active"),
+    msg("operator.account.list.disabled", "disabled"),
+    msg("operator.account.list.yes", "yes"),
+    msg("operator.account.list.no", "no"),
+    msg("operator.account.list.none", "There are no accounts."),
+    msg("operator.account.list.more", "and {more} more of {total}"),
+    msg(
+        "operator.account.check.none",
+        "No handles differ only by case.",
+    ),
+    msg(
+        "operator.account.check.explain",
+        "These handles differ only by case. They keep working and were not renamed:",
+    ),
+    msg("operator.account.check.group", "{key}: {handles}"),
+    msg(
+        "operator.account.check.more",
+        "and {more} more of {total} lines",
+    ),
+    msg("operator.account.show.handle", "Handle"),
+    msg("operator.account.show.name", "Name"),
+    msg("operator.account.show.state", "State"),
+    msg(
+        "operator.account.show.disabled",
+        "disabled on {date}: {reason}",
+    ),
+    msg("operator.account.show.created", "Created"),
+    msg("operator.account.show.password", "Password"),
+    msg(
+        "operator.account.show.password_changed",
+        "yes, set on {date}",
+    ),
+    msg("operator.account.show.identities", "Identities linked"),
+    msg("operator.account.show.roles", "Roles"),
+    msg("operator.account.show.roles_none", "none of its own"),
+    msg(
+        "operator.account.show.roles_more",
+        "and {more} more of {total}",
+    ),
+    msg("operator.account.show.owner", "owner"),
+    msg("operator.account.show.events", "Last events"),
+    msg("operator.account.show.events_none", "none yet"),
+    msg("operator.account.show.event_line", "{date}  {sentence}"),
+    msg("account.by.self", "you"),
+    msg("account.by.operator", "this server's operator"),
+    msg("account.by.provider", "the sign-in provider"),
+    msg("account.event.created", "The account was created by {by}."),
+    msg("account.event.password_set", "A password was set by {by}."),
+    msg(
+        "account.event.password_changed",
+        "The password was changed by {by}.",
+    ),
+    msg(
+        "account.event.identity_linked",
+        "An identity at {detail} was linked to the account by {by}.",
+    ),
+    msg(
+        "account.event.identity_unlinked",
+        "An identity at {detail} was unlinked from the account by {by}.",
+    ),
+    msg(
+        "account.event.token_created",
+        "A token ({detail}) was created by {by}.",
+    ),
+    msg(
+        "account.event.token_revoked",
+        "A token ({detail}) was revoked by {by}.",
+    ),
+    msg(
+        "account.event.session_ended",
+        "A sign-in was ended by {by}.",
+    ),
+    msg(
+        "account.event.role_granted",
+        "A role on a repository was given by {by}: {detail}",
+    ),
+    msg(
+        "account.event.role_revoked",
+        "A role on a repository was taken away by {by}: {detail}",
+    ),
+    msg(
+        "account.event.disabled",
+        "The account was disabled by {by}: {detail}",
+    ),
+    msg("account.event.enabled", "The account was enabled by {by}."),
+    msg(
+        "account.event.signed_in_new_method",
+        "The account signed in by a method it had not used before: {detail}",
+    ),
 ];

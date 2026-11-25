@@ -34,7 +34,7 @@ use crate::config;
 const REASON_MAX: usize = 200;
 
 /// The exit codes.
-mod exit {
+pub(crate) mod exit {
     pub const DONE: i32 = 0;
     pub const REFUSED: i32 = 1;
     pub const COMMAND_LINE: i32 = 2;
@@ -84,18 +84,22 @@ enum Refusal {
     KeyIdMismatch { given: String, derived: String },
 }
 
+/// The options that take **no value** (`--check`, `--password-prompt`, `--allow-no-admin`: the account commands, RFC 014).
+const FLAGS: [&str; 3] = ["password-prompt", "check", "allow-no-admin"];
+
 /// Everything `--lang` and the word list of one command line.
-struct Line {
-    lang: Option<String>,
-    words: Vec<String>,
-    options: Vec<(String, String)>,
-    help: bool,
-    malformed: bool,
+pub(crate) struct Line {
+    pub(crate) lang: Option<String>,
+    pub(crate) words: Vec<String>,
+    /// `--option value` pairs; a flag (see [`FLAGS`]) has the value `""`.
+    pub(crate) options: Vec<(String, String)>,
+    pub(crate) help: bool,
+    pub(crate) malformed: bool,
 }
 
 /// Split the arguments into words, `--option value` pairs (also `--option=value`) and `--help`. An option without a value, a non-UTF-8
 /// argument or an option twice is a malformed command line.
-fn split(args: &[OsString]) -> Line {
+pub(crate) fn split(args: &[OsString]) -> Line {
     let mut line = Line {
         lang: None,
         words: Vec::new(),
@@ -117,11 +121,19 @@ fn split(args: &[OsString]) -> Line {
                 Some((n, v)) => (n.to_owned(), Some(v.to_owned())),
                 None => (opt.to_owned(), None),
             };
-            let value = match value {
-                Some(v) => Some(v),
-                None => {
-                    i += 1;
-                    args.get(i).and_then(|v| v.to_str()).map(str::to_owned)
+            let value = if FLAGS.contains(&name.as_str()) {
+                // A flag takes no value: `--check=x` is not understood.
+                if value.is_some() {
+                    line.malformed = true;
+                }
+                Some(String::new())
+            } else {
+                match value {
+                    Some(v) => Some(v),
+                    None => {
+                        i += 1;
+                        args.get(i).and_then(|v| v.to_str()).map(str::to_owned)
+                    }
                 }
             };
             match value {
@@ -219,9 +231,10 @@ fn language(line: &Line) -> Option<Lang> {
 
 fn help(t: &T) -> String {
     format!(
-        "{}\n\n{}\n\n{}\n",
+        "{}\n\n{}\n\n{}\n\n{}\n",
         t.get(Key::OperatorHelpPurpose),
         t.get(Key::OperatorHelpUsage),
+        t.get(Key::OperatorAccountHelpSummary),
         t.get(Key::OperatorHelpExitCodes)
     )
 }
@@ -237,6 +250,10 @@ pub fn run(args: Vec<OsString>) -> i32 {
         return exit::COMMAND_LINE;
     };
     let t = T::new(lang);
+    // `planeter operator account …` (RFC 014 D-3) is its own module: it runs beside a running server and takes no lock.
+    if line.words.first().map(String::as_str) == Some("account") {
+        return crate::operator_account::run(&t, &line);
+    }
     match parse(&line) {
         Ok(Parsed::Help) => {
             print!("{}", help(&t));
@@ -280,7 +297,7 @@ pub fn run(args: Vec<OsString>) -> i32 {
 }
 
 /// Say a message on stderr and return the code.
-fn fail(msg: planeter_web::catalog::Msg, code: i32) -> i32 {
+pub(crate) fn fail(msg: planeter_web::catalog::Msg, code: i32) -> i32 {
     eprintln!("planeter operator: {}", msg.text());
     code
 }

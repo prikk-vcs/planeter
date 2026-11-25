@@ -12,6 +12,8 @@
 mod args;
 mod config;
 mod operator;
+mod operator_account;
+mod password_input;
 
 // The delivery engine's test hook: debug builds only, and not an operator's setting (so not in `USAGE`).
 #[cfg(debug_assertions)]

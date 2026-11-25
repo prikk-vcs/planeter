@@ -2223,4 +2223,316 @@ pub const CATALOG: &[Entry] = &[
         "{fingerprint} は、{repo} で、すでに信頼されていました。記録がなかったため、今、書きました。このサーバーの運用者が {date} に追加しました: {reason}",
     ),
     msg("operator.start", "サーバーを起動してください。"),
+    msg(
+        "operator.account.help.summary",
+        "account …      アカウントと、アカウントにできることを管理します （create, set-password, disable, enable, link-oidc, unlink-oidc, grant, revoke, list, show）。これらは、動いているサーバーのそばで実行できます。詳しくは planeter operator account --help を実行してください。",
+    ),
+    msg(
+        "operator.account.help.usage",
+        "使い方: planeter operator account create HANDLE --name TEXT [--password-prompt | --password-fd N]\n        planeter operator account set-password HANDLE [--password-fd N]\n        planeter operator account disable HANDLE --reason TEXT\n        planeter operator account enable HANDLE\n        planeter operator account link-oidc HANDLE --issuer URL --subject TEXT\n        planeter operator account unlink-oidc HANDLE --issuer URL --subject TEXT\n        planeter operator account grant OWNER/NAME HANDLE --role read|write|maintain|admin\n        planeter operator account revoke OWNER/NAME HANDLE [--allow-no-admin]\n        planeter operator account list [--check]\n        planeter operator account show HANDLE\n        （どれも [--lang en|ja] を付けられます）\n\ncreate         アカウントを作ります。ユーザー名 （HANDLE） は、小文字の英字、数字、- _ . の 1〜39 文字で、英字か数字から始め、あとから変えられません\n--name         アカウントに表示する名前。1〜100 文字\nset-password   アカウントのパスワードを設定します。そのアカウントのログイン中の状態はすべて終わり、トークンには手を付けません\ndisable        アカウントをすぐに止めます。ログインできなくなり、ログイン中の状態は終わり、トークンは受け付けられません。何も削除しません。--reason に理由を 1〜200 文字で書きます\nenable         disable を元に戻します。トークンは有効期限まで再び使え、終わったログイン中の状態は戻りません\nlink-oidc      アカウントを、このサーバーが設定されているログインのプロバイダー （PLANETER_OIDC_ISSUER） の ID に結び付けます。ほかのアカウントの ID を移すことはしません\ngrant          アカウントに、リポジトリでの権限を 1 つだけ与えます\nrevoke         アカウント自身がリポジトリで持っている権限を取り上げます。リポジトリの管理者が最後の 1 人になるときは、--allow-no-admin を付けないかぎり、取り上げません\nlist           アカウントを、ユーザー名の順に表示します。--check を付けると、大文字と小文字だけが違うユーザー名を表示します\nshow           アカウント 1 つ: 状態、権限、直近の 50 件の出来事",
+    ),
+    msg(
+        "operator.account.help.roles",
+        "権限: read: リポジトリを見て、クローンできます。write: さらに、作業を提案できます。maintain: さらに、引き渡しを依頼し、提案をレビューできます。admin: さらに、だれがアクセスできるかを管理できます",
+    ),
+    msg(
+        "operator.account.help.password",
+        "パスワード: パスワードは、端末で画面に表示されない形で 2 回入力するか （--password-prompt。set-password では --password-fd がなければ常にこちら）、スクリプト向けに、開いているファイル記述子から 1 行として読みます （--password-fd N。スクリプトが、先にその番号でファイルかパイプを開いておきます）。引数や環境変数では渡せません。端末に入力が表示されなくなったときは、stty sane を実行してください。",
+    ),
+    msg(
+        "operator.account.help.exit_codes",
+        "終了コード: 0 完了。1 拒否 （何も変えていません）。2 コマンドライン、または、パスワードを入力する端末がない。5 ローカルのファイルまたはデータベース （5 秒を超えて使用中のデータベースは、その旨を表示します）。これらのコマンドはサーバーを止めなくても実行できるので、3 は使いません。1 回の操作は 1 つの手順なので、変更が途中で終わることはなく、4 も使いません",
+    ),
+    msg(
+        "operator.account.error.usage",
+        "このコマンドラインは解釈できません。planeter operator account --help を実行して、指定できるものを確認してください。",
+    ),
+    msg(
+        "operator.account.error.handle_shape",
+        "ユーザー名 {handle} は使えません。ユーザー名は、小文字の英字、数字、- _ . の 1〜39 文字で、英字か数字から始め、.. を含まず、末尾が . ではないものにしてください。",
+    ),
+    msg(
+        "operator.account.error.handle_upper",
+        "ユーザー名は小文字で書きます。{handle} には大文字が含まれています。小文字にして、もう一度実行してください。",
+    ),
+    msg(
+        "operator.account.error.handle_reserved",
+        "{handle} は、このサーバーが自分のページに使っている言葉です。別のユーザー名にしてください。",
+    ),
+    msg(
+        "operator.account.error.handle_taken",
+        "ユーザー名 {handle} はすでに使われています （大文字と小文字は区別せずに比べ、組織とリポジトリの所有者も数えます）。別のユーザー名にしてください。",
+    ),
+    msg(
+        "operator.account.error.name_missing",
+        "表示名が必要です。--name TEXT に、1〜{max} 文字で書いてください。",
+    ),
+    msg(
+        "operator.account.error.name_long",
+        "表示名は {length} 文字あり、{max} 文字までです。短くして、もう一度実行してください。",
+    ),
+    msg(
+        "operator.account.error.name_unsafe",
+        "表示名に、改行など、表示できない文字が含まれています。普通の文章にして、もう一度実行してください。",
+    ),
+    msg(
+        "operator.account.error.password_short",
+        "パスワードが短すぎます。{min} 文字以上にしてください。何も変えていません。",
+    ),
+    msg(
+        "operator.account.error.password_long",
+        "パスワードが長すぎます。{max} 文字までにしてください。何も変えていません。",
+    ),
+    msg(
+        "operator.account.error.password_handle",
+        "パスワードがユーザー名と同じです。別のものにしてください。何も変えていません。",
+    ),
+    msg(
+        "operator.account.error.password_common",
+        "そのパスワードは、とてもよく使われるパスワードの 1 つです。別のものにしてください。何も変えていません。",
+    ),
+    msg(
+        "operator.account.error.password_differ",
+        "2 回の入力が同じではありません。何も変えていません。もう一度実行してください。",
+    ),
+    msg(
+        "operator.account.error.password_no_terminal",
+        "標準入力が端末ではないので、パスワードを入力できません。端末で実行するか、--password-fd N でファイル記述子からパスワードを渡してください。",
+    ),
+    msg(
+        "operator.account.error.password_fd",
+        "ファイル記述子 {fd} から、パスワードの 1 行を読めませんでした: {why}。何も変えていません。",
+    ),
+    msg(
+        "operator.account.error.password_echo",
+        "端末の入力表示を止められなかった ({why}) ので、パスワードは尋ねませんでした。--password-fd N を使うか、stty が使える場所で実行してください。何も変えていません。",
+    ),
+    msg("operator.account.prompt.password", "パスワード:"),
+    msg("operator.account.prompt.again", "もう一度パスワード:"),
+    msg(
+        "operator.account.error.no_account",
+        "アカウント {handle} はありません。ユーザー名を確認してください。",
+    ),
+    msg(
+        "operator.account.error.reason_missing",
+        "理由が必要です。アカウントを無効にする理由を、1〜{max} 文字で書いてください。",
+    ),
+    msg(
+        "operator.account.error.already_disabled",
+        "{handle} はすでに無効になっています。何も変えていません。",
+    ),
+    msg(
+        "operator.account.error.not_disabled",
+        "{handle} は無効になっていません。何も変えていません。",
+    ),
+    msg(
+        "operator.account.error.no_provider",
+        "このサーバーには、ログインのプロバイダーが設定されていません （PLANETER_OIDC_ISSUER が未設定です） ので、結び付ける ID がありません。サーバーと同じように設定して、もう一度実行してください。",
+    ),
+    msg(
+        "operator.account.error.other_issuer",
+        "{issuer} は、このサーバーが設定されているログインのプロバイダーではありません。PLANETER_OIDC_ISSUER の値を使ってください。",
+    ),
+    msg(
+        "operator.account.error.identity_taken",
+        "この ID はすでにほかのアカウントに結び付いていて、移すことはしません。先にそちらで結び付けを外してください。",
+    ),
+    msg(
+        "operator.account.error.not_linked",
+        "この ID は {handle} に結び付いていません。何も変えていません。",
+    ),
+    msg(
+        "operator.account.error.already_linked",
+        "この ID はすでに {handle} に結び付いています。何も変えていません。",
+    ),
+    msg(
+        "operator.account.error.role",
+        "権限は read、write、maintain、admin のどれかにしてください。",
+    ),
+    msg(
+        "operator.account.error.account_disabled",
+        "{handle} は無効になっているので、権限を与えられません。先に有効にしてください。",
+    ),
+    msg(
+        "operator.account.error.last_admin",
+        "そうすると、{repo} を管理できる人がいなくなります。先にほかのアカウントをリポジトリの管理者にするか、いなくてもよいなら --allow-no-admin を付けてください。",
+    ),
+    msg(
+        "operator.account.error.no_grant",
+        "{handle} は {repo} に自分の権限を持っていないので、取り上げるものがありません。",
+    ),
+    msg(
+        "operator.account.error.already_role",
+        "{handle} は、すでに {repo} で {role} の権限を持っています。何も変えていません。",
+    ),
+    msg(
+        "operator.account.error.busy",
+        "データベースが {seconds} 秒を超えて使用中でした （ほかのプロセスが書き込んでいます）。何も変えていません。もう一度実行してください。",
+    ),
+    msg(
+        "operator.account.done.has_password",
+        "{handle} ({name}) には、パスワードがあります。",
+    ),
+    msg(
+        "operator.account.done.no_password",
+        "{handle} ({name}) には、パスワードがありません。結び付けた ID でだけログインできます。",
+    ),
+    msg(
+        "operator.account.done.sessions_ended",
+        "ログイン中の状態はすべて終わりました。トークンには手を付けていません。",
+    ),
+    msg(
+        "operator.account.done.disabled",
+        "ログイン中の状態はすぐに終わり、トークンは受け付けられません。持っているものは何も削除されておらず、ほかの人はリポジトリを引き続き読めます。",
+    ),
+    msg(
+        "operator.account.done.enabled",
+        "トークンは、有効期限まで再び使えます。終わったログイン中の状態は戻りません。",
+    ),
+    msg(
+        "operator.account.done.linked",
+        "{handle} は、そのプロバイダーでログインできるようになりました。",
+    ),
+    msg(
+        "operator.account.done.unlinked",
+        "{handle} は、その ID でログインできなくなりました。",
+    ),
+    msg(
+        "operator.account.done.granted",
+        "{name} ({handle}) に、{repo} の {role} が与えられました: {means}",
+    ),
+    msg(
+        "operator.account.done.revoked",
+        "{name} ({handle}) は、{repo} で自分の {role} の権限を持たなくなりました。",
+    ),
+    msg(
+        "operator.account.done.no_admin",
+        "{repo} は、リポジトリの管理者を与えるまで、だれも管理できません。",
+    ),
+    msg(
+        "operator.account.role.read",
+        "リポジトリを見て、クローンできます",
+    ),
+    msg("operator.account.role.write", "さらに、作業を提案できます"),
+    msg(
+        "operator.account.role.maintain",
+        "さらに、引き渡しを依頼し、提案をレビューできます",
+    ),
+    msg(
+        "operator.account.role.admin",
+        "さらに、だれがアクセスできるかを管理できます",
+    ),
+    msg(
+        "operator.account.warn.sole_admin",
+        "次のリポジトリは、リポジトリの管理者を与えるまで、だれも管理できなくなります: {repos}",
+    ),
+    msg(
+        "operator.account.warn.sole_admin_more",
+        "次のリポジトリは、リポジトリの管理者を与えるまで、だれも管理できなくなります: {repos}、ほか {more} 件",
+    ),
+    msg(
+        "operator.account.list.header",
+        "ユーザー名 | 表示名 | 状態 | パスワード | ID | 作成日",
+    ),
+    msg("operator.account.list.active", "有効"),
+    msg("operator.account.list.disabled", "無効"),
+    msg("operator.account.list.yes", "あり"),
+    msg("operator.account.list.no", "なし"),
+    msg("operator.account.list.none", "アカウントはありません。"),
+    msg(
+        "operator.account.list.more",
+        "ほか {more} 件 （全部で {total} 件）",
+    ),
+    msg(
+        "operator.account.check.none",
+        "大文字と小文字だけが違うユーザー名はありません。",
+    ),
+    msg(
+        "operator.account.check.explain",
+        "次のユーザー名は、大文字と小文字だけが違います。これまでどおり使え、名前は変えていません:",
+    ),
+    msg("operator.account.check.group", "{key}: {handles}"),
+    msg(
+        "operator.account.check.more",
+        "ほか {more} 行 （全部で {total} 行）",
+    ),
+    msg("operator.account.show.handle", "ユーザー名"),
+    msg("operator.account.show.name", "表示名"),
+    msg("operator.account.show.state", "状態"),
+    msg(
+        "operator.account.show.disabled",
+        "{date} に無効にしました: {reason}",
+    ),
+    msg("operator.account.show.created", "作成日"),
+    msg("operator.account.show.password", "パスワード"),
+    msg(
+        "operator.account.show.password_changed",
+        "あり （{date} に設定）",
+    ),
+    msg("operator.account.show.identities", "結び付いた ID"),
+    msg("operator.account.show.roles", "権限"),
+    msg("operator.account.show.roles_none", "自分のものはありません"),
+    msg(
+        "operator.account.show.roles_more",
+        "ほか {more} 件 （全部で {total} 件）",
+    ),
+    msg("operator.account.show.owner", "所有者"),
+    msg("operator.account.show.events", "直近の出来事"),
+    msg("operator.account.show.events_none", "まだありません"),
+    msg("operator.account.show.event_line", "{date}  {sentence}"),
+    msg("account.by.self", "あなた"),
+    msg("account.by.operator", "このサーバーを運用している人"),
+    msg("account.by.provider", "ログインのプロバイダー"),
+    msg(
+        "account.event.created",
+        "アカウントは、{by}が作成しました。",
+    ),
+    msg(
+        "account.event.password_set",
+        "パスワードを、{by}が設定しました。",
+    ),
+    msg(
+        "account.event.password_changed",
+        "パスワードを、{by}が変更しました。",
+    ),
+    msg(
+        "account.event.identity_linked",
+        "{detail} の ID を、{by}がアカウントに結び付けました。",
+    ),
+    msg(
+        "account.event.identity_unlinked",
+        "{detail} の ID を、{by}がアカウントから外しました。",
+    ),
+    msg(
+        "account.event.token_created",
+        "トークン ({detail}) を、{by}が作成しました。",
+    ),
+    msg(
+        "account.event.token_revoked",
+        "トークン ({detail}) を、{by}が取り消しました。",
+    ),
+    msg(
+        "account.event.session_ended",
+        "ログイン中の状態を、{by}が終わらせました。",
+    ),
+    msg(
+        "account.event.role_granted",
+        "リポジトリでの権限を、{by}が与えました: {detail}",
+    ),
+    msg(
+        "account.event.role_revoked",
+        "リポジトリでの権限を、{by}が取り上げました: {detail}",
+    ),
+    msg(
+        "account.event.disabled",
+        "アカウントを、{by}が無効にしました: {detail}",
+    ),
+    msg(
+        "account.event.enabled",
+        "アカウントを、{by}が有効にしました。",
+    ),
+    msg(
+        "account.event.signed_in_new_method",
+        "アカウントが、これまで使っていなかった方法でログインしました: {detail}",
+    ),
 ];

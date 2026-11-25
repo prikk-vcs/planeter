@@ -766,6 +766,28 @@ impl AccountService {
         Ok(SoleAdministrator { repos: sole, total })
     }
 
+    /// Whether the repository has an administrator who can act now (`None` when there is no such repository).
+    pub fn repo_has_administrator(
+        &self,
+        owner: &str,
+        name: &str,
+    ) -> Result<Option<bool>, AccountError> {
+        let conn = self
+            .db
+            .lock()
+            .map_err(|e| AccountError::Backend(e.to_string()))?;
+        let be = |e: rusqlite::Error| AccountError::Backend(e.to_string());
+        let Some((repo_id, kind, shown_owner)) = resolve_repo(&conn, owner, name).map_err(be)?
+        else {
+            return Ok(None);
+        };
+        Ok(Some(
+            !administrators(&conn, &repo_id, &kind, &shown_owner, None)
+                .map_err(be)?
+                .is_empty(),
+        ))
+    }
+
     /// The accounts sorted by handle, at most `limit` of them, and how many there are.
     pub fn list_accounts(&self, limit: usize) -> Result<AccountList, AccountError> {
         let conn = self
