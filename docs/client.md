@@ -133,6 +133,10 @@ so. **Windows** has no permission bits to check: the program does not look at th
 your user profile, whose access list is private by default. The token is added to a request in one place, is in no message, log or
 `--verbose` line, and a test greps every output of every run for it. Reading (`clone`, `fetch`) needs no token on a public repository.
 
+From 0.10.0 the person who runs the server makes a token with `planeter operator token create HANDLE --name TEXT --scope read-only|write|full --out FILE`
+(beside the running server; the file is new, private to its owner, and holds the token once) and gives that path to `--token-file`; the
+server has no page for a person to make their own yet.
+
 ## https, certificates, proxies
 
 * **https only.** A plain `http://` address is refused before any connection. There is **no `--insecure`**.
