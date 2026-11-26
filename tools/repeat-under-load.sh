@@ -19,7 +19,11 @@
 #   * when `systemd-run --user --scope` works, the whole run (workers and the command) is placed in a scope with
 #     **`CPUQuota = (workers + 4) * 100 %`**: the workers can use at most `workers` cores, and the command gets four more, so the
 #     command is under load but nothing in the run can take more than the cap. Without `systemd-run` the run is not capped (it says so).
-# Use a few repeats (10 to 20) and only for tests whose flake risk is load; do not start it while another heavy job is running.
+# **When to use it** (RFC 010 Amendment 1, principle 3): when a **new or changed test uses timing, ports, processes or a terminal**, or **after an
+# unexplained failure**: not as a routine on every file. Use the **confined** form (`--confine 4 --workers 16`: the command and the workers share
+# four cpus, so the command waits for a cpu as it does on a busy host while the heat stays within four cores) and a small number of runs (20).
+# The default (a few niced workers) leaves a many-core host's other cores idle for the command and exposed nothing in the measurement; it is kept as
+# it is (what a confined default would cost and find is a question of its own). Do not start it while another heavy job is running.
 set -u
 usage="usage: repeat-under-load.sh N [--workers W] [--confine CPUS] -- command..."
 n="${1:?$usage}"

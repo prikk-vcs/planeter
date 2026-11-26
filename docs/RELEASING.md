@@ -13,16 +13,35 @@ published until M4. **Tagging and publishing are owner-authorized.**
    `tools/enf2-symbol-check/check.sh`, and the two maintenance gates `cargo run --locked -p
    planeter-floor-check` and `cargo run --locked -p planeter-pin-check` (RFC 010 D-2, D-5). The
    supply-chain pair may also be run as a checkpoint with the manual `supply-chain.yml` workflow.
-   **Run the gates capped (the development-machine budget).** This budget limits what *running the project's tests and gates* may take from a
-   developer's computer; it says nothing about what the server uses when it serves (RFC 011's cost model and the server's own admission settings, such
-   as `PLANETER_PRIKK_MEMORY_BUDGET_MB`, govern that). The gates and the loaded repeats are heavy and the host is a person's machine, shared with
-   other work: run them through
-   `tools/run-capped.sh -- COMMAND…` (a user scope with `CPUQuota=800%`, `MemoryMax=16G`, `MemorySwapMax=0`, `nice -n 10` and
-   `CARGO_BUILD_JOBS=8`; `--cpu`, `--mem`, `--jobs` change them), look at `uptime` first, and do not start one heavy job while another is
-   running. `tools/repeat-under-load.sh` now starts a quarter of the cores as workers (2 to 8) at low priority inside its own CPU cap, so use
-   it for a few repeats (10 to 20) of tests whose risk is load; where more contention is needed, `--confine 4 --workers 16` puts the
-   workers and the command on the same four cpus (the heat stays within four cores). Not 32 busy workers on 32 cores: that is what
-   overheated the host.
+   **The gates have three tiers and one script, `tools/gates.sh --tier commit|review|release` (RFC 010 Amendment 1; the development-machine
+   budget).** The budget limits what *running the project's tests and gates* may take from a developer's computer; it says nothing about what the
+   server uses when it serves (RFC 011's cost model and the server's own admission settings, such as `PLANETER_PRIKK_MEMORY_BUDGET_MB`, govern
+   that). **This does not relax the release procedure below: what a release requires is unchanged**, and the release tier is the same full set
+   on a clean build. Every tier runs inside `tools/run-capped.sh`, with a **compiler that is the release's** (the pin of `ci.yml`, 1.99.1 today,
+   never `stable` by accident: the script refuses with the `rustup toolchain install` command if it is missing), prints the compiler and the
+   steps first and a table of every step's exit status, wall time and CPU at the end, and **cleans up on every way out** (it removes the worktree
+   and the scratch it made, by their explicit paths, also after a failing step or an interrupt).
+   * **commit** (a developer, before pushing; where the developer is, incremental builds): fmt, floor-check, pin-check, clippy and the tests of
+     the crates the diff touches (the whole workspace when `Cargo.toml`, `Cargo.lock`, `tools/`, `.github/` or the `Dockerfile` changed; the
+     touched crates' dependents are CI's to run).
+   * **review** (the architect, or a team member, on someone else's commit): it **reads CI for that exact commit and refuses to go on unless it
+     is complete and green** (`--no-ci` says so loudly), then runs only what CI cannot: the workspace tests **with prikk** once, cargo-deny and
+     cargo-audit on a freshly fetched advisory database, the sheet check, and what the change touches (`doc`, the 1.89.0 check and the publish
+     dry run, ENF-2 and pin-check, by the diff). It builds on one shared target keyed by compiler and `Cargo.lock` with `CARGO_INCREMENTAL=0`.
+     **A review's green is not a release's evidence.**
+   * **release** (a release candidate and the tag commit): a **clean worktree and an empty target, always** (a shared target is refused), the
+     pinned compiler **and** the 1.89.0 check, fmt, floor, pin, clippy, the test build, the workspace tests with prikk **three times in a row** and
+     once without it, deny, audit, ENF-2, doc, the publish dry run, the sheet check, and CI read as in the review tier; it removes everything it
+     made, the 20 GiB included. A release candidate is built clean because the claim "this commit builds from nothing" can only be shown by an
+     empty directory.
+   **Limits are derived from the machine** (`tools/run-capped.sh` prints what it chose and why): CPU quota an eighth of the cores' worth, 200–800 %
+   (32 cores: 400 %); memory the smaller of 16 GiB and 40 % of RAM, swap off; build jobs cores ÷ 4 between 2 and 8; `nice 10`; overridable by
+   `--cpu`, `--mem`, `--jobs`, `--nice` or `RUN_CAPPED_CPU`, `RUN_CAPPED_MEM`, `RUN_CAPPED_JOBS`, `RUN_CAPPED_NICE`. Look at `uptime` first, and do
+   not start one heavy job while another is running: the host is a person's machine, shared with other work.
+   **Loaded repeats** (`tools/repeat-under-load.sh`) are for a **new or changed test that uses timing, ports, processes or a terminal, and after
+   an unexplained failure**, not a routine on every file: run them **confined** (`--confine 4 --workers 16`: the command and the workers share
+   four cpus, so the heat stays within four cores and the command still has to wait for a cpu) and in small numbers (20). The measurement of the
+   gates showed that a few niced workers on a many-core host expose nothing.
 1b. **Languages.** Run `cargo run -p planeter-i18n-sheet -- --status` and list its lines in the release notes: for each signed-off language, how
    many messages are newer than its sign-off (they ship, flagged until a reviewer has read them; `docs/messages-and-languages.md`). Do not
    write the number into other documents.
