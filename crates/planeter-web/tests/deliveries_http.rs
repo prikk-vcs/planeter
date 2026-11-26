@@ -288,6 +288,55 @@ async fn confirm(s: &Site, token: &str, id: &str) -> Reply {
     .await
 }
 
+/// **A latch the test controls** (IS-72: a transient state is held, never caught by timing). The held side calls [`Latch::hold`]: it says it
+/// is *in* (so the test can wait for that, not for a clock) and then blocks until the test calls [`Latch::release`]; a very long guard
+/// ends the hold by itself so that a test that failed does not leave a thread blocked for good. The test side waits with
+/// [`Latch::wait_entered`], a generous guard that fails with what was last seen.
+#[derive(Default)]
+struct Latch {
+    state: std::sync::Mutex<(bool, bool)>, // (entered, released)
+    changed: std::sync::Condvar,
+}
+
+impl Latch {
+    /// In the held code: announce, then block until released (at most `guard`).
+    fn hold(&self, guard: Duration) {
+        let end = std::time::Instant::now() + guard;
+        let mut g = self.state.lock().unwrap();
+        g.0 = true;
+        self.changed.notify_all();
+        while !g.1 {
+            let left = end.saturating_duration_since(std::time::Instant::now());
+            if left.is_zero() {
+                return;
+            }
+            g = self.changed.wait_timeout(g, left).unwrap().0;
+        }
+    }
+
+    fn entered(&self) -> bool {
+        self.state.lock().unwrap().0
+    }
+
+    fn release(&self) {
+        self.state.lock().unwrap().1 = true;
+        self.changed.notify_all();
+    }
+
+    /// In the test: wait until the held code is inside (the guard is a limit for a broken test, not a time the test depends on).
+    async fn wait_entered(&self, guard: Duration, last_seen: impl Fn() -> String) {
+        let end = std::time::Instant::now() + guard;
+        while !self.entered() {
+            assert!(
+                std::time::Instant::now() < end,
+                "the held code was never reached within {guard:?}; last seen: {}",
+                last_seen()
+            );
+            tokio::time::sleep(Duration::from_millis(10)).await;
+        }
+    }
+}
+
 async fn wait_for_state(s: &Site, token: &str, id: &str, state: &str) -> Value {
     for _ in 0..600 {
         let v = view(s, token, id).await.json();
@@ -744,9 +793,13 @@ async fn the_edge_answers_before_a_byte_of_the_archive_is_read() {
 async fn a_check_that_takes_longer_than_the_wait_answers_202_and_the_delivery_is_polled() {
     need_prikk!();
     let fx = fixtures();
-    let hook: Hook = Arc::new(|name: &str| {
+    // The check is **held** before the import by a latch the test releases (not a sleep the host's speed could outlast): the 202 and the
+    // `staged` state are then a property of the held work, however slow the host.
+    let latch = Arc::new(Latch::default());
+    let held = latch.clone();
+    let hook: Hook = Arc::new(move |name: &str| {
         if name == "stage_before_import" {
-            std::thread::sleep(Duration::from_millis(2500));
+            held.hold(Duration::from_secs(120));
         }
     });
     let s = site_with("slow", Some(hook), |c| {
@@ -758,6 +811,16 @@ async fn a_check_that_takes_longer_than_the_wait_answers_202_and_the_delivery_is
     assert_eq!(v["state"], "staged");
     assert!(v["report"].is_null());
     let id = v["id"].as_str().unwrap().to_owned();
+    // While it is held it is `staged` and has no report; then it is released and reaches `reported`.
+    latch
+        .wait_entered(Duration::from_secs(60), || {
+            "staged, not yet at the hold".to_owned()
+        })
+        .await;
+    let held_view = view(&s, "tok-alice", &id).await.json();
+    assert_eq!(held_view["state"], "staged", "{held_view}");
+    assert!(held_view["report"].is_null());
+    latch.release();
     let done = wait_for_state(&s, "tok-alice", &id, "reported").await;
     assert_eq!(done["report"]["verdict"], "acceptable");
 }
@@ -780,14 +843,20 @@ async fn a_confirmation_whose_connection_is_dropped_is_carried_out() {
         .as_str()
         .unwrap()
         .to_owned();
+    // The permit is **held by a latch** the test releases after the request has been dropped: the holder says it has the permit (the test
+    // waits for that, not for 100 ms), and keeps it until told to let go (IS-72: the old form held it for 1.5 s and hoped the request was
+    // dropped inside that time).
+    let latch = Arc::new(Latch::default());
     let hold = {
         let gate = s.state.gate.clone();
-        tokio::spawn(async move {
-            gate.run(|| std::thread::sleep(Duration::from_millis(1500)))
-                .await
-        })
+        let held = latch.clone();
+        tokio::spawn(async move { gate.run(move || held.hold(Duration::from_secs(120))).await })
     };
-    tokio::time::sleep(Duration::from_millis(100)).await;
+    latch
+        .wait_entered(Duration::from_secs(60), || {
+            "the permit was not taken".to_owned()
+        })
+        .await;
     // the request is dropped after 300 ms, while it waits for the gate
     let dropped = tokio::time::timeout(
         Duration::from_millis(300),
@@ -800,6 +869,7 @@ async fn a_confirmation_whose_connection_is_dropped_is_carried_out() {
     )
     .await;
     assert!(dropped.is_err(), "the request was still waiting");
+    latch.release();
     let _ = hold.await;
     let done = wait_for_state(&s, "tok-alice", &id, "done").await;
     assert_eq!(done["failure"], Value::Null);
@@ -1049,9 +1119,14 @@ fn chrono_free_today() -> String {
 async fn a_confirmation_that_takes_longer_than_the_wait_answers_202_and_is_polled_to_done() {
     need_prikk!();
     let fx = fixtures();
-    let hook: Hook = Arc::new(|name: &str| {
+    // The re-accepting is **held** by a latch the test controls, not slept past: what the test asserts about `reaccepting` is a property of
+    // the held work, and it does not depend on how fast the host reaches it (IS-72: the old form read the 202's state off a 500 ms clock and
+    // saw `confirmed` when the host was slow).
+    let latch = Arc::new(Latch::default());
+    let held = latch.clone();
+    let hook: Hook = Arc::new(move |name: &str| {
         if name == "reaccept_first" {
-            std::thread::sleep(Duration::from_millis(2500));
+            held.hold(Duration::from_secs(120));
         }
     });
     let s = site_with("slow-confirm", Some(hook), |c| {
@@ -1063,8 +1138,24 @@ async fn a_confirmation_that_takes_longer_than_the_wait_answers_202_and_is_polle
     // (the check itself may outlast the short wait of this service: poll until it is reported)
     wait_for_state(&s, "tok-alice", &id, "reported").await;
     let r = confirm(&s, "tok-alice", &id).await;
+    // The wait ran out with the work unfinished (it cannot finish: it is held): 202, the long road.
     assert_eq!(r.status, StatusCode::ACCEPTED, "{}", r.text());
-    assert_eq!(r.json()["state"], "reaccepting");
+    // The 202's body is the state at the end of the wait: the work is on its way to the hold, so `confirmed` (not yet there) or
+    // `reaccepting` (there). Which of the two is a race of the host's speed, and is not what the test is about.
+    let at_the_edge = r.json()["state"].clone();
+    assert!(
+        at_the_edge == "confirmed" || at_the_edge == "reaccepting",
+        "the 202 says {at_the_edge}"
+    );
+    // **The held state, asserted while it is held**: the work is inside the re-accepting (the hook is `reaccept_first`), and the view says so.
+    latch
+        .wait_entered(Duration::from_secs(60), || at_the_edge.to_string())
+        .await;
+    let held_view = view(&s, "tok-alice", &id).await.json();
+    assert_eq!(held_view["state"], "reaccepting", "{held_view}");
+    assert_eq!(held_view["needs_recovery"], false);
+    // Released: it is polled to `done`.
+    latch.release();
     let done = wait_for_state(&s, "tok-alice", &id, "done").await;
     assert_eq!(done["needs_recovery"], false);
     assert_eq!(s.svc.pending(), sc.stays);

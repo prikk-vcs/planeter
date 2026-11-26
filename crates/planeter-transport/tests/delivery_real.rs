@@ -410,12 +410,19 @@ fn an_accept_waits_while_a_confirmation_holds_the_lease() {
     let fx = fixtures();
     let base = scratch("confirm-vs-accept");
     create_live(&base, &fx.h0, &[&fx.m1, &fx.m2]);
+    // The confirmation is **held** inside its re-accepting by a latch the test releases once it has seen what it came to see (IS-72: it was
+    // held for five seconds by a sleep, which a slow host could use up before the proposal below was made).
     let inside = Arc::new(AtomicBool::new(false));
+    let release = Arc::new(AtomicBool::new(false));
     let hook_flag = inside.clone();
+    let hook_release = release.clone();
     let hook: Hook = Arc::new(move |name: &str| {
         if name == "reaccept_first" {
             hook_flag.store(true, Ordering::SeqCst);
-            std::thread::sleep(Duration::from_secs(5));
+            let end = std::time::Instant::now() + Duration::from_secs(120);
+            while !hook_release.load(Ordering::SeqCst) && std::time::Instant::now() < end {
+                std::thread::sleep(Duration::from_millis(5));
+            }
         }
     });
     let s = open(&base, Some(hook));
@@ -448,6 +455,7 @@ fn an_accept_waits_while_a_confirmation_holds_the_lease() {
             matches!(r, Err(planeter_transport::ProposeError::Busy { .. })),
             "{r:?}"
         );
+        release.store(true, Ordering::SeqCst);
         assert!(confirming.join().unwrap().is_ok());
     });
 }
