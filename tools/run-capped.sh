@@ -6,6 +6,10 @@
 #   e.g. tools/run-capped.sh -- sh tools/gates.sh
 #        tools/run-capped.sh --cpu 400 -- cargo test --workspace --locked
 #
+# This is the **development-machine budget**: it limits what *running the project's tests and gates* may take from a developer's computer, and
+# says nothing about what the server uses when it serves (RFC 011's cost model and the server's own admission settings, such as
+# `PLANETER_PRIKK_MEMORY_BUDGET_MB`, govern that).
+#
 # Defaults: `--cpu 800` (`CPUQuota=800%`: eight cores' worth of time in all, however many the host has), `--mem 16G` (`MemoryMax`, with
 # `MemorySwapMax=0`), `--nice 10`, and `CARGO_BUILD_JOBS` = 8 unless it is already set (or `--jobs`). With `systemd-run --user --scope`
 # unavailable the command still runs, at that priority and with that `CARGO_BUILD_JOBS`, and the script says it is not capped.

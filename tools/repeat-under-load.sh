@@ -8,7 +8,8 @@
 # ordering shows itself here and not in a release job. The command is run N times in a row; each run's output is kept in a scratch
 # directory (printed), and the exit status is the number of failed runs (capped at 125). The workers are stopped on every exit path.
 #
-# **The budget.** The load must not run the host at 100% (it is a person's machine, shared with other work):
+# **The development-machine budget.** It limits what *running the project's tests and gates* may take from a developer's computer, and says nothing about what the server uses when it serves (that is RFC 011's cost model and the server's own admission settings, such as `PLANETER_PRIKK_MEMORY_BUDGET_MB`).
+# The load must not run the host at 100% (it is a person's machine, shared with other work):
 #   * the default number of workers is **a quarter of the cores, at least 2 and at most 8** (`--workers W` sets it);
 #   * the workers run at `nice -n 10`;
 #   * **`--confine N`** (optional) puts the workers **and the command** on the same N cpus (`taskset`, the first N the process may use) and

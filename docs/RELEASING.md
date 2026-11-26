@@ -13,7 +13,10 @@ published until M4. **Tagging and publishing are owner-authorized.**
    `tools/enf2-symbol-check/check.sh`, and the two maintenance gates `cargo run --locked -p
    planeter-floor-check` and `cargo run --locked -p planeter-pin-check` (RFC 010 D-2, D-5). The
    supply-chain pair may also be run as a checkpoint with the manual `supply-chain.yml` workflow.
-   **Run the gates capped.** The gates and the loaded repeats are heavy and the host is a person's machine, shared with other work: run them through
+   **Run the gates capped (the development-machine budget).** This budget limits what *running the project's tests and gates* may take from a
+   developer's computer; it says nothing about what the server uses when it serves (RFC 011's cost model and the server's own admission settings, such
+   as `PLANETER_PRIKK_MEMORY_BUDGET_MB`, govern that). The gates and the loaded repeats are heavy and the host is a person's machine, shared with
+   other work: run them through
    `tools/run-capped.sh -- COMMAND…` (a user scope with `CPUQuota=800%`, `MemoryMax=16G`, `MemorySwapMax=0`, `nice -n 10` and
    `CARGO_BUILD_JOBS=8`; `--cpu`, `--mem`, `--jobs` change them), look at `uptime` first, and do not start one heavy job while another is
    running. `tools/repeat-under-load.sh` now starts a quarter of the cores as workers (2 to 8) at low priority inside its own CPU cap, so use
