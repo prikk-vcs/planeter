@@ -1,0 +1,175 @@
+#!/bin/sh
+# Tests of tools/gates.sh without building anything (fake step commands, a throw-away repository): the cleanup on a failing step, on INT and on
+# TERM, the exit status, `--fail-fast`, the release tier's refusal of a shared target, the review tier's refusal when CI is not green or cannot be
+# read, the refusal when the release's compiler is not installed, and the plan of each tier for a diff. `sh tools/tests/gates.sh`
+# (run from `cargo test` by tools/pin-check/tests/shell_tools.rs).
+set -u
+repo=$(cd "$(dirname "$0")/../.." && pwd)
+fails=0
+check() { if [ "$2" = "$3" ]; then echo "ok   $1"; else echo "FAIL $1: expected [$2] got [$3]"; fails=$((fails + 1)); fi; }
+contains() { case "$3" in *"$2"*) echo "ok   $1" ;; *) echo "FAIL $1: [$2] not in: $3" | head -c 600; echo; fails=$((fails + 1)) ;; esac; }
+absent() { case "$3" in *"$2"*) echo "FAIL $1: [$2] is in: $3" | head -c 600; echo; fails=$((fails + 1)) ;; *) echo "ok   $1" ;; esac; }
+
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/gates-test.XXXXXX")
+trap 'rm -rf "$tmp"' EXIT
+export GIT_AUTHOR_NAME=t GIT_AUTHOR_EMAIL=t@t GIT_COMMITTER_NAME=t GIT_COMMITTER_EMAIL=t@t
+# A throw-away repository holding the two scripts, a manifest and a ci.yml with a compiler pin.
+r="$tmp/repo"
+mkdir -p "$r/tools" "$r/.github/workflows" "$r/docs"
+cp "$repo/tools/gates.sh" "$repo/tools/run-capped.sh" "$r/tools/"
+printf '[workspace]\nrust-version = "1.89.0"\n' > "$r/Cargo.toml"
+echo "lock 1" > "$r/Cargo.lock"
+echo "doc" > "$r/docs/a.md"
+cat > "$r/.github/workflows/ci.yml" <<'YML'
+      - run: rustup toolchain install 1.99.1 --profile minimal --no-self-update
+      - run: rustup toolchain install 1.89.0 --profile minimal --no-self-update
+YML
+(cd "$r" && git init -q -b main . && git add -A && git commit -q -m one)
+first=$(git -C "$r" rev-parse HEAD)
+# A second commit that changes only a document.
+echo "doc 2" > "$r/docs/a.md"
+(cd "$r" && git commit -qam two)
+docs_only=$(git -C "$r" rev-parse HEAD)
+# A third that changes Cargo.lock and a workflow.
+echo "lock 2" > "$r/Cargo.lock"
+echo "# x" >> "$r/.github/workflows/ci.yml"
+(cd "$r" && git commit -qam three)
+lock_change=$(git -C "$r" rev-parse HEAD)
+
+gates() { (cd "$r" && GATES_CAPPED=1 sh tools/gates.sh "$@" 2>&1); }
+state() { echo "worktrees=$(git -C "$r" worktree list | wc -l) leftovers=$(ls "$r/.git-exclude/tmp/arch" 2> /dev/null | wc -l)"; }
+start=$(state)
+steps="$tmp/steps.tsv"
+
+# --- the plan of each tier, for diffs of different kinds (compiler checks are real here: the pin is read from the fixture's ci.yml; the
+# self-test hook is not used, so the toolchain must be installed for these; they are skipped, said, when it is not)
+pin=1.99.1
+if rustup toolchain list 2> /dev/null | grep -q "^$pin-"; then
+  out=$(gates --tier review --commit "$docs_only" --plan)
+  contains "review plan: a documents-only diff runs doc" "doc " "$out"
+  absent "review plan: a documents-only diff has no msrv check" "msrv-check" "$out"
+  absent "review plan: a documents-only diff has no publish dry run" "publish-dry-run" "$out"
+  absent "review plan: a documents-only diff has no ENF-2" "enf2" "$out"
+  contains "review plan: always the tests with prikk, deny, audit, the sheet" "tests-with-prikk-1" "$out"
+  contains "review plan: the compiler is the pin" "RUSTUP_TOOLCHAIN=$pin" "$out"
+  out=$(gates --tier review --commit "$lock_change" --plan)
+  contains "review plan: a Cargo.lock change runs the 1.89.0 check" "msrv-check" "$out"
+  contains "review plan: a Cargo.lock change runs the publish dry run" "publish-dry-run" "$out"
+  contains "review plan: a workflow change runs ENF-2 and pin-check" "enf2" "$out"
+  out=$(gates --tier review --commit "$lock_change" --base "$first" --runs 2 --plan)
+  contains "review plan: --runs 2 is two runs" "tests-with-prikk-2" "$out"
+  out=$(gates --tier release --commit "$docs_only" --plan)
+  for s in fmt floor-check pin-check clippy test-build tests-with-prikk-3 tests-without-prikk deny audit enf2 doc msrv-check publish-dry-run sheet-check; do contains "release plan has $s" "$s" "$out"; done
+  out=$(gates --tier commit --plan)
+  contains "commit plan: fmt and clippy" "clippy" "$out"
+  # the compiler that is not installed
+  sed -i 's/1\.99\.1/1.2.3/' "$r/.github/workflows/ci.yml"
+  (cd "$r" && git commit -qam four)
+  out=$(gates --tier review --commit HEAD --plan); rc=$?
+  contains "an uninstalled compiler is refused with the install command" "rustup toolchain install 1.2.3" "$out"
+  contains "...and never falls back to stable" "never fall back to stable" "$out"
+  check "$(state)" "$start" "$(state)"
+else
+  echo "skip the plan tests: the toolchain $pin is not installed here"
+fi
+
+# --- the cleanup, with fake steps
+use_steps() { printf '%b' "$1" > "$steps"; }
+export GATES_SELF_TEST_STEPS="$steps"
+use_steps 'one\techo first step ran\n'
+out=$(gates --tier release --commit "$first" --no-ci); rc=$?
+check "a passing run exits 0" "0" "$rc"
+contains "its table says the step passed" "one " "$out"
+check "a passing run leaves the worktrees and the scratch as they were" "$start" "$(state)"
+
+use_steps 'a\ttrue\nb\texit 7\nc\ttrue\n'
+out=$(gates --tier release --commit "$first" --no-ci); rc=$?
+check "a failing step: the exit status is the first failing step's" "7" "$rc"
+contains "...the later step ran (without --fail-fast)" "c " "$out"
+contains "...and the report names the first failure" "first failing step is b (exit 7)" "$out"
+check "a failing step: worktrees and scratch as they were" "$start" "$(state)"
+check "a failing step: the worktree directory is gone" "no" "$([ -e "$r/.git-exclude/tmp/arch/gates-$(echo "$first" | cut -c1-8)-"* ] 2> /dev/null && echo yes || echo no)"
+
+out=$(gates --tier release --commit "$first" --no-ci --fail-fast); rc=$?
+check "--fail-fast: still 7" "7" "$rc"
+absent "--fail-fast: step c did not run" "=== step: c" "$out"
+check "--fail-fast: cleaned up" "$start" "$(state)"
+
+# an interrupted run: the step sends INT (then TERM) to the script that runs it, which is its parent
+use_steps 'a\ttrue\nb\tkill -INT $PPID; sleep 30\nc\ttrue\n'
+out=$(gates --tier release --commit "$first" --no-ci); rc=$?
+check "INT: the exit status is 130" "130" "$rc"
+contains "INT: the cleanup ran" "cleanup done" "$out"
+absent "INT: the next step did not run" "=== step: c" "$out"
+check "INT: worktrees and scratch as they were" "$start" "$(state)"
+use_steps 'a\ttrue\nb\tkill -TERM $PPID; sleep 30\nc\ttrue\n'
+out=$(gates --tier review --commit "$first" --no-ci); rc=$?
+check "TERM: the exit status is 143" "143" "$rc"
+check "TERM: worktrees and scratch as they were" "$start" "$(state)"
+left=1
+for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+  left=$(ps -eo args | grep -c '[s]leep 30')
+  [ "$left" = 0 ] && break
+  sleep 0.2
+done
+check "no step is left running after an interrupt" "0" "$left"
+
+# --- the release tier refuses a shared target (and cleans up what it had made)
+use_steps 'one\techo should not run\n'
+out=$(CARGO_TARGET_DIR="$tmp/shared" gates --tier release --commit "$first" --no-ci); rc=$?
+check "release refuses a shared target: exit 2" "2" "$rc"
+contains "...with a sentence" "refuses a shared one" "$out"
+absent "...and no step ran" "=== step: one" "$out"
+check "...and it cleaned up" "$start" "$(state)"
+
+# --- CI is read for the exact commit (a stand-in gh)
+mkdir "$tmp/ghbin"
+write_gh() { # $1 = the lines `gh run list` prints; $2 = the lines `gh run view` prints
+  cat > "$tmp/ghbin/gh" <<GH
+#!/bin/sh
+case "\$1 \$2" in
+  "run list") printf '%b' '$1' ;;
+  "run view") printf '%b' '$2' ;;
+esac
+GH
+  chmod +x "$tmp/ghbin/gh"
+}
+runner() { (cd "$r" && PATH="$tmp/ghbin:$PATH" GATES_CAPPED=1 sh tools/gates.sh "$@" 2>&1); }
+use_steps 'one\techo ran after CI\n'
+write_gh '42\tcompleted\tsuccess\tCI\n' 'build\tcompleted\tsuccess\nmsrv\tcompleted\tsuccess\nclient (macos-15)\tcompleted\tskipped\n'
+out=$(runner --tier review --commit "$first"); rc=$?
+check "green CI: the review goes on" "0" "$rc"
+contains "...and prints each job's conclusion" "job build: completed success" "$out"
+write_gh '42\tcompleted\tfailure\tCI\n' 'build\tcompleted\tsuccess\nmsrv\tcompleted\tfailure\n'
+out=$(runner --tier review --commit "$first"); rc=$?
+check "red CI: the review refuses" "2" "$rc"
+contains "...saying CI is not complete and green" "not complete and green" "$out"
+absent "...and no step ran" "=== step: one" "$out"
+check "...and it cleaned up" "$start" "$(state)"
+write_gh '42\tin_progress\t\tCI\n' 'build\tin_progress\t\n'
+out=$(runner --tier review --commit "$first"); rc=$?
+check "CI still running: the review refuses" "2" "$rc"
+write_gh '' ''
+out=$(runner --tier review --commit "$first"); rc=$?
+check "no CI run for the commit: the review refuses" "2" "$rc"
+contains "...saying so" "CI has no run" "$out"
+out=$(runner --tier review --commit "$first" --no-ci); rc=$?
+check "--no-ci goes on" "0" "$rc"
+contains "...and says loudly that CI was not read" "CI was NOT read" "$out"
+# no gh at all
+mkdir "$tmp/nogh"
+for t in sh git sed head cut awk mktemp rm mkdir date cat grep pkill kill ps rustc rustup nice getconf env sort wc ls dirname tr sleep printf true; do p=$(command -v "$t") && ln -sf "$p" "$tmp/nogh/$t"; done
+out=$(cd "$r" && PATH="$tmp/nogh" GATES_CAPPED=1 /bin/sh tools/gates.sh --tier review --commit "$first" 2>&1); rc=$?
+check "without gh the review refuses (unless --no-ci)" "2" "$rc"
+contains "...saying CI cannot be read" "CI cannot be read" "$out"
+check "...and it cleaned up" "$start" "$(state)"
+
+# --- the commit tier makes no worktree
+use_steps 'one\techo in place\n'
+out=$(gates --tier commit); rc=$?
+check "the commit tier runs where it is" "0" "$rc"
+absent "...and makes no worktree" "worktree:" "$out"
+
+[ "$fails" -eq 0 ] && echo "all gates tests passed" && exit 0
+echo "$fails failed"
+exit 1
