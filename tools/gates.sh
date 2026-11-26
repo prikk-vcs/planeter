@@ -102,7 +102,9 @@ cleanup() {
     # The step runs in a session of its own (`setsid`, when there is one): the whole group, whatever it has started, is ended; without it, the
     # step's children and the step.
     if [ "$GROUP" = 1 ]; then
-      kill -TERM -- "-$CHILD" 2> /dev/null
+      # (the external `kill`: the builtins of the shells differ in how they take a group and `--`)
+      env kill -TERM -- "-$CHILD" 2> /dev/null || kill -TERM "$CHILD" 2> /dev/null
+      pkill -TERM -P "$CHILD" 2> /dev/null
     else
       pkill -TERM -P "$CHILD" 2> /dev/null
       kill -TERM "$CHILD" 2> /dev/null

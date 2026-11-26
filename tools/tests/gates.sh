@@ -38,7 +38,14 @@ echo "# x" >> "$r/.github/workflows/ci.yml"
 (cd "$r" && git commit -qam three)
 lock_change=$(git -C "$r" rev-parse HEAD)
 
-gates() { (cd "$r" && GATES_CAPPED=1 sh tools/gates.sh "$@" 2>&1); }
+# The output goes to a file, not a pipe: a step that is left running (a failure of what is tested here) would keep a pipe open and hang the test; and
+# nothing waits for longer than five minutes.
+gates() {
+  (cd "$r" && GATES_CAPPED=1 timeout 300 sh tools/gates.sh "$@" > "$tmp/gates.out" 2>&1)
+  rc_gates=$?
+  cat "$tmp/gates.out"
+  return $rc_gates
+}
 state() { echo "worktrees=$(git -C "$r" worktree list | wc -l) leftovers=$(ls "$r/.git-exclude/tmp/arch" 2> /dev/null | wc -l)"; }
 start=$(state)
 steps="$tmp/steps.tsv"
@@ -137,7 +144,12 @@ esac
 GH
   chmod +x "$tmp/ghbin/gh"
 }
-runner() { (cd "$r" && PATH="$tmp/ghbin:$PATH" GATES_CAPPED=1 sh tools/gates.sh "$@" 2>&1); }
+runner() {
+  (cd "$r" && PATH="$tmp/ghbin:$PATH" GATES_CAPPED=1 timeout 300 sh tools/gates.sh "$@" > "$tmp/gates.out" 2>&1)
+  rc_gates=$?
+  cat "$tmp/gates.out"
+  return $rc_gates
+}
 use_steps 'one\techo ran after CI\n'
 write_gh '42\tcompleted\tsuccess\tCI\n' 'build\tcompleted\tsuccess\nmsrv\tcompleted\tsuccess\nclient (macos-15)\tcompleted\tskipped\n'
 out=$(runner --tier review --commit "$first"); rc=$?
@@ -162,7 +174,8 @@ contains "...and says loudly that CI was not read" "CI was NOT read" "$out"
 # no gh at all
 mkdir "$tmp/nogh"
 for t in sh git sed head cut awk mktemp rm mkdir date cat grep pkill kill ps rustc rustup nice getconf env sort wc ls dirname tr sleep printf true; do p=$(command -v "$t") && ln -sf "$p" "$tmp/nogh/$t"; done
-out=$(cd "$r" && PATH="$tmp/nogh" GATES_CAPPED=1 /bin/sh tools/gates.sh --tier review --commit "$first" 2>&1); rc=$?
+(cd "$r" && PATH="$tmp/nogh" GATES_CAPPED=1 /bin/sh tools/gates.sh --tier review --commit "$first" > "$tmp/gates.out" 2>&1); rc=$?
+out=$(cat "$tmp/gates.out")
 check "without gh the review refuses (unless --no-ci)" "2" "$rc"
 contains "...saying CI cannot be read" "CI cannot be read" "$out"
 check "...and it cleaned up" "$start" "$(state)"
