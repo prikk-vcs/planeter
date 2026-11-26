@@ -135,7 +135,7 @@ your user profile, whose access list is private by default. The token is added t
 
 From 0.10.0 the person who runs the server makes a token with `planeter operator token create HANDLE --name TEXT --scope read-only|write|full --out FILE`
 (beside the running server; the file is new, private to its owner, and holds the token once) and gives that path to `--token-file`; the
-server has no page for a person to make their own yet.
+server has no page for a person to make their own yet. [`accounts.md`](accounts.md) says what each scope allows, what a token's end and its revocation do, and what the operator can see.
 
 ## https, certificates, proxies
 

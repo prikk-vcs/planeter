@@ -9,7 +9,7 @@ You deliver with `planeter-client deliver https://host/owner/name`, run inside y
 * It sends **the whole repository** (what `prikk archive export` writes), not a patch. It is the same file creation takes. The whole history goes each time.
 * The server accepts it **only if yours continues from the project's branch** and every change in it is signed by a key this repository already trusts. A delivery can move the branch forward, and add branches; it cannot rewind, delete a branch or bring in a key.
 * Nothing happens until you confirm. The report says what would change; `Deliver it? [y/N]` has no default yes; `--yes` skips the question; `--dry-run` stops after the report and cancels the delivery on the server.
-* Who may deliver: a **maintainer** (or an administrator) of the repository, with a token whose scope is **`full`**. A `write` token is capped below merge-seal and cannot deliver: the client says so (`403`).
+* Who may deliver: a **maintainer** (or an administrator) of the repository, with a token whose scope is **`full`**. A `write` token is capped below merge-seal and cannot deliver: the client says so (`403`). How an operator makes an account and its token, and what each scope allows, is in [`accounts.md`](accounts.md).
 
 ### The steps
 
