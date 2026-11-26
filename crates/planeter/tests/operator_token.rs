@@ -5,7 +5,11 @@
 
 #[path = "../../planeter-transport/tests/support/archives.rs"]
 mod archives;
+#[path = "common/reaped.rs"]
+#[allow(dead_code)]
+mod reaped;
 
+use reaped::{Reaped, server_command};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
 use std::path::PathBuf;
@@ -186,7 +190,7 @@ fn err(o: &Output) -> String {
 // ------------------------------------------------------------------------------------------------ the real server
 
 struct Server {
-    child: Child,
+    child: Reaped,
     port: u16,
     log: PathBuf,
 }
@@ -198,22 +202,22 @@ fn start(w: &World) -> Server {
         .unwrap()
         .port();
     let log = w.dir.join("server.log");
-    let mut child = Command::new(BIN)
-        .env_clear()
-        .env("PATH", std::env::var("PATH").unwrap_or_default())
-        .env("PLANETER_ADDR", format!("127.0.0.1:{port}"))
-        .env("PLANETER_REPOS_ROOT", w.dir.join("root"))
-        .env("PLANETER_DB", w.dir.join("state.db"))
-        .env("PLANETER_CONTENT_ORIGIN", "https://raw.invalid")
-        .env("PLANETER_SPOOL_DIR", w.dir.join("spool"))
-        .env("PLANETER_ARTIFACT_DIR", w.dir.join("artifacts"))
-        .env("HOME", w.dir.join("home"))
-        .current_dir(&w.dir)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn planeter");
+    let mut child = Reaped::spawn(
+        server_command(BIN)
+            .env_clear()
+            .env("PATH", std::env::var("PATH").unwrap_or_default())
+            .env("PLANETER_ADDR", format!("127.0.0.1:{port}"))
+            .env("PLANETER_REPOS_ROOT", w.dir.join("root"))
+            .env("PLANETER_DB", w.dir.join("state.db"))
+            .env("PLANETER_CONTENT_ORIGIN", "https://raw.invalid")
+            .env("PLANETER_SPOOL_DIR", w.dir.join("spool"))
+            .env("PLANETER_ARTIFACT_DIR", w.dir.join("artifacts"))
+            .env("HOME", w.dir.join("home"))
+            .current_dir(&w.dir)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped()),
+    );
     let reader = BufReader::new(child.stderr.take().unwrap());
     let (tx, rx) = std::sync::mpsc::channel::<()>();
     let path = log.clone();

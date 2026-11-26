@@ -5,13 +5,17 @@
 
 #[path = "../../planeter-transport/tests/support/archives.rs"]
 mod archives;
+#[path = "common/reaped.rs"]
+#[allow(dead_code)]
+mod reaped;
 #[path = "../../planeter-transport/tests/support/delivery_world.rs"]
 mod world;
 
+use reaped::{Reaped, server_command};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Output, Stdio};
+use std::process::{Command, Output, Stdio};
 use std::time::{Duration, Instant};
 
 use planeter_auth::{Sha256TokenHasher, SqliteCredentialStore, TokenHasher, TokenRecord};
@@ -271,7 +275,7 @@ fn flagged(fix: &Fix) -> bool {
 // ------------------------------------------------------------------------------------------------ a real server
 
 struct Server {
-    child: Child,
+    child: Reaped,
     port: u16,
 }
 
@@ -281,21 +285,21 @@ fn start_server(dir: &Path) -> Server {
         .local_addr()
         .unwrap()
         .port();
-    let mut child = Command::new(BIN)
-        .env("PATH", std::env::var("PATH").unwrap_or_default())
-        .env("PLANETER_ADDR", format!("127.0.0.1:{port}"))
-        .env("PLANETER_REPOS_ROOT", dir.join("root"))
-        .env("PLANETER_DB", dir.join("state.db"))
-        .env("PLANETER_CONTENT_ORIGIN", "https://raw.invalid")
-        .env("PLANETER_ARTIFACT_DIR", dir.join("artifacts"))
-        .env("PLANETER_SPOOL_DIR", dir.join("spool"))
-        .env("PLANETER_AUTOMATIC_RECOVERY", "on")
-        .current_dir(dir)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn planeter");
+    let mut child = Reaped::spawn(
+        server_command(BIN)
+            .env("PATH", std::env::var("PATH").unwrap_or_default())
+            .env("PLANETER_ADDR", format!("127.0.0.1:{port}"))
+            .env("PLANETER_REPOS_ROOT", dir.join("root"))
+            .env("PLANETER_DB", dir.join("state.db"))
+            .env("PLANETER_CONTENT_ORIGIN", "https://raw.invalid")
+            .env("PLANETER_ARTIFACT_DIR", dir.join("artifacts"))
+            .env("PLANETER_SPOOL_DIR", dir.join("spool"))
+            .env("PLANETER_AUTOMATIC_RECOVERY", "on")
+            .current_dir(dir)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped()),
+    );
     let lines = BufReader::new(child.stderr.take().unwrap());
     let (tx, rx) = std::sync::mpsc::channel();
     let log = dir.join("server.log");

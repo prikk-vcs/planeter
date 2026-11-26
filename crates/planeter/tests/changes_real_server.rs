@@ -2,10 +2,14 @@
 //! the list and a diff of a revision, and the server's whole log of the run holds neither a file name nor any file content, on the success
 //! path or on the refusal path. Self-skips (printing why) without prikk, bubblewrap or prlimit.
 
+#[path = "common/reaped.rs"]
+#[allow(dead_code)]
+mod reaped;
+use reaped::{Reaped, server_command};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Command, Stdio};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
@@ -125,7 +129,7 @@ fn bearer() -> Vec<(&'static str, String)> {
 }
 
 struct Server {
-    child: Child,
+    child: Reaped,
     port: u16,
     log: Arc<Mutex<Vec<String>>>,
     reader: Option<std::thread::JoinHandle<()>>,
@@ -137,22 +141,22 @@ fn start(dir: &Path) -> Server {
         .local_addr()
         .unwrap()
         .port();
-    let mut child = Command::new(env!("CARGO_BIN_EXE_planeter"))
-        .env("PATH", std::env::var("PATH").unwrap_or_default())
-        .env("PLANETER_ADDR", format!("127.0.0.1:{port}"))
-        .env("PLANETER_REPOS_ROOT", dir.join("repos"))
-        .env("PLANETER_DB", dir.join("db.sqlite"))
-        .env("PLANETER_CONTENT_ORIGIN", "https://raw.invalid")
-        .env("PLANETER_ARTIFACT_DIR", dir.join("artifacts"))
-        .env("PLANETER_SPOOL_DIR", dir.join("spool"))
-        .env("PLANETER_SPOOL_BUDGET_MB", "64")
-        .env("PLANETER_AUTOMATIC_RECOVERY", "off")
-        .current_dir(dir)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn planeter");
+    let mut child = Reaped::spawn(
+        server_command(env!("CARGO_BIN_EXE_planeter"))
+            .env("PATH", std::env::var("PATH").unwrap_or_default())
+            .env("PLANETER_ADDR", format!("127.0.0.1:{port}"))
+            .env("PLANETER_REPOS_ROOT", dir.join("repos"))
+            .env("PLANETER_DB", dir.join("db.sqlite"))
+            .env("PLANETER_CONTENT_ORIGIN", "https://raw.invalid")
+            .env("PLANETER_ARTIFACT_DIR", dir.join("artifacts"))
+            .env("PLANETER_SPOOL_DIR", dir.join("spool"))
+            .env("PLANETER_SPOOL_BUDGET_MB", "64")
+            .env("PLANETER_AUTOMATIC_RECOVERY", "off")
+            .current_dir(dir)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped()),
+    );
     let lines = BufReader::new(child.stderr.take().unwrap());
     let log = Arc::new(Mutex::new(Vec::new()));
     let (tx, rx) = std::sync::mpsc::channel();

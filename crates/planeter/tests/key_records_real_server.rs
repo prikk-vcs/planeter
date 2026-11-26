@@ -7,11 +7,15 @@
 
 #[path = "../../planeter-transport/tests/support/archives.rs"]
 mod archives;
+#[path = "common/reaped.rs"]
+#[allow(dead_code)]
+mod reaped;
 
+use reaped::{Reaped, server_command};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
 use planeter_store::{
@@ -113,7 +117,7 @@ fn world(name: &str) -> (Fix, Vec<archives::KeyInfo>) {
 }
 
 struct Server {
-    child: Child,
+    child: Reaped,
     port: u16,
     lines: std::sync::mpsc::Receiver<String>,
 }
@@ -124,20 +128,20 @@ fn start(dir: &Path) -> Server {
         .local_addr()
         .unwrap()
         .port();
-    let mut child = Command::new(env!("CARGO_BIN_EXE_planeter"))
-        .env("PATH", std::env::var("PATH").unwrap_or_default())
-        .env("PLANETER_ADDR", format!("127.0.0.1:{port}"))
-        .env("PLANETER_REPOS_ROOT", dir.join("root"))
-        .env("PLANETER_DB", dir.join("state.db"))
-        .env("PLANETER_CONTENT_ORIGIN", "https://raw.invalid")
-        // the flag on r01 must stay: the unattended recovery would try it
-        .env("PLANETER_AUTOMATIC_RECOVERY", "off")
-        .current_dir(dir)
-        .stdin(Stdio::null())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .expect("spawn planeter");
+    let mut child = Reaped::spawn(
+        server_command(env!("CARGO_BIN_EXE_planeter"))
+            .env("PATH", std::env::var("PATH").unwrap_or_default())
+            .env("PLANETER_ADDR", format!("127.0.0.1:{port}"))
+            .env("PLANETER_REPOS_ROOT", dir.join("root"))
+            .env("PLANETER_DB", dir.join("state.db"))
+            .env("PLANETER_CONTENT_ORIGIN", "https://raw.invalid")
+            // the flag on r01 must stay: the unattended recovery would try it
+            .env("PLANETER_AUTOMATIC_RECOVERY", "off")
+            .current_dir(dir)
+            .stdin(Stdio::null())
+            .stdout(Stdio::null())
+            .stderr(Stdio::piped()),
+    );
     let reader = BufReader::new(child.stderr.take().unwrap());
     let (tx, rx) = std::sync::mpsc::channel();
     let log = dir.join("server.log");

@@ -18,13 +18,17 @@
 
 #[path = "../../planeter-transport/tests/support/archives.rs"]
 mod archives;
+#[path = "common/reaped.rs"]
+#[allow(dead_code)]
+mod reaped;
 #[path = "../../planeter-transport/tests/support/delivery_world.rs"]
 mod world;
 
+use reaped::{Reaped, server_command};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Command, Stdio};
 use std::sync::OnceLock;
 use std::time::{Duration, Instant};
 
@@ -156,7 +160,7 @@ fn instance(name: &str) -> Instance {
 // ------------------------------------------------------------------------------------------------ the process
 
 struct Server {
-    child: Child,
+    child: Reaped,
     port: u16,
 }
 
@@ -168,7 +172,7 @@ impl Server {
             .local_addr()
             .unwrap()
             .port();
-        let mut cmd = Command::new(env!("CARGO_BIN_EXE_planeter"));
+        let mut cmd = server_command(env!("CARGO_BIN_EXE_planeter"));
         cmd.env("PATH", std::env::var("PATH").unwrap_or_default())
             .env("PLANETER_ADDR", format!("127.0.0.1:{port}"))
             .env("PLANETER_REPOS_ROOT", dir.join("root"))
@@ -188,7 +192,7 @@ impl Server {
                 format!("{point}={}", marker.display()),
             );
         }
-        let mut child = cmd.spawn().expect("spawn planeter");
+        let mut child = Reaped::spawn(&mut cmd);
         let lines = BufReader::new(child.stderr.take().unwrap());
         let (tx, rx) = std::sync::mpsc::channel();
         let log = dir.join("server.log");
@@ -735,8 +739,8 @@ fn kill_at(point: &str, want: After, report: &mut Vec<String>) {
 }
 
 /// A stand-in `Child` for a thread that only needs the port (never waited on).
-fn dummy_child() -> Child {
-    Command::new("true").spawn().unwrap()
+fn dummy_child() -> Reaped {
+    Reaped::new(Command::new("true").spawn().unwrap())
 }
 
 #[test]

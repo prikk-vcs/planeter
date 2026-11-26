@@ -5,7 +5,11 @@
 
 #[path = "../../planeter-transport/tests/support/archives.rs"]
 mod archives;
+#[path = "common/reaped.rs"]
+#[allow(dead_code)]
+mod reaped;
 
+use reaped::{Reaped, server_command};
 use std::io::{BufRead, BufReader, Read, Write};
 use std::net::TcpStream;
 use std::path::PathBuf;
@@ -104,7 +108,7 @@ fn err(o: &Output) -> String {
 // ------------------------------------------------------------------------------------------------ the real server
 
 struct Server {
-    child: Child,
+    child: Reaped,
     port: u16,
     log: PathBuf,
 }
@@ -120,7 +124,7 @@ fn start_with(w: &World, extra: &[(&str, &str)]) -> Server {
         .unwrap()
         .port();
     let log = w.dir.join("server.log");
-    let mut command = Command::new(BIN);
+    let mut command = server_command(BIN);
     command
         .env_clear()
         .env("PATH", std::env::var("PATH").unwrap_or_default())
@@ -138,7 +142,7 @@ fn start_with(w: &World, extra: &[(&str, &str)]) -> Server {
     for (k, v) in extra {
         command.env(k, v);
     }
-    let mut child = command.spawn().expect("spawn planeter");
+    let mut child = Reaped::spawn(&mut command);
     let reader = BufReader::new(child.stderr.take().unwrap());
     let (tx, rx) = std::sync::mpsc::channel::<()>();
     let path = log.clone();
@@ -222,7 +226,7 @@ fn refused(w: &World, extra: &[(&str, &str)]) -> (i32, String) {
         .local_addr()
         .unwrap()
         .port();
-    let mut command = Command::new(BIN);
+    let mut command = server_command(BIN);
     command
         .env_clear()
         .env("PATH", std::env::var("PATH").unwrap_or_default())
@@ -238,7 +242,7 @@ fn refused(w: &World, extra: &[(&str, &str)]) -> (i32, String) {
     for (k, v) in extra {
         command.env(k, v);
     }
-    let mut child = command.spawn().expect("spawn planeter");
+    let mut child = Reaped::spawn(&mut command);
     let end = Instant::now() + Duration::from_secs(60);
     let status = loop {
         if let Some(st) = child.try_wait().unwrap() {
