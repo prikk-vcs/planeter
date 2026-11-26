@@ -646,6 +646,8 @@ struct LoginTpl {
     /// The page title for this state.
     title: Key,
     sso: bool,
+    /// Whether the password form is shown (`PLANETER_LOCAL_PASSWORDS`, RFC 014 D-5): off, the page offers the provider only and says why.
+    passwords: bool,
 }
 #[derive(Template)]
 #[template(path = "notfound.html")]
@@ -1044,6 +1046,7 @@ async fn login_form(State(state): State<AppState>, headers: HeaderMap) -> Respon
             error: None,
             title: Key::TitleLogin,
             sso: state.oidc.is_some(),
+            passwords: authn::local_passwords(&state),
         },
         &c,
     )
@@ -1095,6 +1098,7 @@ async fn login_submit(
                 error: Some(Key::LoginLocked),
                 title: Key::TitleLoginLocked,
                 sso: state.oidc.is_some(),
+                passwords: authn::local_passwords(&state),
             },
             &c,
         );
@@ -1165,6 +1169,7 @@ async fn login_submit(
                     error: Some(Key::LoginFailed),
                     title: Key::TitleLoginFailed,
                     sso: state.oidc.is_some(),
+                    passwords: authn::local_passwords(&state),
                 },
                 &c,
             )

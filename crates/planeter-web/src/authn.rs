@@ -89,6 +89,11 @@ pub(crate) fn session_ttl_secs(state: &AppState) -> u64 {
     state.sessions.ttl_secs()
 }
 
+/// Whether a local password can sign anyone in (`PLANETER_LOCAL_PASSWORDS`, RFC 014 D-5): the sign-in page shows its form only when it can.
+pub(crate) fn local_passwords(state: &AppState) -> bool {
+    state.auth.local_passwords()
+}
+
 /// The one place a request becomes a [`Principal`]: a bearer token (the API path), else a session cookie
 /// (the UI path), else anonymous. A request carrying neither costs nothing; otherwise the lookups run on
 /// the blocking pool, without a permit (token and session checks are cheap and take no Argon2id).

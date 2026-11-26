@@ -925,12 +925,12 @@ async fn main() {
             migration.colliding_accounts
         );
     }
-    let auth = Arc::new(Authenticator::new(
+    let authenticator = Authenticator::new(
         Arc::new(accounts),
         Arc::new(credentials),
         Arc::new(Argon2idHasher),
         Arc::new(Sha256TokenHasher),
-    ));
+    );
 
     // The provider settings and the lifetime of a sign-in (RFC 014 D-11, D-13): a wrong value refuses the start, in the language of the
     // environment (the same choice the operator commands make).
@@ -948,6 +948,8 @@ async fn main() {
     for line in provider_env::lines(&provider_settings, &provider_t) {
         eprintln!("planeter: {line}");
     }
+    // `PLANETER_LOCAL_PASSWORDS=off` (RFC 014 D-5): the one setting of the authenticator; no stored hash is touched by it.
+    let auth = Arc::new(authenticator.with_local_passwords(provider_settings.local_passwords));
     let sessions = match SqliteSessionStore::new(db) {
         Ok(s) => s.with_ttl_secs(provider_settings.session_hours * 3600),
         Err(e) => {

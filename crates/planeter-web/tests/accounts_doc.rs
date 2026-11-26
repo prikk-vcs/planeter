@@ -95,6 +95,7 @@ const QUOTED_FAMILIES: &[&str] = &[
     "operator.account.done.",
     "operator.account.warn.",
     "operator.account.role.",
+    "operator.account.note.",
     "operator.token.error.",
     "operator.token.done.",
     "operator.token.scope.",
@@ -212,6 +213,7 @@ fn the_page_quotes_the_catalogs_sentences_word_for_word() {
         "operator.error.unknown_repo",
         "page.sso_unlinked.body",
         "page.sso_disabled.body",
+        "login.passwords_off",
         "operator.account.list.header",
         "operator.account.list.none",
         "operator.account.list.more",
@@ -226,6 +228,13 @@ fn the_page_quotes_the_catalogs_sentences_word_for_word() {
             );
         }
     }
+    // `disable` says that nothing was deleted and promises nothing about who can read what (a private repository is not readable by others).
+    let disabled = forms("operator.account.done.disabled")[0];
+    assert!(
+        disabled.contains("Nothing of the account was deleted") && !disabled.contains("others"),
+        "{disabled}"
+    );
+    assert!(!doc.contains("others can still read"));
     // The three-line outputs of the examples are the catalog's own sentences, with the example's values.
     for key in [
         "operator.account.done.sessions_ended",
@@ -291,6 +300,17 @@ fn every_command_and_flag_the_help_lists_is_on_the_page() {
     // the five exit codes of the family, as the help says them
     let exits = forms("operator.account.help.exit_codes")[0];
     assert!(exits.contains("3 is not used") && exits.contains("4 is not used"));
+    // the token family's help says its own exit codes: no terminal, no password
+    let exits = forms("operator.token.help.exit_codes")[0];
+    assert!(exits.contains("3 is not used") && exits.contains("4 is not used"));
+    assert!(
+        !exits.contains("password") && !exits.contains("terminal"),
+        "{exits}"
+    );
+    assert!(
+        forms("operator.account.help.exit_codes")[0].contains("no terminal for a password"),
+        "the account family's help still says it"
+    );
     assert!(doc.contains("**`3` and `4` are not used**"));
     for code in ["`0`", "`1`", "`2`", "`5`"] {
         assert!(doc.contains(code), "{code}");
@@ -318,7 +338,10 @@ fn the_page_names_every_setting_the_server_reads_for_accounts_and_providers_and_
             .collect::<Vec<_>>()
             .join("\n");
         for name in names_in(&code) {
-            if name.starts_with("PLANETER_OIDC_") || name.starts_with("PLANETER_SESSION_") {
+            if name.starts_with("PLANETER_OIDC_")
+                || name.starts_with("PLANETER_SESSION_")
+                || name == "PLANETER_LOCAL_PASSWORDS"
+            {
                 read.insert(name);
             }
         }
@@ -330,6 +353,7 @@ fn the_page_names_every_setting_the_server_reads_for_accounts_and_providers_and_
         "PLANETER_OIDC_CLIENT_SECRET",
         "PLANETER_OIDC_ALLOW_PRIVATE_ISSUER",
         "PLANETER_SESSION_HOURS",
+        "PLANETER_LOCAL_PASSWORDS",
     ] {
         assert!(
             read.contains(expected),

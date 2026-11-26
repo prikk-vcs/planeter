@@ -300,6 +300,16 @@ fn a_wrong_value_refuses_the_start_with_a_sentence_in_both_languages() {
             "needs a sign-in provider",
             "プロバイダーが必要です",
         ),
+        (
+            vec![("PLANETER_LOCAL_PASSWORDS", "maybe")],
+            "PLANETER_LOCAL_PASSWORDS must be on or off, and it is maybe",
+            "PLANETER_LOCAL_PASSWORDS は on か off にしてください。今の値は maybe です",
+        ),
+        (
+            vec![("PLANETER_LOCAL_PASSWORDS", "off")],
+            "PLANETER_LOCAL_PASSWORDS=off needs a sign-in provider, or nobody could sign in",
+            "PLANETER_LOCAL_PASSWORDS=off には、ログインのプロバイダーが必要です",
+        ),
     ];
     for (env, en, jp) in cases {
         let (code, said) = refused(&w, &env);
@@ -317,6 +327,7 @@ fn a_wrong_value_refuses_the_start_with_a_sentence_in_both_languages() {
         vec![("PLANETER_SESSION_HOURS", "1")],
         vec![("PLANETER_SESSION_HOURS", "720")],
         vec![("PLANETER_OIDC_ALLOW_PRIVATE_ISSUER", "off")],
+        vec![("PLANETER_LOCAL_PASSWORDS", "on")],
     ] {
         let s = start_with(&w, &ok);
         let _ = s.stop();
@@ -470,4 +481,119 @@ fn the_allowance_decides_whether_the_server_tries_a_private_provider_at_all() {
         "allowance on: the server connected to the provider's own (private) host"
     );
     let _ = on.stop();
+}
+
+#[test]
+fn with_passwords_off_the_real_server_offers_the_provider_only_and_refuses_every_password() {
+    let w = world("passwordsoff");
+    let off = [("PLANETER_LOCAL_PASSWORDS", "off")];
+    // The commands still make and set passwords, and say in one sentence that they cannot be used while it is off.
+    let note = "Password sign-in is off on this server (PLANETER_LOCAL_PASSWORDS=off): this password is kept, and cannot be used to sign in until it is turned on.";
+    let o = w.op_env(
+        &[
+            "account",
+            "create",
+            "alice",
+            "--name",
+            "Alice",
+            "--password-fd",
+            "3",
+        ],
+        Some("a long enough password"),
+        &off,
+    );
+    assert_eq!(code(&o), 0, "{}", err(&o));
+    let said = String::from_utf8_lossy(&o.stdout).into_owned();
+    assert!(said.contains(note), "{said}");
+    let o = w.op_env(
+        &["account", "set-password", "alice", "--password-fd", "3"],
+        Some("another long password"),
+        &off,
+    );
+    assert_eq!(code(&o), 0, "{}", err(&o));
+    assert!(String::from_utf8_lossy(&o.stdout).contains(note));
+    // With it on (or unset) they say nothing about it, and the password is the one just set.
+    let o = w.op(
+        &["account", "set-password", "alice", "--password-fd", "3"],
+        Some("a long enough password"),
+    );
+    assert_eq!(code(&o), 0, "{}", err(&o));
+    assert!(!String::from_utf8_lossy(&o.stdout).contains("PLANETER_LOCAL_PASSWORDS"));
+
+    // The server, with a provider and passwords off: the start-up line, in both languages.
+    let mut env = PROVIDER.to_vec();
+    env.extend(off);
+    let s = start_with(&w, &env);
+    let (status, _, page) = s.http("GET", "/login", &[], "");
+    assert_eq!(status, 200);
+    assert!(
+        page.contains(
+            "Password sign-in is turned off on this server. Sign in through the sign-in provider."
+        ),
+        "{page}"
+    );
+    assert!(page.contains("href=\"/login/oidc\""));
+    assert!(!page.contains("name=\"password\"") && !page.contains("action=\"/login\""));
+    // Every password attempt: the right one, a wrong one, an account that does not exist: the same answer (a refusal, no sign-in).
+    let attempt = |user: &str, password: &str| {
+        let body = format!(
+            "csrf=tok&username={user}&password={}",
+            password.replace(' ', "+")
+        );
+        s.http(
+            "POST",
+            "/login",
+            &[
+                (
+                    "Content-Type",
+                    "application/x-www-form-urlencoded".to_owned(),
+                ),
+                ("Cookie", "planeter_csrf=tok".to_owned()),
+            ],
+            &body,
+        )
+    };
+    let right = attempt("alice", "a long enough password");
+    let wrong = attempt("alice", "not the password at all");
+    let ghost = attempt("ghost", "a long enough password");
+    assert_eq!(right.0, 401, "{}", right.1);
+    assert_eq!((wrong.0, &wrong.2), (right.0, &right.2));
+    assert_eq!((ghost.0, &ghost.2), (right.0, &right.2));
+    for r in [&right, &wrong, &ghost] {
+        assert!(
+            !r.1.to_ascii_lowercase().contains("planeter_session="),
+            "no sign-in was made: {}",
+            r.1
+        );
+    }
+    let log = s.stop();
+    assert!(
+        log.contains("planeter: Password sign-in is off (PLANETER_LOCAL_PASSWORDS=off): people sign in through the sign-in provider only. Passwords already set are kept."),
+        "{log}"
+    );
+    let mut ja_env = env.clone();
+    ja_env.push(("LC_ALL", "ja_JP.UTF-8"));
+    let log = start_with(&w, &ja_env).stop();
+    assert!(
+        log.contains("パスワードでのログインはオフです（PLANETER_LOCAL_PASSWORDS=off）"),
+        "{log}"
+    );
+
+    // Back on: the stored password is untouched and signs in.
+    let s = start_with(&w, &PROVIDER);
+    let back = s.http(
+        "POST",
+        "/login",
+        &[
+            (
+                "Content-Type",
+                "application/x-www-form-urlencoded".to_owned(),
+            ),
+            ("Cookie", "planeter_csrf=tok".to_owned()),
+        ],
+        "csrf=tok&username=alice&password=a+long+enough+password",
+    );
+    let log = s.stop();
+    assert_eq!(back.0, 303, "{}\n{log}", back.1);
+    assert!(!log.contains("PLANETER_LOCAL_PASSWORDS=off"), "{log}");
 }

@@ -29,7 +29,7 @@ planeter operator token create|list|revoke …
 Every command also takes `--lang en|ja` (the language of what it says; without it, the one `LC_ALL`, `LC_MESSAGES` or `LANG` names, else English).
 
 * **They run beside a running server.** An account is a row of the server's database, not a repository, so **you do not stop the server** (`planeter operator key add` is different: it does, [`keys.md`](keys.md)). The server looks at accounts, sign-ins and tokens at every request, so what a command does is seen on the very next one. If the database stays busy for more than 5 seconds because another process is writing, the command says so and changes nothing; run it again.
-* **They read `PLANETER_DB`** (the server's database, which must exist: start the server once first) and, for `link-oidc` and `unlink-oidc`, **`PLANETER_OIDC_ISSUER`**, to check that the identity names the provider this server is set up for. They read no other setting, and never the provider's client secret. Set them as the server's own settings are set.
+* **They read `PLANETER_DB`** (the server's database, which must exist: start the server once first) and, for `link-oidc` and `unlink-oidc`, **`PLANETER_OIDC_ISSUER`**, to check that the identity names the provider this server is set up for. **`PLANETER_LOCAL_PASSWORDS`**, only to say, after a password was set, that password sign-in is off on this server (below). They read no other setting, and never the provider's client secret. Set them as the server's own settings are set.
 * **A refusal changes nothing.** Each command is one step (one database transaction), so a change is never left half done.
 * **Each success says what it did in the sentence the account's holder will see in their own log** (the account log, below), and then one line of what it means.
 * **Exit codes.** `0` done. `1` refused, and nothing was changed (the account or the repository does not exist, the account is in the wrong state, a rule of the command). `2` the command line is not understood, a value is malformed, or no terminal is there to type a password on. `5` local files or the database (no database at `PLANETER_DB`; it cannot be opened; it stayed busy). **`3` and `4` are not used** (they are `key add`'s): `3` means "the server is running", and these commands do not need the server stopped; `4` means "something was changed and not finished", and each act here is one step, so a change is never left half done.
@@ -63,7 +63,7 @@ It was signed out everywhere; its tokens are not touched.
 ```
 $ planeter operator account disable bob --reason "left the team"
 The account was disabled by this server's operator: left the team
-It was signed out everywhere at once and its tokens are refused. Nothing it owns was deleted, and others can still read its repositories.
+It was signed out everywhere at once and its tokens are refused. Nothing of the account was deleted: its repositories, proposals and comments stay.
 
 $ planeter operator account enable bob
 The account was enabled by this server's operator.
@@ -122,7 +122,8 @@ Last events:
 * **The rule.** At least **12** and at most **128** characters, counted after the password is normalized (Unicode NFKC, so that the same password typed through two input methods is the same password); **not equal to the handle**; **not one of the most common passwords** (a list kept inside the program: nothing is fetched from anywhere). There are no rules about capitals or symbols (they teach people worse passwords). Every refusal says which rule failed, and nothing is changed.
 * **Stored** only as an Argon2id hash. A password never appears in a log, an event or a message.
 * **Why there is no reset by email.** planeter keeps and uses no email address, and a reset by mail would make the mailbox the real password. An operator who is asked for a new password runs `set-password`, which signs the account out everywhere. A person who signs in through the provider is helped by the provider.
-* **A local password account has no second factor.** planeter does not build one: a second factor is the provider's job, so an operator who wants one has the accounts sign in through a provider that has it.
+* **A local password account has no second factor.** planeter does not build one: a second factor is the provider's job, so an operator who wants one has the accounts sign in through a provider that has it, **and turns password sign-in off** (`PLANETER_LOCAL_PASSWORDS=off`, below), so that no password is left as a way in beside it.
+* **While password sign-in is off**, `create --password-prompt` and `set-password` still work and say: "Password sign-in is off on this server (PLANETER_LOCAL_PASSWORDS=off): this password is kept, and cannot be used to sign in until it is turned on."
 
 ### Tokens
 
@@ -166,7 +167,7 @@ Token 698cceeba173d9b8 (laptop) of alice was revoked. It is refused from the nex
 There is **no way to delete an account**, on purpose: deleting would orphan its repositories' namespace, its proposals and comments and its log, and would free its handle for someone else to take. **Disable** instead.
 
 * `account disable HANDLE --reason TEXT` (1 to 200 characters, shown to the account's holder in their log and to the operator, **not to other people**) stops the account **at once**: it cannot sign in, it is **signed out everywhere**, and **every token it holds is refused**, each checked at the next request. A password sign-in on a disabled account answers exactly as a wrong password does (nothing tells a stranger which handles exist). A person who has just proved who they are **through the provider** is told plainly: "This account has been disabled. Ask the person who runs this server."
-* **Nothing it owns is deleted**: its repositories, proposals and comments stay, and show its handle; others can still read its repositories.
+* **Nothing of the account is deleted**: its repositories, proposals and comments stay, and show its handle.
 * **Repositories can be left without an administrator.** `disable` first names the repositories for which this account is the only administrator, and still goes ahead: "These repositories will have no administrator until you grant one: {repos}" (and, when the list is long, "… and {more} more"). Grant an administrator to each. `revoke` refuses to take the last administrator away unless `--allow-no-admin` is given.
 * `account enable HANDLE` undoes it: the tokens work again until they expire; **the sign-ins that ended do not come back**, the person signs in again.
 * A disabled account cannot be given a role or a token: enable it first.
@@ -230,7 +231,7 @@ Each of these is printed after the sentence of the event (the account log's sent
 | {handle} ({name}) has a password. | `create` with a password |
 | {handle} ({name}) has no password: it can sign in only through a linked identity. | `create` without one |
 | It was signed out everywhere; its tokens are not touched. | `set-password` |
-| It was signed out everywhere at once and its tokens are refused. Nothing it owns was deleted, and others can still read its repositories. | `disable` |
+| It was signed out everywhere at once and its tokens are refused. Nothing of the account was deleted: its repositories, proposals and comments stay. | `disable` |
 | Its tokens work again until they expire. The sign-ins that ended do not return. | `enable` |
 | {handle} can now sign in through that provider. | `link-oidc` |
 | {handle} can no longer sign in through that identity. | `unlink-oidc` |
@@ -322,12 +323,13 @@ A server can offer **OpenID Connect sign-in** through one provider. Three settin
 | `PLANETER_OIDC_REDIRECT_URI` | the address the provider sends the person back to |
 | `PLANETER_OIDC_CLIENT_SECRET` | optional: the client secret, if the provider's client has one (it is never printed, logged or given to any command of this page) |
 
-Two more are about how it behaves:
+Three more are about how it behaves:
 
 | setting | what it does |
 |---|---|
 | `PLANETER_OIDC_ALLOW_PRIVATE_ISSUER` | `on` or `off` (the default): see "A provider on a private address", below |
 | `PLANETER_SESSION_HOURS` | how long a new sign-in lasts: 1 to 720 hours, default 168 (seven days); see "How long a sign-in lasts", below |
+| `PLANETER_LOCAL_PASSWORDS` | `on` (the default) or `off`: whether a local password can sign anyone in; `off` needs a provider; see "Password sign-in off", below |
 
 **What a provider link is.** A person signs in through the provider, and planeter finds the account **linked to that provider's identity** `(issuer, subject)`. An identity that is linked to no account is refused ("This single sign-on identity is not linked to a planeter account. Ask the person who runs this server."): the operator links it with `account link-oidc`. planeter makes no account for an unknown identity, and links nothing by name or by email.
 
@@ -339,11 +341,14 @@ Two more are about how it behaves:
 | PLANETER_OIDC_ALLOW_PRIVATE_ISSUER=on needs a sign-in provider. Set PLANETER_OIDC_ISSUER, or remove this setting. | on, with no issuer |
 | PLANETER_OIDC_ISSUER {issuer} has no host that can be allowed. Check the address. | on, with an issuer that is not an https address with a host |
 | PLANETER_SESSION_HOURS must be a whole number of hours from {min} to {max}, and it is {value}. Set a number in that range, or remove it. | outside 1 to 720 |
+| PLANETER_LOCAL_PASSWORDS must be on or off, and it is {value}. Set it to on or off, or remove it. | any other value |
+| PLANETER_LOCAL_PASSWORDS=off needs a sign-in provider, or nobody could sign in. Set PLANETER_OIDC_ISSUER, or remove this setting. | off, with no issuer |
 
 | the start-up line | when |
 |---|---|
 | The sign-in provider's host {host} is allowed to be on a private address (PLANETER_OIDC_ALLOW_PRIVATE_ISSUER=on). Every other outbound address is checked as before. | the allowance is on; {host} is the issuer's host, with `:port` when the port is not 443 |
 | Sign-ins last {count} hour. ‖ Sign-ins last {count} hours. | always |
+| Password sign-in is off (PLANETER_LOCAL_PASSWORDS=off): people sign in through the sign-in provider only. Passwords already set are kept. | `PLANETER_LOCAL_PASSWORDS=off` |
 
 #### What the provider told us, and what planeter does about it
 
@@ -371,6 +376,18 @@ planeter refuses to connect to a loopback, private, link-local or carrier-grade-
 * **No private certificate authority yet.** A private-address provider usually has a private certificate. planeter verifies it with the system's certificate store; a setting for one more trusted authority is not built, so put the authority in the system store.
 * The start-up line (above) says that the allowance is on and for which host and port.
 
+#### Password sign-in off
+
+`PLANETER_LOCAL_PASSWORDS=off` (default `on`) turns off the one way in that has no second factor. **With a provider configured and it left on, a person who has a local password can still sign in with it**, beside the provider, whatever the provider asks of them. With it `off`:
+
+* **The sign-in page offers the provider only**: no handle or password fields, and one sentence says why: "Password sign-in is turned off on this server. Sign in through the sign-in provider."
+* **A password attempt is answered as a wrong password is**, for every account: the same refusal, the same page, and the same single verification of work, so nothing says whether an account exists, has a password, or that passwords are off.
+* **Nothing stored is touched.** No password hash is changed or deleted, so turning it back on restores every password; sign-ins and tokens that exist are unaffected, and the provider's sign-in works as before.
+* **The start-up line** says it is off (above). `off` **without a provider refuses the start** (above): it would leave nobody able to sign in. Any value but `on` and `off` refuses it too.
+* **The commands still set passwords** and say, in one sentence, that they cannot be used to sign in while it is off (above).
+
+**The risk.** With it off and the provider down or unreachable, **nobody can sign in through the web**. The way back is the operator's: restart the server with the setting `on` (or removed); the passwords are all still there. It is recommended with a provider.
+
 #### How long a sign-in lasts
 
 A planeter sign-in is independent of the provider's after it is made. `PLANETER_SESSION_HOURS` sets how long a **new** sign-in lasts, at both ways of signing in (a password and the provider), in the server and in the cookie together: 1 to 720 hours, **default 168 (seven days)**. A sign-in that exists keeps the length it was made with. **With a provider, 24 or fewer is recommended**: it is the longest a person stays signed in to planeter after being removed at the provider, unless you disable them here.
@@ -384,7 +401,7 @@ A planeter sign-in is independent of the provider's after it is made. `PLANETER_
 * **What each scope lets the token do.** `read-only`: look at repositories and clone them. `write`: also propose work. `full`: everything your account can do, including delivering a branch. **A `write` token cannot deliver**, whoever you are; a delivery needs a `full` token of an account with the `maintain` role (or `admin`) on the repository ([`deliveries.md`](deliveries.md)). A token never reaches further than your own roles do.
 * **It ends.** Every token has an end (up to 365 days, 90 by default). When it ends, or when the operator revokes it, the client's next request is refused and you ask for another. If your account is disabled, your tokens are refused until it is enabled again, and a sign-in through the provider shows: "This account has been disabled. Ask the person who runs this server."
 * **Your log.** Everything done to your account is recorded with who did it, in the sentences above, and never with a secret. You cannot read it on a page yet; the operator can show it to you (`account show`), and will say who made a token and when.
-* **Who to ask.** The person who runs the server, for a token, a password, a role, a link to your identity at the provider, or anything about a disabled account. If you sign in through the provider and cannot sign in, the provider's own help comes first.
+* **Who to ask.** The person who runs the server, for a token, a password, a role, a link to your identity at the provider, or anything about a disabled account. If you sign in through the provider and cannot sign in, the provider's own help comes first. If the sign-in page shows only the provider's link and says "Password sign-in is turned off on this server. Sign in through the sign-in provider.", your password is not used on this server, and the provider is the way in.
 
 ## What is not here yet
 

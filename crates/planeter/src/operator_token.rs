@@ -189,7 +189,7 @@ fn token_help(t: &T) -> String {
         "{}\n\n{}\n\n{}\n",
         t.get(Key::OperatorTokenHelpUsage),
         t.get(Key::OperatorTokenHelpOutput),
-        t.get(Key::OperatorAccountHelpExitCodes)
+        t.get(Key::OperatorTokenHelpExitCodes)
     )
 }
 

@@ -11,6 +11,9 @@ pub struct ProviderSettings {
     pub private_authority: Option<planeter_core::Authority>,
     /// The lifetime of a new sign-in, in hours.
     pub session_hours: u64,
+    /// Whether a person may sign in with a local password (`PLANETER_LOCAL_PASSWORDS`, RFC 014 D-5): `on` is the default; `off` (only with a
+    /// provider configured) leaves the provider as the one way in, and no password hash is touched.
+    pub local_passwords: bool,
 }
 
 /// Read the settings from `env` (a lookup of variables). `Err` is the sentence to print before refusing to start.
@@ -45,6 +48,21 @@ pub fn read(env: &dyn Fn(&str) -> Option<String>, t: &T) -> Result<ProviderSetti
     } else {
         None
     };
+    let local_passwords = match env("PLANETER_LOCAL_PASSWORDS").as_deref().map(str::trim) {
+        None | Some("") | Some("on") => true,
+        Some("off") => {
+            if env("PLANETER_OIDC_ISSUER").is_none_or(|v| v.is_empty()) {
+                return Err(t.get(Key::ProviderErrorLocalPasswordsNoProvider));
+            }
+            false
+        }
+        Some(other) => {
+            return Err(t
+                .msg(Key::ProviderErrorLocalPasswordsValue)
+                .with("value", other)
+                .text());
+        }
+    };
     let session_hours = planeter_auth::session_hours_from(env("PLANETER_SESSION_HOURS").as_deref())
         .map_err(|got| {
             t.msg(Key::ProviderErrorSessionHours)
@@ -56,6 +74,7 @@ pub fn read(env: &dyn Fn(&str) -> Option<String>, t: &T) -> Result<ProviderSetti
     Ok(ProviderSettings {
         private_authority,
         session_hours,
+        local_passwords,
     })
 }
 
@@ -85,7 +104,16 @@ pub fn lines(s: &ProviderSettings, t: &T) -> Vec<String> {
             .n(s.session_hours)
             .text(),
     );
+    if !s.local_passwords {
+        out.push(t.get(Key::ProviderLineLocalPasswordsOff));
+    }
     out
+}
+
+/// Whether `PLANETER_LOCAL_PASSWORDS` says `off`: what the account commands read, to say that a password they set cannot be used to sign in
+/// on this server. (The server judges the whole setting at start-up and refuses a wrong one; a command only asks whether it is `off`.)
+pub fn passwords_are_off(env: &dyn Fn(&str) -> Option<String>) -> bool {
+    env("PLANETER_LOCAL_PASSWORDS").is_some_and(|v| v.trim() == "off")
 }
 
 #[cfg(test)]
@@ -116,6 +144,7 @@ mod tests {
         let on = ProviderSettings {
             private_authority: Some(planeter_core::Authority::new("127.0.0.1", 8443)),
             session_hours: 168,
+            local_passwords: true,
         };
         let g = provider_guard(&on);
         assert!(
@@ -160,6 +189,7 @@ mod tests {
         let off = ProviderSettings {
             private_authority: None,
             session_hours: 168,
+            local_passwords: true,
         };
         assert!(matches!(
             provider_guard(&off).check("https://127.0.0.1/x"),
@@ -179,7 +209,8 @@ mod tests {
             s,
             ProviderSettings {
                 private_authority: None,
-                session_hours: 168
+                session_hours: 168,
+                local_passwords: true
             }
         );
         assert_eq!(lines(&s, &en()), vec!["Sign-ins last 168 hours."]);
@@ -219,18 +250,21 @@ mod tests {
         let default_port = ProviderSettings {
             private_authority: Some(planeter_core::Authority::new("idp.internal.example", 443)),
             session_hours: 168,
+            local_passwords: true,
         };
         assert!(lines(&default_port, &en())[0].contains("host idp.internal.example is allowed"));
         let v6 = ProviderSettings {
             private_authority: Some(planeter_core::Authority::new("[::1]", 8443)),
             session_hours: 168,
+            local_passwords: true,
         };
         assert!(lines(&v6, &en())[0].contains("host [::1]:8443 is allowed"));
         assert_eq!(
             lines(
                 &ProviderSettings {
                     private_authority: None,
-                    session_hours: 1
+                    session_hours: 1,
+                    local_passwords: true
                 },
                 &en()
             ),
@@ -283,5 +317,80 @@ mod tests {
             );
             assert!(read(&e, &ja()).unwrap_err().contains("1 から 720 まで"));
         }
+    }
+
+    #[test]
+    fn local_passwords_default_to_on_and_off_needs_a_provider() {
+        // The default, and `on`, are today's behaviour; no line is printed for them.
+        for e in [
+            env(&[]),
+            env(&[("PLANETER_LOCAL_PASSWORDS", "on")]),
+            env(&[("PLANETER_LOCAL_PASSWORDS", "")]),
+        ] {
+            let s = read(&e, &en()).unwrap();
+            assert!(s.local_passwords);
+            assert_eq!(lines(&s, &en()), vec!["Sign-ins last 168 hours."]);
+        }
+        // `off` with a provider: off, and one line says so, in both languages (after the length of a sign-in).
+        let e = env(&[
+            ("PLANETER_OIDC_ISSUER", "https://idp.example"),
+            ("PLANETER_LOCAL_PASSWORDS", "off"),
+        ]);
+        let s = read(&e, &en()).unwrap();
+        assert!(!s.local_passwords);
+        let l = lines(&s, &en());
+        assert_eq!(l.len(), 2, "{l:?}");
+        assert_eq!(
+            l[1],
+            "Password sign-in is off (PLANETER_LOCAL_PASSWORDS=off): people sign in through the sign-in provider only. Passwords already set are kept."
+        );
+        assert!(lines(&s, &ja())[1].contains("パスワードでのログインはオフです"));
+        // `off` with no provider would leave nobody able to sign in: the start is refused.
+        let none = env(&[("PLANETER_LOCAL_PASSWORDS", "off")]);
+        let err = read(&none, &en()).unwrap_err();
+        assert!(
+            err.contains("needs a sign-in provider, or nobody could sign in"),
+            "{err}"
+        );
+        assert!(
+            read(&none, &ja())
+                .unwrap_err()
+                .contains("プロバイダーが必要です")
+        );
+        let empty = env(&[
+            ("PLANETER_OIDC_ISSUER", ""),
+            ("PLANETER_LOCAL_PASSWORDS", "off"),
+        ]);
+        assert!(
+            read(&empty, &en()).is_err(),
+            "an empty issuer is no provider"
+        );
+        // Anything else is refused, never read as on or off.
+        for v in ["OFF", "false", "0", "no", "yes"] {
+            let e = move |k: &str| match k {
+                "PLANETER_OIDC_ISSUER" => Some("https://idp.example".to_owned()),
+                "PLANETER_LOCAL_PASSWORDS" => Some(v.to_owned()),
+                _ => None,
+            };
+            let err = read(&e, &en()).unwrap_err();
+            assert!(
+                err.contains("must be on or off") && err.contains(&format!("it is {v}")),
+                "{err}"
+            );
+            assert!(read(&e, &ja()).unwrap_err().contains("今の値は"));
+        }
+    }
+
+    #[test]
+    fn the_account_commands_only_ask_whether_it_is_off() {
+        let e = |v: &'static str| {
+            move |k: &str| (k == "PLANETER_LOCAL_PASSWORDS").then(|| v.to_owned())
+        };
+        assert!(passwords_are_off(&e("off")));
+        assert!(passwords_are_off(&e(" off ")));
+        for v in ["on", "", "OFF", "yes"] {
+            assert!(!passwords_are_off(&e(v)), "{v:?}");
+        }
+        assert!(!passwords_are_off(&|_| None));
     }
 }

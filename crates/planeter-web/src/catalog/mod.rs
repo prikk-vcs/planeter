@@ -1127,6 +1127,7 @@ keys! {
     OperatorAccountHelpUsage => "operator.account.help.usage",
     OperatorAccountHelpRoles => "operator.account.help.roles",
     OperatorAccountHelpPassword => "operator.account.help.password",
+    OperatorTokenHelpExitCodes => "operator.token.help.exit_codes",
     OperatorAccountHelpExitCodes => "operator.account.help.exit_codes",
     OperatorAccountErrorUsage => "operator.account.error.usage",
     OperatorAccountErrorHandleShape => "operator.account.error.handle_shape",
@@ -1240,6 +1241,11 @@ keys! {
     ProviderErrorSessionHours => "provider.error.session_hours",
     ProviderLineAllowPrivate => "provider.line.allow_private",
     ProviderLineSessionHours => "provider.line.session_hours",
+    ProviderLineLocalPasswordsOff => "provider.line.local_passwords_off",
+    ProviderErrorLocalPasswordsValue => "provider.error.local_passwords_value",
+    ProviderErrorLocalPasswordsNoProvider => "provider.error.local_passwords_no_provider",
+    LoginPasswordsOff => "login.passwords_off",
+    OperatorAccountNotePasswordsOff => "operator.account.note.passwords_off",
 }
 
 /// Marks a response whose text depends on the caller's language, so that the response-policy layer adds

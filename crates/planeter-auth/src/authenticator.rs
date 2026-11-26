@@ -36,6 +36,8 @@ pub struct Authenticator {
     dummy_hash: PasswordHash,
     /// Current Unix seconds, injected for testable expiry checks.
     now_unix: fn() -> u64,
+    /// Whether a local password signs anyone in (`PLANETER_LOCAL_PASSWORDS`, RFC 014 D-5). `true` unless the operator turned it off.
+    local_passwords: bool,
 }
 
 impl Authenticator {
@@ -53,7 +55,23 @@ impl Authenticator {
             token_hasher,
             dummy_hash,
             now_unix: default_now,
+            local_passwords: true,
         }
+    }
+
+    /// Turn password sign-in off (`false`) or on (`true`, the default). **Off** changes nothing stored: no hash is touched, so switching it
+    /// back on restores every password. While it is off [`authenticate_password`](Self::authenticate_password) never accepts a password: it
+    /// does what it does for an account with no password (one verification against the dummy hash) and refuses as a wrong password is
+    /// refused, so the answer and the work do not say whether an account exists, has a password, or that passwords are off (IS-31).
+    #[must_use]
+    pub fn with_local_passwords(mut self, on: bool) -> Self {
+        self.local_passwords = on;
+        self
+    }
+
+    /// Whether a local password can sign anyone in on this server.
+    pub fn local_passwords(&self) -> bool {
+        self.local_passwords
     }
 
     /// Override the clock (tests).
@@ -90,10 +108,12 @@ impl Authenticator {
         // that there is no early return: the account's absence must not shorten the work.
         let account = self.accounts.get(&user)?;
         let presented = crate::password::normalize_presented(password);
-        match (
-            account.as_ref().and_then(|a| a.password.as_ref()),
-            &presented,
-        ) {
+        // With passwords off the stored hash is not looked at: the account is treated as one with no password.
+        let stored = account
+            .as_ref()
+            .and_then(|a| a.password.as_ref())
+            .filter(|_| self.local_passwords);
+        match (stored, &presented) {
             (Some(hash), Some(presented)) => {
                 if self.password_hasher.verify(presented.as_str(), hash) {
                     // A disabled account's password is checked like any other (the same one verification) and then refused as a wrong

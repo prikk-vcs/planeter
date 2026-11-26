@@ -7,7 +7,8 @@
 //! success prints **the sentence the account's holder will read in their own log** (it is rendered from the event that was just written),
 //! and one line of what it means.
 //!
-//! Read only what it needs: `PLANETER_DB`, `PLANETER_OIDC_ISSUER` (to check a link names the configured provider) and `PATH` (for `stty`);
+//! Read only what it needs: `PLANETER_DB`, `PLANETER_OIDC_ISSUER` (to check a link names the configured provider), `PLANETER_LOCAL_PASSWORDS` (to say
+//! that a password just set cannot sign anyone in while it is `off`) and `PATH` (for `stty`);
 //! **no other variable**, and `PLANETER_OIDC_CLIENT_SECRET` never. **No password is ever an argument, an environment variable or a file
 //! name** (`password_input.rs`).
 //!
@@ -583,6 +584,14 @@ fn new_password(
     })
 }
 
+/// After a password was set: when this server has password sign-in off (`PLANETER_LOCAL_PASSWORDS=off`, RFC 014 D-5), say so in one sentence. The
+/// password is kept; it cannot sign anyone in until the setting is on. (The variable is read for this and nothing else.)
+fn say_passwords_off(t: &T) {
+    if crate::provider_env::passwords_are_off(&|n| std::env::var(n).ok()) {
+        println!("{}", t.get(Key::OperatorAccountNotePasswordsOff));
+    }
+}
+
 fn execute(t: &T, cmd: Cmd) -> i32 {
     let ctx = match open(t) {
         Ok(c) => c,
@@ -619,6 +628,9 @@ fn execute(t: &T, cmd: Cmd) -> i32 {
                 "{}",
                 line.with("handle", &handle).with("name", shown).text()
             );
+            if password.is_some() {
+                say_passwords_off(t);
+            }
             exit::DONE
         }
         Cmd::SetPassword { handle, source } => {
@@ -639,6 +651,7 @@ fn execute(t: &T, cmd: Cmd) -> i32 {
             }
             ctx.say_latest(&handle);
             println!("{}", t.get(Key::OperatorAccountDoneSessionsEnded));
+            say_passwords_off(t);
             exit::DONE
         }
         Cmd::Disable { handle, reason } => {

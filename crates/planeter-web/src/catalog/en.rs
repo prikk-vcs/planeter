@@ -64,6 +64,10 @@ pub const CATALOG: &[Entry] = &[
         "The username or password was not correct. Check both and try again.",
     ),
     msg("login.sso", "Sign in with single sign-on"),
+    msg(
+        "login.passwords_off",
+        "Password sign-in is turned off on this server. Sign in through the sign-in provider.",
+    ),
     msg("login.user", "Username"),
     msg("login.password", "Password"),
     msg("login.submit", "Sign in"),
@@ -2336,6 +2340,10 @@ pub const CATALOG: &[Entry] = &[
         "passwords: a password is typed at the terminal without echo, twice (--password-prompt, and always for set-password without --password-fd), or read as one line from an open file descriptor for scripts (--password-fd N: the script opens the file or the pipe on that number first); it is never an argument or an environment variable. If your terminal stops echoing, run stty sane.",
     ),
     msg(
+        "operator.token.help.exit_codes",
+        "exit codes: 0 done; 1 refused (nothing was changed); 2 the command line; 5 local files or the database (a database that stays busy for more than 5 seconds says so). These commands do not need the server stopped, so 3 is not used; each act is one step, so a change is never left half done and 4 is not used either",
+    ),
+    msg(
         "operator.account.help.exit_codes",
         "exit codes: 0 done; 1 refused (nothing was changed); 2 the command line, or no terminal for a password; 5 local files or the database (a database that stays busy for more than 5 seconds says so). These commands do not need the server stopped, so 3 is not used; each act is one step, so a change is never left half done and 4 is not used either",
     ),
@@ -2479,7 +2487,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "operator.account.done.disabled",
-        "It was signed out everywhere at once and its tokens are refused. Nothing it owns was deleted, and others can still read its repositories.",
+        "It was signed out everywhere at once and its tokens are refused. Nothing of the account was deleted: its repositories, proposals and comments stay.",
     ),
     msg(
         "operator.account.done.enabled",
@@ -2688,5 +2696,21 @@ pub const CATALOG: &[Entry] = &[
         "provider.line.session_hours",
         "Sign-ins last {count} hour.",
         "Sign-ins last {count} hours.",
+    ),
+    msg(
+        "provider.error.local_passwords_value",
+        "PLANETER_LOCAL_PASSWORDS must be on or off, and it is {value}. Set it to on or off, or remove it.",
+    ),
+    msg(
+        "provider.error.local_passwords_no_provider",
+        "PLANETER_LOCAL_PASSWORDS=off needs a sign-in provider, or nobody could sign in. Set PLANETER_OIDC_ISSUER, or remove this setting.",
+    ),
+    msg(
+        "provider.line.local_passwords_off",
+        "Password sign-in is off (PLANETER_LOCAL_PASSWORDS=off): people sign in through the sign-in provider only. Passwords already set are kept.",
+    ),
+    msg(
+        "operator.account.note.passwords_off",
+        "Password sign-in is off on this server (PLANETER_LOCAL_PASSWORDS=off): this password is kept, and cannot be used to sign in until it is turned on.",
     ),
 ];

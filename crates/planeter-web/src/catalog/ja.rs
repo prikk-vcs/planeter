@@ -75,6 +75,10 @@ pub const CATALOG: &[Entry] = &[
         "ユーザー名またはパスワードが正しくありません。両方を確認して、もう一度お試しください。",
     ),
     msg("login.sso", "シングルサインオンでログイン"),
+    msg(
+        "login.passwords_off",
+        "このサーバーでは、パスワードでのログインはオフになっています。ログインのプロバイダーでログインしてください。",
+    ),
     msg("login.user", "ユーザー名"),
     msg("login.password", "パスワード"),
     msg("login.submit", "ログイン"),
@@ -2358,6 +2362,10 @@ pub const CATALOG: &[Entry] = &[
         "パスワード: パスワードは、端末で画面に表示されない形で 2 回入力するか（--password-prompt。set-password では --password-fd がなければ常にこちら）、スクリプト向けに、開いているファイル記述子から 1 行として読みます（--password-fd N。スクリプトが、先にその番号でファイルかパイプを開いておきます）。引数や環境変数では渡せません。端末に入力が表示されなくなったときは、stty sane を実行してください。",
     ),
     msg(
+        "operator.token.help.exit_codes",
+        "終了コード: 0 完了。1 拒否（何も変えていません）。2 コマンドライン。5 ローカルのファイルまたはデータベース（5 秒を超えて使用中のデータベースは、その旨を表示します）。これらのコマンドはサーバーを止めなくても実行できるので、3 は使いません。1 回の操作は 1 つの手順なので、変更が途中で終わることはなく、4 も使いません",
+    ),
+    msg(
         "operator.account.help.exit_codes",
         "終了コード: 0 完了。1 拒否（何も変えていません）。2 コマンドライン、または、パスワードを入力する端末がない。5 ローカルのファイルまたはデータベース（5 秒を超えて使用中のデータベースは、その旨を表示します）。これらのコマンドはサーバーを止めなくても実行できるので、3 は使いません。1 回の操作は 1 つの手順なので、変更が途中で終わることはなく、4 も使いません",
     ),
@@ -2501,7 +2509,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "operator.account.done.disabled",
-        "ログイン中の状態はすぐに終わり、トークンは受け付けられません。持っているものは何も削除されておらず、ほかの人はリポジトリを引き続き読めます。",
+        "ログイン中の状態はすぐに終わり、トークンは受け付けられません。アカウントのものは何も削除されていません。リポジトリ、提案、コメントはそのまま残ります。",
     ),
     msg(
         "operator.account.done.enabled",
@@ -2718,5 +2726,21 @@ pub const CATALOG: &[Entry] = &[
     msg(
         "provider.line.session_hours",
         "ログイン中の状態は {count} 時間続きます。",
+    ),
+    msg(
+        "provider.error.local_passwords_value",
+        "PLANETER_LOCAL_PASSWORDS は on か off にしてください。今の値は {value} です。on か off にするか、設定を外してください。",
+    ),
+    msg(
+        "provider.error.local_passwords_no_provider",
+        "PLANETER_LOCAL_PASSWORDS=off には、ログインのプロバイダーが必要です。ないと、誰もログインできなくなります。PLANETER_OIDC_ISSUER を設定するか、この設定を外してください。",
+    ),
+    msg(
+        "provider.line.local_passwords_off",
+        "パスワードでのログインはオフです（PLANETER_LOCAL_PASSWORDS=off）。ログインできるのは、ログインのプロバイダー経由だけです。設定済みのパスワードはそのまま残ります。",
+    ),
+    msg(
+        "operator.account.note.passwords_off",
+        "このサーバーでは、パスワードでのログインはオフです（PLANETER_LOCAL_PASSWORDS=off）。このパスワードは保存されますが、オンにするまでログインには使えません。",
     ),
 ];
