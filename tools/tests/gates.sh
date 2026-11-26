@@ -40,8 +40,12 @@ lock_change=$(git -C "$r" rev-parse HEAD)
 
 # The output goes to a file, not a pipe: a step that is left running (a failure of what is tested here) would keep a pipe open and hang the test; and
 # nothing waits for longer than five minutes.
+# A shell started as a background job (or by `nohup`) has INT *ignored*, and a signal ignored on entry cannot be trapped by anything below it: the
+# whole chain (cargo test -> this script -> gates.sh) may have been started that way. `env --default-signal` gives the script the default
+# disposition back, so that the INT test means something wherever it runs; where `env` cannot, the INT test is skipped and says so.
+if env --default-signal=INT,TERM true 2> /dev/null; then DEFSIG="env --default-signal=INT,TERM"; else DEFSIG=""; fi
 gates() {
-  (cd "$r" && GATES_CAPPED=1 timeout 300 sh tools/gates.sh "$@" > "$tmp/gates.out" 2>&1)
+  (cd "$r" && GATES_CAPPED=1 $DEFSIG timeout 300 sh tools/gates.sh "$@" > "$tmp/gates.out" 2>&1)
   rc_gates=$?
   cat "$tmp/gates.out"
   return $rc_gates
@@ -106,12 +110,16 @@ check "--fail-fast: cleaned up" "$start" "$(state)"
 
 mark=$((900000 + $$ % 90000)) # a duration no other process on the machine is sleeping
 # an interrupted run: the step sends INT (then TERM) to the script that runs it, which is its parent
+if [ -n "$DEFSIG" ]; then
 use_steps "a\ttrue\nb\tkill -INT \$PPID; sleep $mark\nc\ttrue\n"
 out=$(gates --tier release --commit "$first" --no-ci); rc=$?
 check "INT: the exit status is 130" "130" "$rc"
 contains "INT: the cleanup ran" "cleanup done" "$out"
 absent "INT: the next step did not run" "=== step: c" "$out"
 check "INT: worktrees and scratch as they were" "$start" "$(state)"
+else
+  echo "skip INT: this env cannot give the script the default disposition of INT"
+fi
 use_steps "a\ttrue\nb\tkill -TERM \$PPID; sleep $mark\nc\ttrue\n"
 out=$(gates --tier review --commit "$first" --no-ci); rc=$?
 check "TERM: the exit status is 143" "143" "$rc"
