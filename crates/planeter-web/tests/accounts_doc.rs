@@ -448,6 +448,31 @@ fn the_numbers_on_the_page_are_the_codes() {
 }
 
 #[test]
+fn the_page_says_how_to_end_the_password_sign_ins_that_exist_when_passwords_go_off() {
+    // A sign-in made by a password stays valid after `PLANETER_LOCAL_PASSWORDS=off` (as built: `local_passwords.rs` shows it is the
+    // password attempt that is refused, not a sign-in that exists). The operator who wants them ended at once is told how, and that
+    // otherwise they end by themselves.
+    let doc = doc();
+    let start = doc
+        .find("#### Password sign-in off")
+        .expect("the subsection");
+    let end = doc[start..]
+        .find("#### How long a sign-in lasts")
+        .map(|i| start + i)
+        .expect("the next subsection");
+    let section = &doc[start..end];
+    for must in [
+        "stays valid",
+        "`account disable`",
+        "`account enable`",
+        "`account set-password`",
+        "`PLANETER_SESSION_HOURS`",
+    ] {
+        assert!(section.contains(must), "the subsection lacks {must:?}");
+    }
+}
+
+#[test]
 fn the_ledger_rows_it_cites_exist_and_nothing_stronger_than_they_say_is_claimed() {
     let doc = doc();
     let ledger = read("docs/src/planeter-idp-ledger.md");

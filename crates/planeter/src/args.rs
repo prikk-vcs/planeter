@@ -145,4 +145,7 @@ environment:
   PLANETER_OIDC_ISSUER, PLANETER_OIDC_CLIENT_ID, PLANETER_OIDC_REDIRECT_URI
                                 all three enable OpenID Connect sign-in
   PLANETER_OIDC_CLIENT_SECRET   optional OpenID Connect client secret
+  PLANETER_OIDC_ALLOW_PRIVATE_ISSUER  on or off (default off): the issuer's host and port may be on a private address
+  PLANETER_SESSION_HOURS        1 to 720 (default 168): how long a new sign-in lasts
+  PLANETER_LOCAL_PASSWORDS      on or off (default on): off turns password sign-in off and needs a provider
 ";

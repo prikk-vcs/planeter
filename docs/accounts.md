@@ -382,7 +382,7 @@ planeter refuses to connect to a loopback, private, link-local or carrier-grade-
 
 * **The sign-in page offers the provider only**: no handle or password fields, and one sentence says why: "Password sign-in is turned off on this server. Sign in through the sign-in provider."
 * **A password attempt is answered as a wrong password is**, for every account: the same refusal, the same page, and the same single verification of work, so nothing says whether an account exists, has a password, or that passwords are off.
-* **Nothing stored is touched.** No password hash is changed or deleted, so turning it back on restores every password; sign-ins and tokens that exist are unaffected, and the provider's sign-in works as before.
+* **Nothing stored is touched.** No password hash is changed or deleted, so turning it back on restores every password; sign-ins and tokens that exist are unaffected, and the provider's sign-in works as before. **A sign-in made with a password before it went `off` stays valid**: to end it at once, run `account disable` and then `account enable` for that account, or `account set-password` (which signs the account out everywhere); otherwise it ends when its time is over, at most `PLANETER_SESSION_HOURS` hours after it was made.
 * **The start-up line** says it is off (above). `off` **without a provider refuses the start** (above): it would leave nobody able to sign in. Any value but `on` and `off` refuses it too.
 * **The commands still set passwords** and say, in one sentence, that they cannot be used to sign in while it is off (above).
 

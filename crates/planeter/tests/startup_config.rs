@@ -204,12 +204,30 @@ fn names_in(text: &str) -> BTreeSet<String> {
 
 #[test]
 fn usage_lists_exactly_the_variables_main_reads() {
-    // The binary's settings are read in main.rs and in config.rs (the paths `PLANETER_DB` and `PLANETER_REPOS_ROOT`, which the server and
-    // `planeter operator` both read, so that they cannot disagree about where the data is).
+    // The binary's settings are read in main.rs, in config.rs (the paths `PLANETER_DB` and `PLANETER_REPOS_ROOT`, which the server and
+    // `planeter operator` both read, so that they cannot disagree about where the data is), in provider_env.rs (the provider settings) and
+    // in the operator's commands: **every source file of the binary is scanned**, so that a variable read anywhere and missing from the
+    // help fails this test. Two files are left out, each for its reason: `args.rs` is the help text itself (and names the build's
+    // compile-time `PLANETER_GIT_COMMIT`, which is not read at run time), and `failpoint.rs` is the delivery engine's debug-only test hook
+    // (not an operator's setting; the release build has no such code).
     let src = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("src");
-    let main = ["main.rs", "config.rs"]
+    let mut files: Vec<_> = std::fs::read_dir(&src)
+        .unwrap()
+        .map(|e| e.unwrap().path())
+        .filter(|p| p.extension().is_some_and(|x| x == "rs"))
+        .filter(|p| {
+            !p.file_name()
+                .is_some_and(|n| n == "args.rs" || n == "failpoint.rs")
+        })
+        .collect();
+    files.sort();
+    assert!(
+        files.len() >= 5 && files.iter().any(|p| p.ends_with("provider_env.rs")),
+        "the scan did not find the sources: {files:?}"
+    );
+    let main = files
         .iter()
-        .map(|f| std::fs::read_to_string(src.join(f)).unwrap())
+        .map(|f| std::fs::read_to_string(f).unwrap())
         .collect::<Vec<_>>()
         .join("\n");
     // Names read by the binary: string literals outside comments.
@@ -237,11 +255,11 @@ fn usage_lists_exactly_the_variables_main_reads() {
     let stale: Vec<_> = listed.difference(&read).collect();
     assert!(
         missing.is_empty(),
-        "read by main.rs or config.rs but not in USAGE: {missing:?}"
+        "read by the binary but not in USAGE: {missing:?}"
     );
     assert!(
         stale.is_empty(),
-        "in USAGE but not read by main.rs or config.rs: {stale:?}"
+        "in USAGE but not read by the binary: {stale:?}"
     );
 }
 
