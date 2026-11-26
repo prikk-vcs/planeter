@@ -65,6 +65,8 @@ while [ "$#" -gt 0 ]; do
     *) echo "gates: unknown argument $1" >&2; usage >&2; exit 2 ;;
   esac
 done
+# A relative --sheet is relative to where the script was run, and the steps run in another directory (the gate's worktree): make it absolute now.
+case "$sheet" in "" | /*) ;; *) sheet="$PWD/$sheet" ;; esac
 case "$tier" in commit | review | release) ;; *) echo "gates: --tier commit, review or release is required" >&2; exit 2 ;; esac
 
 say() { echo "gates: $*"; }

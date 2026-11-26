@@ -69,6 +69,12 @@ if rustup toolchain list 2> /dev/null | grep -q "^$pin-"; then
   contains "review plan: a Cargo.lock change runs the 1.89.0 check" "msrv-check" "$out"
   contains "review plan: a Cargo.lock change runs the publish dry run" "publish-dry-run" "$out"
   contains "review plan: a workflow change runs ENF-2 and pin-check" "enf2" "$out"
+  # --sheet: a relative path is the caller's, made absolute before the steps change directory (a run was lost to it); an absolute one is kept
+  out=$(gates --tier review --commit "$docs_only" --sheet some/dir/sheet.md --plan)
+  contains "review plan: a relative --sheet is made absolute (the caller's directory)" "--check \"$r/some/dir/sheet.md\"" "$out"
+  out=$(gates --tier review --commit "$docs_only" --sheet /elsewhere/sheet.md --plan)
+  contains "review plan: an absolute --sheet is kept" "--check \"/elsewhere/sheet.md\"" "$out"
+  absent "review plan: an absolute --sheet is not prefixed" "$r/elsewhere" "$out"
   out=$(gates --tier review --commit "$lock_change" --base "$first" --runs 2 --plan)
   contains "review plan: --runs 2 is two runs" "tests-with-prikk-2" "$out"
   out=$(gates --tier release --commit "$docs_only" --plan)
