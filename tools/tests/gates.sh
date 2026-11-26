@@ -4,6 +4,8 @@
 # read, the refusal when the release's compiler is not installed, and the plan of each tier for a diff. `sh tools/tests/gates.sh`
 # (run from `cargo test` by tools/pin-check/tests/shell_tools.rs).
 set -u
+# The tests run inside other gates (the review tier runs `cargo test`, which runs them): nothing of that run's environment may reach them.
+unset CARGO_TARGET_DIR CARGO_INCREMENTAL GATES_CAPPED GATES_DRYRUN_TARGET GATES_ADVDB GATES_NOPRIKK_PATH GATES_SELF_TEST_STEPS GATES_ADVISORY_DB_URL
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 fails=0
 check() { if [ "$2" = "$3" ]; then echo "ok   $1"; else echo "FAIL $1: expected [$2] got [$3]"; fails=$((fails + 1)); fi; }
@@ -95,20 +97,21 @@ check "--fail-fast: still 7" "7" "$rc"
 absent "--fail-fast: step c did not run" "=== step: c" "$out"
 check "--fail-fast: cleaned up" "$start" "$(state)"
 
+mark=$((900000 + $$ % 90000)) # a duration no other process on the machine is sleeping
 # an interrupted run: the step sends INT (then TERM) to the script that runs it, which is its parent
-use_steps 'a\ttrue\nb\tkill -INT $PPID; sleep 30\nc\ttrue\n'
+use_steps "a\ttrue\nb\tkill -INT \$PPID; sleep $mark\nc\ttrue\n"
 out=$(gates --tier release --commit "$first" --no-ci); rc=$?
 check "INT: the exit status is 130" "130" "$rc"
 contains "INT: the cleanup ran" "cleanup done" "$out"
 absent "INT: the next step did not run" "=== step: c" "$out"
 check "INT: worktrees and scratch as they were" "$start" "$(state)"
-use_steps 'a\ttrue\nb\tkill -TERM $PPID; sleep 30\nc\ttrue\n'
+use_steps "a\ttrue\nb\tkill -TERM \$PPID; sleep $mark\nc\ttrue\n"
 out=$(gates --tier review --commit "$first" --no-ci); rc=$?
 check "TERM: the exit status is 143" "143" "$rc"
 check "TERM: worktrees and scratch as they were" "$start" "$(state)"
 left=1
 for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
-  left=$(ps -eo args | grep -c '[s]leep 30')
+  left=$(ps -eo args | grep -c "[s]leep $mark\$")
   [ "$left" = 0 ] && break
   sleep 0.2
 done

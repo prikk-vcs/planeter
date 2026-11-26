@@ -19,6 +19,9 @@ PATTERN='forge_seal_sign'
 # workspace root (this script lives at tools/enf2-symbol-check/)
 cd "$(dirname "$0")/../.."
 
+# Where cargo puts the build: `target/` of the workspace, or `$CARGO_TARGET_DIR` when it is set (the review tier of `tools/gates.sh` builds on a shared one).
+T="${CARGO_TARGET_DIR:-target}"
+
 echo "ENF-2: building the default profile (no forge-seal feature)…"
 cargo build --release --workspace --locked
 
@@ -29,10 +32,10 @@ fi
 
 shopt -s nullglob
 artifacts=(
-  target/release/planeter
-  target/release/planeter-client
-  target/release/deps/planeter_core-*.rlib
-  target/release/deps/libplaneter_core-*.rlib
+  "$T"/release/planeter
+  "$T"/release/planeter-client
+  "$T"/release/deps/planeter_core-*.rlib
+  "$T"/release/deps/libplaneter_core-*.rlib
 )
 
 scanned=0
@@ -47,20 +50,20 @@ for a in "${artifacts[@]}"; do
 done
 
 # The delivery engine's test hook (RFC 008 handoff 2, T5) exists in debug builds only: the release server must not carry its name.
-if [ -e target/release/planeter ] && grep -aq 'PLANETER_FAILPOINT' target/release/planeter; then
+if [ -e "$T/release/planeter" ] && grep -aq 'PLANETER_FAILPOINT' "$T/release/planeter"; then
   echo "ENF-2 FAIL: the release server carries the test hook PLANETER_FAILPOINT (it belongs to debug builds only)"
   found=1
 fi
 
 # The operator command's stops (RFC 013 D-2, `planeter operator key add`) exist in debug builds only, like the delivery engine's: the release server
 # must not carry their names either.
-if [ -e target/release/planeter ] && grep -aq 'operator_after_' target/release/planeter; then
+if [ -e "$T/release/planeter" ] && grep -aq 'operator_after_' "$T/release/planeter"; then
   echo "ENF-2 FAIL: the release server carries the operator command's test stops (operator_after_*); they belong to debug builds only"
   found=1
 fi
 
 if [ "$scanned" -eq 0 ]; then
-  echo "ENF-2 ERROR: no artifacts found to scan (did the build produce target/release/*?)." >&2
+  echo "ENF-2 ERROR: no artifacts found to scan (did the build produce $T/release/*?)." >&2
   exit 2
 fi
 

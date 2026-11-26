@@ -2,6 +2,7 @@
 # Tests of tools/run-capped.sh: the derivation of the limits for machines that are not this one, the overrides, and the path without
 # systemd-run. No build, no cap, nothing heavy: `sh tools/tests/run-capped.sh` (run from `cargo test` by tools/pin-check/tests/shell_tools.rs).
 set -u
+unset RUN_CAPPED_CPU RUN_CAPPED_MEM RUN_CAPPED_JOBS RUN_CAPPED_NICE
 repo=$(cd "$(dirname "$0")/../.." && pwd)
 rc="$repo/tools/run-capped.sh"
 fails=0
