@@ -308,31 +308,233 @@ impl std::error::Error for StoreSizeError {}
 /// The repository's store size **S**: the apparent bytes of every regular file under
 /// `<repo_root>/.prikk`, found by a fresh walk. `lstat` only — **symlinks are never followed** and add
 /// nothing — and no cache (a cache saves ≤ 65 µs and adds a staleness window: investigation I1). Bounded
-/// by [`MAX_STORE_ENTRIES`]; any failure is an error, never a guess.
+/// by [`MAX_STORE_ENTRIES`]; any failure is an error, never a guess, **except that an entry that disappears between being listed and being
+/// looked at has size zero: it is gone** (IS-74: prikk creates and removes files while it writes, and a read that arrives meanwhile must not be
+/// refused for a file the next listing would not show). That is `NotFound` from the `lstat` of a listed entry and `NotFound` from the listing of a
+/// **sub**directory that was listed and is gone; the entry still counts toward the bound. Every other error stays an error (permission denied, an I/O
+/// error, too many entries), and so does a missing `.prikk` itself: a repository whose store is not there is not one to read.
 pub fn store_size(repo_root: &Path) -> Result<u64, StoreSizeError> {
     store_size_limited(repo_root, MAX_STORE_ENTRIES)
 }
 
 /// [`store_size`] with an explicit entry bound (so the bound itself can be tested cheaply).
 pub fn store_size_limited(repo_root: &Path, max_entries: usize) -> Result<u64, StoreSizeError> {
+    store_size_walk(repo_root, max_entries, &mut |_, _| {})
+}
+
+/// The two places of the walk where something can change under it: a test (and only a test) acts there, to make a file vanish deterministically.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum WalkStep {
+    /// A directory was taken off the stack and is about to be listed.
+    BeforeList,
+    /// An entry was listed and is about to be looked at.
+    BeforeStat,
+}
+
+/// The walk of [`store_size_limited`], with `hook` called at each [`WalkStep`] (production passes an empty one, which costs nothing).
+fn store_size_walk<F: FnMut(WalkStep, &Path)>(
+    repo_root: &Path,
+    max_entries: usize,
+    hook: &mut F,
+) -> Result<u64, StoreSizeError> {
+    let root = repo_root.join(".prikk");
     let mut total: u64 = 0;
     let mut seen: usize = 0;
-    let mut stack = vec![repo_root.join(".prikk")];
+    let mut stack = vec![root.clone()];
     while let Some(dir) = stack.pop() {
-        for entry in std::fs::read_dir(&dir).map_err(StoreSizeError::Io)? {
-            let entry = entry.map_err(StoreSizeError::Io)?;
+        hook(WalkStep::BeforeList, &dir);
+        let listing = match std::fs::read_dir(&dir) {
+            Ok(l) => l,
+            // A subdirectory that was listed and is gone: nothing in it. The root is not a subdirectory: its absence is an error.
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound && dir != root => continue,
+            Err(e) => return Err(StoreSizeError::Io(e)),
+        };
+        for entry in listing {
+            let entry = match entry {
+                Ok(entry) => entry,
+                // The directory vanished while it was being read: what was listed before counted, the rest is gone.
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound && dir != root => break,
+                Err(e) => return Err(StoreSizeError::Io(e)),
+            };
             seen += 1;
             if seen > max_entries {
                 return Err(StoreSizeError::TooManyEntries);
             }
-            let md = std::fs::symlink_metadata(entry.path()).map_err(StoreSizeError::Io)?;
+            let path = entry.path();
+            hook(WalkStep::BeforeStat, &path);
+            let md = match std::fs::symlink_metadata(&path) {
+                Ok(md) => md,
+                // Listed and gone: size zero.
+                Err(e) if e.kind() == std::io::ErrorKind::NotFound => continue,
+                Err(e) => return Err(StoreSizeError::Io(e)),
+            };
             let kind = md.file_type();
             if kind.is_dir() {
-                stack.push(entry.path());
+                stack.push(path);
             } else if kind.is_file() {
                 total = total.saturating_add(md.len());
             }
         }
     }
     Ok(total)
+}
+
+#[cfg(test)]
+mod walk_tests {
+    //! IS-74: an entry that vanishes between the listing and the stat is nothing; every other failure still refuses. Deterministic: the hook of
+    //! `store_size_walk` makes the change at the exact step, no thread, no timing.
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+    use std::path::PathBuf;
+    use std::sync::atomic::{AtomicU32, Ordering};
+
+    /// A fresh `<repo>/.prikk` under the system's temp directory (unique per call; removed by the test).
+    fn repo() -> PathBuf {
+        static N: AtomicU32 = AtomicU32::new(0);
+        let dir = std::env::temp_dir().join(format!(
+            "planeter-walk-{}-{}",
+            std::process::id(),
+            N.fetch_add(1, Ordering::Relaxed)
+        ));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(dir.join(".prikk")).unwrap();
+        dir
+    }
+
+    fn put(path: &Path, bytes: usize) {
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(path, vec![b'x'; bytes]).unwrap();
+    }
+
+    #[test]
+    fn a_file_removed_between_the_listing_and_the_stat_is_nothing() {
+        let repo = repo();
+        let store = repo.join(".prikk");
+        put(&store.join("keep"), 10);
+        put(&store.join("goes"), 1000);
+        put(&store.join("also-keeps"), 5);
+        let mut removed = 0;
+        let size = store_size_walk(&repo, 100, &mut |step, path| {
+            if step == WalkStep::BeforeStat && path.ends_with("goes") {
+                std::fs::remove_file(path).unwrap();
+                removed += 1;
+            }
+        });
+        assert_eq!(removed, 1, "the hook ran at the step");
+        assert_eq!(size.unwrap(), 15, "the size of what is left");
+        std::fs::remove_dir_all(&repo).unwrap();
+    }
+
+    #[test]
+    fn a_subdirectory_removed_after_it_was_listed_is_nothing() {
+        let repo = repo();
+        let store = repo.join(".prikk");
+        put(&store.join("sub").join("big"), 5000);
+        put(&store.join("top"), 7);
+        let size = store_size_walk(&repo, 100, &mut |step, path| {
+            if step == WalkStep::BeforeList && path.ends_with("sub") {
+                std::fs::remove_dir_all(path).unwrap();
+            }
+        });
+        assert_eq!(size.unwrap(), 7);
+        std::fs::remove_dir_all(&repo).unwrap();
+    }
+
+    #[test]
+    fn a_file_replaced_by_a_directory_of_the_same_name_is_what_is_there_now() {
+        let repo = repo();
+        let store = repo.join(".prikk");
+        put(&store.join("thing"), 900);
+        put(&store.join("other"), 1);
+        let size = store_size_walk(&repo, 100, &mut |step, path| {
+            if step == WalkStep::BeforeStat && path.ends_with("thing") {
+                std::fs::remove_file(path).unwrap();
+                put(&path.join("inside"), 40);
+            }
+        });
+        assert_eq!(
+            size.unwrap(),
+            41,
+            "the stat sees the directory; it is walked; no panic, no loop"
+        );
+        std::fs::remove_dir_all(&repo).unwrap();
+    }
+
+    #[test]
+    fn a_directory_that_cannot_be_read_is_still_an_error() {
+        let repo = repo();
+        let store = repo.join(".prikk");
+        put(&store.join("locked").join("f"), 3);
+        std::fs::set_permissions(store.join("locked"), std::fs::Permissions::from_mode(0o000))
+            .unwrap();
+        if std::fs::read_dir(store.join("locked")).is_ok() {
+            // Running as a user that can read it anyway (root): the case cannot be made here.
+            std::fs::set_permissions(store.join("locked"), std::fs::Permissions::from_mode(0o755))
+                .unwrap();
+            std::fs::remove_dir_all(&repo).unwrap();
+            eprintln!("skipping: this user can read a directory with no permissions");
+            return;
+        }
+        let r = store_size_walk(&repo, 100, &mut |_, _| {});
+        std::fs::set_permissions(store.join("locked"), std::fs::Permissions::from_mode(0o755))
+            .unwrap();
+        match r {
+            Err(StoreSizeError::Io(e)) => {
+                assert_eq!(e.kind(), std::io::ErrorKind::PermissionDenied)
+            }
+            other => panic!("expected the permission error, got {other:?}"),
+        }
+        std::fs::remove_dir_all(&repo).unwrap();
+    }
+
+    #[test]
+    fn a_missing_store_is_still_an_error() {
+        let repo = std::env::temp_dir().join(format!("planeter-walk-none-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&repo);
+        assert!(matches!(
+            store_size_walk(&repo, 100, &mut |_, _| {}),
+            Err(StoreSizeError::Io(_))
+        ));
+        // ...also when the store vanishes after the walk began (the root is not a subdirectory).
+        let repo = self::repo();
+        let r = store_size_walk(&repo, 100, &mut |step, path| {
+            if step == WalkStep::BeforeList && path.ends_with(".prikk") {
+                std::fs::remove_dir_all(path).unwrap();
+            }
+        });
+        assert!(
+            matches!(r, Err(StoreSizeError::Io(ref e)) if e.kind() == std::io::ErrorKind::NotFound),
+            "{r:?}"
+        );
+        std::fs::remove_dir_all(&repo).unwrap();
+    }
+
+    #[test]
+    fn the_entry_bound_still_counts_the_entries_that_vanished() {
+        let repo = repo();
+        let store = repo.join(".prikk");
+        for i in 0..10 {
+            put(&store.join(format!("f{i}")), 1);
+        }
+        // Every entry is gone by the time it is looked at: nothing is counted in bytes, and the bound is still reached.
+        let r = store_size_walk(&repo, 5, &mut |step, path| {
+            if step == WalkStep::BeforeStat {
+                std::fs::remove_file(path).unwrap();
+            }
+        });
+        assert!(matches!(r, Err(StoreSizeError::TooManyEntries)), "{r:?}");
+        // And within the bound the vanished entries add nothing.
+        let repo2 = self::repo();
+        for i in 0..4 {
+            put(&repo2.join(".prikk").join(format!("g{i}")), 9);
+        }
+        let ok = store_size_walk(&repo2, 5, &mut |step, path| {
+            if step == WalkStep::BeforeStat {
+                std::fs::remove_file(path).unwrap();
+            }
+        });
+        assert_eq!(ok.unwrap(), 0);
+        std::fs::remove_dir_all(&repo).unwrap();
+        std::fs::remove_dir_all(&repo2).unwrap();
+    }
 }

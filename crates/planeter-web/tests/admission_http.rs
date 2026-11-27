@@ -517,3 +517,81 @@ async fn each_call_runs_under_the_documented_ceiling() {
         246 * MIB
     );
 }
+
+// ---------------------------------------------------------------- IS-74: a file that vanishes under the measurement refuses nothing
+
+/// A read is admitted by walking the repository's store (`.prikk`). While a **writer** creates and removes files and directories in that store in a
+/// tight loop, 2,000 reads through the router are **all admitted**: the stand-in prikk is reached by every one of them (it appends a line to a
+/// file outside the store when it is asked for anything but its version), and none was refused as "the repository store could not be measured".
+/// (Before the fix a file listed and gone by the next call refused the read with a 503: IS-74.)
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn reads_are_all_admitted_while_a_writer_creates_and_removes_files_in_the_store() {
+    if !have("prlimit") {
+        eprintln!("skipping: needs prlimit on PATH");
+        return;
+    }
+    let root = scratch("writer");
+    let repo = stand_in(&root, "open", 1);
+    let reached = root.join("reached");
+    let script = root.join("prikk");
+    std::fs::write(
+        &script,
+        format!(
+            "#!/bin/sh\ncase \"$1\" in --version) echo 'prikk 0.58.0';; *) echo x >> '{}'; exit 1;; esac\n",
+            reached.display()
+        ),
+    )
+    .unwrap();
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&script, std::fs::Permissions::from_mode(0o755)).unwrap();
+    }
+    exec_wait::wait_until_runs(&script);
+    let repos = vec![Repo {
+        name: "open",
+        visibility: Visibility::Public,
+        path: repo.clone(),
+    }];
+    let gate = Arc::new(PrikkGate::new(8, Duration::from_secs(5)).with_budget(1000 * MIB));
+    let (r, _) = app(repos, gate, Prikk::Script(script));
+
+    let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let writer = {
+        let store = repo.join(".prikk");
+        let stop = stop.clone();
+        std::thread::spawn(move || {
+            let mut i: u64 = 0;
+            let mut churn = 0u64;
+            while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+                let file = store.join(format!("tmp-{}", i % 8));
+                let dir = store.join(format!("d-{}", i % 3));
+                let _ = std::fs::write(&file, b"x");
+                let _ = std::fs::create_dir_all(dir.join("inner"));
+                let _ = std::fs::write(dir.join("inner").join("f"), b"y");
+                let _ = std::fs::remove_file(&file);
+                let _ = std::fs::remove_dir_all(&dir);
+                i += 1;
+                churn += 1;
+            }
+            churn
+        })
+    };
+    let reads = 2_000;
+    for _ in 0..reads {
+        let _ = get(&r, "/api/v1/repos/alice/open/history", APP).await;
+    }
+    stop.store(true, std::sync::atomic::Ordering::Relaxed);
+    let churn = writer.join().unwrap();
+    let admitted = std::fs::read_to_string(&reached)
+        .unwrap_or_default()
+        .lines()
+        .count();
+    eprintln!("the writer made {churn} rounds; {admitted} of {reads} reads were admitted");
+    assert!(churn > 100, "the writer really ran ({churn} rounds)");
+    assert_eq!(
+        admitted,
+        reads,
+        "{} of {reads} reads were refused before they reached prikk",
+        reads - admitted
+    );
+}
