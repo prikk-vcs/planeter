@@ -471,3 +471,81 @@ fn a_removal_can_be_undone_when_something_needs_the_object_after_all_and_never_o
     assert_eq!(bytes_of(store.get(&a).unwrap()), b"needed after all");
     assert_eq!(fs::read_dir(d.join("trash")).unwrap().count(), 0);
 }
+
+// ---------------------------------------------------------------- IS-75: an object that vanishes under a scan is not in it
+
+fn scan_dir(name: &str) -> (PathBuf, ArtifactStore) {
+    let d = dir(name);
+    let store = ArtifactStore::open(&d).unwrap();
+    (d, store)
+}
+
+#[test]
+fn an_object_removed_between_the_listing_and_the_stat_is_not_in_the_scan() {
+    let (d, store) = scan_dir("scan-file-gone");
+    let keep = put_bytes(&store, b"keep");
+    let goes = put_bytes(&store, b"goes away");
+    let mut hits = 0;
+    let found = store
+        .dir
+        .scan_walk(&mut |step, path| {
+            if step == ScanStep::BeforeStat && path.ends_with(goes.as_str()) {
+                fs::remove_file(path).unwrap();
+                hits += 1;
+            }
+        })
+        .unwrap();
+    assert_eq!(hits, 1, "the hook ran at the step");
+    let digests: Vec<_> = found.into_iter().map(|(d, _, _)| d).collect();
+    assert_eq!(digests, vec![keep], "what is left");
+    fs::remove_dir_all(&d).unwrap();
+}
+
+#[test]
+fn a_shard_removed_after_it_was_listed_is_not_in_the_scan() {
+    let (d, store) = scan_dir("scan-shard-gone");
+    let a = put_bytes(&store, b"one");
+    let b = put_bytes(&store, b"two and more");
+    // Remove the shard of `b` (and only it) after it was listed; if both objects share a shard, remove that shard: nothing is left.
+    let victim = b.as_str()[..2].to_owned();
+    let same = a.as_str()[..2] == victim;
+    let found = store
+        .dir
+        .scan_walk(&mut |step, path| {
+            if step == ScanStep::BeforeList && path.ends_with(&victim) {
+                fs::remove_dir_all(path).unwrap();
+            }
+        })
+        .unwrap();
+    assert_eq!(found.len(), if same { 0 } else { 1 });
+    fs::remove_dir_all(&d).unwrap();
+}
+
+#[test]
+fn a_shard_that_cannot_be_read_is_still_an_error() {
+    use std::os::unix::fs::PermissionsExt;
+    let (d, store) = scan_dir("scan-denied");
+    let a = put_bytes(&store, b"locked away");
+    let shard = d.join("objects").join(&a.as_str()[..2]);
+    fs::set_permissions(&shard, fs::Permissions::from_mode(0o000)).unwrap();
+    if fs::read_dir(&shard).is_ok() {
+        fs::set_permissions(&shard, fs::Permissions::from_mode(0o755)).unwrap();
+        fs::remove_dir_all(&d).unwrap();
+        eprintln!("skipping: this user can read a directory with no permissions");
+        return;
+    }
+    let r = store.dir.scan();
+    fs::set_permissions(&shard, fs::Permissions::from_mode(0o755)).unwrap();
+    assert!(
+        matches!(r, Err(StoreError::Io { source, .. }) if source.kind() == io::ErrorKind::PermissionDenied)
+    );
+    fs::remove_dir_all(&d).unwrap();
+}
+
+#[test]
+fn a_missing_objects_directory_is_still_an_error() {
+    let (d, store) = scan_dir("scan-no-objects");
+    fs::remove_dir_all(d.join("objects")).unwrap();
+    assert!(matches!(store.dir.scan(), Err(StoreError::Io { .. })));
+    fs::remove_dir_all(&d).unwrap();
+}

@@ -100,6 +100,15 @@ struct Dir {
     root: PathBuf,
 }
 
+/// The two places of a scan where something can change under it: a test (and only a test) acts there, to make an object vanish deterministically.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum ScanStep {
+    /// A shard directory is about to be listed.
+    BeforeList,
+    /// An object was listed and is about to be looked at.
+    BeforeStat,
+}
+
 static UNIQUE: AtomicU64 = AtomicU64::new(0);
 
 impl Dir {
@@ -216,8 +225,19 @@ impl Dir {
         self.object_path(d).is_file()
     }
 
-    /// Every finished object: (digest, size, modified).
+    /// Every finished object: (digest, size, modified). **An object that disappears between being listed and being looked at is not in the
+    /// result: it is gone** (IS-75, the rule of the store's size, IS-74: removal renames an object to `trash/` and a scan, for a listing or for the
+    /// start-up of the spool, must not fail for it). That is `NotFound` from the `stat` of a listed object and `NotFound` from the listing of a shard
+    /// that was listed and is gone; every other error stays an error, and so does a missing `objects/` directory.
     fn scan(&self) -> Result<Vec<(Digest, u64, SystemTime)>, StoreError> {
+        self.scan_walk(&mut |_, _| {})
+    }
+
+    /// The walk of [`Dir::scan`], with `hook` called at each [`ScanStep`] (production passes an empty one, which costs nothing).
+    fn scan_walk<F: FnMut(ScanStep, &Path)>(
+        &self,
+        hook: &mut F,
+    ) -> Result<Vec<(Digest, u64, SystemTime)>, StoreError> {
         let mut out = Vec::new();
         for shard in fs::read_dir(self.root.join("objects"))
             .map_err(io_err("cannot read the objects directory"))?
@@ -226,15 +246,31 @@ impl Dir {
             if !shard.path().is_dir() {
                 continue;
             }
-            for obj in
-                fs::read_dir(shard.path()).map_err(io_err("cannot read an object directory"))?
-            {
-                let obj = obj.map_err(io_err("cannot read an object directory"))?;
+            hook(ScanStep::BeforeList, &shard.path());
+            let listing = match fs::read_dir(shard.path()) {
+                Ok(l) => l,
+                // A shard that was listed and is gone: nothing in it.
+                Err(e) if e.kind() == io::ErrorKind::NotFound => continue,
+                Err(e) => return Err(io_err("cannot read an object directory")(e)),
+            };
+            for obj in listing {
+                let obj = match obj {
+                    Ok(obj) => obj,
+                    // The shard vanished while it was being read: what was listed before counted, the rest is gone.
+                    Err(e) if e.kind() == io::ErrorKind::NotFound => break,
+                    Err(e) => return Err(io_err("cannot read an object directory")(e)),
+                };
                 let name = obj.file_name().to_string_lossy().into_owned();
                 let Ok(digest) = Digest::parse(&name) else {
                     continue;
                 };
-                let meta = obj.metadata().map_err(io_err("cannot stat an object"))?;
+                hook(ScanStep::BeforeStat, &obj.path());
+                let meta = match obj.metadata() {
+                    Ok(meta) => meta,
+                    // Listed and gone: not an object any more.
+                    Err(e) if e.kind() == io::ErrorKind::NotFound => continue,
+                    Err(e) => return Err(io_err("cannot stat an object")(e)),
+                };
                 out.push((
                     digest,
                     meta.len(),
