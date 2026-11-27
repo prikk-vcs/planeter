@@ -62,6 +62,46 @@ fn skip() -> bool {
     false
 }
 
+/// A bubblewrap that can make the sandbox planeter's reads run in (user namespaces allowed): CI's runner has none, and says so by not having `bwrap`.
+fn bwrap_works() -> bool {
+    Command::new("bwrap")
+        .args([
+            "--ro-bind",
+            "/usr",
+            "/usr",
+            "--symlink",
+            "usr/lib",
+            "/lib",
+            "--symlink",
+            "usr/lib",
+            "/lib64",
+            "--symlink",
+            "usr/bin",
+            "/bin",
+            "--proc",
+            "/proc",
+            "--dev",
+            "/dev",
+            "--unshare-all",
+            "/usr/bin/true",
+        ])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+/// The tests that go through the real bubblewrap sandbox (the default one): skipped, saying so, where prikk or a working bubblewrap is missing.
+fn skip_sandboxed() -> bool {
+    if skip() {
+        return true;
+    }
+    if !bwrap_works() {
+        eprintln!("skipping: needs bubblewrap (with user namespaces)");
+        return true;
+    }
+    false
+}
+
 fn scratch(name: &str) -> PathBuf {
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("changes-e2e-{name}"));
     let _ = std::fs::remove_dir_all(&dir);
@@ -617,7 +657,7 @@ fn counter(w: &World, k: &str) -> u64 {
 #[tokio::test]
 async fn a_one_claim_revision_lists_an_edit_a_delete_an_add_and_a_rename_as_delete_plus_add_and_each_diff_is_exact()
  {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let initial: &[(&str, &[u8])] = &[
@@ -692,7 +732,7 @@ async fn a_one_claim_revision_lists_an_edit_a_delete_an_add_and_a_rename_as_dele
 
 #[tokio::test]
 async fn a_three_claim_chain_is_one_change_against_the_real_parent_of_its_oldest_claim() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut w = world_with(
@@ -740,7 +780,7 @@ async fn a_three_claim_chain_is_one_change_against_the_real_parent_of_its_oldest
 
 #[tokio::test]
 async fn binary_big_non_utf8_crlf_and_one_line_files_have_their_reasons_and_the_caps_hold() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let big = "a line of text\n".repeat(20_000);
@@ -823,7 +863,7 @@ async fn binary_big_non_utf8_crlf_and_one_line_files_have_their_reasons_and_the_
 #[tokio::test]
 async fn prikk_itself_refuses_hostile_names_and_the_one_it_takes_is_shown_as_it_is_with_only_a_hash_in_the_url()
  {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut w = world("names", Opts::default());
@@ -900,7 +940,7 @@ async fn a_symlink_to_etc_passwd_is_shown_as_its_target_and_never_read() {
 
 #[tokio::test]
 async fn work_that_arrived_as_received_sealed_history_is_claim_not_held() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut w = world("received", Opts::default());
@@ -951,7 +991,7 @@ async fn work_that_arrived_as_received_sealed_history_is_claim_not_held() {
 
 #[tokio::test]
 async fn a_proposal_with_no_base_and_a_revision_whose_declared_base_is_not_the_real_parent() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut w = world_with("base", Opts::default(), &[("base.txt", b"base\n")]);
@@ -1012,7 +1052,7 @@ async fn a_proposal_with_no_base_and_a_revision_whose_declared_base_is_not_the_r
 #[tokio::test]
 async fn a_hidden_repository_an_unknown_revision_and_an_unknown_proposal_answer_the_same_404_bytes()
 {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut w = world("hidden", Opts::default());
@@ -1063,7 +1103,7 @@ async fn a_hidden_repository_an_unknown_revision_and_an_unknown_proposal_answer_
 
 #[tokio::test]
 async fn the_cache_answers_the_second_request_and_concurrent_identical_requests_extract_once() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut w = world("cache", Opts::default());
@@ -1133,7 +1173,7 @@ async fn the_cache_answers_the_second_request_and_concurrent_identical_requests_
 
 #[tokio::test]
 async fn a_busy_gate_is_a_503_with_retry_after_in_words_and_nothing_is_cached() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     // one slot, a short wait, and a budget so that the view is admitted only when the slot is free
@@ -1188,7 +1228,7 @@ async fn a_busy_gate_is_a_503_with_retry_after_in_words_and_nothing_is_cached() 
 
 #[tokio::test]
 async fn the_list_is_paged_by_file_id_and_a_bad_cursor_or_a_zero_limit_is_named() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut w = world("paging", Opts::default());
@@ -1260,7 +1300,7 @@ async fn the_list_is_paged_by_file_id_and_a_bad_cursor_or_a_zero_limit_is_named(
 
 #[tokio::test]
 async fn a_revision_with_two_heads_is_not_one_change_and_the_refusal_is_remembered() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     // two claims on one parent, held by the forge: two proposals, each one head
@@ -1347,7 +1387,7 @@ async fn a_revision_with_two_heads_is_not_one_change_and_the_refusal_is_remember
 
 #[tokio::test]
 async fn a_tree_over_the_bound_is_tree_too_large_and_that_is_remembered() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut w = world(
@@ -1381,7 +1421,7 @@ async fn a_tree_over_the_bound_is_tree_too_large_and_that_is_remembered() {
 
 #[tokio::test]
 async fn ten_thousand_and_one_files_are_tree_too_large_through_the_real_prikk_bound() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut w = world("manyfiles", Opts::default());
@@ -1405,7 +1445,7 @@ async fn ten_thousand_and_one_files_are_tree_too_large_through_the_real_prikk_bo
 
 #[tokio::test]
 async fn a_hundred_level_directory_is_listed_as_one_entry_at_the_depth_cap() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut w = world("deep", Opts::default());
@@ -1443,7 +1483,7 @@ async fn a_hundred_level_directory_is_listed_as_one_entry_at_the_depth_cap() {
 #[tokio::test]
 async fn a_view_that_runs_out_of_time_is_timed_out_and_a_broken_repository_is_failed_and_neither_is_cached()
  {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut w = world(
@@ -1500,7 +1540,7 @@ async fn a_view_that_runs_out_of_time_is_timed_out_and_a_broken_repository_is_fa
 
 #[tokio::test]
 async fn a_thousand_file_repository_view_cold_and_cached_timings() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let initial: Vec<(String, Vec<u8>)> = (0..1000)
@@ -1552,7 +1592,7 @@ async fn a_thousand_file_repository_view_cold_and_cached_timings() {
 #[tokio::test]
 async fn a_proposal_built_after_another_carries_the_earlier_claims_again_and_its_view_shows_the_whole_chain_against_the_sealed_base()
  {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut w = world("stacked", Opts::default());
@@ -1616,7 +1656,7 @@ async fn a_proposal_built_after_another_carries_the_earlier_claims_again_and_its
 #[tokio::test]
 async fn twenty_simultaneous_identical_requests_make_one_extraction_eight_wait_and_the_rest_are_busy_at_once()
  {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut w = world("waiters", Opts::default());
@@ -1833,7 +1873,7 @@ async fn pages_world(name: &str) -> (World, String, String) {
 #[tokio::test]
 async fn the_changes_page_and_a_file_page_say_what_the_files_are_in_both_languages_and_pass_every_structural_rule()
  {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let (w, id, uri) = pages_world("pg-both").await;
@@ -1987,7 +2027,7 @@ async fn the_changes_page_and_a_file_page_say_what_the_files_are_in_both_languag
 
 #[tokio::test]
 async fn one_file_one_line_and_zero_lines_use_the_right_plural_forms_in_both_languages() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut w = world("pg-plural", Opts::default());
@@ -2035,7 +2075,7 @@ struct Titled {
 #[tokio::test]
 async fn every_reason_the_view_is_unavailable_is_a_plain_page_with_the_engines_status_in_both_languages()
  {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut titles: Vec<Titled> = Vec::new();
@@ -2386,7 +2426,7 @@ async fn one_proposal(name: &str) -> (World, String) {
 
 #[tokio::test]
 async fn hostile_names_and_text_never_reach_a_page_unescaped_and_no_link_comes_from_file_content() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let (w, id) = one_proposal("pg-hostile").await;
@@ -2583,7 +2623,7 @@ async fn hostile_names_and_text_never_reach_a_page_unescaped_and_no_link_comes_f
 
 #[tokio::test]
 async fn each_statement_and_each_note_appears_exactly_when_it_is_true() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let (w, id) = one_proposal("pg-statements").await;
@@ -2880,7 +2920,7 @@ async fn each_statement_and_each_note_appears_exactly_when_it_is_true() {
 
 #[tokio::test]
 async fn a_really_long_line_is_cut_by_the_engine_and_the_page_says_so_in_words() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut w = world("pg-longline", Opts::default());
@@ -2949,7 +2989,7 @@ async fn a_really_long_line_is_cut_by_the_engine_and_the_page_says_so_in_words()
 #[tokio::test]
 async fn the_proposal_page_links_each_revision_to_its_changes_with_a_text_of_its_own_and_the_old_sentence_is_gone()
  {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let (w, id, _) = pages_world("pg-link").await;
@@ -3021,7 +3061,7 @@ async fn the_proposal_page_links_each_revision_to_its_changes_with_a_text_of_its
 #[tokio::test]
 async fn the_pages_carry_the_headers_of_the_other_dynamic_pages_and_the_download_only_for_who_may_use_it()
  {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let (w, id, uri) = pages_world("pg-headers").await;
@@ -3075,7 +3115,7 @@ async fn the_pages_carry_the_headers_of_the_other_dynamic_pages_and_the_download
 
 #[tokio::test]
 async fn a_hidden_repository_an_unknown_proposal_revision_or_file_are_one_page_whoever_asks() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let (w, id, uri) = pages_world("pg-404").await;
@@ -3106,7 +3146,7 @@ async fn a_hidden_repository_an_unknown_proposal_revision_or_file_are_one_page_w
 
 #[tokio::test]
 async fn the_previous_and_next_file_follow_the_list_and_skip_files_with_no_diff() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let (w, id) = one_proposal("pg-neighbours").await;
@@ -3190,7 +3230,7 @@ async fn the_previous_and_next_file_follow_the_list_and_skip_files_with_no_diff(
 
 #[tokio::test]
 async fn more_than_a_hundred_files_are_paged_with_earlier_and_more_links() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let (w, id) = one_proposal("pg-paging").await;
@@ -3273,7 +3313,7 @@ async fn more_than_a_hundred_files_are_paged_with_earlier_and_more_links() {
 #[tokio::test]
 async fn files_that_real_prikk_rebuilt_as_binary_non_utf8_or_too_large_say_why_and_offer_the_download_to_who_may_use_it()
  {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let big = "a line of text\n".repeat(20_000);
@@ -3338,7 +3378,7 @@ async fn files_that_real_prikk_rebuilt_as_binary_non_utf8_or_too_large_say_why_a
 #[tokio::test]
 async fn twenty_simultaneous_requests_for_the_page_make_one_extraction_and_the_rest_are_the_busy_page_at_once()
  {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut w = world("pg-waiters", Opts::default());
@@ -3386,7 +3426,7 @@ async fn twenty_simultaneous_requests_for_the_page_make_one_extraction_and_the_r
 #[tokio::test]
 async fn a_line_that_ends_like_the_old_english_marker_is_shown_as_itself_and_makes_no_cut_sentence()
 {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut w = world("pg-lookalike", Opts::default());
@@ -3431,7 +3471,7 @@ async fn a_line_that_ends_like_the_old_english_marker_is_shown_as_itself_and_mak
 
 #[tokio::test]
 async fn a_cut_name_is_its_head_with_path_cut_bytes_and_the_pages_say_it_in_each_language() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let (w, id) = one_proposal("pg-cutname").await;
@@ -3535,7 +3575,7 @@ fn find_by_id<'a>(list: &'a serde_json::Value, id: &str) -> &'a serde_json::Valu
 
 #[tokio::test]
 async fn a_pointer_to_a_key_of_an_earlier_format_is_not_read() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let (w, id) = one_proposal("pg-schema").await;

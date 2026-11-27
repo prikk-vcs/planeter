@@ -11,6 +11,35 @@ fn prikk_available() -> bool {
     Command::new("prikk").arg("--version").output().is_ok()
 }
 
+/// prikk, and a bubblewrap that can make the sandbox the driver's reads run in by default (user namespaces allowed): CI's runner has no `bwrap`.
+fn sandbox_available() -> bool {
+    prikk_available()
+        && Command::new("bwrap")
+            .args([
+                "--ro-bind",
+                "/usr",
+                "/usr",
+                "--symlink",
+                "usr/lib",
+                "/lib",
+                "--symlink",
+                "usr/lib",
+                "/lib64",
+                "--symlink",
+                "usr/bin",
+                "/bin",
+                "--proc",
+                "/proc",
+                "--dev",
+                "/dev",
+                "--unshare-all",
+                "/usr/bin/true",
+            ])
+            .output()
+            .map(|o| o.status.success())
+            .unwrap_or(false)
+}
+
 /// Create a fresh initialized prikk repository under the test tmp dir and return its root.
 fn init_repo(name: &str) -> PathBuf {
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(name);
@@ -60,8 +89,8 @@ fn sealed_repo(name: &str) -> PathBuf {
 
 #[test]
 fn tree_and_cat_read_a_sealed_repo() {
-    if !prikk_available() {
-        eprintln!("skipping: prikk not on PATH");
+    if !sandbox_available() {
+        eprintln!("skipping: needs prikk and bubblewrap (with user namespaces)");
         return;
     }
     let dir = sealed_repo("driver-tree-cat");
@@ -107,8 +136,8 @@ fn tree_and_cat_read_a_sealed_repo() {
 
 #[test]
 fn open_pins_the_version_and_reports_it() {
-    if !prikk_available() {
-        eprintln!("skipping: prikk not on PATH");
+    if !sandbox_available() {
+        eprintln!("skipping: needs prikk and bubblewrap (with user namespaces)");
         return;
     }
     let dir = init_repo("driver-version");
@@ -123,8 +152,8 @@ fn open_pins_the_version_and_reports_it() {
 
 #[test]
 fn reads_parse_to_typed_models_on_a_fresh_repo() {
-    if !prikk_available() {
-        eprintln!("skipping: prikk not on PATH");
+    if !sandbox_available() {
+        eprintln!("skipping: needs prikk and bubblewrap (with user namespaces)");
         return;
     }
     let dir = init_repo("driver-reads");
@@ -186,8 +215,8 @@ fn prikk_version() -> Option<(u64, u64, u64)> {
 /// driver refuses an unexpected `schema_version`, so a drifted id fails here by name.
 #[test]
 fn every_schema_the_driver_reads_parses_on_the_installed_prikk() {
-    if !prikk_available() {
-        eprintln!("skipping: prikk not on PATH");
+    if !sandbox_available() {
+        eprintln!("skipping: needs prikk and bubblewrap (with user namespaces)");
         return;
     }
     let dir = sealed_repo("driver-schema-probe");
@@ -254,8 +283,8 @@ fn every_schema_the_driver_reads_parses_on_the_installed_prikk() {
 /// bare form. prikk 0.45.0/0.46.0 refused it; fixed in 0.47.0. Skips **visibly** below 0.47.0.
 #[test]
 fn explicit_current_branch_on_an_unsealed_repo_matches_the_bare_form() {
-    if !prikk_available() {
-        eprintln!("skipping: prikk not on PATH");
+    if !sandbox_available() {
+        eprintln!("skipping: needs prikk and bubblewrap (with user namespaces)");
         return;
     }
     match prikk_version() {
@@ -291,8 +320,8 @@ fn explicit_current_branch_on_an_unsealed_repo_matches_the_bare_form() {
 /// repository root because that is the only path the sandbox binds.
 #[test]
 fn bundle_round_trip_lands_under_remotes() {
-    if !prikk_available() {
-        eprintln!("skipping: prikk not on PATH");
+    if !sandbox_available() {
+        eprintln!("skipping: needs prikk and bubblewrap (with user namespaces)");
         return;
     }
     let source = sealed_repo("driver-bundle-src");
@@ -334,8 +363,8 @@ fn bundle_round_trip_lands_under_remotes() {
 /// "not trusted" is (0 before 0.52.0, 1 since).
 #[test]
 fn trust_check_answers_for_adopted_and_unknown_keys() {
-    if !prikk_available() {
-        eprintln!("skipping: prikk not on PATH");
+    if !sandbox_available() {
+        eprintln!("skipping: needs prikk and bubblewrap (with user namespaces)");
         return;
     }
     let dir = sealed_repo("driver-trust-check");
@@ -360,8 +389,8 @@ fn trust_check_answers_for_adopted_and_unknown_keys() {
 /// refused for its content instead — so the size refusal below is the bound's doing.
 #[test]
 fn sandbox_bound_reaches_prikk_and_refuses_an_oversize_artifact() {
-    if !prikk_available() {
-        eprintln!("skipping: prikk not on PATH");
+    if !sandbox_available() {
+        eprintln!("skipping: needs prikk and bubblewrap (with user namespaces)");
         return;
     }
     use planeter_prikk::sandbox::{BwrapConfig, IncomingBounds};

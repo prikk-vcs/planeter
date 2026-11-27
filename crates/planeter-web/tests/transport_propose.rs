@@ -60,6 +60,18 @@ fn skip() -> bool {
     false
 }
 
+/// The tests that go through the real bubblewrap sandbox (the default one): skipped, saying so, where prikk or a working bubblewrap is missing.
+fn skip_sandboxed() -> bool {
+    if skip() {
+        return true;
+    }
+    if !bwrap_works() {
+        eprintln!("skipping: needs bubblewrap (with user namespaces)");
+        return true;
+    }
+    false
+}
+
 fn bwrap_works() -> bool {
     Command::new("bwrap")
         .args([
@@ -773,7 +785,7 @@ fn titled(title: &str) -> serde_json::Value {
 
 #[tokio::test]
 async fn a_keyed_clients_artifact_becomes_a_proposal_with_one_revision_and_nothing_is_published() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut w = world("happy", Opts::default());
@@ -928,7 +940,7 @@ impl Client {
 
 #[tokio::test]
 async fn a_second_revision_to_the_same_proposal_and_a_resend_of_an_identical_artifact() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut w = world("second", Opts::default());
@@ -1081,7 +1093,7 @@ async fn a_client_builds_against_the_have_list_the_forge_serves_and_propose_acce
 
 #[tokio::test]
 async fn an_artifact_that_adds_nothing_records_nothing_and_says_so() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut w = world("nothing", Opts::default());
@@ -1127,7 +1139,7 @@ async fn an_artifact_that_adds_nothing_records_nothing_and_says_so() {
 #[tokio::test]
 async fn a_declaration_that_misses_an_added_patch_or_names_one_not_held_is_refused_and_a_corrected_resend_records_once()
  {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut w = world("declare", Opts::default());
@@ -1227,7 +1239,7 @@ async fn a_declaration_that_misses_an_added_patch_or_names_one_not_held_is_refus
 #[tokio::test]
 async fn a_stranger_a_reader_a_read_only_token_a_cookie_and_the_anonymous_are_refused_as_documented()
  {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut w = world("authz", Opts::default());
@@ -1325,7 +1337,7 @@ async fn a_stranger_a_reader_a_read_only_token_a_cookie_and_the_anonymous_are_re
 
 #[tokio::test]
 async fn any_authenticated_opens_the_door_to_a_reader_and_the_quota_is_named_when_it_is_used_up() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut w = world("quota", Opts::default());
@@ -1514,7 +1526,7 @@ async fn only_the_opener_or_a_writer_adds_to_a_proposal_and_only_while_it_is_ope
 
 #[tokio::test]
 async fn a_base_must_be_a_block_the_repository_holds() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut w = world("base", Opts::default());
@@ -1562,7 +1574,7 @@ async fn a_base_must_be_a_block_the_repository_holds() {
 
 #[tokio::test]
 async fn a_malformed_body_is_refused_with_a_named_reason_and_nothing_is_accepted() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut w = world("framing", Opts::default());
@@ -1758,7 +1770,7 @@ async fn a_proposal_over_the_bound_is_refused_before_its_body_is_read() {
 
 #[tokio::test]
 async fn a_repository_that_needs_recovery_refuses_writes_and_still_answers_reads() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut w = world("flag", Opts::default());
@@ -1793,7 +1805,7 @@ async fn a_repository_that_needs_recovery_refuses_writes_and_still_answers_reads
 
 #[tokio::test]
 async fn a_busy_repository_is_a_queue_not_an_error() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut w = world(
@@ -1841,7 +1853,7 @@ async fn a_busy_repository_is_a_queue_not_an_error() {
 
 #[tokio::test]
 async fn a_pending_patch_is_never_called_sealed_whatever_show_says_of_queued() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut w = world("assurance", Opts::default());
@@ -1955,7 +1967,7 @@ fn object_exists(w: &World, art: &[u8]) -> bool {
 #[tokio::test]
 async fn a_run_that_dies_after_changing_the_repository_is_incomplete_and_a_resend_after_recovery_records_exactly_one()
  {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let (mut w, ctrl) = standin_world("died");
@@ -2076,7 +2088,7 @@ async fn a_run_that_dies_after_changing_the_repository_is_incomplete_and_a_resen
 
 #[tokio::test]
 async fn a_refusal_that_leaves_nothing_closes_the_intent_and_does_not_flag_the_repository() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let (mut w, ctrl) = standin_world("refused");
@@ -2451,7 +2463,7 @@ fn open_change(id: &str, repo: &str, by: &str) -> planeter_store::ChangeRecord {
 /// never says more than the caller is entitled to know.
 #[tokio::test]
 async fn the_checks_run_in_the_documented_order_and_each_refusal_is_the_earlier_rule() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut w = world("order", Opts::default());
@@ -2624,7 +2636,7 @@ async fn the_rate_limit_comes_before_the_read_gate_and_says_nothing_about_any_re
 /// them records its revision and its bytes are counted once.
 #[tokio::test]
 async fn artifacts_whose_declarations_are_refused_are_counted_and_the_limit_is_reached() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut w = world(
@@ -3378,7 +3390,7 @@ async fn a_proposal_lands_only_when_every_patch_is_in_a_sealed_block_and_none_is
 /// is not landing. (The records are seeded: the forge cannot be made to drop a pending patch without sealing it.)
 #[tokio::test]
 async fn a_patch_that_is_merely_absent_from_pending_is_not_landed() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let w = world("pr-negative", Opts::default());
@@ -4230,7 +4242,7 @@ fn register_qaa() {
 /// stays open, with the received ref shown as a sighting and nothing derived from it.
 #[tokio::test]
 async fn history_received_by_import_is_a_sighting_and_never_lands_the_proposal() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let mut w = world("pr-sighting", Opts::default());

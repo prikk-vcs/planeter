@@ -54,6 +54,46 @@ fn skip() -> bool {
     false
 }
 
+/// A bubblewrap that can make the sandbox planeter's reads run in (user namespaces allowed): CI's runner has none, and says so by not having `bwrap`.
+fn bwrap_works() -> bool {
+    Command::new("bwrap")
+        .args([
+            "--ro-bind",
+            "/usr",
+            "/usr",
+            "--symlink",
+            "usr/lib",
+            "/lib",
+            "--symlink",
+            "usr/lib",
+            "/lib64",
+            "--symlink",
+            "usr/bin",
+            "/bin",
+            "--proc",
+            "/proc",
+            "--dev",
+            "/dev",
+            "--unshare-all",
+            "/usr/bin/true",
+        ])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
+/// The tests that go through the real bubblewrap sandbox (the default one): skipped, saying so, where prikk or a working bubblewrap is missing.
+fn skip_sandboxed() -> bool {
+    if skip() {
+        return true;
+    }
+    if !bwrap_works() {
+        eprintln!("skipping: needs bubblewrap (with user namespaces)");
+        return true;
+    }
+    false
+}
+
 fn scratch(name: &str) -> PathBuf {
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join(format!("recovery-{name}"));
     let _ = std::fs::remove_dir_all(&dir);
@@ -537,7 +577,7 @@ fn standin_log(ctrl: &Path) -> Vec<String> {
 
 #[test]
 fn a_killed_accept_is_recovered_by_itself_when_every_witness_agrees_and_every_step_is_recorded() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let w = world("auto", Opts::default());
@@ -669,7 +709,7 @@ fn a_healthy_flagged_repository_is_only_cleared_after_a_fresh_verify_and_a_secon
 
 #[test]
 fn a_verify_that_fails_leaves_the_flag_set_and_says_so_in_the_record() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let (w, ctrl) = standin_world("verify-fails");
@@ -739,7 +779,7 @@ fn kill(pid: u32) {
 
 #[test]
 fn a_live_foreign_process_leaves_the_flag_set_changes_nothing_and_names_the_commands() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let w = world("foreign", Opts::default());
@@ -901,7 +941,7 @@ fn the_servers_own_processes_are_not_foreign_and_a_stranger_command_line_naming_
 
 #[test]
 fn a_lock_of_an_unknown_kind_or_outside_the_repository_is_evidence_we_do_not_have() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let w = world("lockkind", Opts::default());
@@ -946,7 +986,7 @@ fn a_lock_of_an_unknown_kind_or_outside_the_repository_is_evidence_we_do_not_hav
 
 #[test]
 fn an_unreadable_unlock_output_stops_with_prikks_text_kept_and_changes_nothing() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let (w, ctrl) = standin_world("unreadable");
@@ -973,7 +1013,7 @@ fn an_unreadable_unlock_output_stops_with_prikks_text_kept_and_changes_nothing()
 /// stays set and the dead lease record stays. (`doctor` and `unlock` are over 32 MiB and 1 MiB; `verify` over 32 MiB.)
 #[test]
 fn a_doctor_unlock_or_verify_that_prints_more_than_its_cap_is_unknown_and_changes_nothing() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     for (mode, blocker) in [
@@ -1029,7 +1069,7 @@ fn a_doctor_unlock_or_verify_that_prints_more_than_its_cap_is_unknown_and_change
 
 #[test]
 fn a_live_lease_holder_is_not_now_and_a_record_of_this_boot_is_a_live_holder() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let w = world("holders", Opts::default());
@@ -1188,7 +1228,7 @@ fn doctor_problems_covered_by_a_named_idempotent_repair_are_overridable_by_an_ad
 
 #[test]
 fn an_unattended_run_never_repairs_and_stays_flagged() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let (w, ctrl) = warned("doctor-unattended");
@@ -1214,7 +1254,7 @@ fn an_unattended_run_never_repairs_and_stays_flagged() {
 
 #[test]
 fn an_administrators_run_executes_exactly_the_named_repair_writes_its_step_first_and_completes() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let (w, ctrl) = warned("doctor-admin");
@@ -1289,7 +1329,7 @@ fn an_administrators_run_executes_exactly_the_named_repair_writes_its_step_first
 
 #[test]
 fn a_doctor_that_is_still_dirty_after_the_repair_stops_with_the_flag_set_and_the_locks_untouched() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let (w, ctrl) = standin_world("doctor-stuck");
@@ -1367,7 +1407,7 @@ fn a_repair_off_the_allow_list_is_never_run_and_shows_only_as_text() {
 #[test]
 fn one_problem_without_a_repair_or_a_forbidden_repair_beside_an_allowed_one_refuses_the_whole_report()
  {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     for mode in ["doctor-error", "doctor-mixed", "doctor-both"] {
@@ -1562,7 +1602,7 @@ fn the_note_beside_a_repairable_warning_stays_an_administrators_decision() {
 
 #[test]
 fn recovery_run_twice_at_once_is_serialized_and_recovers_once() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let w = world("twice", Opts::default());
@@ -1630,7 +1670,7 @@ const RECOVERY: &str = "/api/v1/repos/alice/forge/recovery";
 
 #[tokio::test]
 async fn the_door_shows_the_plan_to_an_administrator_and_tells_nobody_else_anything() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let w = world("door", Opts::default());
@@ -1737,7 +1777,7 @@ async fn the_door_shows_the_plan_to_an_administrator_and_tells_nobody_else_anyth
 
 #[tokio::test]
 async fn the_door_runs_recovery_abandons_the_intents_it_is_asked_to_and_refuses_an_unknown_one() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let w = world("door-run", Opts::default());
@@ -1939,7 +1979,7 @@ fn spawn_adopted_prikk(base: &Path, name: &str, body: &str) -> u32 {
 
 #[test]
 fn a_prikk_that_only_changed_into_the_repository_is_found_by_its_working_directory() {
-    if skip() {
+    if skip_sandboxed() {
         return;
     }
     let w = world("cwd", Opts::default());

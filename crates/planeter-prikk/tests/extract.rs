@@ -755,8 +755,8 @@ fn client(base: &Path, blocks: usize) -> (PathBuf, PathBuf) {
 
 #[test]
 fn real_prikk_extracts_a_ref_into_the_working_directory_and_a_plan_writes_nothing() {
-    if !have_prikk() {
-        eprintln!("skipping: needs prikk >= 0.54.0");
+    if !have_prikk() || !bwrap_works() {
+        eprintln!("skipping: needs prikk >= 0.54.0 and bubblewrap (with user namespaces)");
         return;
     }
     let base = scratch("real-ref");
@@ -841,8 +841,8 @@ fn real_prikk_extracts_under_the_production_sandbox_with_only_the_working_direct
 /// Each refusal that can be provoked with a real repository, as the driver reads it. (The rest are from prikk's source.)
 #[test]
 fn real_prikk_refusals_provoked_here_read_to_their_ids() {
-    if !have_prikk() {
-        eprintln!("skipping: needs prikk >= 0.54.0");
+    if !have_prikk() || !bwrap_works() {
+        eprintln!("skipping: needs prikk >= 0.54.0 and bubblewrap (with user namespaces)");
         return;
     }
     let base = scratch("real-refusals");
