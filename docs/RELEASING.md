@@ -20,7 +20,7 @@ published until M4. **Tagging and publishing are owner-authorized.**
    on a clean build. Every tier runs inside `tools/run-capped.sh`, with a **compiler that is the release's** (the pin of `ci.yml`, 1.99.1 today,
    never `stable` by accident: the script refuses with the `rustup toolchain install` command if it is missing), prints the compiler and the
    steps first and a table of every step's exit status, wall time and CPU at the end, and **cleans up on every way out** (it removes the worktree
-   and the scratch it made, by their explicit paths, also after a failing step or an interrupt).
+   and the scratch it made, by their explicit paths, also after a failing step or an interrupt). A run is **immune to edits of the scripts meanwhile**: it copies itself and `run-capped.sh` into a private directory when it starts and runs from the copy (a shell reads a script as it goes, so a file rewritten on a shared working copy would otherwise be resumed in the middle of new text), names the file's hash in its log, and removes the copy when it ends.
    * **commit** (a developer, before pushing; where the developer is, incremental builds): fmt, floor-check, pin-check, clippy and the tests of
      the crates the diff touches (the whole workspace when `Cargo.toml`, `Cargo.lock`, `tools/`, `.github/` or the `Dockerfile` changed; the
      touched crates' dependents are CI's to run).

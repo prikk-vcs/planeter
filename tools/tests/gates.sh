@@ -199,6 +199,73 @@ check "...no shared target directory was made" "0" "$(ls -d "$r"/.git-exclude/tm
 check "...and the existing checkout was not removed" "yes" "$([ -e "$tmp/old-checkout/a.txt" ] && echo yes || echo no)"
 check "...and it cleaned up" "$start" "$(state)"
 
+# --- a run is immune to edits of the script meanwhile (a shell reads a script a piece at a time, so a rewritten file resumed in the middle of new text)
+snaptmp="$tmp/snaptmp"
+mkdir -p "$snaptmp"
+snapshots() { ls "$snaptmp" 2> /dev/null | grep -c '^gates-snapshot\.'; }
+cp "$r/tools/gates.sh" "$tmp/gates.sh.orig"
+orig_sum=$(sha256sum "$r/tools/gates.sh" | cut -d' ' -f1)
+# $1 = a label, $2 = what happens to the script on disk (in place, as an editor or a script writes a file) while a slow step is running
+edit_while_running() {
+  rm -f "$tmp/started" "$tmp/go" "$tmp/edit.rc"
+  use_steps "slow\ttouch $tmp/started; while [ ! -e $tmp/go ]; do sleep 0.1; done; echo slow-step-done\nafter\techo after-the-edit\n"
+  (cd "$r" && TMPDIR="$snaptmp" GATES_CAPPED=1 $DEFSIG timeout 120 sh tools/gates.sh --tier release --commit "$first" --no-ci --sheet "$osheet" > "$tmp/edit.out" 2>&1; echo $? > "$tmp/edit.rc") &
+  n=0
+  while [ ! -e "$tmp/started" ] && [ "$n" -lt 300 ]; do sleep 0.1; n=$((n + 1)); done
+  check "$1: the slow step started" "yes" "$([ -e "$tmp/started" ] && echo yes || echo no)"
+  check "$1: the run is from a snapshot (one private directory exists while it runs)" "1" "$(snapshots)"
+  eval "$2"
+  touch "$tmp/go"
+  n=0
+  while [ ! -e "$tmp/edit.rc" ] && [ "$n" -lt 600 ]; do sleep 0.1; n=$((n + 1)); done
+  out=$(cat "$tmp/edit.out"); rc=$(cat "$tmp/edit.rc" 2> /dev/null)
+  cp "$tmp/gates.sh.orig" "$r/tools/gates.sh"
+  check "$1: the run finishes with its own exit status" "0" "$rc"
+  contains "$1: ...and its own table" "result: tier release" "$out"
+  contains "$1: ...with the step that ran after the edit" "after " "$out"
+  contains "$1: ...and its own verdict" "all steps passed" "$out"
+  absent "$1: ...no syntax error from a file read in the middle" "syntax error" "$out"
+  absent "$1: ...nor the replacement's text" "REPLACED BY ANOTHER SCRIPT" "$out"
+  contains "$1: ...the log names the version that ran (the file's hash at the start)" "running from a snapshot of tools/gates.sh ($orig_sum)" "$out"
+  contains "$1: ...and it cleaned up" "cleanup done" "$out"
+  check "$1: ...the snapshot is gone" "0" "$(snapshots)"
+  check "$1: ...worktrees and scratch as they were" "$start" "$(state)"
+}
+# the edit that breaks the syntax: a line inserted near the top shifts everything the shell has not read yet (appended at the end it would never be reached)
+edit_insert_junk() { { sed -n 1,3p "$tmp/gates.sh.orig"; echo 'fi )'; sed -n '4,$p' "$tmp/gates.sh.orig"; } > "$tmp/edited.sh" && cat "$tmp/edited.sh" > "$r/tools/gates.sh"; }
+# the edit that replaces it with a different, valid script
+edit_replace() { printf '#!/bin/sh\necho REPLACED BY ANOTHER SCRIPT\nexit 99\n' > "$r/tools/gates.sh"; }
+edit_while_running "an inserted syntax error" edit_insert_junk
+edit_while_running "a replaced script" edit_replace
+# the snapshot is removed on every way out: a failing step, TERM, INT
+use_steps 'a\texit 7\n'
+out=$(TMPDIR="$snaptmp" gates --tier release --commit "$first" --no-ci --sheet "$osheet"); rc=$?
+check "a failing step: exit 7" "7" "$rc"
+check "...and the snapshot is gone" "0" "$(snapshots)"
+use_steps "a\tkill -TERM \$PPID; sleep $mark\nb\ttrue\n"
+out=$(TMPDIR="$snaptmp" gates --tier release --commit "$first" --no-ci --sheet "$osheet"); rc=$?
+check "TERM: exit 143" "143" "$rc"
+check "...and the snapshot is gone" "0" "$(snapshots)"
+if [ -n "$DEFSIG" ]; then
+  use_steps "a\tkill -INT \$PPID; sleep $mark\nb\ttrue\n"
+  out=$(TMPDIR="$snaptmp" gates --tier release --commit "$first" --no-ci --sheet "$osheet"); rc=$?
+  check "INT: exit 130" "130" "$rc"
+  check "...and the snapshot is gone" "0" "$(snapshots)"
+fi
+use_steps 'one\techo ran\n'
+out=$(TMPDIR="$snaptmp" gates --tier release --commit "$first" --no-ci --sheet "$osheet" --plan); rc=$?
+check "--plan: exit 0" "0" "$rc"
+check "...and the snapshot is gone" "0" "$(snapshots)"
+out=$(TMPDIR="$snaptmp" gates --tier release --commit "$first" --no-ci --bogus); rc=$?
+check "an unknown argument: exit 2" "2" "$rc"
+check "...and the snapshot is gone" "0" "$(snapshots)"
+# a snapshot that cannot be made is a stop with a sentence, not a continuation from the original
+out=$(TMPDIR="$tmp/no/such/dir" gates --tier release --commit "$first" --no-ci --sheet "$osheet"); rc=$?
+check "no snapshot, no run: exit 2" "2" "$rc"
+contains "...with a sentence" "cannot make a snapshot of" "$out"
+absent "...and nothing ran" "=== step" "$out"
+check "...and it left nothing behind" "$start" "$(state)"
+
 # --- the release tier refuses a shared target (and cleans up what it had made)
 use_steps 'one\techo should not run\n'
 out=$(CARGO_TARGET_DIR="$tmp/shared" gates --tier release --commit "$first" --sheet "$osheet" --no-ci); rc=$?
@@ -248,7 +315,7 @@ check "--no-ci goes on" "0" "$rc"
 contains "...and says loudly that CI was not read" "CI was NOT read" "$out"
 # no gh at all
 mkdir "$tmp/nogh"
-for t in sh git sed head cut awk mktemp rm mkdir date cat grep pkill kill ps rustc rustup nice getconf env sort wc ls dirname tr sleep printf true; do p=$(command -v "$t") && ln -sf "$p" "$tmp/nogh/$t"; done
+for t in sh git sed head cut awk mktemp rm mkdir date cat grep pkill kill ps rustc rustup nice getconf env sort wc ls dirname basename chmod cp cmp sha256sum tr sleep printf true; do p=$(command -v "$t") && ln -sf "$p" "$tmp/nogh/$t"; done
 (cd "$r" && PATH="$tmp/nogh" GATES_CAPPED=1 /bin/sh tools/gates.sh --tier review --commit "$first" > "$tmp/gates.out" 2>&1); rc=$?
 out=$(cat "$tmp/gates.out")
 check "without gh the review refuses (unless --no-ci)" "2" "$rc"

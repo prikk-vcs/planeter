@@ -45,6 +45,13 @@
 # and never a path it did not make. (Only the stale keys of the review tier's shared target are removed beyond that, by their exact names,
 # and only those that carry this script's marker file.) The tools installed once per machine stay, in `.git-exclude/tmp/gate-tools/`.
 #
+# **A run is immune to edits of the scripts meanwhile.** A POSIX shell reads a script a piece at a time as it runs, so a script that runs for twenty
+# minutes and is rewritten on disk (the working copy is shared) resumes in the middle of the new text. At its very start the script therefore copies
+# itself and `tools/run-capped.sh` into a private directory (`mktemp -d`, mode 0700) and **re-executes from the copy** (`--snapshot-of ORIGINAL` marks the
+# copy, so that it does not copy again), prints `running from a snapshot of tools/gates.sh (<sha256>)`, and removes that one directory when it ends, on
+# every way out. A copy that cannot be made is a stop with a sentence, never a continuation from the original. Only the *runner* is snapshotted: the
+# steps run the commit's own files in the worktree this run made.
+#
 # `GATES_SELF_TEST_STEPS=FILE` replaces the tier's step list with the lines `name<TAB>command` of FILE (and skips the compiler check and the tools):
 # it is how this script's own tests (`tools/tests/gates.sh`) show the cleanup without building anything.
 set -u
@@ -56,9 +63,28 @@ case "${1:-}" in
   -h | --help) usage; exit 0 ;;
 esac
 
+# Run from a snapshot, before anything else is read: see the header. The first start makes the copy and re-executes from it; the copy (and the
+# process under the cap, which is the same copy again) knows it is one by `--snapshot-of`.
+if [ "${1:-}" != --snapshot-of ]; then
+  orig="$here/$(basename "$0")"
+  nosnap() { echo "gates: cannot make a snapshot of $orig ($1): stopping rather than run from a file that others may edit meanwhile" >&2; exit 2; }
+  snap=$(mktemp -d "${TMPDIR:-/tmp}/gates-snapshot.XXXXXX" 2> /dev/null) || nosnap "no private directory in ${TMPDIR:-/tmp}"
+  chmod 700 "$snap" || { rm -rf "$snap"; nosnap "chmod"; }
+  for f in gates.sh run-capped.sh; do
+    cp "$here/$f" "$snap/$f" 2> /dev/null || { rm -rf "$snap"; nosnap "cannot copy $f"; }
+  done
+  cmp -s "$orig" "$snap/gates.sh" || { rm -rf "$snap"; nosnap "the file changed while it was copied"; }
+  chmod 700 "$snap/gates.sh" "$snap/run-capped.sh" || { rm -rf "$snap"; nosnap "chmod"; }
+  exec sh "$snap/gates.sh" --snapshot-of "$orig" "$@"
+fi
+snapshot_of=${2:?--snapshot-of needs the original file}
+shift 2
+SNAPDIR=$here
+case "$SNAPDIR" in */gates-snapshot.*) trap 'rm -rf "$SNAPDIR"' EXIT ;; *) echo "gates: not running from a snapshot directory: $SNAPDIR" >&2; exit 2 ;; esac
+
 # Run inside the cap, once.
 if [ -z "${GATES_CAPPED:-}" ]; then
-  exec "$here/run-capped.sh" -- env GATES_CAPPED=1 sh "$here/gates.sh" "$@"
+  exec "$here/run-capped.sh" -- env GATES_CAPPED=1 sh "$here/gates.sh" --snapshot-of "$snapshot_of" "$@"
 fi
 
 tier="" commit=HEAD base="" runs="" sheet="" no_ci=0 fail_fast=0 plan_only=0
@@ -85,6 +111,7 @@ fi
 
 say() { echo "gates: $*"; }
 die() { echo "gates: $*" >&2; exit 2; }
+say "running from a snapshot of tools/gates.sh ($(sha256sum "$0" | cut -d' ' -f1))"
 
 repo=$(git rev-parse --show-toplevel 2> /dev/null) || die "run it inside the repository"
 cd "$repo" || exit 2
@@ -133,6 +160,8 @@ cleanup() {
   [ -n "$WT" ] && git worktree prune 2> /dev/null
   [ -n "$SCR" ] && [ -e "$SCR" ] && rm -rf "$SCR"
   [ -n "$PLAN" ] && rm -f "$PLAN"
+  # The snapshot of this runner, by its one path (it is the directory this script runs from; the check keeps a wrong path from being removed).
+  case "$SNAPDIR" in */gates-snapshot.*) rm -rf "$SNAPDIR" ;; esac
   say "cleanup done: worktree ${WT:-(none)} and scratch ${SCR:-(none)} removed"
 }
 trap cleanup EXIT
