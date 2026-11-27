@@ -232,6 +232,10 @@ pub type StoreFile = (String, u64, u128);
 /// Two equal signatures taken around a failed accept are positive evidence that the store did not change; anything else, or a signature
 /// that could not be read, is not. The same bounded walk as [`store_size`]: `lstat` only, symlinks never followed, at most
 /// [`MAX_STORE_ENTRIES`] entries, any failure is an error and never a guess.
+///
+/// **Strict on purpose, unlike the size walk and the digest walk** (IS-74, IS-75: an entry that vanishes between being listed and being looked at is
+/// nothing there): equal signatures are *positive evidence that the store did not change*, a file that vanished mid-walk **is** a change, and an error
+/// here makes the caller treat the store as possibly changed. Do not "fix" it by symmetry.
 pub fn store_signature(repo_root: &Path) -> Result<Vec<StoreFile>, StoreSizeError> {
     store_signature_limited(repo_root, MAX_STORE_ENTRIES)
 }

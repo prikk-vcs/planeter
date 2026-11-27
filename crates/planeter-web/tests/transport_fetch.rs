@@ -2412,3 +2412,56 @@ async fn a_have_list_hit_is_served_without_admission_and_a_miss_is_admitted_by_i
     assert_eq!(other.code(), "too_large");
     assert_eq!(fx.metrics.snapshot().refusals["over_budget"], 2);
 }
+
+// ================================================================================================ IS-75: a file that vanishes under the fingerprint refuses nothing
+
+/// `advertise` takes the repository's state fingerprint, which walks `<repo>/.prikk`. While a **writer** creates and removes files and directories in that
+/// store in a tight loop, 300 advertisements through the router are **all answered**: none is refused because a file was listed and gone by the time it
+/// was looked at (before IS-75 the walk failed with `NotFound` and the answer was a 503).
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn advertisements_are_all_answered_while_a_writer_creates_and_removes_files_in_the_store() {
+    if skip() {
+        return;
+    }
+    let fx = fixture("fingerprint-writer", Opts::default());
+    let store = fx.open_path.join(".prikk");
+    let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let writer = {
+        let stop = stop.clone();
+        std::thread::spawn(move || {
+            let mut i: u64 = 0;
+            while !stop.load(std::sync::atomic::Ordering::Relaxed) {
+                let file = store.join(format!("churn-{}", i % 8));
+                let dir = store.join(format!("churn-d-{}", i % 3));
+                let _ = std::fs::write(&file, b"x");
+                let _ = std::fs::create_dir_all(dir.join("inner"));
+                let _ = std::fs::write(dir.join("inner").join("f"), b"y");
+                let _ = std::fs::remove_file(&file);
+                let _ = std::fs::remove_dir_all(&dir);
+                i += 1;
+            }
+            i
+        })
+    };
+    let asked = 300;
+    let mut refused = Vec::new();
+    for _ in 0..asked {
+        let r = call(&fx.router, ADVERTISE, &[]).await;
+        if r.status != StatusCode::OK {
+            refused.push(r.status);
+        }
+    }
+    stop.store(true, std::sync::atomic::Ordering::Relaxed);
+    let rounds = writer.join().unwrap();
+    eprintln!(
+        "the writer made {rounds} rounds; {} of {asked} advertisements were refused",
+        refused.len()
+    );
+    assert!(rounds > 50, "the writer really ran ({rounds} rounds)");
+    assert!(
+        refused.is_empty(),
+        "{} of {asked} advertisements were refused: {:?}",
+        refused.len(),
+        &refused[..refused.len().min(5)]
+    );
+}
