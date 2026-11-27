@@ -4,7 +4,7 @@
 service that hosts prikk repositories and the collaboration around them: repositories, review, issues,
 CI, and packages.
 
-> **Status: v0 — 0.9.0 builds on 0.5.0, the first release in which a person can propose work, have it reviewed, and create a
+> **Status: v0 — 0.10.0 builds on 0.5.0, the first release in which a person can propose work, have it reviewed, and create a
 > repository; the forge still holds no key.** planeter hosts and serves prikk repositories (multi-repository
 > hosting, a browse UI and a read API, sign-in with local passwords or SSO, scoped tokens, per-repository
 > authorization), and lets a signed-in person **propose** a change (held for review; no branch moves),
@@ -17,6 +17,12 @@ CI, and packages.
 > 0.9.0 adds **maintainer keys you can see and, as the person who runs the server, add** (RFC 013): every repository page lists the keys the repository trusts and how each came,
 > `planeter operator key add` adds one with the server stopped, and the creation page says how many of the 64 key slots it leaves. **No key can be removed, retired or revoked yet,
 > and a delivery cannot add one.** It still **requires prikk 0.58.0**. The 37 Japanese messages of this release were read and accepted by the owner on 2026-11-25, and none is flagged.
+> 0.10.0 adds **accounts the person who runs the server can make and read** (RFC 014, step 1): `planeter operator account …` and `planeter operator token …` run **beside the
+> running server**, every act is written to the account's own log in sentences its holder is meant to read, disabling an account refuses its sign-ins and tokens at the next request and
+> deletes nothing, and the sign-in provider (OpenID Connect) has the settings a deployment needs: a provider on a private address, how long a sign-in lasts, and **turning password
+> sign-in off**. It also fixes two availability faults in the running service (IS-74, IS-75). **There are no pages yet where a person makes their own token or changes their own password**
+> (step 2). planeter's sign-in code was **tested with sui-id 0.92.0 on 2026-11-27**, in process, not through a running planeter server: the limits are in [`docs/accounts.md`](docs/accounts.md).
+> It still **requires prikk 0.58.0**. **160 Japanese messages of this release have not been read by the owner and ship flagged**; English is complete.
 > **1.0 is an explicit owner gate.**
 > Releases: [`CHANGELOG.md`](CHANGELOG.md) · plan: [`ROADMAP.md`](ROADMAP.md).
 
@@ -69,7 +75,7 @@ Install one of:
   cannot carry the prerequisites above).
 
 **On your own computer** (a person with their own prikk and keys): `cargo install planeter-client --locked`, or build it from source
-(`cargo build -p planeter-client --release --locked`). 0.5.0, 0.6.0, 0.7.0, 0.8.0 and 0.9.0 ship the client through crates.io and as source; release-asset binaries of it
+(`cargo build -p planeter-client --release --locked`). 0.5.0, 0.6.0, 0.7.0, 0.8.0, 0.9.0 and 0.10.0 ship the client through crates.io and as source; release-asset binaries of it
 are not part of this release. See [`docs/client.md`](docs/client.md).
 
 Run it:
@@ -107,9 +113,9 @@ deployment notes are in [`docs/RELEASING.md`](docs/RELEASING.md).
   land, those that cannot be kept), and **after the maintainer confirms** it becomes `heads/main`, with the open proposals made again from the artifacts the server kept. A refusal changes nothing and
   says what to do. The repository's pages say who delivered; a landed proposal's changes are shown from the sealed history. A fresh clone has the delivered branch exactly.
 - **Maintainer keys** (RFC 013, [`docs/keys.md`](docs/keys.md)): the repository and history pages (and `trusted_keys` in the `refs` JSON) list the keys the repository trusts and how each came (creation, the server's operator, a delivery, or not recorded); with the server stopped, the operator adds one with `planeter operator key add`, with a reason everyone who can see the repository reads. A key is never removed (prikk cannot do it without breaking `verify`); at most 64 keys, and the creation page says how many slots are left.
-- **Accounts and tokens** (RFC 014 step 1, [`docs/accounts.md`](docs/accounts.md)): the person who runs the server makes accounts and their access tokens with `planeter operator account …` and `planeter operator token …` (beside the running server; a password is never an argument, a token is shown once and always ends, disabling an account refuses its sign-ins and tokens at once and nothing is deleted); a sign-in provider (OpenID Connect) is linked by `(issuer, subject)` only, never by email; `PLANETER_SESSION_HOURS` sets how long a sign-in lasts. The page says what the provider told us, what it risks to allow a provider on a private address, and that a person disabled at the provider must be disabled here too.
-- **Languages** (RFC 012): English and Japanese (signed off by the owner on 2026-10-31, and read again on 2026-11-14, on 2026-11-17, on 2026-11-21 and on 2026-11-25, the last time with the 37 messages of the maintainer keys) — the pages, the API's error messages and `planeter-client`; a caller who does not ask is English.
-- **Not yet:** removing, retiring or revoking a maintainer key, adding one by a delivery, self-service pages for accounts (a person's own tokens, password, sign-ins and security log: RFC 014 step 2), provisioning and a collaborators page (step 3), a second factor (the provider's job) or email recovery (never in planeter), required approvals, several followed branches, a delta delivery (the whole history is sent each time, up to
+- **Accounts and tokens** (RFC 014 step 1, [`docs/accounts.md`](docs/accounts.md)): the person who runs the server makes accounts and their access tokens with `planeter operator account …` and `planeter operator token …` (beside the running server; a password is never an argument, a token is shown once and always ends, disabling an account refuses its sign-ins and tokens at once and nothing is deleted); a sign-in provider (OpenID Connect) is linked by `(issuer, subject)` only, never by email; `PLANETER_SESSION_HOURS` sets how long a sign-in lasts; `PLANETER_LOCAL_PASSWORDS=off` leaves the provider as the only way in. The page says what the provider told us and what was measured (sui-id 0.92.0, with its limits), what it risks to allow a provider on a private address, and that a person disabled at the provider must be disabled here too.
+- **Languages** (RFC 012): English and Japanese (signed off by the owner on 2026-10-31, and read again on 2026-11-14, on 2026-11-17, on 2026-11-21 and on 2026-11-25, the last time with the 37 messages of the maintainer keys; **the 160 messages of 0.10.0's accounts and sign-in are not yet read and ship flagged**) — the pages, the API's error messages and `planeter-client`; a caller who does not ask is English.
+- **Not yet:** removing, retiring or revoking a maintainer key, adding one by a delivery, self-service pages for accounts (a person's own tokens, password, sign-ins and security log: RFC 014 step 2), provisioning and a collaborators page (step 3), a second factor (the provider's job) or email recovery (never in planeter), a private certificate authority for the provider (and so a sign-in through a running server against one that has been measured), a periodic check that a person still exists at the provider, required approvals, several followed branches, a delta delivery (the whole history is sent each time, up to
   `PLANETER_IMPORT_MAX_MB`), a web form for delivering (a browser cannot sign), issues, checks and CI, packages. SSH is not planned: transport is https behind your
   reverse proxy. The [roadmap](ROADMAP.md) has the order and the reasons.
 
