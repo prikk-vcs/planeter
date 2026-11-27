@@ -53,6 +53,7 @@ gates() {
 state() { echo "worktrees=$(git -C "$r" worktree list | wc -l) leftovers=$(ls "$r/.git-exclude/tmp/arch" 2> /dev/null | wc -l)"; }
 start=$(state)
 steps="$tmp/steps.tsv"
+osheet="$tmp/owner-sheet.md" # the sheet the owner reads (the release tier requires one to be named; the fake steps never open it)
 
 # --- the plan of each tier, for diffs of different kinds (compiler checks are real here: the pin is read from the fixture's ci.yml; the
 # self-test hook is not used, so the toolchain must be installed for these; they are skipped, said, when it is not)
@@ -77,7 +78,7 @@ if rustup toolchain list 2> /dev/null | grep -q "^$pin-"; then
   absent "review plan: an absolute --sheet is not prefixed" "$r/elsewhere" "$out"
   out=$(gates --tier review --commit "$lock_change" --base "$first" --runs 2 --plan)
   contains "review plan: --runs 2 is two runs" "tests-with-prikk-2" "$out"
-  out=$(gates --tier release --commit "$docs_only" --plan)
+  out=$(gates --tier release --commit "$docs_only" --sheet "$osheet" --plan)
   for s in fmt floor-check pin-check clippy test-build tests-with-prikk-3 tests-without-prikk deny audit enf2 doc msrv-check publish-dry-run sheet-check; do contains "release plan has $s" "$s" "$out"; done
   out=$(gates --tier commit --plan)
   contains "commit plan: fmt and clippy" "clippy" "$out"
@@ -92,24 +93,44 @@ else
   echo "skip the plan tests: the toolchain $pin is not installed here"
 fi
 
+# --- the sheet step (RFC 010 Amendment 1): the review tier generates its own; a supplied sheet is an extra check, named as such; the release tier needs one
+if rustup toolchain list 2> /dev/null | grep -q "^$pin-"; then
+  out=$(gates --tier review --commit "$docs_only" --plan)
+  contains "review plan: without --sheet the sheet step generates a sheet from the live catalogs" '--out "$GATES_SHEET_OUT"' "$out"
+  contains "review plan: ...and checks what it generated" '--check "$GATES_SHEET_OUT"' "$out"
+  absent "review plan: ...and has no step for a supplied sheet" "supplied-sheet" "$out"
+  out=$(gates --tier review --commit "$docs_only" --sheet "$osheet" --plan)
+  contains "review plan: with --sheet there is a separate supplied-sheet step" "supplied-sheet" "$out"
+  contains "review plan: ...that checks that file" "--check \"$osheet\"" "$out"
+  contains "review plan: ...next to the generated one" "GATES_SHEET_OUT" "$out"
+fi
+out=$(gates --tier release --commit "$first" --plan); rc=$?
+check "the release tier without --sheet is refused: exit 2" "2" "$rc"
+contains "...saying what to name" "needs --sheet FILE" "$out"
+absent "...and nothing was started (no plan, no worktree)" "steps:" "$out"
+check "...and it left nothing behind" "$start" "$(state)"
+out=$(gates --tier release --commit "$first" --sheet "$osheet" --plan); rc=$?
+check "the release tier with --sheet plans as before" "0" "$rc"
+contains "...checking the named sheet" "--check \"$osheet\"" "$out"
+absent "...and generating none" "GATES_SHEET_OUT" "$out"
 # --- the cleanup, with fake steps
 use_steps() { printf '%b' "$1" > "$steps"; }
 export GATES_SELF_TEST_STEPS="$steps"
 use_steps 'one\techo first step ran\n'
-out=$(gates --tier release --commit "$first" --no-ci); rc=$?
+out=$(gates --tier release --commit "$first" --sheet "$osheet" --no-ci); rc=$?
 check "a passing run exits 0" "0" "$rc"
 contains "its table says the step passed" "one " "$out"
 check "a passing run leaves the worktrees and the scratch as they were" "$start" "$(state)"
 
 use_steps 'a\ttrue\nb\texit 7\nc\ttrue\n'
-out=$(gates --tier release --commit "$first" --no-ci); rc=$?
+out=$(gates --tier release --commit "$first" --sheet "$osheet" --no-ci); rc=$?
 check "a failing step: the exit status is the first failing step's" "7" "$rc"
 contains "...the later step ran (without --fail-fast)" "c " "$out"
 contains "...and the report names the first failure" "first failing step is b (exit 7)" "$out"
 check "a failing step: worktrees and scratch as they were" "$start" "$(state)"
 check "a failing step: the worktree directory is gone" "no" "$([ -e "$r/.git-exclude/tmp/arch/gates-$(echo "$first" | cut -c1-8)-"* ] 2> /dev/null && echo yes || echo no)"
 
-out=$(gates --tier release --commit "$first" --no-ci --fail-fast); rc=$?
+out=$(gates --tier release --commit "$first" --sheet "$osheet" --no-ci --fail-fast); rc=$?
 check "--fail-fast: still 7" "7" "$rc"
 absent "--fail-fast: step c did not run" "=== step: c" "$out"
 check "--fail-fast: cleaned up" "$start" "$(state)"
@@ -118,7 +139,7 @@ mark=$((900000 + $$ % 90000)) # a duration no other process on the machine is sl
 # an interrupted run: the step sends INT (then TERM) to the script that runs it, which is its parent
 if [ -n "$DEFSIG" ]; then
 use_steps "a\ttrue\nb\tkill -INT \$PPID; sleep $mark\nc\ttrue\n"
-out=$(gates --tier release --commit "$first" --no-ci); rc=$?
+out=$(gates --tier release --commit "$first" --sheet "$osheet" --no-ci); rc=$?
 check "INT: the exit status is 130" "130" "$rc"
 contains "INT: the cleanup ran" "cleanup done" "$out"
 absent "INT: the next step did not run" "=== step: c" "$out"
@@ -138,9 +159,49 @@ for _ in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
 done
 check "no step is left running after an interrupt" "0" "$left"
 
+# --- the sheet step, continued: a stale supplied sheet (fake steps)
+# a stale supplied sheet fails only its own check, and says whose it is (fake steps: the names are the plan's)
+use_steps 'tests\ttrue\nsheet-check\ttrue\nsupplied-sheet\texit 1\ndoc\ttrue\n'
+out=$(gates --tier review --commit "$first" --no-ci --sheet "$osheet"); rc=$?
+check "a stale supplied sheet fails the run (exit 1)" "1" "$rc"
+contains "...saying the supplied sheet does not match the catalogs, naming the file" "the supplied sheet does not match the catalogs: $osheet" "$out"
+contains "...that the commit's own steps all passed" "Every step of the commit passed" "$out"
+absent "...and it is not reported as a failing step of the commit" "first failing step is supplied-sheet" "$out"
+contains "...the later step still ran" "doc " "$out"
+check "...and it cleaned up" "$start" "$(state)"
+use_steps 'tests\texit 3\nsupplied-sheet\texit 1\n'
+out=$(gates --tier review --commit "$first" --no-ci --sheet "$osheet"); rc=$?
+check "a failing step of the commit and a stale sheet: the exit is the step's" "3" "$rc"
+contains "...the first failing step is the commit's" "first failing step is tests (exit 3)" "$out"
+contains "...and the stale sheet is named too" "and the supplied sheet does not match the catalogs" "$out"
+
+# --- the shared target says who may use it, and is refused to anything but this run's own fresh worktree
+use_steps 'show\tprintf "TARGET=%s\\n" "$CARGO_TARGET_DIR"\n'
+out=$(gates --tier review --commit "$first" --no-ci); rc=$?
+check "a fresh worktree of this run uses the shared target" "0" "$rc"
+contains "...saying so in its header line" "(the worktree is fresh: made by this run" "$out"
+contains "...the step sees the shared target" "TARGET=$r/.git-exclude/tmp/gate-target-" "$out"
+marker=$(ls "$r"/.git-exclude/tmp/gate-target-*/.planeter-gates-target 2> /dev/null | head -1)
+contains "the marker file explains the cache" "Do not point another checkout at it" "$(cat "$marker" 2> /dev/null)"
+contains "...and how to use it by hand" "make a fresh worktree" "$(cat "$marker" 2> /dev/null)"
+rm -rf "$r"/.git-exclude/tmp/gate-target-*
+# a fake existing checkout (older files than anything cached) is refused the shared target
+mkdir -p "$tmp/old-checkout"
+echo "old file" > "$tmp/old-checkout/a.txt"
+touch -d '2020-01-01' "$tmp/old-checkout/a.txt"
+out=$(GATES_EXISTING_CHECKOUT="$tmp/old-checkout" gates --tier review --commit "$first" --no-ci); rc=$?
+check "an existing checkout still runs the steps" "0" "$rc"
+contains "...says it is not a fresh worktree and is refused the shared target" "NOT using the shared target" "$out"
+absent "...does not use the shared target" "shared target: $r" "$out"
+absent "...the step's target is not a gate-target directory" "TARGET=$r/.git-exclude/tmp/gate-target-" "$out"
+contains "...it is a target of its own in the scratch" "TARGET=$r/.git-exclude/tmp/arch/gates-scratch-" "$out"
+check "...no shared target directory was made" "0" "$(ls -d "$r"/.git-exclude/tmp/gate-target-* 2> /dev/null | wc -l)"
+check "...and the existing checkout was not removed" "yes" "$([ -e "$tmp/old-checkout/a.txt" ] && echo yes || echo no)"
+check "...and it cleaned up" "$start" "$(state)"
+
 # --- the release tier refuses a shared target (and cleans up what it had made)
 use_steps 'one\techo should not run\n'
-out=$(CARGO_TARGET_DIR="$tmp/shared" gates --tier release --commit "$first" --no-ci); rc=$?
+out=$(CARGO_TARGET_DIR="$tmp/shared" gates --tier release --commit "$first" --sheet "$osheet" --no-ci); rc=$?
 check "release refuses a shared target: exit 2" "2" "$rc"
 contains "...with a sentence" "refuses a shared one" "$out"
 absent "...and no step ran" "=== step: one" "$out"

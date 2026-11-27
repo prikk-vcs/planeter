@@ -3,7 +3,7 @@
 #
 #   tools/gates.sh --tier commit  [--fail-fast]
 #   tools/gates.sh --tier review  [--commit REV] [--base REV] [--runs N] [--sheet FILE] [--no-ci] [--fail-fast]
-#   tools/gates.sh --tier release [--commit REV] [--runs N] [--sheet FILE] [--no-ci] [--fail-fast]
+#   tools/gates.sh --tier release --sheet FILE [--commit REV] [--runs N] [--no-ci] [--fail-fast]     (--sheet is REQUIRED in the release tier)
 #   tools/gates.sh --tier T --plan          (print what the tier would run, and stop)
 #
 # **Every tier** runs inside `tools/run-capped.sh` (the development-machine budget: it limits what running the gates takes from a developer's
@@ -20,15 +20,25 @@
 #   review   the architect, or a team member, on someone else's commit: **reads CI for that exact commit first** (`gh`) and refuses to go on
 #            unless it is complete and green (`--no-ci` says so loudly), then runs what CI cannot: the workspace tests **with prikk** once
 #            (`--runs N` for more), cargo-deny and cargo-audit on a **freshly fetched** advisory database (the tools pinned as the workflows
-#            pin them, installed once per machine into `.git-exclude/tmp/gate-tools/`), the sheet check, and what the change touches (the diff of
+#            pin them, installed once per machine into `.git-exclude/tmp/gate-tools/`), the sheet step (**it needs no file**: it generates a Japanese
+#            sheet from the worktree's live catalogs into the run's scratch and checks it; `--sheet FILE` ADDS a check of that file, reported as "the
+#            supplied sheet does not match the catalogs" and never as a failing step of the commit), and what the change touches (the diff of
 #            `--base`, default `REV^`, to `REV`): `doc` when documents, public items or a `Cargo.toml` changed; the 1.89.0 check and the publish
 #            dry run when a `Cargo.toml`, `Cargo.lock` or `rust-version` changed; ENF-2 and pin-check when `.github/`, the `Dockerfile`,
 #            `tools/` or the manifests changed. One shared `CARGO_TARGET_DIR` keyed by compiler and `Cargo.lock`, `CARGO_INCREMENTAL=0` (what CI
-#            sets). **A review's green is not a release's evidence.**
+#            sets); **the shared target is for this script's own fresh worktrees only** (see below). **A review's green is not a release's evidence.**
 #   release  a release candidate and the tag commit: **a clean worktree and an empty target, always** (a `CARGO_TARGET_DIR` in the
 #            environment is refused), fmt, floor, pin, clippy, the test build, the workspace tests with prikk three times and once without it,
-#            deny, audit (fresh database), ENF-2, doc, the 1.89.0 check, the publish dry run (its own target), the sheet check, and CI read as in
-#            the review tier; everything it made is removed at the end, the target included.
+#            deny, audit (fresh database), ENF-2, doc, the 1.89.0 check, the publish dry run (its own target), the check of **the sheet the owner
+#            reads**, which `--sheet` must name (a release is not tagged on a sheet nobody named: without it the script says so and starts
+#            nothing), and CI read as in the review tier; everything it made is removed at the end, the target included.
+#
+# **The shared target of the review tier** (`.git-exclude/tmp/gate-target-<compiler>-<lock>/`) is a cache that saves the third-party dependencies and
+# the disk, **not** the workspace's own compile: cargo takes a workspace artifact as current by file times, so a worktree this run has just made
+# (its files are newer than anything cached) rebuilds its own crates, while an OLDER checkout pointed at the same target is given the cached binary of
+# another commit and another path. The script therefore uses the shared target only for a worktree it made in this run (every file newer than the run's
+# start), says so in its header, and **refuses it for anything else** (a target of its own in the scratch). `GATES_EXISTING_CHECKOUT=DIR` runs the
+# steps in an existing checkout instead of a fresh worktree (the script's own tests use it); the shared target is then never used.
 #
 # **The cleanup runs on every way out** (the end, a failing step, `INT`, `TERM`): `git worktree remove --force` and `git worktree prune`
 # for the worktree this run made, and `rm -rf` of its scratch directory, each **by the one explicit path this run created**, never a glob
@@ -68,6 +78,10 @@ done
 # A relative --sheet is relative to where the script was run, and the steps run in another directory (the gate's worktree): make it absolute now.
 case "$sheet" in "" | /*) ;; *) sheet="$PWD/$sheet" ;; esac
 case "$tier" in commit | review | release) ;; *) echo "gates: --tier commit, review or release is required" >&2; exit 2 ;; esac
+if [ "$tier" = release ] && [ -z "$sheet" ]; then
+  echo "gates: the release tier needs --sheet FILE: the Japanese reading sheet the owner reads (a release is not tagged on a sheet nobody named). Nothing was started." >&2
+  exit 2
+fi
 
 say() { echo "gates: $*"; }
 die() { echo "gates: $*" >&2; exit 2; }
@@ -128,7 +142,6 @@ trap 'cleanup; exit 143' TERM
 # ---------------------------------------------------------------------------------------------------- the plan of each tier
 runs_with=${runs:-1}
 [ "$tier" = release ] && runs_with=${runs:-3}
-sheet=${sheet:-$repo/.git-exclude/review-requests/japanese-review-sheet.md}
 changed=""
 if [ "$tier" = review ]; then
   changed=$(git diff --name-only "${base:-$sha^}" "$sha" 2> /dev/null)
@@ -173,7 +186,10 @@ case "$tier" in
     while [ "$i" -le "$runs_with" ]; do plan "tests-with-prikk-$i" "$tests_with"; i=$((i + 1)); done
     plan deny "cargo deny check"
     plan audit "cargo audit --db \"\$GATES_ADVDB\" --no-fetch"
-    plan sheet-check "cargo run -q --locked -p planeter-i18n-sheet -- --lang ja --check \"$sheet\""
+    # The sheet step needs no file: a sheet is generated from this worktree's live catalogs and checked (the catalogs are complete and the generator
+    # accepts them). A supplied sheet is an extra check of that file, and its failure says whose it is.
+    plan sheet-check "cargo run -q --locked -p planeter-i18n-sheet -- --lang ja --out \"\$GATES_SHEET_OUT\" && cargo run -q --locked -p planeter-i18n-sheet -- --lang ja --check \"\$GATES_SHEET_OUT\""
+    [ -n "$sheet" ] && plan supplied-sheet "cargo run -q --locked -p planeter-i18n-sheet -- --lang ja --check \"$sheet\""
     if touches '(^docs/|\.md$|(^|/)Cargo\.toml$)' || public_items_changed; then plan doc "RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps --locked"; fi
     if touches '(^|/)Cargo\.(toml|lock)$'; then
       plan msrv-check "cargo +$msrv check --workspace --locked"
@@ -219,21 +235,34 @@ print_header
 if [ "$plan_only" = 1 ]; then rm -f "$PLAN"; exit 0; fi
 
 work="$repo"
+FRESH=0
 if [ "$tier" != commit ]; then
   arch="$repo/.git-exclude/tmp/arch"
   mkdir -p "$arch" || die "cannot make $arch"
   SCR="$arch/gates-scratch-$short-$$"
   mkdir -p "$SCR" || die "cannot make $SCR"
-  WT="$arch/gates-$short-$$"
-  git worktree add -q --detach "$WT" "$sha" || die "cannot make a worktree of $short"
-  work="$WT"
-  say "worktree: $WT   scratch: $SCR"
+  : > "$SCR/.run-start"
+  if [ -n "${GATES_EXISTING_CHECKOUT:-}" ] && [ "$tier" = review ]; then
+    # An existing checkout (the script's own tests, or a deliberate run): never a worktree of this run's, never the shared target.
+    work="$GATES_EXISTING_CHECKOUT"
+    [ -d "$work" ] || die "GATES_EXISTING_CHECKOUT is not a directory: $work"
+    say "existing checkout: $work   scratch: $SCR"
+  else
+    WT="$arch/gates-$short-$$"
+    sleep 0.05
+    git worktree add -q --detach "$WT" "$sha" || die "cannot make a worktree of $short"
+    work="$WT"
+    # Fresh: made by this run a moment ago, and every file of it newer than the run's start (nothing older that a cached artifact could outlast).
+    if [ -z "$(find "$WT" -path "$WT/.git" -prune -o -type f ! -newer "$SCR/.run-start" -print -quit 2> /dev/null)" ]; then FRESH=1; fi
+    say "worktree: $WT   scratch: $SCR"
+  fi
 fi
 
 # ---------------------------------------------------------------------------------------------------- the environment of the steps
 GATES_DRYRUN_TARGET="$SCR/dry-run-target"
 GATES_ADVDB="$SCR/advisory-db"
-export GATES_DRYRUN_TARGET GATES_ADVDB
+GATES_SHEET_OUT="$SCR/sheet.md"
+export GATES_DRYRUN_TARGET GATES_ADVDB GATES_SHEET_OUT
 case "$tier" in
   release)
     [ -z "${CARGO_TARGET_DIR:-}" ] || die "the release tier builds in an empty target of its own and refuses a shared one: CARGO_TARGET_DIR is set (to $CARGO_TARGET_DIR); unset it"
@@ -243,16 +272,25 @@ case "$tier" in
   review)
     CARGO_INCREMENTAL=0
     export CARGO_INCREMENTAL
-    if [ -z "$selftest" ]; then
+    if [ "$FRESH" = 1 ]; then
       lock=$(git show "$sha:Cargo.lock" 2> /dev/null | sha256sum | cut -c1-12)
       key="gate-target-$(rustc --version | cut -d' ' -f2)-$lock"
       CARGO_TARGET_DIR="$repo/.git-exclude/tmp/$key"
       for d in "$repo"/.git-exclude/tmp/gate-target-*; do
         [ -d "$d" ] && [ -e "$d/.planeter-gates-target" ] && [ "$d" != "$CARGO_TARGET_DIR" ] && { say "removing the stale shared target $d"; rm -rf "$d"; }
       done
-      mkdir -p "$CARGO_TARGET_DIR" && : > "$CARGO_TARGET_DIR/.planeter-gates-target"
+      mkdir -p "$CARGO_TARGET_DIR" && cat > "$CARGO_TARGET_DIR/.planeter-gates-target" <<'MARK'
+Made by tools/gates.sh for its own fresh worktrees. Do not point another checkout at it: a cached workspace artifact can be taken as current for older
+files and be a different commit's. To use it by hand, make a fresh worktree. (It is a cache for the third-party dependencies and the disk, not for the
+workspace's own compile.)
+MARK
       export CARGO_TARGET_DIR
-      say "shared target: $CARGO_TARGET_DIR"
+      say "shared target: $CARGO_TARGET_DIR   (the worktree is fresh: made by this run, every file newer than its start)"
+    else
+      CARGO_TARGET_DIR="$SCR/target"
+      mkdir -p "$CARGO_TARGET_DIR"
+      export CARGO_TARGET_DIR
+      say "NOT using the shared target: the checkout is not a fresh worktree of this run, and a cached workspace artifact could be taken as current for older files and be a different commit's. A target of its own: $CARGO_TARGET_DIR"
     fi
     ;;
 esac
@@ -320,7 +358,7 @@ cpu_usec() { awk '/^usage_usec/{print $2}' "$cg/cpu.stat" 2> /dev/null; }
 RESULTS="$SCR/results.tsv"
 [ -n "$SCR" ] || RESULTS=$(mktemp "${TMPDIR:-/tmp}/gates-results.XXXXXX")
 : > "$RESULTS"
-first_rc=0 first_name=""
+first_rc=0 first_name="" sup_rc=0
 while IFS="$(printf '\t')" read -r name cmd; do
   [ -n "$name" ] || continue
   say "=== step: $name"
@@ -341,8 +379,14 @@ while IFS="$(printf '\t')" read -r name cmd; do
   [ -r "$cg/memory.peak" ] && peak=$(($(cat "$cg/memory.peak") / 1048576))
   printf '%s\t%s\t%s\t%s\t%s\n' "$name" "$rc" "$((t1 - t0))" "$cpu" "$peak" >> "$RESULTS"
   if [ "$rc" -ne 0 ]; then
-    say "step $name FAILED with $rc"
-    if [ "$first_rc" -eq 0 ]; then first_rc=$rc first_name=$name; fi
+    if [ "$name" = supplied-sheet ]; then
+      # A fact about the file somebody supplied, not about the commit under review.
+      say "the supplied sheet does not match the catalogs: $sheet (this says nothing about the commit; regenerate that file)"
+      [ "$sup_rc" -eq 0 ] && sup_rc=$rc
+    else
+      say "step $name FAILED with $rc"
+      if [ "$first_rc" -eq 0 ]; then first_rc=$rc first_name=$name; fi
+    fi
     [ "$fail_fast" = 1 ] && break
   fi
 done < "$PLAN"
@@ -354,7 +398,12 @@ awk -F'\t' '{printf "%-24s %6s %8s %9s %12s\n", $1, $2, $3, $4, $5; w+=$3; if ($
 say "* peak MiB is the scope's memory.peak so far (it includes page cache); CPU s is the scope's cpu.stat difference around the step"
 if [ "$first_rc" -ne 0 ]; then
   say "FAILED: the first failing step is $first_name (exit $first_rc)"
+  [ "$sup_rc" -ne 0 ] && say "and the supplied sheet does not match the catalogs: $sheet"
   exit "$first_rc"
+fi
+if [ "$sup_rc" -ne 0 ]; then
+  say "FAILED: the supplied sheet does not match the catalogs: $sheet. Every step of the commit passed; the file is stale, not the commit."
+  exit "$sup_rc"
 fi
 say "all steps passed"
 exit 0

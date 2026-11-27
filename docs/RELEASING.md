@@ -26,12 +26,18 @@ published until M4. **Tagging and publishing are owner-authorized.**
      touched crates' dependents are CI's to run).
    * **review** (the architect, or a team member, on someone else's commit): it **reads CI for that exact commit and refuses to go on unless it
      is complete and green** (`--no-ci` says so loudly), then runs only what CI cannot: the workspace tests **with prikk** once, cargo-deny and
-     cargo-audit on a freshly fetched advisory database, the sheet check, and what the change touches (`doc`, the 1.89.0 check and the publish
-     dry run, ENF-2 and pin-check, by the diff). It builds on one shared target keyed by compiler and `Cargo.lock` with `CARGO_INCREMENTAL=0`.
-     **A review's green is not a release's evidence.**
+     cargo-audit on a freshly fetched advisory database, the sheet step, and what the change touches (`doc`, the 1.89.0 check and the publish
+     dry run, ENF-2 and pin-check, by the diff). **The sheet step needs no file**: it generates a Japanese sheet from the worktree's own catalogs and checks
+     it; `--sheet FILE` adds a check of that file (the reading sheet someone keeps), and a stale one is reported as "the supplied sheet does not match the
+     catalogs", not as a failing step of the commit. It builds on one shared target keyed by compiler and `Cargo.lock` with `CARGO_INCREMENTAL=0`; **the
+     shared target is a cache for the third-party dependencies and the disk, not for the workspace's own compile, and it is for the script's own fresh
+     worktrees only** (cargo takes an artifact as current by file times, so an older checkout pointed at it is given another commit's binary): the script
+     refuses it for anything that is not a worktree it made in that run. **A review's green is not a
+     release's evidence.**
    * **release** (a release candidate and the tag commit): a **clean worktree and an empty target, always** (a shared target is refused), the
      pinned compiler **and** the 1.89.0 check, fmt, floor, pin, clippy, the test build, the workspace tests with prikk **three times in a row** and
-     once without it, deny, audit, ENF-2, doc, the publish dry run, the sheet check, and CI read as in the review tier; it removes everything it
+     once without it, deny, audit, ENF-2, doc, the publish dry run, the check of **the sheet the owner reads**, which `--sheet FILE` must name (the script
+     refuses to start without it), and CI read as in the review tier; it removes everything it
      made, the 20 GiB included. A release candidate is built clean because the claim "this commit builds from nothing" can only be shown by an
      empty directory.
    **Limits are derived from the machine** (`tools/run-capped.sh` prints what it chose and why): CPU quota an eighth of the cores' worth, 200–800 %
