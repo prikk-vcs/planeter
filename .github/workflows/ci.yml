@@ -42,6 +42,64 @@ jobs:
       - name: Test (includes the layering gate)
         run: cargo test --workspace --locked
 
+  # RFC 010 (CI with prikk): the tests that need prikk (the real-server, kill-point, delivery and creation tests) run here, in parallel with `build`, with the
+  # pinned prikk the `client` job installs (the same variable, the same asset, the same checksum check, the same place on PATH). The tests that need
+  # bubblewrap with user namespaces still skip on this runner (Ubuntu 24.04 restricts them) and say so; nothing else is skipped for lack of prikk.
+  tests-with-prikk:
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Rust toolchain (pinned, one compiler for CI and release)
+        run: |
+          set -euo pipefail
+          rustup toolchain install 1.99.1 --profile minimal --no-self-update
+          rustup default 1.99.1
+          rustc --version
+          cargo --version
+
+      - name: Install prikk (the floor, checksum verified)
+        run: |
+          set -euo pipefail
+          T=x86_64-unknown-linux-gnu
+          mkdir -p "$RUNNER_TEMP/prikk-dl" "$RUNNER_TEMP/prikk-bin"
+          cd "$RUNNER_TEMP/prikk-dl"
+          curl -fsSLO "https://github.com/prikk-vcs/prikk/releases/download/${PRIKK_VERSION}/prikk-${T}.tar.gz"
+          curl -fsSLO "https://github.com/prikk-vcs/prikk/releases/download/${PRIKK_VERSION}/prikk-${T}.tar.gz.sha256"
+          cat "prikk-${T}.tar.gz.sha256"
+          ls -l "prikk-${T}.tar.gz"
+          sha256sum -c "prikk-${T}.tar.gz.sha256"
+          tar -xzf "prikk-${T}.tar.gz" -C "$RUNNER_TEMP/prikk-bin"
+          ls -l "$RUNNER_TEMP/prikk-bin"
+          echo "$RUNNER_TEMP/prikk-bin" >> "$GITHUB_PATH"
+
+      - name: prikk and the sandbox tools on this runner
+        run: |
+          prikk --version
+          for t in bwrap prlimit script stty python3 curl git; do if command -v "$t" >/dev/null 2>&1; then echo "$t: present"; else echo "$t: absent"; fi; done
+          if bwrap --ro-bind / / --unshare-user true 2>&1; then echo "bubblewrap with user namespaces: works"; else echo "bubblewrap with user namespaces: does not work here"; fi
+
+      - name: Test (with prikk)
+        run: |
+          set -uo pipefail
+          start=$(date +%s)
+          cargo test --workspace --locked --no-fail-fast -- --nocapture 2>&1 | tee test.log
+          rc=${PIPESTATUS[0]}
+          echo "tests with prikk: $(( $(date +%s) - start )) s"
+          exit "$rc"
+
+      - name: Which tests skipped, and why (a measurement)
+        if: always()
+        run: |
+          {
+            echo "### Skipped on this runner"
+            grep -E 'skipping|SKIPPED' test.log | sed -E 's/^.*(skipping|SKIPPED)/\1/' | sort | uniq -c | sort -rn
+            echo "### Totals"
+            grep -E '^test result' test.log | awk '{p+=$4; f+=$6; i+=$8} END {print "passed " p ", failed " f ", ignored " i}'
+          } | tee -a "$GITHUB_STEP_SUMMARY"
+          awk '/^ +Running /{b=$2" "$3} /skipping|SKIPPED/{n[b]++} END {for (k in n) printf "%4d  %s\n", n[k], k}' test.log | sort -rn
+
   msrv:
     # IS-32 (RFC 010 D-5): the declared minimum compiler is built with, so the claim cannot be false.
     # This job's toolchain must equal `rust-version` in Cargo.toml (pin-check enforces it); it is the one
