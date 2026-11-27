@@ -350,20 +350,44 @@ Three more are about how it behaves:
 | Sign-ins last {count} hour. ‖ Sign-ins last {count} hours. | always |
 | Password sign-in is off (PLANETER_LOCAL_PASSWORDS=off): people sign in through the sign-in provider only. Passwords already set are kept. | `PLANETER_LOCAL_PASSWORDS=off` |
 
-#### What the provider told us, and what planeter does about it
+#### What the provider told us, what was measured, and what planeter does about it
 
-This is the provider planeter prefers, sui-id. What follows is what its architect **told** us from its source (the ledger's rows ID-1 to ID-10, each with its status and its limits there). **It is not a measurement, and it is not a claim about a release: planeter's interoperability test against a real release has not run, and this page says nothing like "tested with" a provider. A provider other than sui-id works if it speaks OpenID Connect the same way; planeter claims nothing about one it has not tested.**
+This is the provider planeter prefers, sui-id. Two kinds of fact follow: what its architect **told** us from its source, and what planeter **measured** (the ledger's rows ID-1 to ID-12 hold each fact with its status and its limits). planeter's sign-in code was tested with sui-id 0.92.0 on 2026-11-27. That sentence has limits, and they are part of it: the test ran planeter's own provider code, in process, against a local build of that one release behind a throw-away certificate authority, **not through a running planeter server** (its pages, its cookies and the confined `curl` were not exercised, and a private certificate authority is not supported yet, above); it says nothing about any other release; and **not shown** were: that a deleted person's identifier is never reused, the values of `acr` and `amr` for a second factor (none was set up), that a new key is published "not before" it becomes the signer, the provider's promise of stability and its embeddable form. A provider other than sui-id works if it speaks OpenID Connect the same way; planeter claims nothing about one it has not tested.
 
-* **ID-1.** The provider says `email_verified` is always false. planeter stores an email only when it is verified, so it stores **none** from this provider, which is the safe result.
-* **ID-2.** The ID token carries no `name` and no `preferred_username` (those live at the userinfo endpoint), and its only algorithm is EdDSA. So planeter **reads neither**, asks for **no userinfo**, and the person's name and handle are the ones the operator typed. Nothing the provider says about a name can reach a page.
-* **ID-3.** `acr` and `amr` say which factors were used, not when; planeter does not use them to judge how recent a sign-in was.
-* **ID-4.** The provider **silently ignores `prompt` and `max_age`**, so planeter **sends neither**, and never reads a successful answer as proof of a recent sign-in.
-* **ID-5.** The provider has no logout notification. Disabling a person at the provider ends their sign-ins *there*; planeter is not told. **A planeter sign-in outlives the provider's, so the operator disables a person in both places** (below).
-* **ID-6.** The `sub` is a random identifier that is never reused; planeter stores it, with the issuer, as the identity. Everything else the provider says about a person is untrusted text, and is not read (ID-2).
-* **ID-7.** The provider keeps its previous signing key in its key set until an administrator deletes it, and publishes a new key when it becomes the signer. planeter fetches the key set again once when it meets an unknown key, and **sends that request with `Cache-Control: no-cache`** so that a shared cache cannot answer with the old copy.
-* **ID-8.** Nothing at the provider is under a stability promise before its 1.0, and no production-readiness milestone has started. planeter does not call it production-ready.
-* **ID-9.** An embeddable form of the provider is a contract with no code. planeter does not embed an identity provider.
-* **ID-10.** The interoperability test must run against a **tagged release**, with two added checks (`prompt=login` is not read as a recent sign-in; a person disabled at the provider ends the planeter sign-in, or the test reports how long it continues). **Open.**
+**What the nine checks showed**, each against sui-id 0.92.0:
+
+* **Discovery.** The provider's address is exactly the one configured, every endpoint is on the same host and port, the only signing algorithm is EdDSA and the only proof-key method is S256.
+* **The sign-in flow.** The authorization-code flow with a proof key (S256) completes for a public client (no secret) and for a confidential client (its secret in the `Authorization` header, never in the body); the ID token's signature, issuer, audience, expiry and `nonce` are checked as planeter checks them.
+* **The claims.** The ID token carries exactly `acr`, `amr`, `aud`, `email`, `email_verified`, `exp`, `iat`, `iss`, `jti`, `nonce` and `sub` (the two email claims only for a person who has an email), and **no name and no `preferred_username`**; the `sub` is a lowercase, hyphenated random identifier of 36 characters, **the same on a second sign-in**; `email_verified` is false; planeter asked for no userinfo.
+* **Codes and checks that must fail.** A replayed code, a code older than 60 seconds and a wrong code verifier are refused by the provider (a wrong verifier also spends the code); planeter refuses a wrong or replayed `state`, a code from another flow and a wrong `nonce`.
+* **`prompt=login`.** With a live sign-in at the provider, a request that sent `prompt=login` and `max_age=0` got a code at once with no new sign-in, and the ID token has no `auth_time`. planeter sends neither and its claim stays "a sign-in to planeter within 15 minutes".
+* **Key rotation.** The key set is served with `Cache-Control: public, max-age=300`; after a rotation every earlier key stays in it and the new key is there at once; a sign-in signed by the new key succeeds through planeter's one `no-cache` refresh, and **fails without it** behind a cache that serves the old set.
+* **A provider that is slow, down, stopped or wrong.** A token endpoint slower than planeter's 15-second limit, a provider that is down, a stopped provider process, a discovery document that is not JSON and one that names another issuer each end in a refused sign-in and an error, never a signed-in person and never a wait of more than 25 seconds.
+* **Offboarding.** After the person was disabled at the provider, a new sign-in there, a code issued before, the person's own sign-in at the provider and a refresh token (planeter uses none) were all refused; **a planeter sign-in made before stays valid until its own length ends**, because planeter does not ask the provider again.
+* **Cost.** Three requests per sign-in (discovery, token, key set), one when the first two are remembered; the whole of planeter's part took 30 milliseconds against a local provider.
+
+How each told fact stands, and what planeter does about it:
+
+* **ID-1. Measured.** The provider's `email_verified` is false. planeter's provider code returns an email **only when the provider says `email_verified` is exactly true** (anything else, including the text "true", is dropped there), so planeter keeps **none** from this provider, which is the safe result. The rule is in that code, not left to whoever calls it.
+* **ID-2. Measured.** The ID token carries no `name` and no `preferred_username` (those live at the userinfo endpoint), and its only algorithm is EdDSA. So planeter **reads neither**, asks for **no userinfo**, and the person's name and handle are the ones the operator typed. Nothing the provider says about a name can reach a page.
+* **ID-3. Measured.** `acr` and `amr` say which factors were used, not when; planeter does not use them to judge how recent a sign-in was.
+* **ID-4. Measured.** The provider **silently ignores `prompt` and `max_age`**, so planeter **sends neither**, and never reads a successful answer as proof of a recent sign-in.
+* **ID-5. Measured.** The provider has no logout notification. Disabling a person at the provider ends their sign-ins *there*; planeter is not told. **A planeter sign-in outlives the provider's, so the operator disables a person in both places** (below).
+* **ID-6. Measured**, except "never reused", which was not shown. The `sub` is a random identifier; planeter stores it, with the issuer, as the identity. Everything else the provider says about a person is untrusted text, and is not read (ID-2).
+* **ID-7. Measured**, except "not before", which was not shown. The provider keeps its previous signing key in its key set until an administrator deletes it, and publishes a new key when it becomes the signer. planeter fetches the key set again once when it meets an unknown key, and **sends that request with `Cache-Control: no-cache`** so that a shared cache cannot answer with the old copy.
+* **ID-8. Told.** Nothing at the provider is under a stability promise before its 1.0, and no production-readiness milestone has started. planeter does not call it production-ready.
+* **ID-9. Told.** An embeddable form of the provider is a contract with no code. planeter does not embed an identity provider.
+* **ID-10. Done.** The interoperability test ran against a **tagged release**, with the two added checks (`prompt=login` is not read as a recent sign-in; a person disabled at the provider: the planeter sign-in continues until its length ends, as above).
+* **ID-11.** The measurement itself: the nine checks above, their evidence and their limits, which travel with the sentence at the top of this section.
+* **ID-12.** Three differences from what planeter had assumed (next), and the email rule of ID-1.
+
+#### If you use sui-id
+
+Three facts about the release that was tested, sui-id 0.92.0, that an operator of planeter meets:
+
+* **Its first-run commands are not the ones in its later, unreleased documents.** The 0.92.0 program makes its starter configuration with `sui-id --print-sample-config` and issues a registration token with `sui-id admin issue-registration-token`; the commands `sui-id init`, `sui-id config sample` and `sui-id admin registration-token issue` are not in it. Follow the documents that come with the release you run.
+* **Its console cannot make a public client.** Leaving the "Confidential client" box unchecked still makes a confidential client (a form with an unchecked box sends nothing, and the console reads that as "yes"). planeter works with either kind: register a confidential client and set its secret in `PLANETER_OIDC_CLIENT_SECRET` (the settings table, above).
+* **Its login form allows ten posts a minute from one address.** Behind a reverse proxy that is not listed in its `trusted_proxies` setting, everyone shares the proxy's address, so ten sign-ins a minute is the limit for all of them together.
 
 #### A provider on a private address
 

@@ -472,57 +472,172 @@ fn the_page_says_how_to_end_the_password_sign_ins_that_exist_when_passwords_go_o
     }
 }
 
+/// The one sentence the documents may use about a tested provider (ledger ID-11), exactly.
+const TESTED_SENTENCE: &str =
+    "planeter's sign-in code was tested with sui-id 0.92.0 on 2026-11-27.";
+
+/// Every claim of the form "tested with sui-id …" in `text` must name exactly the version and date of the ledger's measurement and have its limits in the
+/// sentences that follow; and no other release of sui-id may be named at all. `Err` says what is wrong.
+fn tested_with_claims_ok(text: &str) -> Result<(), String> {
+    let lower = text.to_lowercase();
+    let claims: Vec<usize> = lower
+        .match_indices("tested with sui-id")
+        .map(|(i, _)| i)
+        .collect();
+    if claims.is_empty() {
+        return Err("no 'tested with sui-id' claim".into());
+    }
+    for i in claims {
+        let rest = &text[i..];
+        if !rest.starts_with("tested with sui-id 0.92.0 on 2026-11-27") {
+            return Err(format!(
+                "a 'tested with sui-id' claim with another version or no date: {:?}",
+                rest.chars().take(60).collect::<String>()
+            ));
+        }
+        let after: String = rest.chars().take(900).collect();
+        for limit in [
+            "not through a running planeter server",
+            "any other release",
+            "not shown",
+        ] {
+            if !after.contains(limit) {
+                return Err(format!(
+                    "a 'tested with sui-id' claim without its limit {limit:?} beside it"
+                ));
+            }
+        }
+    }
+    // No other release is named, anywhere on the page.
+    for (i, _) in lower.match_indices("sui-id") {
+        let mut rest = lower[i + "sui-id".len()..]
+            .trim_start_matches(' ')
+            .chars()
+            .peekable();
+        if rest.peek() == Some(&'v') {
+            rest.next();
+        }
+        if rest.peek().is_some_and(char::is_ascii_digit) {
+            let version: String = rest.take(6).collect();
+            if version != "0.92.0" {
+                return Err(format!("sui-id followed by another version: {version:?}"));
+            }
+        }
+    }
+    Ok(())
+}
+
 #[test]
 fn the_ledger_rows_it_cites_exist_and_nothing_stronger_than_they_say_is_claimed() {
     let doc = doc();
     let ledger = read("docs/src/planeter-idp-ledger.md");
-    for n in 1..=10 {
-        let id = format!("ID-{n}");
-        assert!(
-            doc.contains(&format!("**{id}.**")),
-            "{id} is cited with its own sentence"
-        );
-        assert!(
-            ledger.contains(&format!("| {id} |")),
-            "{id} is in the ledger"
-        );
-    }
-    // ID-10 is open in the ledger, and the page says so
-    let id10 = ledger.lines().find(|l| l.starts_with("| ID-10 |")).unwrap();
-    assert!(id10.contains("OPEN"));
-    assert!(doc.contains("**Open.**"));
-    // Every other row is "TOLD", not measured: the page says "told", and says it is not a measurement
-    for n in 1..=9 {
-        let row = ledger
+    let row = |n: u32| {
+        ledger
             .lines()
             .find(|l| l.starts_with(&format!("| ID-{n} |")))
-            .unwrap();
-        assert!(row.contains("TOLD"), "ID-{n} is TOLD");
+            .unwrap_or_else(|| panic!("ID-{n} is in the ledger"))
+            .to_owned()
+    };
+    // Every row from ID-1 to ID-12 is cited on the page with its own sentence, and says how it stands.
+    for n in 1..=12u32 {
+        row(n);
+        assert!(
+            doc.contains(&format!("**ID-{n}.")),
+            "ID-{n} is cited with its own sentence"
+        );
     }
-    assert!(doc.contains("**told**") && doc.contains("It is not a measurement"));
-    // The only sentence the documents may use about a tested provider is "tested with sui-id {version} on {date}", and none is true yet:
-    // the page names no release and makes no such claim.
-    let lower = doc.to_lowercase();
+    // How each stands is what the ledger says: ID-11 holds the measurement of ID-1..ID-7 and the completion of ID-10; ID-8 and ID-9 stay told.
+    let id11 = row(11);
+    assert!(id11.contains("MEASURED"), "ID-11 is MEASURED");
     assert!(
-        !lower.contains("tested with sui-id"),
-        "a 'tested with' claim"
+        id11.contains("ID-1…ID-7 now measured") && id11.contains("ID-10 done"),
+        "ID-11 says what it measured"
     );
+    assert!(row(12).contains("MEASURED"), "ID-12 is MEASURED");
+    for n in [8, 9] {
+        assert!(row(n).contains("TOLD"), "ID-{n} is TOLD");
+        assert!(
+            doc.contains(&format!("**ID-{n}. Told.**")),
+            "the page says ID-{n} is told"
+        );
+    }
+    for n in 1..=7 {
+        assert!(
+            doc.contains(&format!("**ID-{n}. Measured")),
+            "the page says ID-{n} is measured"
+        );
+    }
+    assert!(doc.contains("**ID-10. Done.**"));
+    // The sentence, exactly, once, with its limits, and no other release.
+    assert!(
+        doc.contains(TESTED_SENTENCE),
+        "the page has the ledger's sentence word for word"
+    );
+    assert_eq!(doc.matches("tested with sui-id").count(), 1);
+    assert_eq!(tested_with_claims_ok(&doc), Ok(()));
+    // The ledger allows exactly that sentence, for that version, and the page's limits are the ledger's.
+    assert!(
+        ledger.contains("tested with sui-id {version} on {date}")
+            && ledger.contains("**since 2026-11-27 it is true for `0.92.0`"),
+        "the ledger's own statement of what the sentence may cover"
+    );
+    for limit in [
+        "in process",
+        "private certificate authority",
+        "not exercised",
+    ] {
+        assert!(doc.contains(limit), "the page says {limit:?}");
+    }
+    let lower = doc.to_lowercase();
     assert!(
         !lower.contains("production-ready") || lower.contains("does not call it production-ready")
     );
-    for (i, _) in lower.match_indices("sui-id") {
-        let after: Vec<char> = lower[i + "sui-id".len()..].chars().take(3).collect();
-        let digit = |c: Option<&char>| c.is_some_and(|c| c.is_ascii_digit());
-        let versioned = {
-            let mut rest = after.iter().skip_while(|c| **c == ' ');
-            match rest.next() {
-                Some('v') => digit(rest.next()),
-                other => digit(other),
-            }
-        };
-        assert!(!versioned, "sui-id followed by a version: {after:?}");
+}
+
+#[test]
+fn the_tested_with_check_fails_on_another_version_no_date_or_no_limit() {
+    // The mutation of the sentence's rule: the same check run on the page with the claim damaged must refuse each time.
+    let doc = doc();
+    assert_eq!(tested_with_claims_ok(&doc), Ok(()));
+    let damaged = [
+        // another version
+        doc.replace(
+            "tested with sui-id 0.92.0 on",
+            "tested with sui-id 0.93.0 on",
+        ),
+        // no version
+        doc.replace("tested with sui-id 0.92.0 on", "tested with sui-id on"),
+        // no date
+        doc.replace(
+            "tested with sui-id 0.92.0 on 2026-11-27",
+            "tested with sui-id 0.92.0",
+        ),
+        // another date
+        doc.replace("on 2026-11-27.", "on 2026-11-28."),
+        // no limit beside it (each of the three, one at a time)
+        doc.replace(
+            "not through a running planeter server",
+            "through a running planeter server",
+        ),
+        doc.replace(
+            "it says nothing about any other release",
+            "it says nothing more",
+        ),
+        doc.replace("**not shown** were", "left out were"),
+        // a second claim, another version, no limit beside it
+        format!("{doc}\n\nIt was also tested with sui-id 0.91.1 on 2026-11-20.\n"),
+        // the claim gone altogether
+        doc.replace("was tested with sui-id", "was checked against sui-id"),
+        // another release named without the word "tested"
+        format!("{doc}\n\nsui-id 0.93.0 is fine too.\n"),
+    ];
+    for (i, text) in damaged.iter().enumerate() {
+        assert_ne!(text, &doc, "mutation {i} changed something");
+        assert!(
+            tested_with_claims_ok(text).is_err(),
+            "mutation {i} was accepted"
+        );
     }
-    assert!(ledger.contains("none is true yet"));
 }
 
 #[test]
