@@ -28,6 +28,8 @@ pub struct VerifiedIdentity {
     pub issuer: String,
     /// The provider's stable subject identifier.
     pub subject: String,
+    /// The email address, **only when the provider says it verified it** (`email_verified` exactly `true`); otherwise `None`. The email is a
+    /// hint the provider vouches for: an unverified address is dropped here, not by the caller.
     pub email: Option<String>,
 }
 
@@ -106,6 +108,9 @@ struct IdClaims {
     nonce: Option<String>,
     #[serde(default)]
     email: Option<String>,
+    /// Read as a raw value: only the JSON boolean `true` counts (a string `"true"`, a number, `null` or an absent claim is "not verified").
+    #[serde(default)]
+    email_verified: Option<serde_json::Value>,
 }
 
 /// Pending logins keyed by `state` (server-side; the browser holds only the opaque `state`).
@@ -380,7 +385,10 @@ impl OidcProvider {
         Ok(VerifiedIdentity {
             issuer: data.claims.iss,
             subject: data.claims.sub,
-            email: data.claims.email,
+            email: data
+                .claims
+                .email
+                .filter(|_| data.claims.email_verified == Some(serde_json::Value::Bool(true))),
         })
     }
 
@@ -504,7 +512,7 @@ BXaTdqRaPA7mOrNmL/VGO0eeJS9V/25SRXPdRAdaGWs75OxYcjsHqSZV
     fn claims(nonce: &str) -> serde_json::Value {
         serde_json::json!({
             "iss": ISSUER, "sub": "user-42", "aud": CLIENT,
-            "exp": now() + 300, "iat": now(), "nonce": nonce, "email": "u@example"
+            "exp": now() + 300, "iat": now(), "nonce": nonce, "email": "u@example", "email_verified": true
         })
     }
 

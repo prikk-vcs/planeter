@@ -222,6 +222,11 @@ fn query(url: &str, name: &str) -> String {
 }
 
 fn id_token(issuer: &str, nonce: &str) -> String {
+    id_token_with(issuer, nonce, serde_json::json!({}))
+}
+
+/// The same ID token with `extra` claims merged over the usual ones (a `null` removes a claim).
+fn id_token_with(issuer: &str, nonce: &str, extra: serde_json::Value) -> String {
     let k = keys();
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -229,9 +234,17 @@ fn id_token(issuer: &str, nonce: &str) -> String {
         .as_secs();
     let mut h = Header::new(Algorithm::EdDSA);
     h.kid = Some("k-ed".into());
+    let mut claims = serde_json::json!({"iss": issuer, "sub": "user-42", "aud": CLIENT, "exp": now + 300, "iat": now, "nonce": nonce});
+    for (name, value) in extra.as_object().unwrap() {
+        if value.is_null() {
+            claims.as_object_mut().unwrap().remove(name);
+        } else {
+            claims[name] = value.clone();
+        }
+    }
     encode(
         &h,
-        &serde_json::json!({"iss": issuer, "sub": "user-42", "aud": CLIENT, "exp": now + 300, "iat": now, "nonce": nonce}),
+        &claims,
         &EncodingKey::from_ed_pem(k["ed"]["pem"].as_str().unwrap().as_bytes()).unwrap(),
     )
     .unwrap()
@@ -632,5 +645,93 @@ fn the_pinned_address_is_the_address_connected_to_even_if_the_name_resolves_else
         args.windows(2)
             .any(|w| w[0] == "--resolve" && w[1] == format!("idp.test:{}:127.0.0.1", s.port)),
         "{args:?}"
+    );
+}
+
+// ---------------------------------------------------------------- the email, only when the provider vouches for it (RFC 014 ID-1, ID-12)
+
+/// A whole sign-in against the stand-in whose ID token carries `extra` claims: the `email` the provider layer returns.
+fn email_returned(name: &str, extra: serde_json::Value) -> Option<String> {
+    let s = Standin::start(name, "127.0.0.1");
+    let issuer = format!("https://idp.test:{}", s.port);
+    publish(&s, &issuer);
+    let p = provider(&issuer, guard(Some(&issuer)), &s.dir, true);
+    let begin = p.begin_login(1_000).unwrap();
+    let nonce = query(&begin.authorization_url, "nonce");
+    s.put(
+        "token.json",
+        format!(
+            r#"{{"id_token":"{}"}}"#,
+            id_token_with(&issuer, &nonce, extra)
+        ),
+    );
+    let who = p
+        .finish_login(&begin.state, "the-code", 1_001)
+        .expect("the ID token is verified");
+    assert_eq!(who.subject, "user-42", "the sign-in itself is unchanged");
+    who.email
+}
+
+#[test]
+fn an_email_the_provider_says_it_verified_is_returned() {
+    need_tools!();
+    assert_eq!(
+        email_returned(
+            "email-true",
+            serde_json::json!({"email": "u@example.org", "email_verified": true})
+        )
+        .as_deref(),
+        Some("u@example.org")
+    );
+}
+
+#[test]
+fn an_email_the_provider_says_is_not_verified_is_dropped_here_not_by_the_caller() {
+    need_tools!();
+    assert_eq!(
+        email_returned(
+            "email-false",
+            serde_json::json!({"email": "u@example.org", "email_verified": false})
+        ),
+        None
+    );
+}
+
+#[test]
+fn an_email_without_email_verified_is_dropped() {
+    need_tools!();
+    assert_eq!(
+        email_returned(
+            "email-absent",
+            serde_json::json!({"email": "u@example.org"})
+        ),
+        None
+    );
+}
+
+#[test]
+fn a_string_true_is_not_verified() {
+    need_tools!();
+    for (name, value) in [
+        ("email-string", serde_json::json!("true")),
+        ("email-number", serde_json::json!(1)),
+    ] {
+        assert_eq!(
+            email_returned(
+                name,
+                serde_json::json!({"email": "u@example.org", "email_verified": value})
+            ),
+            None,
+            "{value}"
+        );
+    }
+}
+
+#[test]
+fn no_email_claim_returns_none_even_when_the_provider_says_verified() {
+    need_tools!();
+    assert_eq!(
+        email_returned("email-none", serde_json::json!({"email_verified": true})),
+        None
     );
 }
