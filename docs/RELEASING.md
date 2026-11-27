@@ -13,6 +13,11 @@ published until M4. **Tagging and publishing are owner-authorized.**
    `tools/enf2-symbol-check/check.sh`, and the two maintenance gates `cargo run --locked -p
    planeter-floor-check` and `cargo run --locked -p planeter-pin-check` (RFC 010 D-2, D-5). The
    supply-chain pair may also be run as a checkpoint with the manual `supply-chain.yml` workflow.
+   **What CI runs (the `build` job) includes the tests that need prikk**: it installs the pinned prikk (`PRIKK_VERSION`, the floor; the same step and the
+   same checksum check as the `client` job) and runs `cargo test --workspace` with it, so a commit's real-prikk tests (the real-server, kill-point,
+   delivery and creation tests that use no bubblewrap) run on the runner. **What CI cannot run is the tests that need bubblewrap with user
+   namespaces**: the runner has no `bwrap`, those tests skip there and say so ("skipping: needs bubblewrap …"), and they are run locally by the review
+   tier. A green CI is therefore a green run **without bubblewrap**; it is not a release's evidence.
    **The gates have three tiers and one script, `tools/gates.sh --tier commit|review|release` (RFC 010 Amendment 1; the development-machine
    budget).** The budget limits what *running the project's tests and gates* may take from a developer's computer; it says nothing about what the
    server uses when it serves (RFC 011's cost model and the server's own admission settings, such as `PLANETER_PRIKK_MEMORY_BUDGET_MB`, govern
@@ -25,7 +30,7 @@ published until M4. **Tagging and publishing are owner-authorized.**
      the crates the diff touches (the whole workspace when `Cargo.toml`, `Cargo.lock`, `tools/`, `.github/` or the `Dockerfile` changed; the
      touched crates' dependents are CI's to run).
    * **review** (the architect, or a team member, on someone else's commit): it **reads CI for that exact commit and refuses to go on unless it
-     is complete and green** (`--no-ci` says so loudly), then runs only what CI cannot: the workspace tests **with prikk** once, cargo-deny and
+     is complete and green** (`--no-ci` says so loudly), then runs only what CI cannot: the workspace tests **with prikk and bubblewrap** once (CI runs the ones that need prikk but not bubblewrap; the script runs the whole set, because the ones that need bubblewrap are the difference), cargo-deny and
      cargo-audit on a freshly fetched advisory database, the sheet step, and what the change touches (`doc`, the 1.89.0 check and the publish
      dry run, ENF-2 and pin-check, by the diff). **The sheet step needs no file**: it generates a Japanese sheet from the worktree's own catalogs and checks
      it; `--sheet FILE` adds a check of that file (the reading sheet someone keeps), and a stale one is reported as "the supplied sheet does not match the
