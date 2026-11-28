@@ -8,6 +8,9 @@ authors.workspace = true
 repository.workspace = true
 readme.workspace = true
 description = "planeter's authentication: accounts, sessions, login throttles, OpenID Connect sign-in, scoped tokens, SSH keys and deploy keys, Argon2id and constant-time hashing."
+# The tests' throw-away TLS certificate, private keys and the interoperability procedure are fixtures for the tests only; they do not belong in the published package
+# (as `planeter-client`'s do not): the tests that read them are run from the repository.
+exclude = ["tests/fixtures/"]
 
 [dependencies]
 planeter-core = { path = "../planeter-core", version = "0.10.0" }
