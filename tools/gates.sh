@@ -29,7 +29,8 @@
 #            sets); **the shared target is for this script's own fresh worktrees only** (see below). **A review's green is not a release's evidence.**
 #   release  a release candidate and the tag commit: **a clean worktree and an empty target, always** (a `CARGO_TARGET_DIR` in the
 #            environment is refused), fmt, floor, pin, clippy, the test build, the workspace tests with prikk three times and once without it,
-#            deny, audit (fresh database), ENF-2, doc, the 1.89.0 check, the publish dry run (its own target), the check of **the sheet the owner
+#            deny, audit (fresh database), ENF-2, doc, the 1.89.0 check, the publish dry run (its own target), **`package-keys`** (no file of any of the eleven packages is named like a
+#            private key or holds one: `cargo package --list` of each), the check of **the sheet the owner
 #            reads**, which `--sheet` must name (a release is not tagged on a sheet nobody named: without it the script says so and starts
 #            nothing), and CI read as in the review tier; everything it made is removed at the end, the target included.
 #
@@ -244,6 +245,8 @@ case "$tier" in
     plan doc "RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps --locked"
     plan msrv-check "cargo +$msrv check --workspace --locked"
     plan publish-dry-run "CARGO_TARGET_DIR=\"\$GATES_DRYRUN_TARGET\" cargo publish --workspace --exclude planeter-runner --dry-run --locked"
+    # No private key in any package that would be published (a crate is never taken back from crates.io).
+    plan package-keys 'sh "$GATES_PACKAGE_KEYS"'
     plan sheet-check "cargo run -q --locked -p planeter-i18n-sheet -- --lang ja --check \"$sheet\""
     ;;
 esac
@@ -291,7 +294,38 @@ fi
 GATES_DRYRUN_TARGET="$SCR/dry-run-target"
 GATES_ADVDB="$SCR/advisory-db"
 GATES_SHEET_OUT="$SCR/sheet.md"
-export GATES_DRYRUN_TARGET GATES_ADVDB GATES_SHEET_OUT
+GATES_PACKAGE_KEYS="$SCR/package-keys.sh"
+export GATES_DRYRUN_TARGET GATES_ADVDB GATES_SHEET_OUT GATES_PACKAGE_KEYS
+if [ "$tier" = release ]; then
+  # The `package-keys` step (release tier only): for each of the eleven published crates, `cargo package --list`; fail if a listed file is named like a key
+  # (`*.pem`, `*.key`, `*.seed`, `*.p12`) or contains `PRIVATE KEY-----` or `-----BEGIN PRIVATE`. Run in the worktree. A test key written as a string in a
+  # Rust file that was already in the packages of earlier releases is named below, printed every time, and is not a failure; any other file is.
+  cat > "$GATES_PACKAGE_KEYS" <<'PKEYS'
+crates="planeter-i18n planeter-prikk planeter-store planeter-core planeter-auth planeter-ci planeter-registry planeter-transport planeter-web planeter planeter-client"
+known="planeter-auth:src/oidc.rs planeter-web:tests/oidc.rs"
+bad=0 files=0
+for c in $crates; do
+  dir=crates/$c
+  list=$(cargo package --list -p "$c" --locked 2> /dev/null) || { echo "package-keys: cannot list the package of $c"; exit 2; }
+  for f in $list; do
+    files=$((files + 1))
+    case "$f" in
+      *.pem | *.key | *.seed | *.p12) echo "package-keys: $c: $f is named like a key"; bad=$((bad + 1)); continue ;;
+    esac
+    [ -f "$dir/$f" ] || continue
+    if grep -qE 'PRIVATE KEY-----|-----BEGIN PRIVATE' "$dir/$f" 2> /dev/null; then
+      case " $known " in
+        *" $c:$f "*) echo "package-keys: $c: $f holds a test key as a string (known, in earlier releases' packages)" ;;
+        *) echo "package-keys: $c: $f holds a private key"; bad=$((bad + 1)) ;;
+      esac
+    fi
+  done
+done
+echo "package-keys: looked at $files files of: $crates"
+if [ "$bad" -ne 0 ]; then echo "package-keys: $bad file(s) must not be in a published package"; exit 1; fi
+echo "package-keys: no private key in any package"
+PKEYS
+fi
 case "$tier" in
   release)
     [ -z "${CARGO_TARGET_DIR:-}" ] || die "the release tier builds in an empty target of its own and refuses a shared one: CARGO_TARGET_DIR is set (to $CARGO_TARGET_DIR); unset it"

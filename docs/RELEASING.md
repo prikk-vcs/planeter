@@ -41,7 +41,7 @@ published until M4. **Tagging and publishing are owner-authorized.**
      release's evidence.**
    * **release** (a release candidate and the tag commit): a **clean worktree and an empty target, always** (a shared target is refused), the
      pinned compiler **and** the 1.89.0 check, fmt, floor, pin, clippy, the test build, the workspace tests with prikk **three times in a row** and
-     once without it, deny, audit, ENF-2, doc, the publish dry run, the check of **the sheet the owner reads**, which `--sheet FILE` must name (the script
+     once without it, deny, audit, ENF-2, doc, the publish dry run, **`package-keys`** (for each of the eleven published crates, `cargo package --list`: the step fails if a listed file is named `*.pem`, `*.key`, `*.seed` or `*.p12` or holds `PRIVATE KEY-----`; a crate is never taken back from crates.io, so a private key, however throw-away, must not be in one; two Rust files that have held a test key as a string since earlier releases are named in the step and said every time, and any other file fails it; a person still reads the package lists by eye, the step catches the one class that must never ship), the check of **the sheet the owner reads**, which `--sheet FILE` must name (the script
      refuses to start without it), and CI read as in the review tier; it removes everything it
      made, the 20 GiB included. A release candidate is built clean because the claim "this commit builds from nothing" can only be shown by an
      empty directory.

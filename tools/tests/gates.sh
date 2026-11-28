@@ -79,7 +79,13 @@ if rustup toolchain list 2> /dev/null | grep -q "^$pin-"; then
   out=$(gates --tier review --commit "$lock_change" --base "$first" --runs 2 --plan)
   contains "review plan: --runs 2 is two runs" "tests-with-prikk-2" "$out"
   out=$(gates --tier release --commit "$docs_only" --sheet "$osheet" --plan)
-  for s in fmt floor-check pin-check clippy test-build tests-with-prikk-3 tests-without-prikk deny audit enf2 doc msrv-check publish-dry-run sheet-check; do contains "release plan has $s" "$s" "$out"; done
+  for s in fmt floor-check pin-check clippy test-build tests-with-prikk-3 tests-without-prikk deny audit enf2 doc msrv-check publish-dry-run package-keys sheet-check; do contains "release plan has $s" "$s" "$out"; done
+  contains "release plan: package-keys comes after the publish dry run" "publish-dry-run" "$(printf '%s' "$out" | sed -n '/publish-dry-run/,/package-keys/p')"
+  out=$(gates --tier review --commit "$docs_only" --plan)
+  absent "review plan has no package-keys" "package-keys" "$out"
+  out=$(gates --tier commit --plan)
+  absent "commit plan has no package-keys" "package-keys" "$out"
+  out=$(gates --tier release --commit "$docs_only" --sheet "$osheet" --plan)
   out=$(gates --tier commit --plan)
   contains "commit plan: fmt and clippy" "clippy" "$out"
   # the compiler that is not installed
@@ -265,6 +271,55 @@ check "no snapshot, no run: exit 2" "2" "$rc"
 contains "...with a sentence" "cannot make a snapshot of" "$out"
 absent "...and nothing ran" "=== step" "$out"
 check "...and it left nothing behind" "$start" "$(state)"
+
+# --- package-keys (release tier): no file of a package is named like a private key or holds one. A fake `cargo package --list` and a fake crates tree.
+pk="$tmp/pk"
+mkdir -p "$pk/bin" "$pk/root/crates" "$pk/lists"
+for c in planeter-i18n planeter-prikk planeter-store planeter-core planeter-auth planeter-ci planeter-registry planeter-transport planeter-web planeter planeter-client; do
+  mkdir -p "$pk/root/crates/$c/src" "$pk/root/crates/$c/tests"
+  echo "fn main() {}" > "$pk/root/crates/$c/src/lib.rs"
+  printf 'src/lib.rs\n' > "$pk/lists/$c"
+done
+cat > "$pk/bin/cargo" <<'FAKE'
+#!/bin/sh
+# cargo package --list -p CRATE --locked
+cat "$PKLISTS/$4"
+FAKE
+chmod +x "$pk/bin/cargo"
+pk_run() {
+  use_steps "pk\tcd $pk/root && PKLISTS=$pk/lists PATH=$pk/bin:\$PATH sh \"\$GATES_PACKAGE_KEYS\"\n"
+  gates --tier release --commit "$first" --no-ci --sheet "$osheet"
+}
+out=$(pk_run); rc=$?
+check "package-keys on clean packages: exit 0" "0" "$rc"
+contains "...says how many files and which crates it looked at" "looked at 11 files of: planeter-i18n" "$out"
+contains "...and that there is none" "no private key in any package" "$out"
+printf 'src/lib.rs\ntests/fixtures/leaf.pem\n' > "$pk/lists/planeter-auth"
+out=$(pk_run); rc=$?
+check "a file named *.pem in a package: the step fails" "1" "$rc"
+contains "...and names the crate and the file" "planeter-auth: tests/fixtures/leaf.pem is named like a key" "$out"
+for ext in key seed p12; do
+  printf 'src/lib.rs\nx.%s\n' "$ext" > "$pk/lists/planeter-auth"
+  out=$(pk_run); rc=$?
+  check "a file named *.$ext: the step fails" "1" "$rc"
+done
+printf 'src/lib.rs\ntests/keys.json\n' > "$pk/lists/planeter-auth"
+printf '{"pem": "-----BEGIN PRIVATE KEY-----\\nAAAA\\n-----END PRIVATE KEY-----"}\n' > "$pk/root/crates/planeter-auth/tests/keys.json"
+out=$(pk_run); rc=$?
+check "a file that holds a private key (not named like one): the step fails" "1" "$rc"
+contains "...and names it" "planeter-auth: tests/keys.json holds a private key" "$out"
+printf 'src/lib.rs\ntests/keys.json\n' > "$pk/lists/planeter-auth"
+rm "$pk/root/crates/planeter-auth/tests/keys.json"
+printf 'src/lib.rs\nsrc/oidc.rs\n' > "$pk/lists/planeter-auth"
+printf 'const K: &str = "-----BEGIN PRIVATE KEY-----";\n' > "$pk/root/crates/planeter-auth/src/oidc.rs"
+out=$(pk_run); rc=$?
+check "the one Rust file that has held a test key since an earlier release: not a failure" "0" "$rc"
+contains "...but it is said, every time" "planeter-auth: src/oidc.rs holds a test key as a string (known" "$out"
+printf 'src/lib.rs\nsrc/other.rs\n' > "$pk/lists/planeter-auth"
+printf 'const K: &str = "-----BEGIN PRIVATE KEY-----";\n' > "$pk/root/crates/planeter-auth/src/other.rs"
+out=$(pk_run); rc=$?
+check "the same text in any other file: the step fails" "1" "$rc"
+check "...and the run cleaned up" "$start" "$(state)"
 
 # --- the release tier refuses a shared target (and cleans up what it had made)
 use_steps 'one\techo should not run\n'
