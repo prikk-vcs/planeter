@@ -18,7 +18,7 @@ published until M4. **Tagging and publishing are owner-authorized.**
    delivery and creation tests that use no bubblewrap) run on the runner. **What CI cannot run is the tests that need bubblewrap with user
    namespaces**: the runner has no `bwrap`, those tests skip there and say so ("skipping: needs bubblewrap …"), and they are run locally by the review
    tier. A green CI is therefore a green run **without bubblewrap**; it is not a release's evidence.
-   **The gates have three tiers and one script, `tools/gates.sh --tier commit|review|release` (RFC 010 Amendment 1; the development-machine
+   **The gates have four tiers and one script, `tools/gates.sh --tier commit|review|docs|release` (RFC 010 Amendment 1; the development-machine
    budget).** The budget limits what *running the project's tests and gates* may take from a developer's computer; it says nothing about what the
    server uses when it serves (RFC 011's cost model and the server's own admission settings, such as `PLANETER_PRIKK_MEMORY_BUDGET_MB`, govern
    that). **This does not relax the release procedure below: what a release requires is unchanged**, and the release tier is the same full set
@@ -30,7 +30,7 @@ published until M4. **Tagging and publishing are owner-authorized.**
      the crates the diff touches (the whole workspace when `Cargo.toml`, `Cargo.lock`, `tools/`, `.github/` or the `Dockerfile` changed; the
      touched crates' dependents are CI's to run).
    * **review** (the architect, or a team member, on someone else's commit): it **reads CI for that exact commit and refuses to go on unless it
-     is complete and green** (`--no-ci` says so loudly), then runs only what CI cannot: the workspace tests **with prikk and bubblewrap** once (CI runs the ones that need prikk but not bubblewrap; the script runs the whole set, because the ones that need bubblewrap are the difference), cargo-deny and
+     is complete and green** (`--no-ci` says so loudly), then runs only what CI cannot: **the test binaries that hold a test which skips in CI for want of bubblewrap** (derived, never listed by hand: the script reads the skip markers the tests print, "skipping: …" or "SKIPPED: …" with a reason that names bubblewrap or the sandbox, from the sources of the worktree, and runs `cargo test` for exactly those binaries; it prints the set and its size first, and an empty set is a failure because the derivation is then broken; CI runs the whole workspace on the same commit, so what the reduced set leaves out is CI's evidence; a test that skips *silently* is not found by it, and the release tier, which runs everything, is where that would show), cargo-deny and
      cargo-audit on a freshly fetched advisory database, the sheet step, and what the change touches (`doc`, the 1.89.0 check and the publish
      dry run, ENF-2 and pin-check, by the diff). **The sheet step needs no file**: it generates a Japanese sheet from the worktree's own catalogs and checks
      it; `--sheet FILE` adds a check of that file (the reading sheet someone keeps), and a stale one is reported as "the supplied sheet does not match the
@@ -39,6 +39,7 @@ published until M4. **Tagging and publishing are owner-authorized.**
      worktrees only** (cargo takes an artifact as current by file times, so an older checkout pointed at it is given another commit's binary): the script
      refuses it for anything that is not a worktree it made in that run. **A review's green is not a
      release's evidence.**
+   * **docs** (`tools/gates.sh --tier docs --base EVIDENCE`; for a diff of documents only, on the evidence of a commit whose release tier is green and verified): it **refuses**, saying why and starting nothing, unless `git diff --name-only EVIDENCE..COMMIT` names only files under `docs/` and `rfcs/` and the root `CHANGELOG.md`, `README.md` and `ROADMAP.md` (and unless EVIDENCE is an ancestor of COMMIT); it reads CI for the commit, and runs fmt, floor-check, pin-check, deny, audit, doc, the sheet step, `package-keys` and **the test binaries that read those files** (derived: test sources that open a path under `docs/` or `rfcs/`, or the CHANGELOG, README or ROADMAP). **It is not a release tier and says so**: a tag commit may use it only when its diff from the evidence commit is documents only; one Rust file in the diff and it refuses and the release tier is run.
    * **release** (a release candidate and the tag commit): a **clean worktree and an empty target, always** (a shared target is refused), the
      pinned compiler **and** the 1.89.0 check, fmt, floor, pin, clippy, the test build, the workspace tests with prikk **three times in a row** and
      once without it, deny, audit, ENF-2, doc, the publish dry run, **`package-keys`** (for each of the eleven published crates, `cargo package --list`: the step fails if a listed file is named `*.pem`, `*.key`, `*.seed` or `*.p12` or holds `PRIVATE KEY-----`; a crate is never taken back from crates.io, so a private key, however throw-away, must not be in one; two Rust files that have held a test key as a string since earlier releases are named in the step and said every time, and any other file fails it; a person still reads the package lists by eye, the step catches the one class that must never ship), the check of **the sheet the owner reads**, which `--sheet FILE` must name (the script
@@ -49,6 +50,23 @@ published until M4. **Tagging and publishing are owner-authorized.**
    (32 cores: 400 %); memory the smaller of 16 GiB and 40 % of RAM, swap off; build jobs cores ÷ 4 between 2 and 8; `nice 10`; overridable by
    `--cpu`, `--mem`, `--jobs`, `--nice` or `RUN_CAPPED_CPU`, `RUN_CAPPED_MEM`, `RUN_CAPPED_JOBS`, `RUN_CAPPED_NICE`. Look at `uptime` first, and do
    not start one heavy job while another is running: the host is a person's machine, shared with other work.
+   **Heat is a budget too (RFC 010 Amendment 2; the development machine, not the running service).** The budget has three parts: the **peak** (the cap above), the
+   **duty** (how long the machine is kept hot: a tier that runs for an hour is an hour of heat, whatever its cap), and the **concurrency** (two heavy jobs
+   at once, from different sessions, defeat a per-job cap). Concurrency is enforced: **`tools/run-capped.sh` takes a machine-wide lock** (`flock` on one
+   file in `$XDG_RUNTIME_DIR`, else `$TMPDIR`, else `/tmp`), so **a second heavy job waits**, saying who holds it (the command and its age), and gives up
+   after `--wait SECONDS` (`RUN_CAPPED_LOCK_WAIT`, default 5400) with exit status 3, having run nothing; the lock is held by the running process, so it is
+   released on every way out, a kill of the job included; `--no-lock` is for the script's own tests and says so loudly; a plan (`--plan`) runs nothing and
+   does not wait. **Everything heavy goes through the runner**: a single crate's tests (`tools/run-capped.sh --cpu 200 -- cargo test -p …`), a mutation run, a stress
+   run, `cargo package`, not only the tiers. Duty is measured, not yet limited: **while a run is inside the runner, a sampler writes one line every ten
+   seconds** (`RUN_CAPPED_SAMPLE_INTERVAL`, 0 turns it off) to `samples.tsv` in a directory the runner prints (beside the lock file; `RUN_CAPPED_SAMPLE_DIR`
+   names another): the time, the 1-minute load, the CPU temperature (found in `/sys/class/hwmon` by sensor *name*: `k10temp`'s `Tctl`, else `coretemp`'s
+   package, else `/sys/class/thermal`; none found: it says so once and the run goes on), the hottest NVMe's temperature, and the three processes using the
+   most CPU **outside the run** (names only). At the end it prints one block: peak and mean load and temperature, the seconds above **the device's own
+   reported limit minus 15 °C** where it reports one (an NVMe's `max`; `k10temp` reports none, and the block says no threshold was applied), and the names
+   that were hot outside the run (which answers whether the gates are the heat). **The block changes no default and sets no limit**; a duty rule is
+   derived from its data by the architect. The review tier is the **derived** set above and the docs tier exists so that a documents-only change is not paid
+   for with a full test run. **The architect verifies a log instead of re-running it**: the header's commit, the snapshot hash of the runner, the exit codes of
+   the table, the test counts, and CI for the commit; a run is repeated only when one of those is wrong or missing.
    **Loaded repeats** (`tools/repeat-under-load.sh`) are for a **new or changed test that uses timing, ports, processes or a terminal, and after
    an unexplained failure**, not a routine on every file: run them **confined** (`--confine 4 --workers 16`: the command and the workers share
    four cpus, so the heat stays within four cores and the command still has to wait for a cpu) and in small numbers (20). The measurement of the

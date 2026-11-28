@@ -1,5 +1,5 @@
 #!/bin/sh
-# The project's gates, in three tiers (RFC 010 Amendment 1, D-138/D-140): one script, so that nobody keeps a copy.
+# The project's gates, in four tiers (RFC 010 Amendment 1, D-138/D-140): one script, so that nobody keeps a copy.
 #
 #   tools/gates.sh --tier commit  [--fail-fast]
 #   tools/gates.sh --tier review  [--commit REV] [--base REV] [--runs N] [--sheet FILE] [--no-ci] [--fail-fast]
