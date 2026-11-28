@@ -313,8 +313,11 @@ sdir=${RUN_CAPPED_SAMPLE_DIR:-}
 [ -n "$sdir" ] || sdir=$(mktemp -d "$lockdir/planeter-run-capped.XXXXXX" 2> /dev/null) || sdir=''
 if [ -z "$sdir" ] || ! mkdir -p "$sdir" 2> /dev/null; then exec "$@"; fi
 samples="$sdir/samples.tsv"
-"$@" <&0 &
+# (a command started with `&` gets /dev/null for its input before any redirection is applied, so the real input is kept on fd 8 and given back)
+exec 8<&0
+"$@" <&8 &
 child=$!
+exec 8<&-
 echo "$child" > "$sdir/child.pid"
 sh "$0" --sampler "$samples" "$sdir/child.pid" "$mode" "$interval" 9>&- < /dev/null > /dev/null 2>&1 &
 sampler=$!
