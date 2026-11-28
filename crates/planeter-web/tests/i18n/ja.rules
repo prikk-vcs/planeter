@@ -25,6 +25,9 @@ forbidden	*	自分の変更	say 自分の提案 (D-38)	これは自分の変更�
 forbidden	*	完了した変更	say 完了した提案 (D-38)	これは完了した変更の例です。	ログインしてください。
 forbidden	*	その変更は	a proposal is 提案 (D-38)	これはその変更はの例です。	ログインしてください。
 forbidden	*	ID の変更	a proposal is 提案 (D-38)	これはID の変更の例です。	ログインしてください。
+forbidden	*	結び付!リクエストと結び付	an identity linked to an account is 連携する / 連携を解除する, one word for one thing (D-150; the signed 連携されていません); the one other use, binding a login to the request that began it (`page.sso_mismatch.body`), is another thing and stays	アカウントに結び付けました。	アカウントに連携しました。|このログインを、開始したリクエストと結び付けることができませんでした。
+forbidden	*	取り上げ	a role is revoked, 取り消す (the word the token messages use); 取り上げる reads as a punishment, and the tone is calm and never blaming (D-150)	権限を取り上げました。	権限を取り消しました。
+forbidden	*	手を付	an idiom: say what happens (影響しません) (D-150, the glossary's no-idiom rule)	トークンには手を付けません。	トークンには影響しません。
 forbidden	*	彼女	gendered wording (D-6)	これは彼女の例です。	ログインしてください。
 forbidden	*	彼は	gendered wording (D-6)	これは彼はの例です。	ログインしてください。
 forbidden	*	男性	gendered wording (D-6)	これは男性の例です。	ログインしてください。

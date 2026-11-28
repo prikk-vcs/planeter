@@ -77,7 +77,7 @@ pub const CATALOG: &[Entry] = &[
     msg("login.sso", "シングルサインオンでログイン"),
     msg(
         "login.passwords_off",
-        "このサーバーでは、パスワードでのログインはオフになっています。ログインのプロバイダーでログインしてください。",
+        "このサーバーでは、パスワードでのログインはオフになっています。ログインのプロバイダー経由でログインしてください。",
     ),
     msg("login.user", "ユーザー名"),
     msg("login.password", "パスワード"),
@@ -2104,7 +2104,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "repo.keys.source.operator",
-        "このサーバーの運用者が {date} に追加しました: {reason}",
+        "このサーバーを運用している人が {date} に追加しました: {reason}",
     ),
     msg(
         "repo.keys.source.delivery",
@@ -2220,11 +2220,11 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "operator.done",
-        "{fingerprint} は、{repo} で信頼されるようになりました。このサーバーの運用者が {date} に追加しました: {reason}",
+        "{fingerprint} は、{repo} で信頼されるようになりました。このサーバーを運用している人が {date} に追加しました: {reason}",
     ),
     msg(
         "operator.done.recorded",
-        "{fingerprint} は、{repo} で、すでに信頼されていました。記録がなかったため、今、書きました。このサーバーの運用者が {date} に追加しました: {reason}",
+        "{fingerprint} は、{repo} で、すでに信頼されていました。記録がなかったため、今、書きました。このサーバーを運用している人が {date} に追加しました: {reason}",
     ),
     msg("operator.start", "サーバーを起動してください。"),
     msg(
@@ -2233,7 +2233,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "operator.token.help.usage",
-        "使い方: planeter operator token create HANDLE --name TEXT --scope read-only|write|full [--expires-days N] [--repos OWNER/NAME[,OWNER/NAME…]] [--out FILE]\n        planeter operator token list HANDLE\n        planeter operator token revoke HANDLE ID\n       （どれも [--lang en|ja] を付けられます）\n\ncreate         アカウントのトークンを作ります。表示されるのは 1 回だけで、保存されるのはそのハッシュだけです\n--name         トークンの用途。1〜60 文字。持ち主が自分のトークンを見分けるためのものです\n--scope        read-only: リポジトリを見て、クローンできます。write: さらに、作業を提案できますが、ブランチの引き渡しはできません。full: アカウントにできることはすべて、ブランチの引き渡しも含めてできます\n--expires-days トークンの有効日数。1〜365（省略すると 90）。期限のないトークンはありません\n--repos        トークンを、指定したリポジトリ（20 個まで）に限ります。指定しなければ、アカウントが届くすべてのリポジトリに届きます\n--out          トークンを表示せず、新しいファイル（モード 0600、上書きしません）に書きます。そのファイルを planeter-client --token-file に渡します\nlist           アカウントのトークンを新しい順に表示します: ID、名前、スコープ、リポジトリ、作成日、最後に使った日、期限。秘密は表示しません\nrevoke         指定した ID のトークンを、次のリクエストから受け付けなくします",
+        "使い方: planeter operator token create HANDLE --name TEXT --scope read-only|write|full [--expires-days N] [--repos OWNER/NAME[,OWNER/NAME…]] [--out FILE]\n        planeter operator token list HANDLE\n        planeter operator token revoke HANDLE ID\n       （どれも [--lang en|ja] を付けられます）\n\ncreate         アカウントのトークンを作ります。表示されるのは 1 回だけで、保存されるのはそのハッシュだけです\n--name         トークンの用途。1〜60 文字。持ち主が自分のトークンを見分けるためのものです\n--scope        read-only: リポジトリを見て、クローンできます。write: さらに、作業を提案できますが、ブランチの引き渡しはできません。full: アカウントにできることはすべて、ブランチの引き渡しも含めてできます\n--expires-days トークンの有効日数。1〜365（省略すると 90）。期限のないトークンはありません\n--repos        トークンを、指定したリポジトリ（20 個まで）に限ります。指定しなければ、アカウントがアクセスできるすべてのリポジトリが対象です\n--out          トークンを表示せず、新しいファイル（モード 0600、上書きしません）に書きます。そのファイルを planeter-client --token-file に渡します\nlist           アカウントのトークンを新しい順に表示します: ID、名前、スコープ、リポジトリ、作成日、最後に使った日、期限。秘密は表示しません\nrevoke         指定した ID のトークンを、次のリクエストから受け付けなくします",
     ),
     msg(
         "operator.token.help.output",
@@ -2273,7 +2273,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "operator.token.error.repos_too_many",
-        "トークンを限れるリポジトリは、{max} 個までです。",
+        "1 つのトークンで指定できるリポジトリは、{max} 個までです。",
     ),
     msg(
         "operator.token.error.repos_empty",
@@ -2303,7 +2303,7 @@ pub const CATALOG: &[Entry] = &[
         "operator.token.done.once",
         "トークンが表示されるのは、この 1 回だけです。人に見られない場所に保管してください。もう一度表示することはできません。",
     ),
-    msg("operator.token.done.expires", "{date} までです。"),
+    msg("operator.token.done.expires", "{date} まで有効です。"),
     msg(
         "operator.token.scope.read_only",
         "読み取り専用です。リポジトリを見て、クローンすることだけができます。",
@@ -2318,11 +2318,11 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "operator.token.repos.all",
-        "アカウントが届くすべてのリポジトリに届きます。",
+        "アカウントがアクセスできるすべてのリポジトリが対象です。",
     ),
     msg(
         "operator.token.repos.only",
-        "次のリポジトリにだけ届きます: {repos}。",
+        "次のリポジトリだけが対象です: {repos}。",
     ),
     msg(
         "operator.token.done.out",
@@ -2351,7 +2351,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "operator.account.help.usage",
-        "使い方: planeter operator account create HANDLE --name TEXT [--password-prompt | --password-fd N]\n        planeter operator account set-password HANDLE [--password-fd N]\n        planeter operator account disable HANDLE --reason TEXT\n        planeter operator account enable HANDLE\n        planeter operator account link-oidc HANDLE --issuer URL --subject TEXT\n        planeter operator account unlink-oidc HANDLE --issuer URL --subject TEXT\n        planeter operator account grant OWNER/NAME HANDLE --role read|write|maintain|admin\n        planeter operator account revoke OWNER/NAME HANDLE [--allow-no-admin]\n        planeter operator account list [--check]\n        planeter operator account show HANDLE\n       （どれも [--lang en|ja] を付けられます）\n\ncreate         アカウントを作ります。ユーザー名（HANDLE） は、小文字の英字、数字、- _ . の 1〜39 文字で、英字か数字から始め、あとから変えられません\n--name         アカウントに表示する名前。1〜100 文字\nset-password   アカウントのパスワードを設定します。そのアカウントのログイン中の状態はすべて終わり、トークンには手を付けません\ndisable        アカウントをすぐに止めます。ログインできなくなり、ログイン中の状態は終わり、トークンは受け付けられません。何も削除しません。--reason に理由を 1〜200 文字で書きます\nenable         disable を元に戻します。トークンは有効期限まで再び使え、終わったログイン中の状態は戻りません\nlink-oidc      アカウントを、このサーバーが設定されているログインのプロバイダー（PLANETER_OIDC_ISSUER） の ID に結び付けます。ほかのアカウントの ID を移すことはしません\ngrant          アカウントに、リポジトリでの権限を 1 つだけ与えます\nrevoke         アカウント自身がリポジトリで持っている権限を取り上げます。リポジトリの管理者が最後の 1 人になるときは、--allow-no-admin を付けないかぎり、取り上げません\nlist           アカウントを、ユーザー名の順に表示します。--check を付けると、大文字と小文字だけが違うユーザー名を表示します\nshow           アカウント 1 つ: 状態、権限、直近の 50 件の出来事",
+        "使い方: planeter operator account create HANDLE --name TEXT [--password-prompt | --password-fd N]\n        planeter operator account set-password HANDLE [--password-fd N]\n        planeter operator account disable HANDLE --reason TEXT\n        planeter operator account enable HANDLE\n        planeter operator account link-oidc HANDLE --issuer URL --subject TEXT\n        planeter operator account unlink-oidc HANDLE --issuer URL --subject TEXT\n        planeter operator account grant OWNER/NAME HANDLE --role read|write|maintain|admin\n        planeter operator account revoke OWNER/NAME HANDLE [--allow-no-admin]\n        planeter operator account list [--check]\n        planeter operator account show HANDLE\n       （どれも [--lang en|ja] を付けられます）\n\ncreate         アカウントを作ります。ユーザー名（HANDLE）は、小文字の英字、数字、- _ . の 1〜39 文字で、英字か数字から始め、あとから変えられません\n--name         アカウントに表示する名前。1〜100 文字\nset-password   アカウントのパスワードを設定します。そのアカウントのログイン中の状態はすべて終わり、トークンには影響しません\ndisable        アカウントをすぐに止めます。ログインできなくなり、ログイン中の状態は終わり、トークンは受け付けられません。何も削除しません。--reason に理由を 1〜200 文字で書きます\nenable         disable を元に戻します。トークンは有効期限まで再び使え、終わったログイン中の状態は戻りません\nlink-oidc      アカウントを、このサーバーに設定されているログインのプロバイダー（PLANETER_OIDC_ISSUER）の ID に連携します。ほかのアカウントに連携済みの ID を移すことはしません\ngrant          アカウントに、リポジトリでの権限を 1 つだけ与えます\nrevoke         アカウントに直接与えられているリポジトリでの権限を取り消します。リポジトリの管理者が最後の 1 人になるときは、--allow-no-admin を付けないかぎり、取り消しません\nlist           アカウントを、ユーザー名の順に表示します。--check を付けると、大文字と小文字だけが違うユーザー名を表示します\nshow           アカウント 1 つ: 状態、権限、直近の 50 件の出来事",
     ),
     msg(
         "operator.account.help.roles",
@@ -2387,7 +2387,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "operator.account.error.handle_taken",
-        "ユーザー名 {handle} はすでに使われています（大文字と小文字は区別せずに比べ、組織とリポジトリの所有者も数えます）。別のユーザー名にしてください。",
+        "ユーザー名 {handle} はすでに使われています（大文字と小文字は区別せずに比べ、組織とリポジトリの所有者の名前も同じように比べます）。別のユーザー名にしてください。",
     ),
     msg(
         "operator.account.error.name_missing",
@@ -2431,7 +2431,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "operator.account.error.password_echo",
-        "端末の入力表示を止められなかった ({why}) ので、パスワードは尋ねませんでした。--password-fd N を使うか、stty が使える場所で実行してください。何も変えていません。",
+        "端末の入力表示を止められなかったので（{why}）、パスワードの入力は求めませんでした。--password-fd N を使うか、stty が使える場所で実行してください。何も変えていません。",
     ),
     msg("operator.account.prompt.password", "パスワード:"),
     msg("operator.account.prompt.again", "もう一度パスワード:"),
@@ -2453,23 +2453,23 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "operator.account.error.no_provider",
-        "このサーバーには、ログインのプロバイダーが設定されていません（PLANETER_OIDC_ISSUER が未設定です） ので、結び付ける ID がありません。サーバーと同じように設定して、もう一度実行してください。",
+        "このサーバーには、ログインのプロバイダーが設定されていません（PLANETER_OIDC_ISSUER が未設定です）。そのため、連携する ID がありません。サーバーと同じように設定して、もう一度実行してください。",
     ),
     msg(
         "operator.account.error.other_issuer",
-        "{issuer} は、このサーバーが設定されているログインのプロバイダーではありません。PLANETER_OIDC_ISSUER の値を使ってください。",
+        "{issuer} は、このサーバーに設定されているログインのプロバイダーではありません。PLANETER_OIDC_ISSUER の値を使ってください。",
     ),
     msg(
         "operator.account.error.identity_taken",
-        "この ID はすでにほかのアカウントに結び付いていて、移すことはしません。先にそちらで結び付けを外してください。",
+        "この ID はすでにほかのアカウントに連携されていて、移すことはしません。先にそちらで連携を解除してください。",
     ),
     msg(
         "operator.account.error.not_linked",
-        "この ID は {handle} に結び付いていません。何も変えていません。",
+        "この ID は {handle} に連携されていません。何も変えていません。",
     ),
     msg(
         "operator.account.error.already_linked",
-        "この ID はすでに {handle} に結び付いています。何も変えていません。",
+        "この ID はすでに {handle} に連携されています。何も変えていません。",
     ),
     msg(
         "operator.account.error.role",
@@ -2485,11 +2485,11 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "operator.account.error.no_grant",
-        "{handle} は {repo} に自分の権限を持っていないので、取り上げるものがありません。",
+        "{repo} で直接与えられた権限が {handle} にはないので、取り消すものがありません。",
     ),
     msg(
         "operator.account.error.already_role",
-        "{handle} は、すでに {repo} で {role} の権限を持っています。何も変えていません。",
+        "{handle} は、{repo} で、すでに権限「{role}」を持っています。何も変えていません。",
     ),
     msg(
         "operator.account.error.busy",
@@ -2497,15 +2497,15 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "operator.account.done.has_password",
-        "{handle} ({name}) には、パスワードがあります。",
+        "{handle}（{name}）には、パスワードがあります。",
     ),
     msg(
         "operator.account.done.no_password",
-        "{handle} ({name}) には、パスワードがありません。結び付けた ID でだけログインできます。",
+        "{handle}（{name}）には、パスワードがありません。連携した ID でだけログインできます。",
     ),
     msg(
         "operator.account.done.sessions_ended",
-        "ログイン中の状態はすべて終わりました。トークンには手を付けていません。",
+        "ログイン中の状態はすべて終わりました。トークンには影響していません。",
     ),
     msg(
         "operator.account.done.disabled",
@@ -2525,15 +2525,15 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "operator.account.done.granted",
-        "{name} ({handle}) に、{repo} の {role} が与えられました: {means}",
+        "{name}（{handle}）に、{repo} での権限「{role}」が与えられました: {means}",
     ),
     msg(
         "operator.account.done.revoked",
-        "{name} ({handle}) は、{repo} で自分の {role} の権限を持たなくなりました。",
+        "{name}（{handle}）は、{repo} で直接与えられた権限「{role}」を持たなくなりました。",
     ),
     msg(
         "operator.account.done.no_admin",
-        "{repo} は、リポジトリの管理者を与えるまで、だれも管理できません。",
+        "{repo} は、リポジトリの管理者の権限を与えるまで、だれも管理できません。",
     ),
     msg(
         "operator.account.role.read",
@@ -2550,11 +2550,11 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "operator.account.warn.sole_admin",
-        "次のリポジトリは、リポジトリの管理者を与えるまで、だれも管理できなくなります: {repos}",
+        "次のリポジトリは、リポジトリの管理者の権限を与えるまで、だれも管理できなくなります: {repos}",
     ),
     msg(
         "operator.account.warn.sole_admin_more",
-        "次のリポジトリは、リポジトリの管理者を与えるまで、だれも管理できなくなります: {repos}、ほか {more} 件",
+        "次のリポジトリは、リポジトリの管理者の権限を与えるまで、だれも管理できなくなります: {repos}、ほか {more} 件",
     ),
     msg(
         "operator.account.list.header",
@@ -2595,9 +2595,12 @@ pub const CATALOG: &[Entry] = &[
         "operator.account.show.password_changed",
         "あり（{date} に設定）",
     ),
-    msg("operator.account.show.identities", "結び付いた ID"),
+    msg("operator.account.show.identities", "連携している ID"),
     msg("operator.account.show.roles", "権限"),
-    msg("operator.account.show.roles_none", "自分のものはありません"),
+    msg(
+        "operator.account.show.roles_none",
+        "直接与えられたものはありません",
+    ),
     msg(
         "operator.account.show.roles_more",
         "ほか {more} 件（全部で {total} 件）",
@@ -2628,19 +2631,19 @@ pub const CATALOG: &[Entry] = &[
     msg("account.event.then", "{first}{second}"),
     msg(
         "account.event.identity_linked",
-        "{host} の ID を、{by}がアカウントに結び付けました。",
+        "{host} の ID を、{by}がアカウントに連携しました。",
     ),
     msg(
         "account.event.identity_unlinked",
-        "{host} の ID を、{by}がアカウントから外しました。",
+        "{host} の ID とアカウントの連携を、{by}が解除しました。",
     ),
     msg(
         "account.event.plain.identity_linked",
-        "ID を、{by}がアカウントに結び付けました。",
+        "ID を、{by}がアカウントに連携しました。",
     ),
     msg(
         "account.event.plain.identity_unlinked",
-        "ID を、{by}がアカウントから外しました。",
+        "ID とアカウントの連携を、{by}が解除しました。",
     ),
     msg(
         "account.event.token_created",
@@ -2661,7 +2664,7 @@ pub const CATALOG: &[Entry] = &[
     msg("account.event.token_repositories", "{count} 件のリポジトリ"),
     msg(
         "account.event.token_repositories_all",
-        "アカウントが届くすべてのリポジトリ",
+        "アカウントがアクセスできるすべてのリポジトリ",
     ),
     msg(
         "account.event.session_ended",
@@ -2673,7 +2676,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "account.event.role_revoked",
-        "{repository} での権限「{role}」を、{by}が取り上げました。",
+        "{repository} での権限「{role}」を、{by}が取り消しました。",
     ),
     msg(
         "account.event.plain.role_granted",
@@ -2681,7 +2684,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "account.event.plain.role_revoked",
-        "リポジトリでの権限を、{by}が取り上げました。",
+        "リポジトリでの権限を、{by}が取り消しました。",
     ),
     msg("account.event.role.read", "読み取り"),
     msg("account.event.role.write", "書き込み"),
@@ -2717,7 +2720,7 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "provider.error.session_hours",
-        "PLANETER_SESSION_HOURS は、{min} から {max} までの整数の時間にしてください。今の値は {value} です。その範囲の数にするか、設定を外してください。",
+        "PLANETER_SESSION_HOURS は、{min} から {max} までの整数（単位は時間）にしてください。今の値は {value} です。その範囲の数にするか、設定を外してください。",
     ),
     msg(
         "provider.line.allow_private",
@@ -2741,6 +2744,6 @@ pub const CATALOG: &[Entry] = &[
     ),
     msg(
         "operator.account.note.passwords_off",
-        "このサーバーでは、パスワードでのログインはオフです（PLANETER_LOCAL_PASSWORDS=off）。このパスワードは保存されますが、オンにするまでログインには使えません。",
+        "このサーバーでは、パスワードでのログインはオフです（PLANETER_LOCAL_PASSWORDS=off）。このパスワードはそのまま残りますが、オンにするまでログインには使えません。",
     ),
 ];

@@ -57,6 +57,8 @@ says the same for every count; numbers group with commas (`1,200`).
 | an administrator of a repository | リポジトリの管理者 | yes | Always with the qualifier, never 管理者 alone (`error.forbidden_hide.message`, `review.hidden.*`, `new.empty.consequence`). Not the person who runs the server. Added 2026-10-29 (D-50). | Hard term — reviewers decide |
 | the repository check that prikk's `doctor` does | 点検 | yes | `recovery.blocker.doctor_problems`, `recovery.note.unreached_objects`. Only for `doctor`; it is a different operation from the verification, as the English keeps *repository check* and *verification* apart. 検査 is not used. Added 2026-10-29 (D-50). | Hard term — reviewers decide |
 | merge | マージ | yes | The usual loan word in software (`proposal.*`, `review.*`: "何もマージしません"). Added 2026-10-29 (D-50). | Proposed |
+| link / unlink (an identity at the provider to an account) | 連携する / 連携を解除 | yes | One word for one thing (D-150): the signed text already says 連携されていません (`page.sso_unlinked.*`), so the operator's commands and the account log say 連携 too (`operator.account.*`, `account.event.identity_*`); 結び付ける is not used. Added 2026-11-28. | Proposed |
+| a role given to the account directly (not through ownership or an organization) | 直接与えられた権限 | yes | `operator.account.show.roles_none`, `operator.account.show.*`: the roles the account has of its own; the owner and an organization's administrators count separately (`docs/accounts.md`). A role is always written 権限「{role}」. Revoked is 取り消す (the word the token messages use), never 取り上げる. Added 2026-11-28. | Proposed |
 
 ## Messages that carry a term or a trust label
 
@@ -116,7 +118,7 @@ Rules the Japanese catalogs follow, each enforced by `crates/planeter-web/tests/
 is 変わる / 変える (「どのブランチも変わっていません」); **変更** is the noun *change* only (and the fixed pair 変更を依頼する / 変更依頼あり, which the
 reviewers approved). *Sign in* is ログイン everywhere (シングルサインオン keeps its own name). *Refused* is 拒否 (not 断る / 断られた). *Closed* is
 閉じている (a proposal and a branch alike; 締め切られました for "comments closed on {date}" is a deadline, a different sense). *Confirm* is 確定.
-A space stands between a numeral or placeholder and its counter (`{used} 件`, `1 時間`). Brackets are full-width （ ）. `explain.queued` does **not**
+The person who runs the server is このサーバーを運用している人 in every sentence for people (the operator's commands, the account log, the repository's key list: D-150 changed the three signed sentences that said このサーバーの運用者); 運用者 stays in the two API hints for developers. *Linked* is 連携 (結び付ける is not used for an identity), a role is *revoked* with 取り消す (取り上げる reads as a punishment), and no idiom stands for what happens (手を付けません → 影響しません): each is a rule of `ja.rules`. A space stands between a numeral or placeholder and its counter (`{used} 件`, `1 時間`). Brackets are full-width （ ）. `explain.queued` does **not**
 promise a signature (no まだ): the English has no "yet" by decision D-50, because a keyless forge cannot promise that anyone will sign.
 
 Words with one family and more than one audience or sense, **deliberately left as they are**: 取り込み = take into the repository (the server's
