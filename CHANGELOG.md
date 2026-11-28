@@ -3,7 +3,7 @@
 Releases are bare version tags; each section is the release's notes (assembled into the GitHub
 release by `release.yml`). Kept by hand, per release, so nothing here goes stale by templating.
 
-## [0.10.0] — unreleased until tagged — accounts you can make and read, and a sign-in provider that can be the only way in
+## [0.10.0] — 2026-11-28 — accounts you can make and read, and a sign-in provider that can be the only way in
 
 0.10.0 is **step 1 of RFC 014: accounts and sign-in**. The person who runs the server can now make accounts, set their passwords, link them to a sign-in provider, give them roles and make their access tokens **with commands that run beside the live server**, and every one of those acts is written to **the account's own log** in sentences the account's holder is meant to read. The sign-in provider (OpenID Connect) got the settings a real deployment needs: a provider on a private address, how long a sign-in lasts, and **turning password sign-in off**, so that the provider's second factor has nothing weaker beside it. It also fixes **two availability faults in the running service** (a read, an export or a changes page could be answered with an error while prikk was writing). The pages where a person makes their own tokens and changes their own password are **not** in this release (step 2). The whole of it is described on one page, [`docs/accounts.md`](docs/accounts.md), whose every quoted sentence is the program's own, checked word for word by a test.
 
