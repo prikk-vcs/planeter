@@ -2,7 +2,7 @@
 # Run a command with the project's resource budget (D-134): memory, swap, CPU and priority are capped, so that the gates and other heavy
 # jobs do not run the host at 100% or into swap.
 #
-#   tools/run-capped.sh [--cpu PERCENT] [--mem SIZE] [--jobs N] [--nice N] -- COMMAND...
+#   tools/run-capped.sh [--cpu PERCENT] [--mem SIZE] [--jobs N] [--nice N] [--wait SECONDS] [--no-lock] -- COMMAND...
 #   tools/run-capped.sh --derive CORES MEMTOTAL_KIB     (prints "CPU MEM JOBS" for a machine of that size, and runs nothing)
 #   e.g. tools/gates.sh --tier review            (which runs itself inside this script)
 #        tools/run-capped.sh --cpu 200 -- cargo test --workspace --locked
@@ -19,7 +19,15 @@
 #   * nice 10
 # Each can be set by a flag (`--cpu`, `--mem`, `--jobs`, `--nice`) or by an environment variable (`RUN_CAPPED_CPU`, `RUN_CAPPED_MEM`,
 # `RUN_CAPPED_JOBS`, `RUN_CAPPED_NICE`; `CARGO_BUILD_JOBS`, if set, is kept as the jobs); a flag beats the variable, the variable beats the
-# derived value. The script prints the numbers it chose and why. With `systemd-run --user --scope` unavailable the command still runs, at that
+# derived value. The script prints the numbers it chose and why.
+#
+# **One heavy job at a time on the machine** (RFC 010 Amendment 2, the concurrency part of the budget): a job takes an exclusive `flock` on one file in
+# the per-user runtime directory (`$XDG_RUNTIME_DIR`, else `$TMPDIR`, else `/tmp`; `RUN_CAPPED_LOCK_DIR` names another), and a second job **waits**,
+# saying who holds the lock (the command and its age), and gives up after `--wait SECONDS` (`RUN_CAPPED_LOCK_WAIT`, default 5400) with exit status 3 and
+# a sentence, having run nothing. The lock is held by the running process, not by the file's existence: it is released on every way out, a kill
+# included, and a file left behind means nothing. A job started inside a holder (the gates call the runner once, but a test may call it again) does not wait
+# for its own parent (`RUN_CAPPED_LOCK_HELD`). `--no-lock` takes no lock and says so loudly: it is for the script's own tests. **Development machine, not the
+# running service.** With `systemd-run --user --scope` unavailable the command still runs, at that
 # priority and with that job count, and the script says it is **not** capped. The exit status is the command's. Do not start a heavy job while
 # another one of yours is running, and look at `uptime` first.
 set -u
@@ -51,6 +59,8 @@ set -- $(derive "$cores" "$memkib") "$@"
 cpu=$1 mem=$2 jobs=$3
 shift 3
 nice=10
+lockwait=${RUN_CAPPED_LOCK_WAIT:-5400}
+nolock=0
 cpu_why="an eighth of $cores cores' worth, between 200 and 800"
 mem_why="the smaller of 16 GiB and 40% of $((memkib / 1024 / 1024)) GiB"
 jobs_why="cores / 4 ($cores), between 2 and 8"
@@ -65,11 +75,46 @@ while [ "${1:-}" != "--" ]; do
     --mem) mem="${2:?--mem needs a size}"; mem_why="--mem"; shift 2 ;;
     --jobs) jobs="${2:?--jobs needs a number}"; jobs_why="--jobs"; shift 2 ;;
     --nice) nice="${2:?--nice needs a number}"; shift 2 ;;
-    *) echo "usage: run-capped.sh [--cpu PERCENT] [--mem SIZE] [--jobs N] [--nice N] -- command..." >&2; exit 2 ;;
+    --wait) lockwait="${2:?--wait needs a number of seconds}"; shift 2 ;;
+    --no-lock) nolock=1; shift ;;
+    *) echo "usage: run-capped.sh [--cpu PERCENT] [--mem SIZE] [--jobs N] [--nice N] [--wait SECONDS] [--no-lock] -- command..." >&2; exit 2 ;;
   esac
 done
 shift
 [ "$#" -gt 0 ] || { echo "run-capped.sh: no command" >&2; exit 2; }
+case "$lockwait" in '' | *[!0-9]*) echo "run-capped.sh: --wait wants a whole number of seconds, not '$lockwait'" >&2; exit 2 ;; esac
+
+# --- the machine-wide lock for heavy jobs
+lockdir=${RUN_CAPPED_LOCK_DIR:-${XDG_RUNTIME_DIR:-${TMPDIR:-/tmp}}}
+lock="$lockdir/planeter-heavy-job-$(id -u).lock"
+holder_text() { # who holds it, from the note the holder wrote when it took the lock
+  IFS='	' read -r hpid hat hcmd < "$lock.info" 2> /dev/null || hpid=''
+  if [ -z "$hpid" ] || [ -z "$hat" ]; then echo "another heavy job (it left no description)"; return; fi
+  age=$(($(date +%s) - hat))
+  echo "\`$hcmd\` (pid $hpid, running $((age / 60)) min $((age % 60)) s)"
+}
+if [ "$nolock" = 1 ]; then
+  echo "run-capped: --no-lock: NO machine-wide lock is taken; two heavy jobs may run at once and heat the machine. This is for the script's own tests, not for a heavy job." >&2
+elif [ -n "${RUN_CAPPED_LOCK_HELD:-}" ] && kill -0 "$RUN_CAPPED_LOCK_HELD" 2> /dev/null; then
+  :
+elif ! command -v flock > /dev/null 2>&1; then
+  echo "run-capped: flock is not available: NO machine-wide lock is taken (install util-linux); do not start a heavy job while another is running." >&2
+else
+  mkdir -p "$lockdir" 2> /dev/null
+  exec 9>> "$lock" || { echo "run-capped: cannot open the lock file $lock" >&2; exit 2; }
+  if ! flock -n 9; then
+    who=$(holder_text)
+    echo "run-capped: waiting for the heavy-job lock ($lock): it is held by $who; giving up after $lockwait s" >&2
+    if ! flock -w "$lockwait" 9; then
+      echo "run-capped: gave up: the heavy-job lock was still held after $lockwait s by $who. Nothing was run. Wait for it, or look at what holds it; do not start a second heavy job beside it." >&2
+      exit 3
+    fi
+    echo "run-capped: got the lock" >&2
+  fi
+  printf '%s\t%s\t%.300s\n' "$$" "$(date +%s)" "$*" > "$lock.info" 2> /dev/null
+  RUN_CAPPED_LOCK_HELD=$$
+  export RUN_CAPPED_LOCK_HELD
+fi
 export CARGO_BUILD_JOBS="$jobs"
 if command -v systemd-run > /dev/null 2>&1 && systemd-run --user --scope -q -p CPUQuota=100% true > /dev/null 2>&1; then
   echo "run-capped: CPUQuota=${cpu}% ($cpu_why) MemoryMax=${mem} ($mem_why) MemorySwapMax=0 nice=${nice} CARGO_BUILD_JOBS=${jobs} ($jobs_why)" >&2
