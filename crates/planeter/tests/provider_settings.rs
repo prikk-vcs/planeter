@@ -282,7 +282,7 @@ fn a_wrong_value_refuses_the_start_with_a_sentence_in_both_languages() {
         (
             vec![("PLANETER_SESSION_HOURS", "0")],
             "must be a whole number of hours from 1 to 720, and it is 0",
-            "1 から 720 までの整数の時間にしてください。今の値は 0 です",
+            "1 から 720 までの整数（単位は時間）にしてください。今の値は 0 です",
         ),
         (
             vec![("PLANETER_SESSION_HOURS", "721")],

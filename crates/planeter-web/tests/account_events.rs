@@ -78,7 +78,7 @@ fn every_kind_is_rendered_in_english_and_in_japanese_from_its_typed_form() {
             ),
             "An identity at idp.example:8443 was linked to the account by the sign-in provider."
                 .to_owned(),
-            "idp.example:8443 の ID を、ログインのプロバイダーがアカウントに結び付けました。"
+            "idp.example:8443 の ID を、ログインのプロバイダーがアカウントに連携しました。"
                 .to_owned(),
         ),
         (
@@ -88,7 +88,7 @@ fn every_kind_is_rendered_in_english_and_in_japanese_from_its_typed_form() {
                 &EventDetail::Host("idp.example".into()),
             ),
             format!("An identity at idp.example was unlinked from the account by {OP_EN}."),
-            format!("idp.example の ID を、{OP_JA}がアカウントから外しました。"),
+            format!("idp.example の ID とアカウントの連携を、{OP_JA}が解除しました。"),
         ),
         (
             ev(
@@ -100,7 +100,7 @@ fn every_kind_is_rendered_in_english_and_in_japanese_from_its_typed_form() {
                 "Access token \"my laptop\" (read-only, all repositories the account can reach, until 2027-02-23) was created by {OP_EN}."
             ),
             format!(
-                "トークン「my laptop」（読み取り専用、アカウントが届くすべてのリポジトリ、2027-02-23 まで）を、{OP_JA}が作成しました。"
+                "トークン「my laptop」（読み取り専用、アカウントがアクセスできるすべてのリポジトリ、2027-02-23 まで）を、{OP_JA}が作成しました。"
             ),
         ),
         (
@@ -164,7 +164,7 @@ fn every_kind_is_rendered_in_english_and_in_japanese_from_its_typed_form() {
                 },
             ),
             format!("The role \"read\" on acme/tool was taken away by {OP_EN}."),
-            format!("acme/tool での権限「読み取り」を、{OP_JA}が取り上げました。"),
+            format!("acme/tool での権限「読み取り」を、{OP_JA}が取り消しました。"),
         ),
         (
             ev(
@@ -223,7 +223,7 @@ fn the_plural_boundaries_for_repositories_and_sign_ins_in_both_languages() {
     let (en2, ja2) = repos(2);
     assert!(
         en0.contains("all repositories the account can reach")
-            && ja0.contains("アカウントが届くすべてのリポジトリ")
+            && ja0.contains("アカウントがアクセスできるすべてのリポジトリ")
     );
     assert!(en1.contains("(write, 1 repository, until") && ja1.contains("、1 件のリポジトリ、"));
     assert!(en2.contains("(write, 2 repositories, until") && ja2.contains("、2 件のリポジトリ、"));

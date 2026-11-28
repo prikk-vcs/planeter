@@ -240,7 +240,7 @@ async fn with_passwords_off_the_page_offers_the_provider_only_and_says_why_in_bo
         ),
         (
             "ja",
-            "このサーバーでは、パスワードでのログインはオフになっています。ログインのプロバイダーでログインしてください。",
+            "このサーバーでは、パスワードでのログインはオフになっています。ログインのプロバイダー経由でログインしてください。",
         ),
     ] {
         let page = send(&off, login_page(lang)).await;

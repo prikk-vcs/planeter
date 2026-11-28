@@ -965,7 +965,7 @@ fn every_refusal_changes_nothing_says_why_and_speaks_both_languages() {
             vec!["account", "revoke", "alice/forge", "alice"],
             1,
             "has no role of its own on alice/forge",
-            "自分の権限を持っていない",
+            "で直接与えられた権限が alice にはない",
         ),
         (
             vec!["account", "revoke", "alice/nothing", "alice"],
