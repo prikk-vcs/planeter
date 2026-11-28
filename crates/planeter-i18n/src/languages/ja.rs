@@ -13,12 +13,12 @@ pub static JA: Language = Language {
     decimal_separator: '.',
     status: Status::SignedOff(SignOff {
         reviewers: &[
-            "the architect of the project (an AI assistant, Claude), reading on the owner's delegation of 2026-11-28",
+            "the architect of the project (an AI assistant, Claude), reading on the owner's delegation",
         ],
         date: "2026-11-28",
         commit: "860f3acc2e89312095d4d3d995cf45a300b841b8",
         sheet_fingerprint: "7193ee88069104ca",
-        note: "The seventh reading. The 160 messages that were newer than the sign-off of 2026-11-25 - the operator's account and token \
+        note: "The seventh reading, made on 2026-11-28 on the owner's delegation of that date. The 160 messages that were newer than the sign-off of 2026-11-25 - the operator's account and token \
                commands, the account's own log, the sign-in provider's settings and start-up lines, the sign-in page's sentences and the page \
                for a disabled account - were read in full against the glossary. 35 of them and 3 messages that had been signed (for one word: \
                the person who runs the server) were corrected (`corrections.tsv` of the reading, 38 messages in all); 125 were accepted as \
