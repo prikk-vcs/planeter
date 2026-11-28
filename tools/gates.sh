@@ -3,6 +3,7 @@
 #
 #   tools/gates.sh --tier commit  [--fail-fast]
 #   tools/gates.sh --tier review  [--commit REV] [--base REV] [--runs N] [--sheet FILE] [--no-ci] [--fail-fast]
+#   tools/gates.sh --tier docs    --base EVIDENCE [--commit REV] [--no-ci] [--fail-fast]     (only for a diff of documents; NOT a release tier)
 #   tools/gates.sh --tier release --sheet FILE [--commit REV] [--runs N] [--no-ci] [--fail-fast]     (--sheet is REQUIRED in the release tier)
 #   tools/gates.sh --tier T --plan          (print what the tier would run, and stop)
 #
@@ -83,7 +84,8 @@ shift 2
 SNAPDIR=$here
 case "$SNAPDIR" in */gates-snapshot.*) trap 'rm -rf "$SNAPDIR"' EXIT ;; *) echo "gates: not running from a snapshot directory: $SNAPDIR" >&2; exit 2 ;; esac
 
-# Run inside the cap, once.
+# Run inside the cap, once. (A plan runs nothing: it is not a heavy job, so it does not wait for the machine-wide lock.)
+case " $* " in *" --plan "*) GATES_CAPPED=1; export GATES_CAPPED ;; esac
 if [ -z "${GATES_CAPPED:-}" ]; then
   exec "$here/run-capped.sh" -- env GATES_CAPPED=1 sh "$here/gates.sh" --snapshot-of "$snapshot_of" "$@"
 fi
@@ -91,7 +93,7 @@ fi
 tier="" commit=HEAD base="" runs="" sheet="" no_ci=0 fail_fast=0 plan_only=0
 while [ "$#" -gt 0 ]; do
   case "$1" in
-    --tier) tier="${2:?--tier needs commit, review or release}"; shift 2 ;;
+    --tier) tier="${2:?--tier needs commit, review, docs or release}"; shift 2 ;;
     --commit) commit="${2:?--commit needs a revision}"; shift 2 ;;
     --base) base="${2:?--base needs a revision}"; shift 2 ;;
     --runs) runs="${2:?--runs needs a number}"; shift 2 ;;
@@ -104,7 +106,14 @@ while [ "$#" -gt 0 ]; do
 done
 # A relative --sheet is relative to where the script was run, and the steps run in another directory (the gate's worktree): make it absolute now.
 case "$sheet" in "" | /*) ;; *) sheet="$PWD/$sheet" ;; esac
-case "$tier" in commit | review | release) ;; *) echo "gates: --tier commit, review or release is required" >&2; exit 2 ;; esac
+case "$tier" in commit | review | docs | release) ;; *) echo "gates: --tier commit, review, docs or release is required" >&2; exit 2 ;; esac
+# The docs tier is the review tier's environment (a fresh worktree, the shared target, the tools, CI read for the commit) with its own plan.
+tier_name=$tier docs_tier=0
+if [ "$tier" = docs ]; then docs_tier=1 tier=review; fi
+if [ "$docs_tier" = 1 ] && [ -z "$base" ]; then
+  echo "gates: the docs tier needs --base REV: the last commit whose release tier is green and verified (the evidence the documents are added to). Nothing was started." >&2
+  exit 2
+fi
 if [ "$tier" = release ] && [ -z "$sheet" ]; then
   echo "gates: the release tier needs --sheet FILE: the Japanese reading sheet the owner reads (a release is not tagged on a sheet nobody named). Nothing was started." >&2
   exit 2
@@ -119,6 +128,18 @@ cd "$repo" || exit 2
 sha=$(git rev-parse --verify "$commit^{commit}" 2> /dev/null) || die "no such revision: $commit"
 short=$(echo "$sha" | cut -c1-8)
 selftest="${GATES_SELF_TEST_STEPS:-}"
+if [ "$docs_tier" = 1 ]; then
+  git rev-parse --verify "$base^{commit}" > /dev/null 2>&1 || die "the docs tier: no such revision for --base: $base"
+  git merge-base --is-ancestor "$base" "$sha" 2> /dev/null || die "the docs tier refuses: the evidence commit $base is not an ancestor of $short. Nothing was started."
+  # Only documents may differ from the evidence: docs/, rfcs/, and the root CHANGELOG.md, README.md and ROADMAP.md.
+  outside=$(git diff --name-only "$base" "$sha" 2> /dev/null | grep -Ev '^(docs/|rfcs/|CHANGELOG\.md$|README\.md$|ROADMAP\.md$)')
+  if [ -n "$outside" ]; then
+    echo "gates: the docs tier refuses: between $(echo "$base" | cut -c1-8) and $short these files are not documents (only docs/, rfcs/, CHANGELOG.md, README.md and ROADMAP.md may differ):" >&2
+    printf '%s\n' "$outside" | head -10 | sed 's/^/gates:   /' >&2
+    echo "gates: run the release tier (or the review tier) for this diff. Nothing was started." >&2
+    exit 2
+  fi
+fi
 
 # ---------------------------------------------------------------------------------------------------- the compiler, as the release has it
 msrv=$(git show "$sha:Cargo.toml" 2> /dev/null | sed -n 's/^rust-version *= *"\([0-9.]*\)".*/\1/p' | head -1)
@@ -212,8 +233,22 @@ case "$tier" in
     fi
     ;;
   review)
+    if [ "$docs_tier" = 1 ]; then
+      # The docs tier (RFC 010 Amendment 2, principle 7): for a diff of documents only, on the evidence of a release tier. It is NOT a release tier.
+      plan fmt "cargo fmt --all --check"
+      plan floor-check "cargo run -q --locked -p planeter-floor-check"
+      plan pin-check "cargo run -q --locked -p planeter-pin-check"
+      plan deny "cargo deny check"
+      plan audit "cargo audit --db \"\$GATES_ADVDB\" --no-fetch"
+      plan doc "RUSTDOCFLAGS='-D warnings' cargo doc --workspace --no-deps --locked"
+      plan package-keys 'sh "$GATES_PACKAGE_KEYS"'
+      plan sheet-check "cargo run -q --locked -p planeter-i18n-sheet -- --lang ja --out \"\$GATES_SHEET_OUT\" && cargo run -q --locked -p planeter-i18n-sheet -- --lang ja --check \"\$GATES_SHEET_OUT\""
+      plan tests-that-read-documents 'sh "$GATES_TESTSET" docs'
+    else
+    # The tests this tier runs are the ones CI cannot: the test binaries that hold a test which skips in CI for want of bubblewrap (derived from the skip
+    # marker the tests print; see the step's own output). CI runs the whole workspace, so the rest is CI's evidence; the release tier runs everything.
     i=1
-    while [ "$i" -le "$runs_with" ]; do plan "tests-with-prikk-$i" "$tests_with"; i=$((i + 1)); done
+    while [ "$i" -le "$runs_with" ]; do plan "tests-ci-cannot-$i" 'sh "$GATES_TESTSET" bwrap'; i=$((i + 1)); done
     plan deny "cargo deny check"
     plan audit "cargo audit --db \"\$GATES_ADVDB\" --no-fetch"
     # The sheet step needs no file: a sheet is generated from this worktree's live catalogs and checked (the catalogs are complete and the generator
@@ -228,6 +263,7 @@ case "$tier" in
     if touches '(^\.github/|^Dockerfile$|^tools/|(^|/)Cargo\.(toml|lock)$)'; then
       plan enf2 "tools/enf2-symbol-check/check.sh"
       plan pin-check "cargo run -q --locked -p planeter-pin-check"
+    fi
     fi
     ;;
   release)
@@ -253,11 +289,17 @@ esac
 if [ -n "$selftest" ]; then : > "$PLAN"; cat "$selftest" > "$PLAN"; fi
 
 print_header() {
-  say "tier: $tier   commit: $short   compiler: ${pinned:-"(self test: none)"} ($(rustc --version 2> /dev/null))"
+  say "tier: $tier_name   commit: $short   compiler: ${pinned:-"(self test: none)"} ($(rustc --version 2> /dev/null))"
   [ -n "$pinned" ] && say "the release's compiler, from .github/workflows/ci.yml; RUSTUP_TOOLCHAIN=$pinned"
   case "$tier" in
     commit) say "runs where you are; incremental builds on; no worktree is made and none is cleaned up" ;;
-    review) say "a review's green is NOT a release's evidence: it reads CI for the commit and runs what CI cannot, on a shared target (CARGO_INCREMENTAL=0)" ;;
+    review)
+      if [ "$docs_tier" = 1 ]; then
+        say "the DOCS tier is NOT a release tier: the diff from the evidence commit $(echo "$base" | cut -c1-8) names only documents; it reads CI for the commit and checks what a document change can break, on a shared target"
+      else
+        say "a review's green is NOT a release's evidence: it reads CI for the commit and runs what CI cannot (the test binaries that skip in CI for want of bubblewrap), on a shared target (CARGO_INCREMENTAL=0)"
+      fi
+      ;;
     release) say "a clean worktree and an empty target; everything it makes is removed at the end" ;;
   esac
   say "steps:"
@@ -295,8 +337,9 @@ GATES_DRYRUN_TARGET="$SCR/dry-run-target"
 GATES_ADVDB="$SCR/advisory-db"
 GATES_SHEET_OUT="$SCR/sheet.md"
 GATES_PACKAGE_KEYS="$SCR/package-keys.sh"
-export GATES_DRYRUN_TARGET GATES_ADVDB GATES_SHEET_OUT GATES_PACKAGE_KEYS
-if [ "$tier" = release ]; then
+GATES_TESTSET="$SCR/testset.sh"
+export GATES_DRYRUN_TARGET GATES_ADVDB GATES_SHEET_OUT GATES_PACKAGE_KEYS GATES_TESTSET
+if [ "$tier" = release ] || [ "$docs_tier" = 1 ]; then
   # The `package-keys` step (release tier only): for each of the eleven published crates, `cargo package --list`; fail if a listed file is named like a key
   # (`*.pem`, `*.key`, `*.seed`, `*.p12`) or contains `PRIVATE KEY-----` or `-----BEGIN PRIVATE`. Run in the worktree. The list `known` below is empty
   # (IS-76: the two test keys that earlier packages held as strings are fixtures now, which the packages leave out); a file named in it as `crate:path` would
@@ -326,6 +369,67 @@ echo "package-keys: looked at $files files of: $crates"
 if [ "$bad" -ne 0 ]; then echo "package-keys: $bad file(s) must not be in a published package"; exit 1; fi
 echo "package-keys: no private key in any package"
 PKEYS
+fi
+if [ "$tier" = review ]; then
+  # The test set of the review tier and of the docs tier, DERIVED from the sources of the worktree (no list is kept by hand).
+  #   bwrap: the test binaries that print a skip marker ("skipping: ..." or "SKIPPED: ...") whose reason names bubblewrap or the sandbox: the tests CI
+  #          cannot run (its runner has no `bwrap`). CI runs the whole workspace and these skip there; this run is where they run.
+  #   docs:  the test binaries whose sources read a file under docs/ or rfcs/, or the CHANGELOG, README or ROADMAP.
+  # It prints the set and its size before it runs anything, runs `cargo test` for each crate with only those targets, and fails if any does. An empty
+  # bwrap set is a failure: the derivation has found nothing, which means it is broken, not that nothing is needed.
+  cat > "$GATES_TESTSET" <<'TESTSET'
+mode=${1:?mode}
+tmpd=$(mktemp -d "${TMPDIR:-/tmp}/testset.XXXXXX") || exit 2
+trap 'rm -rf "$tmpd"' EXIT
+find crates tools -type f -name '*.rs' \( -path '*/tests/*' -o -path '*/src/*' \) -not -path '*/target/*' 2> /dev/null | sort > "$tmpd/files"
+total=$(grep -c '/tests/[^/]*\.rs$' "$tmpd/files")
+selected() { # FILE
+  case "$mode" in
+    bwrap)
+      m=$(grep -A2 -E '(eprintln|println)!\("(skipping|SKIPPED)' "$1" 2> /dev/null) || return 1
+      printf '%s\n' "$m" | grep -qiE 'bubblewrap|bwrap|sandbox' && return 0
+      printf '%s\n' "$m" | grep -q '{why}' && grep -qiE 'bubblewrap|bwrap|Sandbox' "$1" && return 0
+      return 1
+      ;;
+    docs)
+      grep -qE 'read_to_string|include_str!|fs::read|File::open' "$1" 2> /dev/null || return 1
+      grep -qE '(docs|rfcs)/|CHANGELOG\.md|README\.md|ROADMAP\.md' "$1"
+      ;;
+    *) echo "testset: unknown mode $mode"; exit 2 ;;
+  esac
+}
+n=0
+while read -r f; do
+  selected "$f" || continue
+  d=$(dirname "$f")
+  while [ ! -f "$d/Cargo.toml" ]; do d=$(dirname "$d"); done
+  pkg=$(sed -n '/^\[package\]/,/^\[/s/^name *= *"\(.*\)".*/\1/p' "$d/Cargo.toml" | head -1)
+  rel=${f#"$d"/}
+  case "$rel" in
+    tests/*/*) echo "--tests" ;;
+    tests/*.rs) b=${rel#tests/}; echo "--test ${b%.rs}" ;;
+    src/*) if [ -f "$d/src/lib.rs" ]; then echo "--lib"; else echo "--bins"; fi ;;
+    *) continue ;;
+  esac >> "$tmpd/pkg-$pkg"
+  echo "$pkg $rel" >> "$tmpd/chosen"
+  n=$((n + 1))
+done < "$tmpd/files"
+if [ "$n" -eq 0 ]; then
+  if [ "$mode" = bwrap ]; then echo "testset: bwrap: the derivation found no test that skips for want of bubblewrap: it is broken; nothing was run"; exit 1; fi
+  echo "testset: $mode: no test reads those files; nothing to run"; exit 0
+fi
+echo "testset: $mode: $n source file(s) select test targets, in $(ls "$tmpd" | grep -c '^pkg-') crate(s), of $total integration-test binaries in the workspace:"
+sort -u "$tmpd/chosen" | sed 's/^/testset:   /'
+status=0
+for pf in "$tmpd"/pkg-*; do
+  pkg=${pf##*/pkg-}
+  args=$(sort -u "$pf" | tr '\n' ' ')
+  case "$args" in *--tests*) args="--tests --lib" ;; esac
+  echo "testset: cargo test --locked --no-fail-fast -p $pkg $args"
+  cargo test --locked --no-fail-fast -p "$pkg" $args || status=1
+done
+exit $status
+TESTSET
 fi
 case "$tier" in
   release)
@@ -456,7 +560,7 @@ while IFS="$(printf '\t')" read -r name cmd; do
 done < "$PLAN"
 
 echo
-say "result: tier $tier, commit $short, compiler ${pinned:-none}"
+say "result: tier $tier_name, commit $short, compiler ${pinned:-none}"
 printf '%-24s %6s %8s %9s %12s\n' step exit "wall s" "CPU s" "peak MiB*"
 awk -F'\t' '{printf "%-24s %6s %8s %9s %12s\n", $1, $2, $3, $4, $5; w+=$3; if ($4 != "-") c+=$4} END {printf "%-24s %6s %8d %9d\n", "total", "", w, c}' "$RESULTS"
 say "* peak MiB is the scope's memory.peak so far (it includes page cache); CPU s is the scope's cpu.stat difference around the step"

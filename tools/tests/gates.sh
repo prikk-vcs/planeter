@@ -64,7 +64,8 @@ if rustup toolchain list 2> /dev/null | grep -q "^$pin-"; then
   absent "review plan: a documents-only diff has no msrv check" "msrv-check" "$out"
   absent "review plan: a documents-only diff has no publish dry run" "publish-dry-run" "$out"
   absent "review plan: a documents-only diff has no ENF-2" "enf2" "$out"
-  contains "review plan: always the tests with prikk, deny, audit, the sheet" "tests-with-prikk-1" "$out"
+  contains "review plan: always the tests CI cannot run, deny, audit, the sheet" "tests-ci-cannot-1" "$out"
+  absent "review plan: no longer the whole workspace with prikk" "tests-with-prikk" "$out"
   contains "review plan: the compiler is the pin" "RUSTUP_TOOLCHAIN=$pin" "$out"
   out=$(gates --tier review --commit "$lock_change" --plan)
   contains "review plan: a Cargo.lock change runs the 1.89.0 check" "msrv-check" "$out"
@@ -77,7 +78,7 @@ if rustup toolchain list 2> /dev/null | grep -q "^$pin-"; then
   contains "review plan: an absolute --sheet is kept" "--check \"/elsewhere/sheet.md\"" "$out"
   absent "review plan: an absolute --sheet is not prefixed" "$r/elsewhere" "$out"
   out=$(gates --tier review --commit "$lock_change" --base "$first" --runs 2 --plan)
-  contains "review plan: --runs 2 is two runs" "tests-with-prikk-2" "$out"
+  contains "review plan: --runs 2 is two runs" "tests-ci-cannot-2" "$out"
   out=$(gates --tier release --commit "$docs_only" --sheet "$osheet" --plan)
   for s in fmt floor-check pin-check clippy test-build tests-with-prikk-3 tests-without-prikk deny audit enf2 doc msrv-check publish-dry-run package-keys sheet-check; do contains "release plan has $s" "$s" "$out"; done
   contains "release plan: package-keys comes after the publish dry run" "publish-dry-run" "$(printf '%s' "$out" | sed -n '/publish-dry-run/,/package-keys/p')"
@@ -88,6 +89,30 @@ if rustup toolchain list 2> /dev/null | grep -q "^$pin-"; then
   out=$(gates --tier release --commit "$docs_only" --sheet "$osheet" --plan)
   out=$(gates --tier commit --plan)
   contains "commit plan: fmt and clippy" "clippy" "$out"
+  # --- the docs tier (RFC 010 Amendment 2, principle 7): only for a diff of documents, on the evidence of a commit; a fourth tier that is not a release
+  (cd "$r" && mkdir -p rfcs && echo r > rfcs/x.md && echo c > CHANGELOG.md && echo m > README.md && echo o > ROADMAP.md && git add -A && git commit -qm docs-more)
+  docs_more=$(git -C "$r" rev-parse HEAD)
+  out=$(gates --tier docs --commit "$docs_more" --plan); rc=$?
+  check "docs tier without --base: refused, exit 2" "2" "$rc"
+  contains "...saying what the base is" "needs --base REV" "$out"
+  out=$(gates --tier docs --base "$lock_change" --commit "$docs_more" --plan); rc=$?
+  check "docs tier on a diff of docs/, rfcs/, CHANGELOG, README and ROADMAP: planned" "0" "$rc"
+  for s in fmt floor-check pin-check deny audit doc package-keys sheet-check tests-that-read-documents; do contains "docs plan has $s" "$s" "$out"; done
+  contains "docs plan says it is not a release tier" "NOT a release tier" "$out"
+  absent "docs plan has no clippy" "clippy" "$out"
+  absent "docs plan has no whole-workspace tests" "cargo test --workspace" "$out"
+  contains "docs plan: the tests are the ones that read documents" 'GATES_TESTSET" docs' "$out"
+  out=$(gates --tier docs --base "$first" --commit "$lock_change" --plan); rc=$?
+  check "docs tier on a diff that touches Cargo.lock and a workflow: refused, exit 2" "2" "$rc"
+  contains "...naming the files" "Cargo.lock" "$out"
+  contains "...and sending the reader to the release tier" "run the release tier" "$out"
+  absent "...and nothing was started (no steps)" "steps:" "$out"
+  check "...and it left nothing behind" "$start" "$(state)"
+  out=$(gates --tier docs --base "$docs_more" --commit "$first" --plan); rc=$?
+  check "docs tier whose evidence is not an ancestor: refused, exit 2" "2" "$rc"
+  contains "...with a sentence" "not an ancestor" "$out"
+  out=$(gates --tier docs --base "no-such-revision" --commit "$docs_more" --plan); rc=$?
+  check "docs tier with an unknown base: refused, exit 2" "2" "$rc"
   # the compiler that is not installed
   sed -i 's/1\.99\.1/1.2.3/' "$r/.github/workflows/ci.yml"
   (cd "$r" && git commit -qam four)
@@ -321,6 +346,68 @@ printf 'const K: &str = "-----BEGIN PRIVATE KEY-----";\n' > "$pk/root/crates/pla
 out=$(pk_run); rc=$?
 check "the same text in any other file: the step fails" "1" "$rc"
 check "...and the run cleaned up" "$start" "$(state)"
+
+# --- the test sets of the review tier and of the docs tier are DERIVED from the sources (RFC 010 Amendment 2): a fake `cargo` and a fake tree
+ts="$tmp/ts"
+mkdir -p "$ts/bin" "$ts/root/crates/a/tests" "$ts/root/crates/d/tests/common" "$ts/root/crates/d/src" "$ts/root/crates/a/src" "$ts/root/crates/b/src" "$ts/root/crates/c/tests" "$ts/root/tools"
+printf '[package]\nname = "a-pkg"\n' > "$ts/root/crates/a/Cargo.toml"; printf '[package]\nname = "b-pkg"\n' > "$ts/root/crates/b/Cargo.toml"; printf '[package]\nname = "c-pkg"\n' > "$ts/root/crates/c/Cargo.toml"; printf '[package]\nname = "d-pkg"\n' > "$ts/root/crates/d/Cargo.toml"; echo "pub fn h() {}" > "$ts/root/crates/d/src/lib.rs"
+echo "pub fn f() {}" > "$ts/root/crates/a/src/lib.rs"; echo "pub fn g() {}" > "$ts/root/crates/b/src/lib.rs"
+cat > "$ts/root/crates/a/tests/needs_bwrap.rs" <<'RS'
+#[test] fn t() { if !ok() { eprintln!("skipping: needs prikk and bubblewrap (with user namespaces)"); return; } }
+RS
+cat > "$ts/root/crates/a/tests/needs_prikk_only.rs" <<'RS'
+#[test] fn t() { if !ok() { eprintln!("skipping: needs prikk on PATH"); return; } }
+RS
+cat > "$ts/root/crates/a/tests/plain.rs" <<'RS'
+#[test] fn t() { assert!(true); }
+RS
+cat > "$ts/root/crates/a/tests/why_form.rs" <<'RS'
+fn sandbox_unusable() -> Option<String> { Some("bwrap cannot make a user namespace".into()) }
+#[test] fn t() { if let Some(why) = sandbox_unusable() { eprintln!("skipping: {why}"); return; } }
+RS
+cat > "$ts/root/crates/a/tests/reads_docs.rs" <<'RS'
+#[test] fn t() { let s = std::fs::read_to_string("../../docs/glossary/ja.md").unwrap(); assert!(!s.is_empty()); }
+RS
+cat > "$ts/root/crates/d/tests/common/mod.rs" <<'RS'
+pub fn nothing() { println!("SKIPPED: no sandbox here"); }
+RS
+cat > "$ts/root/crates/b/src/lib.rs" <<'RS'
+#[cfg(test)] mod tests { #[test] fn t() { eprintln!("SKIPPED: the bubblewrap sandbox cannot run
+ here"); } }
+RS
+cat > "$ts/root/crates/c/tests/other_skip.rs" <<'RS'
+#[test] fn t() { eprintln!("skipping: needs python3 (with ssl) and curl"); }
+RS
+cat > "$ts/bin/cargo" <<'FAKE'
+#!/bin/sh
+echo "cargo $*" >> "$TSLOG"
+FAKE
+chmod +x "$ts/bin/cargo"
+ts_run() { # MODE
+  : > "$tmp/tslog"
+  use_steps "ts\tcd $ts/root && TSLOG=$tmp/tslog PATH=$ts/bin:\$PATH sh \"\$GATES_TESTSET\" $1\n"
+  gates --tier review --commit "$first" --no-ci
+}
+out=$(ts_run bwrap); rc=$?
+check "the review tier's test set (bwrap): exit 0" "0" "$rc"
+contains "...a test that skips for want of bubblewrap is in it" "-p a-pkg" "$out"
+contains "...(its binary)" "--test needs_bwrap" "$out"
+contains "...a skip whose reason is a variable, in a file that probes bwrap, is in it" "--test why_form" "$out"
+contains "...a unit test in a crate's source is its --lib" "-p b-pkg --lib" "$out"
+contains "...a helper under tests/ sends the crate's whole tests/" "-p d-pkg --tests --lib" "$out"
+absent "...a test that skips only for want of prikk is not (CI has prikk)" "needs_prikk_only" "$(cat "$tmp/tslog")"
+absent "...a test with no skip is not" "plain" "$(cat "$tmp/tslog")"
+absent "...a skip for python3 and curl is not" "other_skip" "$out"
+contains "...the set is printed with its size before anything runs" "of 6 integration-test binaries in the workspace" "$out"
+out=$(ts_run docs); rc=$?
+check "the docs tier's test set: exit 0" "0" "$rc"
+contains "...a test that reads docs/ is in it" "--test reads_docs" "$(cat "$tmp/tslog")"
+absent "...a test that does not is not" "plain" "$(cat "$tmp/tslog")"
+rm "$ts/root/crates/a/tests/needs_bwrap.rs" "$ts/root/crates/a/tests/why_form.rs" "$ts/root/crates/d/tests/common/mod.rs" "$ts/root/crates/b/src/lib.rs"; echo "pub fn g() {}" > "$ts/root/crates/b/src/lib.rs"
+out=$(ts_run bwrap); rc=$?
+check "an empty bwrap set is a failure (the derivation is broken, not the tests unneeded)" "1" "$rc"
+contains "...saying so" "the derivation found no test that skips for want of bubblewrap" "$out"
+absent "...and running nothing" "cargo test" "$(cat "$tmp/tslog")"
 
 # --- the release tier refuses a shared target (and cleans up what it had made)
 use_steps 'one\techo should not run\n'

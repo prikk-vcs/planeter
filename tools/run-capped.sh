@@ -177,8 +177,8 @@ if [ "${1:-}" = "--sample-once" ]; then # FILE CHILDPID MODE (the tests; a heade
   exit 0
 fi
 
-if [ "${1:-}" = "--sampler" ]; then # FILE CHILDPIDFILE MODE INTERVAL: runs until the runner is gone or kills it
-  file=$2 pidfile=$3 mode=$4 interval=$5
+run_sampler() { # FILE CHILDPIDFILE MODE INTERVAL: runs until the child is gone or the runner kills it
+  file=$1 pidfile=$2 mode=$3 interval=$4
   trap 'kill "$sp" 2> /dev/null; exit 0' TERM INT
   hw_scan
   {
@@ -197,11 +197,11 @@ if [ "${1:-}" = "--sampler" ]; then # FILE CHILDPIDFILE MODE INTERVAL: runs unti
     sp=$!
     wait "$sp"
   done
-  exit 0
-fi
+}
+if [ "${1:-}" = "--sampler" ]; then run_sampler "$2" "$3" "$4" "$5"; exit 0; fi
 
-if [ "${1:-}" = "--report" ]; then # FILE: the block
-  awk -F'\t' -v file="$2" -v hot="${RUN_CAPPED_HOT_PCT:-100}" '
+report_block() { # FILE: the block
+  awk -F'\t' -v file="$1" -v hot="${RUN_CAPPED_HOT_PCT:-100}" '
     /^# every|^# run-capped heat/ { if (match($0, /every [0-9]+ s/)) iv = substr($0, RSTART + 6, RLENGTH - 8) + 0 }
     /^# cpu sensor:/ { cpu = $0; sub(/^# cpu sensor: /, "", cpu); if (match(cpu, /limit [0-9.]+/)) climit = substr(cpu, RSTART + 6, RLENGTH - 6) + 0 }
     /^# nvme: limit/ { if (match($0, /[0-9.]+$/)) nlimit = substr($0, RSTART) + 0 }
@@ -228,9 +228,9 @@ if [ "${1:-}" = "--report" ]; then # FILE: the block
       c = 0; for (k in hc) { printf " %s (%d sample(s), peak %d%%)", k, hc[k], hp[k]; c++ }
       if (!c) printf " none"
       printf "\n"
-    }' "$2"
-  exit 0
-fi
+    }' "$1"
+}
+if [ "${1:-}" = "--report" ]; then report_block "$2"; exit 0; fi
 
 cores=$(getconf _NPROCESSORS_ONLN 2> /dev/null || nproc 2> /dev/null || echo 4)
 memkib=$(sed -n 's/^MemTotal: *\([0-9]*\) kB.*/\1/p' /proc/meminfo 2> /dev/null | head -1)
@@ -319,7 +319,9 @@ exec 8<&0
 child=$!
 exec 8<&-
 echo "$child" > "$sdir/child.pid"
-sh "$0" --sampler "$samples" "$sdir/child.pid" "$mode" "$interval" 9>&- < /dev/null > /dev/null 2>&1 &
+# (the sampler and the report are functions of this file, run in this process: the file may be gone by the time the command ends, as when the gates remove
+# their snapshot of it)
+( run_sampler "$samples" "$sdir/child.pid" "$mode" "$interval" ) 9>&- < /dev/null > /dev/null 2>&1 &
 sampler=$!
 trap 'kill -TERM "$child" 2> /dev/null' INT TERM
 wait "$child"
@@ -331,5 +333,5 @@ done
 trap - INT TERM
 kill "$sampler" 2> /dev/null
 wait "$sampler" 2> /dev/null
-sh "$0" --report "$samples" >&2
+report_block "$samples" >&2
 exit "$status"
