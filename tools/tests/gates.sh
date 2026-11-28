@@ -313,8 +313,9 @@ rm "$pk/root/crates/planeter-auth/tests/keys.json"
 printf 'src/lib.rs\nsrc/oidc.rs\n' > "$pk/lists/planeter-auth"
 printf 'const K: &str = "-----BEGIN PRIVATE KEY-----";\n' > "$pk/root/crates/planeter-auth/src/oidc.rs"
 out=$(pk_run); rc=$?
-check "the one Rust file that has held a test key since an earlier release: not a failure" "0" "$rc"
-contains "...but it is said, every time" "planeter-auth: src/oidc.rs holds a test key as a string (known" "$out"
+check "the file that held a test key in earlier releases (IS-76): the list of known files is empty, so it fails like any other" "1" "$rc"
+contains "...and names it" "planeter-auth: src/oidc.rs holds a private key" "$out"
+absent "...and no \"known\" line is printed" "(known" "$out"
 printf 'src/lib.rs\nsrc/other.rs\n' > "$pk/lists/planeter-auth"
 printf 'const K: &str = "-----BEGIN PRIVATE KEY-----";\n' > "$pk/root/crates/planeter-auth/src/other.rs"
 out=$(pk_run); rc=$?

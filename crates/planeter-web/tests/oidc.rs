@@ -26,11 +26,16 @@ use planeter_web::{AppState, ContentOrigin, router};
 
 const ISSUER: &str = "https://idp.example";
 const CLIENT: &str = "planeter-client";
-const TEST_KEY_PEM: &str = "-----BEGIN PRIVATE KEY-----
-MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgopZeFiRGZXWvz9h4
-G2WRp6WFSymfcUW7Kavsub8xSMehRANCAATQ+QQEj43jJBGpA4RYiR3l6Pnckdxw
-BXaTdqRaPA7mOrNmL/VGO0eeJS9V/25SRXPdRAdaGWs75OxYcjsHqSZV
------END PRIVATE KEY-----";
+// The key itself is a fixture (a published package carries no private key, even a throw-away one).
+fn test_key_pem() -> String {
+    std::fs::read_to_string(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/fixtures/oidc-test-key.pem"
+    ))
+    .expect(
+        "the throw-away test key: tests/fixtures/oidc-test-key.pem is not in a published package",
+    )
+}
 const JWK_X: &str = "0PkEBI-N4yQRqQOEWIkd5ej53JHccAV2k3akWjwO5jo";
 const JWK_Y: &str = "s2Yv9UY7R54lL1X_blJFc91EB1oZazvk7FhyOwepJlU";
 
@@ -70,7 +75,7 @@ fn signed_id_token(nonce: &str, sub: &str) -> String {
     encode(
         &h,
         &serde_json::json!({"iss": ISSUER, "sub": sub, "aud": CLIENT, "exp": now() + 300, "iat": now(), "nonce": nonce}),
-        &EncodingKey::from_ec_pem(TEST_KEY_PEM.as_bytes()).unwrap(),
+        &EncodingKey::from_ec_pem(test_key_pem().as_bytes()).unwrap(),
     )
     .unwrap()
 }

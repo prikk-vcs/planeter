@@ -8,9 +8,9 @@ authors.workspace = true
 repository.workspace = true
 readme.workspace = true
 description = "planeter's HTTP surface: the browse UI and GET read API, sign-in (local or OIDC) with sessions and CSRF, strict sanitization, CSP, trusted-proxy client IPs and an isolated content origin."
-# Three of the tests hold a throw-away private key as a string (as `planeter-auth`'s unit test and `tests/oidc.rs` already did in earlier releases); the three added in 0.10.0 are the
-# repository's, not the package's (the gates' `package-keys` step names the rest).
-exclude = ["tests/local_passwords.rs", "tests/provider_held.rs", "tests/session_lifetime.rs"]
+# Three tests of 0.10.0 hold a throw-away private key as a string, and `tests/oidc.rs` reads its key from a fixture that is not packaged (the gates' `package-keys`
+# step fails on any private key in any package).
+exclude = ["tests/local_passwords.rs", "tests/provider_held.rs", "tests/session_lifetime.rs", "tests/fixtures/oidc-test-key.pem"]
 
 [dependencies]
 planeter-core = { path = "../planeter-core", version = "0.10.0" }

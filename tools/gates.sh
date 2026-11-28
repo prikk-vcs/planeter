@@ -298,11 +298,12 @@ GATES_PACKAGE_KEYS="$SCR/package-keys.sh"
 export GATES_DRYRUN_TARGET GATES_ADVDB GATES_SHEET_OUT GATES_PACKAGE_KEYS
 if [ "$tier" = release ]; then
   # The `package-keys` step (release tier only): for each of the eleven published crates, `cargo package --list`; fail if a listed file is named like a key
-  # (`*.pem`, `*.key`, `*.seed`, `*.p12`) or contains `PRIVATE KEY-----` or `-----BEGIN PRIVATE`. Run in the worktree. A test key written as a string in a
-  # Rust file that was already in the packages of earlier releases is named below, printed every time, and is not a failure; any other file is.
+  # (`*.pem`, `*.key`, `*.seed`, `*.p12`) or contains `PRIVATE KEY-----` or `-----BEGIN PRIVATE`. Run in the worktree. The list `known` below is empty
+  # (IS-76: the two test keys that earlier packages held as strings are fixtures now, which the packages leave out); a file named in it as `crate:path` would
+  # be printed every time and not be a failure, and any other file is.
   cat > "$GATES_PACKAGE_KEYS" <<'PKEYS'
 crates="planeter-i18n planeter-prikk planeter-store planeter-core planeter-auth planeter-ci planeter-registry planeter-transport planeter-web planeter planeter-client"
-known="planeter-auth:src/oidc.rs planeter-web:tests/oidc.rs"
+known=""
 bad=0 files=0
 for c in $crates; do
   dir=crates/$c
