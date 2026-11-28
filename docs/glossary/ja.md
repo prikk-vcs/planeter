@@ -4,7 +4,7 @@ The Japanese column of [`../glossary.md`](../glossary.md): the terms the interfa
 
 ## Status
 
-**Status.** **Signed off** by its reviewers, the owner and a colleague, on 2026-10-31 (the status and its record are data on the language, `crates/planeter-i18n/src/languages/ja.rs`, with the baselines `crates/*/locales/ja.signed`); shipped like English and offered without any operator setting. The reviewed sheet is generated from the catalogs
+**Status.** **Signed off** by its reviewers, the owner and a colleague, on 2026-10-31 (read again by the owner on five later dates, and on 2026-11-28 by the project's architect, an AI assistant that is not a native speaker of Japanese, on the owner's delegation: the seventh record, `docs/messages-and-languages.md`) (the status and its record are data on the language, `crates/planeter-i18n/src/languages/ja.rs`, with the baselines `crates/*/locales/ja.signed`); shipped like English and offered without any operator setting. The reviewed sheet is generated from the catalogs
 (`cargo run -p planeter-i18n-sheet -- --lang ja`, `docs/messages-and-languages.md`). **The English meaning of every trust label is fixed; the Japanese
 keeps it exactly.** A later correction is an edit of this section and of `ja.rs` together, then a regenerated sheet.
 The style is the polite form (です・ます); headings and badges are noun phrases; Japanese has no plural, so a counted message
